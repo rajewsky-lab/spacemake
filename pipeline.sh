@@ -1,25 +1,37 @@
 #!/bin/bash
 #  
-# Master script for the computational analysis of Spatial Transcriptomics Sequencing data
+# Master pipeline script for the computational analysis of Spatial Transcriptomics Sequencing data
 #
-# nikolaos.karaiskos@mdc-berlin.de
+# author : Nikos Karaiskos
+# email : nikolaos.karaiskos@mdc-berlin.de
 #
-# version 0.1.1 
+# version 0.1.3
 #
-####################################################
+###############################################################################
 
-####################################################
+###############################################################################
+#
+# Variable holding the folder where the toolkit is
+
+toolkit_folder='/home/nkarais/src/git/sts-sequencing'
+
+#
+###############################################################################
+
+###############################################################################
 #
 # Variables passed as arguments
 #
 # The folder where the demultiplexed data is located 
 folder=$1
+
 # The genome species that the reads will be mapped onto
 species=$2
-#
-####################################################
 
-####################################################
+#
+###############################################################################
+
+###############################################################################
 #
 # 1. Call a python script that
 #      - renames the fastq files to meaningful names
@@ -27,11 +39,11 @@ species=$2
 #      - creates symbolic links for Read2
 #
 
-python ~/src/git/sts-sequencing/sequencing_preprocessing.py $folder
+python $toolkit_folder/sequencing_preprocessing.py $folder
 
-####################################################
+###############################################################################
 
-####################################################
+###############################################################################
 #
 # 2. Start FastQC analysis
 #
@@ -42,11 +54,11 @@ if [ ! -d fastqc ]; then
   mkdir fastqc
 fi
 
-find . -name "*.fastq.gz"  | xargs /data/murphy/shared_bins/FastQC-0.11.2/fastqc -t 20 -o ./fastqc/
+find . -name "*.fastq.gz"  | xargs /data/rajewsky/shared_bins/FastQC-0.11.2/fastqc -t 20 -o ./fastqc/
 
-####################################################
+###############################################################################
 
-####################################################
+###############################################################################
 #
 # 3. Start the dropseq pipeline tailored for sts-seq
 #
@@ -59,15 +71,27 @@ do
     sample_prefix=${prefix/_1.fastq.gz/};
     sample_folder=${i/$prefix/};
     cd $sample_folder;
-    ~/src/git/sts-sequencing/sequencing_analysis.sh $species $sample_prefix 5000 &
+    $toolkit_folder/sequencing_analysis.sh $species $sample_prefix &
 done
 
-####################################################
+###############################################################################
 
-####################################################
+###############################################################################
 #
 # 4. Start the pythonic script for generating the QC sheet
 
-# python
+for i in $(find . -print | grep -i 'reversed_1.fastq.gz');
+do
+    ((j=j%4)); ((j++==0)) && wait
+    cd $folder;
+    prefix=$(echo $i | sed 's:.*/::');
+    sample_prefix=${prefix/_1.fastq.gz/};
+    sample_folder=${i/$prefix/};
+    cd $sample_folder$sample_prefix;
+    myvar="$PWD"
+    cd $toolkit_folder;
+    python qc_sequencing_create_sheet.py $myvar &
+    echo "Done";
+done
 
-####################################################
+###############################################################################

@@ -23,34 +23,27 @@ import sys
 # functions #
 #############
 
-def is_gzip_file(filename):
+def is_gzip_file(file_path):
     """Checks if file is gzipped or not."""
     try:
-        gzip.GzipFile(filename).peek(1)
+        gzip.GzipFile(file_path).peek(1)
         return True
     except OSError:
         return False
 
-def open_file(filename):
+def open_file(file_path):
     """Extension of the standard open function in python that opens a file
     for reading regardless of being zipped or not."""
-    if (is_gzip_file(filename)):
-        return gzip.open(filename, 'rt')
+    if (is_gzip_file(file_path)):
+        return gzip.open(file_path, 'rt')
     else:
-        return open(filename, 'rt')
-
-def get_num_lines(file_path):
-    lines = 0
-    with open_file(file_path) as fi:
-        for line in fi:
-            lines += 1
-    return lines
+        return open(file_path, 'rt')
 
 def estimate_num_lines(file_path):
     # read the size of the file
     full_size = os.stat(file_path).st_size
     
-    # need some if statement to catch exception for small sizes
+    # need to catch errors for small file sizes, leads to wrong estimation
 
     # extract the first 1,000,000 reads to estimate file size
     subprocess.call("zcat " + file_path + " | head -4000000 > temp_small.fastq", 
@@ -68,10 +61,11 @@ def estimate_num_lines(file_path):
     # return the estimated number of lines of the full size
     return int(full_size * 4000000 / small_file_size)
 
-def get_filenames(pattern_list):
+def get_filenames(folder, pattern_list):
     """Get the names of files in a given folder that contain a list of 
     strings. It descends onto subfolders and searches recursively.
-    list -- a list of strings to look for in the filenames"""
+    folder -- the folder containing the data
+    list   -- a list of strings to look for in the filenames"""
     filenames = []
     # r=root, d=directories, f = files
     for r, d, f in os.walk(folder):
@@ -85,7 +79,7 @@ def rename_fastq_files(folder):
     from the file names.
     folder -- the folder containing the .fastq.gz files."""
 
-    filenames = get_filenames(['.fastq.gz'])
+    filenames = get_filenames(folder, ['.fastq.gz'])
 
     # these are the new filenames
     new_filenames = []
@@ -101,21 +95,13 @@ def rename_fastq_files(folder):
     for file in range(len(filenames)):
         os.rename(filenames[file], new_filenames[file])        
 
-def reverse_fastq_file(file):
-    print ('reversing file', file)
-    # first identify how many bases were sequenced
-    with open_file(file) as fi:
-        for i, line in enumerate(fi):
-            if i == 1:
-                read1_length = len(line.strip('\n'))
-                break
+def reverse_fastq_file(file_path):
+    print ('reversing file', file_path)
 
     # reverse the fastq file
     idx = 1
-    # num_lines = get_num_lines(file) # maybe this can be improved
-    num_lines = estimate_num_lines(file)
-    with open_file(file) as fi, open(re.sub('_1.fastq.gz', '_reversed_1.fastq', file), 'w') as fo:
-        for line in tqdm(fi, total=num_lines):
+    with open_file(file_path) as fi, open(re.sub('_1.fastq.gz', '_reversed_1.fastq', file), 'w') as fo:
+        for line in tqdm(fi, total=estimate_num_lines(file_path)):
             if (idx % 4 == 2) or (idx % 4 == 0):
                 line = line[:20] # read only UMI+barcode
                 line = line.strip('\n')
@@ -132,14 +118,11 @@ def reverse_fastq_file(file):
 if __name__ == '__main__':
 
     # this is the folder where the demultiplexed data is.
-    # it will later be passed as an argument to the file (or through a yaml file)
-    # folder = '/scratch/home/nkarais/analyze_191220_mouse_brain/redemultiplex_to_check_script/newdata/'
-
     folder = sys.argv[1]
     rename_fastq_files(folder)
 
-    # get filenames of new fastq files to reverse their read one
-    filenames = get_filenames(['.fastq.gz'])
+    # get filenames of new fastq files to reverse their read1
+    filenames = get_filenames(folder, ['.fastq.gz'])
 
     # split into read1 and read2 files
     filenames_read1 = [x for x in filenames if '_1.fastq.gz' in x]
@@ -151,28 +134,21 @@ if __name__ == '__main__':
         reverse_fastq_file(file)
 
     # get filenames of reversed fastq files
-    filenames = get_filenames(['_reversed', 'fastq'])
+    filenames = get_filenames(folder, ['_reversed', 'fastq'])
 
     print ('\n')
 
-    # zip read1 files
+    # zip read1 files. Currently requires pigz to be installed
     print ('Zipping', len(filenames), 'files')
 
     for file in filenames:
         print ('zipping', file)
-        subprocess.call("pigz "+file, shell=True)
+        subprocess.call("pigz " + file, shell=True)
 
     print ('\n')
 
-    # Create symbolic links for the Read2 files
+    # create symbolic links for the Read2 files
     for file in filenames_read2:
         print ('creating symbolic link for', file)
-        subprocess.call("ln -s "+file+' '+
+        subprocess.call("ln -s " + file + ' ' +
             re.sub('_2.fastq.gz', '_reversed_2.fastq.gz', file), shell=True)
-
-
-    # Need to start FASTQC here
-
-    # Then continue with the dropseq pipeline
-
-    # Then continue with producing the QC sheet

@@ -4,7 +4,7 @@
 # about #
 #########
 
-__version__ = '0.1.6'
+__version__ = '0.1.7'
 __author__ = ['Nikos Karaiskos']
 __licence__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de']
@@ -25,6 +25,11 @@ import collections
 import sys
 import yaml
 import subprocess
+
+#############
+# Variables #
+#############
+toolkit_folder = '~/src/git/sts-sequencing/'
 
 #############
 # functions #
@@ -152,7 +157,8 @@ def load_downstream_statistics(folder, threshold):
     print ('Loading the DGE... ', end='', flush=True)
 
     # call the R script that calculates the downstream statistics
-    subprocess.call("Rscript ./generate_downstream_statistics.R " + folder + ' '
+    subprocess.call("Rscript " + toolkit_folder + 
+                    "generate_downstream_statistics.R " + folder + ' '
                     + str(threshold), shell=True)
     # read the result of the Rscript here through pandas
     downstream_stats_R = pd.read_csv(folder+'output_qc_sheet/downstream_statistics.csv',
