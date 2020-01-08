@@ -1,7 +1,7 @@
 #########
 # about #
 #########
-__version__ = '0.1.1'
+__version__ = '0.1.3'
 __author__ = ['Nikos Karaiskos']
 __licence__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de']
@@ -17,6 +17,7 @@ import gzip
 import subprocess
 from tqdm import tqdm
 import mmap
+import sys
 
 #############
 # functions #
@@ -44,6 +45,28 @@ def get_num_lines(file_path):
         for line in fi:
             lines += 1
     return lines
+
+def estimate_num_lines(file_path):
+    # read the size of the file
+    full_size = os.stat(file_path).st_size
+    
+    # need some if statement to catch exception for small sizes
+
+    # extract the first 1,000,000 reads to estimate file size
+    subprocess.call("zcat " + file_path + " | head -4000000 > temp_small.fastq", 
+        shell=True)
+
+    # zip the small file
+    subprocess.call("pigz temp_small.fastq", shell=True)
+
+    # read the size of the small file
+    small_file_size = os.stat('temp_small.fastq.gz').st_size
+
+    # remove the intermediate file
+    subprocess.call("rm temp_small.fastq.gz", shell=True)
+
+    # return the estimated number of lines of the full size
+    return int(full_size * 4000000 / small_file_size)
 
 def get_filenames(pattern_list):
     """Get the names of files in a given folder that contain a list of 
@@ -89,7 +112,8 @@ def reverse_fastq_file(file):
 
     # reverse the fastq file
     idx = 1
-    num_lines = get_num_lines(file) # maybe this can be improved
+    # num_lines = get_num_lines(file) # maybe this can be improved
+    num_lines = estimate_num_lines(file)
     with open_file(file) as fi, open(re.sub('_1.fastq.gz', '_reversed_1.fastq', file), 'w') as fo:
         for line in tqdm(fi, total=num_lines):
             if (idx % 4 == 2) or (idx % 4 == 0):
@@ -109,8 +133,9 @@ if __name__ == '__main__':
 
     # this is the folder where the demultiplexed data is.
     # it will later be passed as an argument to the file (or through a yaml file)
-    folder = '/scratch/home/nkarais/analyze_191220_mouse_brain/redemultiplex_to_check_script/newdata/'
+    # folder = '/scratch/home/nkarais/analyze_191220_mouse_brain/redemultiplex_to_check_script/newdata/'
 
+    folder = sys.argv[1]
     rename_fastq_files(folder)
 
     # get filenames of new fastq files to reverse their read one
@@ -151,10 +176,3 @@ if __name__ == '__main__':
     # Then continue with the dropseq pipeline
 
     # Then continue with producing the QC sheet
-
-
-    
-
-
-
-
