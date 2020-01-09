@@ -117,12 +117,11 @@ def reverse_fastq_file(file_path):
 
 if __name__ == '__main__':
 
-    # this is the folder where the demultiplexed data is.
-    folder = sys.argv[1]
-    rename_fastq_files(folder)
+    demultiplexed_data_folder = sys.argv[1]
+    rename_fastq_files(demultiplexed_data_folder)
 
     # get filenames of new fastq files to reverse their read1
-    filenames = get_filenames(folder, ['.fastq.gz'])
+    filenames = get_filenames(demultiplexed_data_folder, ['.fastq.gz'])
 
     # split into read1 and read2 files
     filenames_read1 = [x for x in filenames if '_1.fastq.gz' in x]
@@ -134,7 +133,8 @@ if __name__ == '__main__':
         reverse_fastq_file(file)
 
     # get filenames of reversed fastq files
-    filenames = get_filenames(folder, ['_reversed', 'fastq'])
+    filenames = get_filenames(demultiplexed_data_folder, 
+                              ['_reversed', 'fastq'])
 
     print ('\n')
 

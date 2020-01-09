@@ -22,29 +22,21 @@ toolkit_folder= ~/src/git/sts-sequencing
 
 # Setting up species type
 if [ $1 == "hek3t3" ]; then
-  genome_dir=/data/rajewsky/home/nkarais/hg38_mm10_GRCh38.84_GRCm38.84_STAR_2.4.0/
-  annotation_file=/data/rajewsky/home/nkarais/hg38_mm10_GRCh38.84_GRCm38.84_STAR_2.4.0/Homo_sapiens_84_Mus_musculus_84.gtf
-  ref_sequence=/data/rajewsky/home/nkarais/hg38_mm10_GRCh38.84_GRCm38.84_STAR_2.4.0/MegaGenome.fa
-elif [ $1 == "flies" ]; then
-  genome_dir=/data/rajewsky/home/nkarais/dmel_dvir_star/
-  annotation_file=${genome_dir}/dmel_dvir_pDsRed_pVm26Aa.gtf
-  ref_sequence=/data/rajewsky/home/nkarais/dmel_dvir_star/MegaGenome.fa
+  genome_dir=/data/rajewsky/home/nkarais/hg38_mm10_STAR_2.7.1a/
+  annotation_file=/data/rajewsky/home/nkarais/hg38_mm10_STAR_2.7.1a/hg.gencode.M32_mm.gencode.M23.gtf
+  ref_sequence=/data/rajewsky/home/nkarais/hg38_mm10_STAR_2.7.1a/MegaGenome.fa
 elif [ $1 == 'human' ]; then
-  genome_dir=/data/rajewsky/home/nkarais/hg38_GRCh38.84_STAR/
-  annotation_file=/data/rajewsky/home/nkarais/hg38_GRCh38.84_STAR/Homo_sapiens.GRCh38.84.chr.gtf
-  ref_sequence=/data/rajewsky/home/nkarais/hg38_GRCh38.84_STAR/GRCh38.primary_assembly.genome.fa
+  genome_dir=/data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/
+  annotation_file=/data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/gencode.v32.primary_assembly.annotation.gtf
+  ref_sequence=/data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/GRCh38.primary_assembly.genome.fa
 elif [ $1 == 'mouse' ]; then
-  genome_dir=/data/rajewsky/home/nkarais/mm10_GRCm38.p5_STAR/
-  annotation_file=/data/rajewsky/home/nkarais/mm10_GRCm38.p5_STAR/gencode.vM12.annotation.gtf
-  ref_sequence=/data/rajewsky/home/nkarais/mm10_GRCm38.p5_STAR/GRCm38.primary_assembly.genome.fa
+  genome_dir=/data/rajewsky/home/nkarais/mm10_GRCm38.p5_gencode.vM23_STAR_2.7.1a/
+  annotation_file=/data/rajewsky/home/nkarais/mm10_GRCm38.p5_gencode.vM23_STAR_2.7.1a/gencode.vM23.primary_assembly.annotation.gtf
+  ref_sequence=/data/rajewsky/home/nkarais/mm10_GRCm38.p5_gencode.vM23_STAR_2.7.1a/GRCm38.primary_assembly.genome.fa
 elif [ $1 == 'ercc' ]; then
-  genome_dir=/data/rajewsky/home/nkarais/ercc/
-  annotation_file=/data/rajewsky/home/nkarais/ercc/ERCC92.gtf
-  ref_sequence=/data/rajewsky/home/nkarais/ercc/ERCC92.fa
-elif [ $1 == 'ercc_gfp' ]; then
-  genome_dir=/data/rajewsky/home/nkarais/ercc_gfp/
-  annotation_file=/data/rajewsky/home/nkarais/ercc_gfp/ercc_gfp.gtf
-  ref_sequence=/data/rajewsky/home/nkarais/ercc_gfp/ercc_gfp.fa
+  genome_dir=/data/rajewsky/home/nkarais/ercc_STAR_2.7.1a/
+  annotation_file=/data/rajewsky/home/nkarais/ercc_STAR_2.7.1a/ERCC92.gtf
+  ref_sequence=/data/rajewsky/home/nkarais/ercc_STAR_2.7.1a/ERCC92.fa
 fi
 
 # The prefix of sample
@@ -229,8 +221,7 @@ $bam_tag_histogram
 # - computes the "elbow" of the graph and writes it in a .txt file
 Rscript $toolkit_folder/estimate_cell_number.R $name 250000
 
-# Create a txt file with the top $cellnumber barcodes so that there's no
-# need to iterate over BAM again
+# Create a txt file with the top $cellnumber barcodes
 zcat ${name}/out_readcounts.txt.gz | cut -f2 | head -60000 > ${name}/topBarcodes.txt
 
 $dge_exon_only

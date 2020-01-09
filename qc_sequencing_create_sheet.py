@@ -158,7 +158,7 @@ def load_downstream_statistics(folder, threshold):
 
     # call the R script that calculates the downstream statistics
     subprocess.call("Rscript " + toolkit_folder + 
-                    "generate_downstream_statistics.R " + folder + ' '
+                    "qc_sequencing_generate_downstream_statistics.R " + folder + ' '
                     + str(threshold), shell=True)
     # read the result of the Rscript here through pandas
     downstream_stats_R = pd.read_csv(folder+'output_qc_sheet/downstream_statistics.csv',
@@ -222,7 +222,7 @@ def load_downstream_statistics(folder, threshold):
     return downstream_statistics
 
 def create_qc_sheet(folder):
-    with open(folder+'parameters.yaml') as f:
+    with open(folder+'qc_sequencing_parameters.yaml') as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     read_statistics = load_read_statistics(folder)

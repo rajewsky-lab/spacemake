@@ -5,7 +5,7 @@
 # author : Nikos Karaiskos
 # email : nikolaos.karaiskos@mdc-berlin.de
 #
-# version 0.1.3
+# version 0.1.4
 #
 ###############################################################################
 
@@ -60,7 +60,7 @@ find . -name "*.fastq.gz"  | xargs /data/rajewsky/shared_bins/FastQC-0.11.2/fast
 
 ###############################################################################
 #
-# 3. Start the dropseq pipeline tailored for sts-seq
+# 3. Start the sequencing analysis pipeline
 #
 
 for i in $(find . -print | grep -i 'reversed_1.fastq.gz');
@@ -88,10 +88,10 @@ do
     sample_prefix=${prefix/_1.fastq.gz/};
     sample_folder=${i/$prefix/};
     cd $sample_folder$sample_prefix;
+    cp $toolkit_folder/qc_sequencing_parameters.yaml ./
     myvar="$PWD"
     cd $toolkit_folder;
     python qc_sequencing_create_sheet.py $myvar &
-    echo "Done";
 done
 
 ###############################################################################
