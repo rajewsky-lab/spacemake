@@ -5,8 +5,8 @@ args <- commandArgs(trailingOnly = TRUE)
 folder = args[1]
 threshold = as.integer(args[2])
 
-dge = fread(paste0('zcat < ', folder, '/dge.txt.gz'))
-dge_reads = fread(paste0('zcat < ', folder, '/dgeReads.txt.gz'))
+dge = fread(paste0('zcat < ', folder, '/dge_all.txt.gz'))
+dge_reads = fread(paste0('zcat < ', folder, '/dgeReads_all.txt.gz'))
 
 # find beads which have the minimum number of UMIs
 sum_umis = colSums(dge[, 3:dim(dge)[2]])

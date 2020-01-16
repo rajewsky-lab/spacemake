@@ -4,7 +4,7 @@
 # about #
 #########
 
-__version__ = '0.1.7'
+__version__ = '0.1.8'
 __author__ = ['Nikos Karaiskos']
 __licence__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de']
@@ -295,7 +295,11 @@ def create_qc_sheet(folder):
     pdf.image(folder+'output_qc_sheet/hist_reads_per_bead.png', x=None, y=None, w=75, h=50, type='', link='')
     pdf.image(folder+'output_qc_sheet/hist_genes_per_bead.png', x=100, y=162, w=75, h=50, type='', link='')
     pdf.image(folder+'output_qc_sheet/hist_umis_per_bead.png', x=None, y=None, w=75, h=50, type='', link='')
-    pdf.output(folder+'output_qc_sheet/qc_sheet.pdf', 'F')
+    
+    sample_folder = folder.strip('/$').split('/')
+    sample_folder = sample_folder[-1]
+    pdf.output(folder + 'output_qc_sheet/qc_sheet_' + 
+               sample_folder.strip('/') + '.pdf', 'F')
 
 
 ########
