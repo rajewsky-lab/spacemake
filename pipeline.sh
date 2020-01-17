@@ -5,7 +5,7 @@
 # author : Nikos Karaiskos
 # email : nikolaos.karaiskos@mdc-berlin.de
 #
-# version 0.1.4
+# version 0.1.5
 #
 ###############################################################################
 
@@ -27,6 +27,10 @@ folder=$1
 
 # The genome species that the reads will be mapped onto
 species=$2
+
+# The sample sheet. right now it's the 3rd parameter but eventually
+# will replace $1 so that the demultiplexing starts there
+sample_sheet=$3
 
 #
 ###############################################################################
@@ -63,7 +67,7 @@ find . -name "*.fastq.gz"  | xargs /data/rajewsky/shared_bins/FastQC-0.11.2/fast
 # 3. Start the sequencing analysis pipeline
 #
 
-for i in $(find . -print | grep -i 'reversed_1.fastq.gz');
+for i in $(find . -print | grep -i 'reversed_1.fastq.gz' | grep -v 'Undetermined');
 do
     ((j=j%4)); ((j++==0)) && wait
     cd $folder;
@@ -74,13 +78,20 @@ do
     $toolkit_folder/sequencing_analysis.sh $species $sample_prefix &
 done
 
+wait
+
 ###############################################################################
 
 ###############################################################################
 #
 # 4. Start the pythonic script for generating the QC sheet
 
-for i in $(find . -print | grep -i 'reversed_1.fastq.gz');
+# first create the qc_parameters files
+python $toolkit_folder/qc_sequencing_create_parameters_from_sample_sheet.py $sample_sheet
+
+cd $folder
+
+for i in $(find . -print | grep -i 'reversed_1.fastq.gz' | grep -v 'Undetermined');
 do
     ((j=j%4)); ((j++==0)) && wait
     cd $folder;
@@ -88,10 +99,11 @@ do
     sample_prefix=${prefix/_1.fastq.gz/};
     sample_folder=${i/$prefix/};
     cd $sample_folder$sample_prefix;
-    cp $toolkit_folder/qc_sequencing_parameters.yaml ./
     myvar="$PWD"
     cd $toolkit_folder;
     python qc_sequencing_create_sheet.py $myvar &
 done
+
+cd $folder
 
 ###############################################################################

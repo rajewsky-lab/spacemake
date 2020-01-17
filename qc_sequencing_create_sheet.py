@@ -4,7 +4,7 @@
 # about #
 #########
 
-__version__ = '0.1.8'
+__version__ = '0.1.9'
 __author__ = ['Nikos Karaiskos']
 __licence__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de']
@@ -104,7 +104,7 @@ def load_bead_statistics(folder):
     bead_statistics['total # of barcodes'] = readcounts.shape[0]
 
     # select # barcodes for cumulative fraction
-    barcode_limit = 25000
+    barcode_limit = min(100000, bead_statistics['total # of barcodes'])
     rc_cumsum = readcounts['reads'][:barcode_limit].cumsum()
     rc_cumsum /= max(rc_cumsum)
     plt.plot(np.arange(barcode_limit), rc_cumsum)
@@ -222,7 +222,8 @@ def load_downstream_statistics(folder, threshold):
     return downstream_statistics
 
 def create_qc_sheet(folder):
-    with open(folder+'qc_sequencing_parameters.yaml') as f:
+    parameters_file = find_filename(folder, endswith='.yaml')
+    with open(parameters_file) as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     read_statistics = load_read_statistics(folder)

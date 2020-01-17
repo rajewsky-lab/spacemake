@@ -1,5 +1,10 @@
 #!/bin/bash
 #
+# author : Nikos Karaiskos
+# email : nikolaos.karaiskos@mdc-berlin.de
+#
+# version 0.1
+#
 # Programs used:
 # - picard-tools
 # - the Drop-Seq toolkit
@@ -18,7 +23,7 @@
 dropSeqDir=/data/rajewsky/shared_bins/Drop-seq_tools-2.3.0
 
 # the location of the sts-sequencing toolkit
-toolkit_folder= ~/src/git/sts-sequencing
+toolkit_folder=/home/nkarais/src/git/sts-sequencing
 
 # Setting up species type
 if [ $1 == "hek3t3" ]; then
@@ -45,6 +50,10 @@ name=$2
 if [ ! -d ${name} ]; then
 	mkdir ${name}
 fi
+if [ ! -d ${name}/output_qc_sheet ]; then
+  mkdir ${name}/output_qc_sheet
+fi
+
 
 # Convert fastq to unaligned sam
 fastq_to_sam="java -jar /data/rajewsky/shared_bins/picard-tools-2.21.6/picard.jar FastqToSam \
@@ -211,8 +220,11 @@ $sort_sam_to_bam
 $merge_alignments | \
   $add_gene_annotations
 
+# These two tools are not needed, unless we tailor them for our purposes.
+# In this case the symbolic link below should be commented out.
 $detect_bead_substitution_errors
 $detect_bead_synthesis_errors
+# ln -s star_gene_exon_tagged.bam ${name}/star_gene_exon_tagged_corrected.bam
 
 $bam_tag_histogram
 
