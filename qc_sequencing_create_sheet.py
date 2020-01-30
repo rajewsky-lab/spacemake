@@ -4,7 +4,7 @@
 # about #
 #########
 
-__version__ = '0.1.9'
+__version__ = '0.1.10'
 __author__ = ['Nikos Karaiskos']
 __licence__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de']
@@ -21,10 +21,12 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import fpdf
-import collections
+from collections import Counter
 import sys
 import yaml
 import subprocess
+import itertools
+import math
 
 #############
 # Variables #
@@ -60,6 +62,16 @@ def find_filename(folder, endswith=''):
                         for f in files
                         if f.endswith(endswith)][0]
     return filename
+
+def compute_shannon_entropy(barcode):
+    prob, length = Counter(barcode), float(len(barcode))
+    return -sum( count/length * math.log(count/length, 2) for count in prob.values())
+
+
+def compress_string(barcode):
+    return ''.join(
+            letter + str(len(list(group)))
+            for letter, group in itertools.groupby(barcode))
 
 def load_read_statistics(folder):
     """Read the basic and mapped read stastistics.
@@ -112,6 +124,28 @@ def load_bead_statistics(folder):
     plt.ylabel('cumulative fraction of reads', fontsize=18)
     plt.savefig(folder+'output_qc_sheet/cumulative_fraction.png')
     plt.tight_layout()
+    plt.close()
+
+    # calculate Shannon entropies for the barcodes
+    barcode_entropies = np.round(np.array([compute_shannon_entropy(bc) for 
+        bc in readcounts['barcode'][:barcode_limit]]), 2)
+    bead_statistics['barcode_entropies'] = barcode_entropies
+    plt.hist(barcode_entropies, bins=100)
+    plt.xlabel('Shannon entropy', fontsize=18)
+    plt.ylabel('count', fontsize=18)
+    plt.tight_layout()
+    plt.savefig(folder+'output_qc_sheet/barcode_entropies.png')
+    plt.close()
+
+    # calculate string compression for the barcodes
+    barcode_string_compr = np.array([len(compress_string(bc)) for 
+        bc in readcounts['barcode'][:barcode_limit]])
+    bead_statistics['barcode_string_compression'] = barcode_string_compr
+    plt.hist(barcode_string_compr, bins=20)
+    plt.xlabel('string compression', fontsize=18)
+    plt.ylabel('count', fontsize=18)
+    plt.tight_layout()
+    plt.savefig(folder+'output_qc_sheet/barcode_string_compression.png')
     plt.close()
 
     # read the synthesis errors summary from the dropseq toolkit
@@ -209,7 +243,7 @@ def load_downstream_statistics(folder, threshold):
     beads = bases.reshape(len(beads), len(beads[0]))
     beads = beads.T
     # count the nucleotide frequencies
-    dict_list = [dict(collections.Counter(beads[x])) for x in range(beads.shape[0])]
+    dict_list = [dict(Counter(beads[x])) for x in range(beads.shape[0])]
     nt_composition = pd.DataFrame(dict_list)
     # make a plot and save it on the disk
     nt_composition.plot.bar()
@@ -297,6 +331,12 @@ def create_qc_sheet(folder):
     pdf.image(folder+'output_qc_sheet/hist_genes_per_bead.png', x=100, y=162, w=75, h=50, type='', link='')
     pdf.image(folder+'output_qc_sheet/hist_umis_per_bead.png', x=None, y=None, w=75, h=50, type='', link='')
     
+    # 2nd page
+    pdf.add_page()
+    pdf.set_xy(0, 0)
+    pdf.image(folder+'output_qc_sheet/barcode_entropies.png', x=20, y=20, w=75, h=50, type='', link='')
+    pdf.image(folder+'output_qc_sheet/barcode_string_compression.png', x=100, y=20, w=75, h=50, type='', link='')
+
     sample_folder = folder.strip('/$').split('/')
     sample_folder = sample_folder[-1]
     pdf.output(folder + 'output_qc_sheet/qc_sheet_' + 
