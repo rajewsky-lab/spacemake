@@ -61,14 +61,10 @@ def find_filename(folder, endswith=''):
                         if f.endswith(endswith)][0]
     return filename
 
-def load_read_statistics(folder):
-    """Read the basic and mapped read stastistics.
-    folder -- The folder containing the sequencing data after analyzing it
-              with the standard Dropseq pipeline."""
-
+def load_read_statistics():
     read_statistics = dict()
 
-    with open(folder + 'star_Log.final.out', 'r') as fi:
+    with open(snakemake.input.star_log, 'r') as fi:
         idx = 0
         for line in fi.readlines():
             entry = line.strip('\n').split('\t')
@@ -114,9 +110,7 @@ def load_bead_statistics(folder):
     plt.tight_layout()
     plt.close()
 
-    # read the synthesis errors summary from the dropseq toolkit
-    filename = find_filename(folder, 'synthesis_stats_summary.txt')
-    with open(filename, 'r') as fi:
+    with open(snakemake.input.synthesis_stats, 'r') as fi:
         idx = 0
         for line in fi.readlines():
             if idx == 3:
@@ -128,17 +122,17 @@ def load_bead_statistics(folder):
     bead_statistics['beads without synthesis errors'] = pct
 
     # read the substitution errors file from the dropseq toolkit
-    filename = find_filename(folder, 'substitution_errors_report.txt')
-    with open(filename, 'r') as fi:
-        idx = 0
-        for line in fi.readlines():
-            entry = line.strip('\n').split('=')
-            if idx == 5:
-                total_barcodes_tested = int(entry[1])
-            if idx == 6:
-                barcodes_collapsed = int(entry[1])
-            idx += 1
-    bead_statistics['barcodes collapsed'] = barcodes_collapsed
+    #filename = find_filename(folder, 'substitution_errors_report.txt')
+    #with open(filename, 'r') as fi:
+    #    idx = 0
+    #    for line in fi.readlines():
+    #        entry = line.strip('\n').split('=')
+    #        if idx == 5:
+    #            total_barcodes_tested = int(entry[1])
+    #        if idx == 6:
+    #            barcodes_collapsed = int(entry[1])
+    #        idx += 1
+    bead_statistics['barcodes collapsed'] = None
 
     return bead_statistics
 

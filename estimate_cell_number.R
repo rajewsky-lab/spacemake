@@ -1,12 +1,9 @@
 library(ggplot2)
 library(data.table)
 
-args <- commandArgs(trailingOnly = T)
-setwd(args[1])
-
-h = as.data.frame(fread("zcat < out_readcounts.txt.gz", 
+h = as.data.frame(fread(paste0("zcat < ", snakemake@input[[1]]), 
     header=F, stringsAsFactors = F))
-y = cumsum(h$V1[1:(args[2])])
+y = cumsum(h$V1[1:(snakemake@params$knee_limit)])
 y = y/max(y)
 Y = length(y)
 hdf <- data.frame("y" = y, "x" = 1:Y)
@@ -23,7 +20,7 @@ histplot <- (ggplot(data = hdf, aes(x = x, y = y))
                      axis.ticks = element_blank(),
                      axis.title.y = element_text(vjust = 1),
                      axis.title.x = element_text(vjust = 0)))
-ggsave(histplot, file = paste(args[1], "_cumulative.png", sep = ""), width = 3, height = 2)
+ggsave(histplot, file = paste(snakemake@output$cummulative_plot, sep = ""), width = 3, height = 2)
 
 # Calculate the point where the elbow occurs and write it in a file
 mindist = 1
@@ -40,4 +37,4 @@ for (i in 1:Y) {
 }
 
 # Write it to a file
-write.table(whichmin, "cell_number.txt", col.names = F, row.names = F)
+write.table(whichmin, snakemake@output$cell_number, col.names = F, row.names = F)

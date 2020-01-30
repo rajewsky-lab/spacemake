@@ -37,8 +37,7 @@ if __name__ == '__main__':
     # provide the sample_sheet location as an argument
     # it assumes that the data is already demultiplexed and therefore all
     # relevant sample directories have been created
-    sample_sheet = sys.argv[1]
-    sample_sheet_folder = '/'.join(sys.argv[1].split('/')[:-1])
+    sample_sheet = snakemake.input[0]
 
     with open(sample_sheet, 'r') as fi:
         sample_id_seen = False
@@ -61,11 +60,7 @@ if __name__ == '__main__':
                 # print ('file extension for the qc_sheet in the end',
                 #     sample_info[0] + '_' + sample_info[1])
 
-                with open(sample_sheet_folder + '/demultiplexed_data/' + 
-                          sample_info[6] + '/' + sample_info[0] + '/' +
-                          sample_info[1] + '_reversed/output_qc_sheet/' +
-                          'qc_sequencing_parameters_' + sample_info[0] + 
-                          '_' + sample_info[1] + '.yaml', 'w') as fo:
+                with open(snakemake.output[0], 'w') as fo:
 
                     fo.write('sample_id: ' + sample_info[0] + '\n')
                     fo.write('puck_id: ' + sample_info[1] + '\n')
@@ -73,24 +68,3 @@ if __name__ == '__main__':
                     fo.write('date: ' + sequencing_date + '\n')
                     fo.write('input_beads: 60k-100k' + '\n')
                     fo.write('threshold: 100' + '\n')
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-

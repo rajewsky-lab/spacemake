@@ -1,0 +1,27 @@
+illumina_runs:
+    test:
+        samplesheet: /scratch/home/tsztank/spatial_pipeline/test/20191206_spatseq_smples3-4.csv
+        flowcell_id: 191206_NS500648_0416_AHY3KYBGXC
+        samples:
+            sts_01:
+                species: hg38
+            sts_02:
+                species: hg38
+
+adapters:
+    smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'
+
+knowledge:
+    annotations:
+        hg38: /data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/gencode.v32.primary_assembly.annotation.gtf
+        #mm10: /data/rajewsky/annotation/GRCm38/M21/GRCm38.M21.gtf
+    genomes:
+        hg38: /data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/GRCh38.primary_assembly.genome.fa
+        #mm10: /data/rajewsky/genomes/mm10/mm10.fa
+    indices:
+        hg38:
+            star: /data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/STAR_index
+        #mm10:
+        #    bwa: /data/rajewsky/indices/mm10_bwa_0.7.17/mm10.fa
+        #    star: /data/rajewsky/indices/mm10_GRCm38.p6_star_2.7.0/
+        #    bt2_rRNA: /data/rajewsky/indices/mm10_rRNA_bowtie2_2.0.5/mouse_rRNA
