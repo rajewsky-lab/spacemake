@@ -1,21 +1,64 @@
 # Spatial transcriptomics sequencing
 
+## Structure of the pipeline
+
 This repository collects all scripts and tools used for analyzing the sequencing side of the spatial transcriptomics datasets. The following steps are currently performed:
 
-## Demultiplex the data
+### Demultiplex the data
 This assumes that the sample sheet has been provided and that the raw data has been copied to the basecalls folder. The tool `bcl2fastq` is used to demultiplex the data.
 
-## Rename the fastq files
+### Rename the fastq files
 It is important to rename the `.fastq` files so that the namings are meaningful.
 
-## Reverse the fastq files
+### Reverse the fastq files
 Read 1 needs to be reversed to match the barcodes of the optical side.
 
-## Run FastQC on the fastq files
+### Run FastQC on the fastq files
 Run it on all files. Do QC.
 
-## Run the sequencing analysis pipeline
+### Run the sequencing analysis pipeline
 After this the sequences are analyzed. It needs to be provided the (i) species to map onto and (ii) the filename of the sample. 
 
-## Produce the QC sheet of the sequencing data
+### Produce the QC sheet of the sequencing data
 After everything is finished, a `python` script (containing an `R` part) is being run to produce the QC sheet for the sample. There's the `qc_sequencing_parameters.yaml` file which contains metadata for the experiment/sample and currently needs to be created automatically. Could be automized, with taking info partially from the sample sheet.
+
+## Snakemake
+
+The pipeline is implemented in snakemake. All metadata of the experiments (experiment\_name, flowcell\_id, species, etc) should be put in the `config.yaml` file. Structure description of the file soon...
+
+To run the snakemake script, the `snakemake` python library is required (installed with `pip` or `conda`). The script requires at least 6 threads to run, this is due to pipeing several commands one after the other to descrease runtime.
+
+**Example run:**
+
+`snakemake --cores 16`
+
+### Produced directory structure
+
+The following directory structure will be produced by the snakemake file
+
+    .
+    └── sequencing_runs
+        └── <run_name_1>
+            ├── data
+            │   ├── 
+            │   │   ├── dge             # folder containing all DGEs
+            │   │   ├── qc_sheet        # folder with the qc sheet
+            │   │   ├── reports         # folder with all report, and summary files from the pipeline 
+            │   │   └── tmp             # temporary directory used during the pipeline
+            │   └── sts_02
+            │       ├── dge
+            │       ├── qc_sheet
+            │       ├── reports
+            │       └── tmp
+            ├── demux_data              # demultiplexing root directory
+            │   ├── Reports
+            │   │   └── html
+            │   ├── Stats
+            │   └── sts_0xxx
+            │       ├── sts_01
+            │       └── sts_02
+            └── reads                   # reads root directory
+                ├── raw                 # directory containing symbolic links to the demultiplexed reads
+                └── reversed            # directory containing reversed R1 and symbolic link to R2 from raw reads
+
+23 directories, 0 files

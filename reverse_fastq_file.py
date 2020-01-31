@@ -1,7 +1,7 @@
 #########
 # about #
 #########
-# reversing a fastq file. code on code in sequencing_preprocessing.py
+# reversing a fastq file. code based on code from sequencing_preprocessing.py
 # this script will be called by the main Snakefile
 
 import gzip

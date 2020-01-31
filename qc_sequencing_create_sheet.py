@@ -27,10 +27,12 @@ import yaml
 import subprocess
 
 #############
-# Variables #
+# snakemake #
 #############
-toolkit_folder = '~/src/git/sts-sequencing/'
-
+# 
+# This file will be called by snakemake. 
+# The variable snakemake holds all the input data which is needed to run functions here
+#
 #############
 # functions #
 #############
@@ -74,7 +76,7 @@ def load_read_statistics():
                 read_statistics['uniquely mapped'] = int(entry[1])
             idx += 1
 
-    with open(folder + 'uniquely_mapped_reads_type.txt', 'r') as fi:
+    with open(snakemake.input.reads_type_out, 'r') as fi:
         idx = 0
         for line in fi.readlines():
             entry = line.strip('\n').split(' ')
@@ -95,7 +97,7 @@ def load_bead_statistics(folder):
     bead_statistics = dict()
     
     # read readcounts for all barcodes seen in the data
-    readcounts = pd.read_csv(folder + 'out_readcounts.txt.gz', sep='\t', 
+    readcounts = pd.read_csv(snakemake.input.read_counts, sep='\t', 
         skiprows=1, names=['reads', 'barcode'])
     bead_statistics['total # of barcodes'] = readcounts.shape[0]
 
@@ -106,11 +108,11 @@ def load_bead_statistics(folder):
     plt.plot(np.arange(barcode_limit), rc_cumsum)
     plt.xlabel('bead barcodes sorted by number of reads', fontsize=18)
     plt.ylabel('cumulative fraction of reads', fontsize=18)
-    plt.savefig(folder+'output_qc_sheet/cumulative_fraction.png')
+    plt.savefig(folder+'cumulative_fraction.png')
     plt.tight_layout()
     plt.close()
 
-    with open(snakemake.input.synthesis_stats, 'r') as fi:
+    with open(snakemake.input.synthesis_stats_summary, 'r') as fi:
         idx = 0
         for line in fi.readlines():
             if idx == 3:
@@ -121,18 +123,16 @@ def load_bead_statistics(folder):
     pct = round(pct * 100, 2)
     bead_statistics['beads without synthesis errors'] = pct
 
-    # read the substitution errors file from the dropseq toolkit
-    #filename = find_filename(folder, 'substitution_errors_report.txt')
-    #with open(filename, 'r') as fi:
-    #    idx = 0
-    #    for line in fi.readlines():
-    #        entry = line.strip('\n').split('=')
-    #        if idx == 5:
-    #            total_barcodes_tested = int(entry[1])
-    #        if idx == 6:
-    #            barcodes_collapsed = int(entry[1])
-    #        idx += 1
-    bead_statistics['barcodes collapsed'] = None
+    with open(snakemake.input.substitution_error_report, 'r') as fi:
+        idx = 0
+        for line in fi.readlines():
+            entry = line.strip('\n').split('=')
+            if idx == 5:
+                total_barcodes_tested = int(entry[1])
+            if idx == 6:
+                barcodes_collapsed = int(entry[1])
+            idx += 1
+    bead_statistics['barcodes collapsed'] = barcodes_collapsed
 
     return bead_statistics
 
@@ -146,17 +146,8 @@ def load_downstream_statistics(folder, threshold):
     downstream_statistics = dict()
     downstream_statistics['minimum umis per bead'] = threshold
 
-    # read the Digital Gene Expression matrix
-    start_time = time.time()
-    print ('Loading the DGE... ', end='', flush=True)
-
-    # call the R script that calculates the downstream statistics
-    subprocess.call("Rscript " + toolkit_folder + 
-                    "qc_sequencing_generate_downstream_statistics.R " + folder + ' '
-                    + str(threshold), shell=True)
     # read the result of the Rscript here through pandas
-    downstream_stats_R = pd.read_csv(folder+'output_qc_sheet/downstream_statistics.csv',
-                                     index_col=0)
+    downstream_stats_R = pd.read_csv(snakemake.input.downstream_statistics, index_col=0)
     
     print ('[', round(time.time()-start_time, 2), 'seconds ]')
 
@@ -172,7 +163,7 @@ def load_downstream_statistics(folder, threshold):
     plt.ylabel('count', fontsize=18)
     plt.xscale('log')
     plt.tight_layout()
-    plt.savefig(folder+'output_qc_sheet/hist_reads_per_bead.png')
+    plt.savefig(folder+'hist_reads_per_bead.png')
     plt.close()
 
     # compute total genes per bead and plot histogram
@@ -183,7 +174,7 @@ def load_downstream_statistics(folder, threshold):
     plt.ylabel('count', fontsize=18)
     plt.xscale('log')
     plt.tight_layout()
-    plt.savefig(folder+'output_qc_sheet/hist_genes_per_bead.png')
+    plt.savefig(folder+'hist_genes_per_bead.png')
     plt.close()
 
     # compute total umis per bead and plot histogram
@@ -194,7 +185,7 @@ def load_downstream_statistics(folder, threshold):
     plt.ylabel('count', fontsize=18)
     plt.xscale('log')
     plt.tight_layout()
-    plt.savefig(folder+'output_qc_sheet/hist_umis_per_bead.png')
+    plt.savefig(folder+'hist_umis_per_bead.png')
     plt.close()
 
     # split barcodes to individual bases
@@ -211,16 +202,15 @@ def load_downstream_statistics(folder, threshold):
     plt.xlabel('barcode position', fontsize=18)
     plt.ylabel('count', fontsize=18)
     plt.tight_layout()
-    plt.savefig(folder+'output_qc_sheet/nucleotide_composition.png')
+    plt.savefig(folder+'nucleotide_composition.png')
 
     return downstream_statistics
 
 def create_qc_sheet(folder):
-    parameters_file = find_filename(folder, endswith='.yaml')
-    with open(parameters_file) as f:
+    with open(snakemake.input.parameters_file) as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 
-    read_statistics = load_read_statistics(folder)
+    read_statistics = load_read_statistics()
     bead_statistics = load_bead_statistics(folder)
     downstream_statistics = load_downstream_statistics(folder, threshold=parameters['threshold'])
 
@@ -270,8 +260,8 @@ def create_qc_sheet(folder):
     pdf.cell(30, 8, format(bead_statistics['barcodes collapsed'], ','), 1, 1, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(10)
-    pdf.image(folder+'output_qc_sheet/cumulative_fraction.png', x=None, y=None, w=75, h=50, type='', link='')
-    pdf.image(folder+'output_qc_sheet/nucleotide_composition.png', x=100, y=89, w=75, h=50, type='', link='')
+    pdf.image(folder+'cumulative_fraction.png', x=None, y=None, w=75, h=50, type='', link='')
+    pdf.image(folder+'nucleotide_composition.png', x=100, y=89, w=75, h=50, type='', link='')
     pdf.cell(90, 5, " ", 0, 1, 'C')
     pdf.cell(10)
     pdf.cell(20, 8, 'beads', 1, 0, 'C')
@@ -287,14 +277,11 @@ def create_qc_sheet(folder):
     pdf.cell(25, 8, format(downstream_statistics['minimum umis per bead'], ','), 1, 1, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.set_font('arial', '', 12)
-    pdf.image(folder+'output_qc_sheet/hist_reads_per_bead.png', x=None, y=None, w=75, h=50, type='', link='')
-    pdf.image(folder+'output_qc_sheet/hist_genes_per_bead.png', x=100, y=162, w=75, h=50, type='', link='')
-    pdf.image(folder+'output_qc_sheet/hist_umis_per_bead.png', x=None, y=None, w=75, h=50, type='', link='')
+    pdf.image(folder+'hist_reads_per_bead.png', x=None, y=None, w=75, h=50, type='', link='')
+    pdf.image(folder+'hist_genes_per_bead.png', x=100, y=162, w=75, h=50, type='', link='')
+    pdf.image(folder+'hist_umis_per_bead.png', x=None, y=None, w=75, h=50, type='', link='')
     
-    sample_folder = folder.strip('/$').split('/')
-    sample_folder = sample_folder[-1]
-    pdf.output(folder + 'output_qc_sheet/qc_sheet_' + 
-               sample_folder.strip('/') + '.pdf', 'F')
+    pdf.output(snakemake.output[0], 'F')
 
 
 ########
@@ -306,14 +293,11 @@ if __name__ == '__main__':
     start_time = time.time()
 
     # provide the folder as an argument
-    folder = '/' + sys.argv[1].strip('/') + '/'
-    print ('starting analysis for sample in folder', folder, '... ')
+    qc_sheet_folder = os.path.dirname(snakemake.output[0]) + '/'
+    print ('starting analysis for sample in folder', qc_sheet_folder, '... ')
 
-    try:
-        os.mkdir(folder + 'output_qc_sheet')
-    except OSError:
-        print ("Skipped creating new output folder, already exists")
+    subprocess.call('mkdir -p ' + qc_sheet_folder, shell=True)
     
-    create_qc_sheet(folder)
+    create_qc_sheet(qc_sheet_folder)
 
     print ('took', round(time.time() - start_time, 2), 'seconds')

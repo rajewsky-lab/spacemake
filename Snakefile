@@ -124,7 +124,7 @@ dropseq_bead_substitution_cleaned = dropseq_root + '/clean_substitution.bam'
 
 # detect bead synthesis errors
 dropseq_mapped_clean_reads = dropseq_root + '/clean.bam'
-synthesis_stats_summary = dropseq_reports_dir + '/detect_bead_synthesis_error.stats.txt'
+synthesis_stats_summary = dropseq_reports_dir + '/detect_bead_synthesis_error.summary.txt'
 substitution_error_report = dropseq_reports_dir + '/detect_bead_substitution_error.report.txt'
 
 # index bam file
@@ -152,8 +152,9 @@ dgeReads_exon_intron =     dge_root + '/dgeReads_all.txt.gz'
 reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
 cell_number = data_root + '/cell_number.txt'
 cell_cummulative_plot = data_root + '/cell_cummulative.png'
-qc_sheet_parameters_file = data_root + '/qc_sheet_parameters.yaml'
-qc_sheet = data_root + '/qc_sheet.pdf'
+downstream_statistics = data_root + '/downstream_statistics.csv'
+qc_sheet_parameters_file = data_root + '/qc_sheet/qc_sheet_parameters.yaml'
+qc_sheet = data_root + '/qc_sheet/qc_sheet.pdf'
 
 ################################
 # Final output file generation #
@@ -173,12 +174,10 @@ def get_final_output_files(pattern):
 #############
 rule all:
     input:
-       get_final_output_files(dge_exon_only),
-       get_final_output_files(reads_type_out),
-       get_final_output_files(cell_number),
-       get_final_output_files(cell_cummulative_plot),
-       get_final_output_files(qc_sheet_parameters_file),
-       get_final_output_files(dropseq_mapped_clean_reads_ix)
+        get_final_output_files(dge_exon_only),
+        get_final_output_files(cell_number),
+        get_final_output_files(dropseq_mapped_clean_reads_ix),
+        get_final_output_files(qc_sheet)
 
 rule demultiplex_data:
     params:
@@ -284,9 +283,10 @@ rule index_bam_file:
         dropseq_mapped_clean_reads_ix 
     shell:
        "samtools index {input}"
+
 rule estimate_cell_number:
     input:
-        dropseq_out_readcounts = dropseq_root + '/out_readcounts.txt.gz'
+        dropseq_out_readcounts = dropseq_out_readcounts
     output:
         cell_number=cell_number,
         cummulative_plot = cell_cummulative_plot
@@ -303,13 +303,27 @@ rule create_qc_parameters:
     script:
         "qc_sequencing_create_parameters_from_sample_sheet.py"
 
+rule create_downstream_statistics:
+    input:
+        dge = dge_exon_intron,
+        dge_reads = dgeReads_exon_intron,
+        parameters = qc_sheet_parameters_file
+    output:
+        downstream_statistics 
+    script:
+        'qc_sequencing_generate_downstream_statistics.R'
+
 rule create_qc_sheet:
     input:
         star_log = star_log_file,
         reads_type_out=reads_type_out,
-        synthesys_stats_summary=synthesis_stats_summary,
-        parameters_file=qc_sheet_parameters_file
+        synthesis_stats_summary=synthesis_stats_summary,
+        substitution_error_report=substitution_error_report,
+        parameters_file=qc_sheet_parameters_file,
+        read_counts = dropseq_out_readcounts,
+        downstream_statistics = downstream_statistics,
+        cummulative_plot = cell_cummulative_plot,
     output:
-        qc_sheet 
+        qc_sheet
     script:
         "qc_sequencing_create_sheet.py"

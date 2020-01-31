@@ -15,11 +15,7 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de']
 import os
 import yaml
 import sys
-
-#############
-# Variables #
-#############
-toolkit_folder = '~/src/git/sts-sequencing/'
+import subprocess
 
 #############
 # functions #
@@ -38,6 +34,10 @@ if __name__ == '__main__':
     # it assumes that the data is already demultiplexed and therefore all
     # relevant sample directories have been created
     sample_sheet = snakemake.input[0]
+
+    parameters_file = snakemake.output[0]
+    qc_sheet_folder = os.path.dirname(parameters_file)
+    subprocess.call("mkdir -p " + qc_sheet_folder, shell=True)
 
     with open(sample_sheet, 'r') as fi:
         sample_id_seen = False
