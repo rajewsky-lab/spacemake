@@ -1,12 +1,19 @@
+###
+# file is called from snakemake. snakemake is a global variable holding all the required input
+# and output file names
+###
+
+
 library(data.table)
+library(yaml)
 
-# pass the arguments from command line
-args <- commandArgs(trailingOnly = TRUE)
-folder = args[1]
-threshold = as.integer(args[2])
+parameters = read_yaml(snakemake@input[['parameters']])
 
-dge = fread(paste0('zcat < ', folder, '/dge_all.txt.gz'))
-dge_reads = fread(paste0('zcat < ', folder, '/dgeReads_all.txt.gz'))
+threshold = parameters$threshold
+
+print('Loading the DGE...')
+dge = fread(paste0('zcat < ', snakemake@input[['dge']]))
+dge_reads = fread(paste0('zcat < ', snakemake@input[['dge_reads']]))
 
 # find beads which have the minimum number of UMIs
 sum_umis = colSums(dge[, 3:dim(dge)[2]])
@@ -26,5 +33,4 @@ umis_per_bead = colSums(dge[, names(beads), with=FALSE])
 df = data.frame('reads'=reads_per_bead,
                 'genes'=genes_per_bead,
 		'umis'=umis_per_bead)
-fwrite(df, paste0(folder, '/output_qc_sheet/downstream_statistics.csv'),
-       row.names=TRUE)
+fwrite(df, snakemake@output[[1]], row.names=TRUE)
