@@ -40,12 +40,12 @@ The following directory structure will be produced by the snakemake file
     └── sequencing_runs
         └── <run_name_1>
             ├── data
-            │   ├── 
+            │   ├── <experiment_name_1>
             │   │   ├── dge             # folder containing all DGEs
             │   │   ├── qc_sheet        # folder with the qc sheet
             │   │   ├── reports         # folder with all report, and summary files from the pipeline 
             │   │   └── tmp             # temporary directory used during the pipeline
-            │   └── sts_02
+            │   └── <experiment_name_2>
             │       ├── dge
             │       ├── qc_sheet
             │       ├── reports
@@ -54,7 +54,7 @@ The following directory structure will be produced by the snakemake file
             │   ├── Reports
             │   │   └── html
             │   ├── Stats
-            │   └── sts_0xxx
+            │   └── <project_name_1>
             │       ├── sts_01
             │       └── sts_02
             └── reads                   # reads root directory
