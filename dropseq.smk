@@ -136,7 +136,7 @@ def get_star_inputs(wildcards):
     #    - annotation (.gtf file)
     #    - genome (.fa file)
     #    - index (a directory where the STAR index is)
-    species = config['illumina_runs'][wildcards.run]['samples'][wildcards.sample]['species']
+    species = samples[wildcards.project]['samples'][wildcards.sample]
 
     return {
         'annotation': config['knowledge']['annotations'][species],
@@ -180,7 +180,7 @@ rule sort_mapped_reads:
         """
 
 def get_genome(wildcards):
-    species = config['illumina_runs'][wildcards.run]['samples'][wildcards.sample]['species']
+    species = samples[wildcards.project]['samples'][wildcards.sample]
 
     return {
         'genome': config['knowledge']['genomes'][species]
@@ -210,7 +210,7 @@ rule merge_bam:
         """
 
 def get_annotation(wildcards):
-    species = config['illumina_runs'][wildcards.run]['samples'][wildcards.sample]['species']
+    species = samples[wildcards.project]['samples'][wildcards.sample]
 
     return {
         'annotation': config['knowledge']['annotations'][species]

@@ -9,14 +9,42 @@
 # import necessary python packages
 ####
 import os
-from sample_sheet import SampleSheet
+import pandas as pd
 
-def get_samples(runs):
+####
+# get the sample info for each sample_sheet-flowcell_id pair
+
+def get_samples(sample_sheet_path, flowcell_id):
+    with open(sample_sheet_path) as sample_sheet:
+        ix = 0
+        for line in sample_sheet:
+            if '[Data]' in line:
+                break
+            else:
+                ix = ix + 1
+
+    df = pd.read_csv(sample_sheet_path, skiprows = ix+1)
+    df['species'] = df['Description'].str.split('_').str[1]
+
     out_dict = {}
-    for key in runs.keys():
-        out_dict[key] = [sample['Sample_ID'] for sample in SampleSheet(runs[key]['samplesheet']).samples]
 
-    return(out_dict)
+    projects = df.Sample_Project.unique()
+
+    for project in projects:
+        sample_names = df[df.Sample_Project.eq(project)].Sample_ID.to_list()
+        species = df[df.Sample_Project.eq(project)].species.to_list()
+
+        samples = {}
+        for i in range(len(sample_names)):
+            samples[sample_names[i]] = species[i]
+
+        out_dict[project] = {
+            'sample_sheet': sample_sheet_path,
+            'flowcell_id': flowcell_id,
+            'samples': samples
+        }
+    
+    return out_dict
 
 ####
 # this file should contain all sample information, sample name etc.
@@ -27,35 +55,38 @@ configfile: 'config.yaml'
 # Global vars #
 ###############
 # set root output dir
-run_dir = '{run}'
+project_dir = '{project}'
 
-# runs as a dictionary
-runs = config['illumina_runs']
+illumina_projects = config['illumina_projects']
 
 # get the samples
-samples = get_samples(runs) 
+smpls = [get_samples(illumina_project['sample_sheet'], illumina_project['flowcell_id']) for illumina_project in illumina_projects]
+samples = {}
+for s in smpls:
+    samples.update(s)
+
+# create lookup table for flowcell-to-samplesheet
+# flowcell_id2samplesheet = {value['flowcell_id'] : value['sample_sheet'] for key, value in samples.items()}
 
 ##############
 # Demux vars #
 ##############
-# demultiplexing root. for each run we demultiplex only once
-demux_out = run_dir + '/demultiplexed_data'
-
 # Undetermined files pattern
 # they are the output of bcl2fastq, and serve as an indicator to see if the demultiplexing has finished
-demux_indicator = run_dir + '/demux_data/indicator.log'
+demux_dir = project_dir + '/demultiplex_data'
+demux_indicator = demux_dir + '/indicator.log'
 
 ####################################
 # FASTQ file linking and reversing #
 ####################################
 reads_suffix = '.fastq.gz'
 
-raw_reads_prefix = run_dir + '/reads/raw/{sample}_R'
+raw_reads_prefix = project_dir + '/reads/raw/{sample}_R'
 raw_reads_pattern = raw_reads_prefix + '{mate}' + reads_suffix
 raw_reads_mate_1 = raw_reads_prefix + '1' + reads_suffix
 raw_reads_mate_2 = raw_reads_prefix + '2' + reads_suffix
 
-reverse_reads_prefix = run_dir + '/reads/reversed/{sample}_reversed_R'
+reverse_reads_prefix = project_dir + '/reads/reversed/{sample}_reversed_R'
 reverse_reads_pattern = reverse_reads_prefix + '{mate}' + reads_suffix
 reverse_reads_mate_1 = reverse_reads_prefix + '1' + reads_suffix
 reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
@@ -63,7 +94,7 @@ reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
 ###############
 # Fastqc vars #
 ###############
-fastqc_root = run_dir + '/reads/fastqc/'
+fastqc_root = project_dir + '/reads/fastqc/'
 fastqc_pattern = fastqc_root + '{sample}_reversed_R{mate}_fastqc.{ext}'
 fastqc_command = '/data/rajewsky/shared_bins/FastQC-0.11.2/fastqc'
 fastqc_ext = ['zip', 'html']
@@ -76,7 +107,8 @@ picard_tools = '/data/rajewsky/shared_bins/picard-tools-2.21.6/picard.jar'
 dropseq_tools = '/data/rajewsky/shared_bins/Drop-seq_tools-2.3.0'
 
 # set per sample vars
-dropseq_root = run_dir + '/data/{sample}'
+dropseq_root = project_dir + '/data/{sample}'
+
 data_root = dropseq_root
 dropseq_reports_dir = dropseq_root + '/reports'
 dropseq_tmp_dir = dropseq_root + '/tmp'
@@ -146,18 +178,19 @@ cell_number = data_root + '/cell_number.txt'
 cell_cummulative_plot = data_root + '/cell_cummulative.png'
 downstream_statistics = data_root + '/downstream_statistics.csv'
 qc_sheet_parameters_file = data_root + '/qc_sheet/qc_sheet_parameters.yaml'
-qc_sheet = data_root + '/qc_sheet/qc_sheet.pdf'
+qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample_id}_{puck_id}.pdf'
 
 ################################
 # Final output file generation #
 ################################
 
+print(samples)
+
 def get_final_output_files(pattern, **kwargs):
-    out_files = [expand(pattern, run=key, sample=value, **kwargs) for key, value in samples.items()]
+    out_files = [expand(pattern, project=key, sample=value['samples'], **kwargs) for key, value in samples.items()]
 
     # flatten the list
     out_files = [item for sublist in out_files for item in sublist]
-    print(out_files)
 
     return out_files
 
@@ -166,17 +199,17 @@ def get_final_output_files(pattern, **kwargs):
 #############
 rule all:
     input:
-        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        get_final_output_files(dge_out, dge_type = dge_types),
-        get_final_output_files(cell_number),
-        get_final_output_files(dropseq_final_bam_ix),
-        get_final_output_files(qc_sheet)
+        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2])
+        #get_final_output_files(dge_out, dge_type = dge_types),
+        #get_final_output_files(cell_number),
+        #get_final_output_files(dropseq_final_bam_ix),
+        #get_final_output_files(qc_sheet)
 
 rule demultiplex_data:
     params:
-        samplesheet=lambda wildcards: runs[wildcards.run]['samplesheet'],
-        flowcell_id=lambda wildcards: runs[wildcards.run]['flowcell_id'],
-        output_dir= lambda wildcards: expand(demux_out, run=wildcards.run)
+        samplesheet=lambda wildcards: samples[wildcards.project]['sample_sheet'],
+        flowcell_id=lambda wildcards: samples[wildcards.project]['flowcell_id'],
+        output_dir= lambda wildcards: expand(demux_dir, project=wildcards.project)
     output:
         demux_indicator
     shell:
@@ -200,9 +233,9 @@ rule link_raw_reads:
     # isntead of hard links the link is now relative 
     shell:
         """
-        mkdir -p {wildcards.run}/reads/raw
+        mkdir -p {wildcards.project}/reads/raw
 
-        find {wildcards.run}/demux_data -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -s ../../../../{{}} {output} \; 
+        find {wildcards.project}/demultiplex_data -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -sr {{}} {output} \; 
         """
 
 rule reverse_first_mate:
@@ -211,7 +244,7 @@ rule reverse_first_mate:
     output:
         reverse_reads_mate_1
     params:
-        tmp_file_pattern = lambda wildcards: wildcards.run + '/reads/reversed/' + wildcards.sample + '_small'
+        tmp_file_pattern = lambda wildcards: wildcards.project + '/reads/reversed/' + wildcards.sample + '_small'
     script:
         'reverse_fastq_file.py'
 
@@ -222,9 +255,9 @@ rule reverse_second_mate:
         reverse_reads_mate_2
     shell:
         """
-        mkdir -p {wildcards.run}/reads/reversed
+        mkdir -p {wildcards.project}/reads/reversed
 
-        ln -s ../../../../{input} {output}
+        ln -sr {input} {output}
         """
 
 rule run_fastqc:
@@ -290,7 +323,7 @@ rule estimate_cell_number:
 
 rule create_qc_parameters:
     input:
-        samplesheet=lambda wildcards: runs[wildcards.run]['samplesheet'],
+        samplesheet=lambda wildcards: samples[wildcards.project]['sample_sheet'],
     output:
         qc_sheet_parameters_file
     script:
@@ -298,10 +331,10 @@ rule create_qc_parameters:
 
 def get_dge_input_for_downstream_statistics(wildcards):
     return {
-        'dge': expand(dge_out, run=wildcards.run, sample=wildcards.sample, dge_type ='_all'),
-        'dgeReads': expand(dge_out, run=wildcards.run, sample=wildcards.sample, dge_type ='Reads_all'),
-        'dge_summary': expand(dge_out_summary, run=wildcards.run, sample=wildcards.sample, dge_type ='_all'),
-        'dgeReads_summary': expand(dge_out_summary, run=wildcards.run, sample=wildcards.sample, dge_type ='Reads_all')
+        'dge': expand(dge_out, project=wildcards.project, sample=wildcards.sample, dge_type ='_all'),
+        'dgeReads': expand(dge_out, project=wildcards.project, sample=wildcards.sample, dge_type ='Reads_all'),
+        'dge_summary': expand(dge_out_summary, project=wildcards.project, sample=wildcards.sample, dge_type ='_all'),
+        'dgeReads_summary': expand(dge_out_summary, project=wildcards.project, sample=wildcards.sample, dge_type ='Reads_all')
     }
 
 rule create_downstream_statistics:
