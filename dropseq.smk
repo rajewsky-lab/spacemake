@@ -11,7 +11,7 @@ rule merge_reads:
         pipe(dropseq_merged_reads)
     shell:
         """
-        java -jar {picard_tools} FastqToSam i\
+        java -jar {picard_tools} FastqToSam \
             F1={input.R1} \
             F2={input.R2} \
             SM={wildcards.sample} \
@@ -136,7 +136,7 @@ def get_star_inputs(wildcards):
     #    - annotation (.gtf file)
     #    - genome (.fa file)
     #    - index (a directory where the STAR index is)
-    species = samples[wildcards.project]['samples'][wildcards.sample]
+    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
 
     return {
         'annotation': config['knowledge']['annotations'][species],
@@ -180,7 +180,7 @@ rule sort_mapped_reads:
         """
 
 def get_genome(wildcards):
-    species = samples[wildcards.project]['samples'][wildcards.sample]
+    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
 
     return {
         'genome': config['knowledge']['genomes'][species]
@@ -210,7 +210,7 @@ rule merge_bam:
         """
 
 def get_annotation(wildcards):
-    species = samples[wildcards.project]['samples'][wildcards.sample]
+    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
 
     return {
         'annotation': config['knowledge']['annotations'][species]
@@ -292,7 +292,6 @@ rule create_top_barcodes_file:
 
 def get_dge_extra_params(wildcards):
     dge_type = wildcards.dge_type
-    print(dge_type)
 
     if dge_type == '_exon':
         return ''

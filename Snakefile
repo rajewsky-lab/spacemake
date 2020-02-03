@@ -14,7 +14,7 @@ import pandas as pd
 ####
 # get the sample info for each sample_sheet-flowcell_id pair
 
-def get_samples(sample_sheet_path, flowcell_id):
+def read_sample_sheet(sample_sheet_path, flowcell_id):
     with open(sample_sheet_path) as sample_sheet:
         ix = 0
         for line in sample_sheet:
@@ -26,26 +26,42 @@ def get_samples(sample_sheet_path, flowcell_id):
     df = pd.read_csv(sample_sheet_path, skiprows = ix+1)
     df['species'] = df['Description'].str.split('_').str[1]
 
-    out_dict = {}
+    df.rename(columns={"Sample_ID":"sample_id", "Sample_Name":"puck_id", "Sample_Project":"project_id"}, inplace=True)
+    
+    df['flowcell_id'] = flowcell_id
+    df['sample_sheet'] = sample_sheet_path
 
-    projects = df.Sample_Project.unique()
+    return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id', 'species']]
+    
 
-    for project in projects:
-        sample_names = df[df.Sample_Project.eq(project)].Sample_ID.to_list()
-        species = df[df.Sample_Project.eq(project)].species.to_list()
+
+def create_lookup_table(df):
+    samples_lookup = {}
+
+    projects = df.project_id.unique()
+
+    for p in projects:
+        sample_ids = df[df.project_id.eq(p)].sample_id.to_list()
+        species = df[df.project_id.eq(p)].species.to_list()
+        pucks = df[df.project_id.eq(p)].puck_id.to_list()
+        sample_sheet = df[df.project_id.eq(p)].sample_sheet.to_list()[0]
+        flowcell_id = df[df.project_id.eq(p)].flowcell_id.to_list()[0]
 
         samples = {}
-        for i in range(len(sample_names)):
-            samples[sample_names[i]] = species[i]
+        for i in range(len(sample_ids)):
+            samples[sample_ids[i]] = {
+                'species': species[i],
+                'puck': pucks[i]
+            }
 
-        out_dict[project] = {
-            'sample_sheet': sample_sheet_path,
+        samples_lookup[p] = {
+            'sample_sheet': sample_sheet,
             'flowcell_id': flowcell_id,
             'samples': samples
         }
-    
-    return out_dict
 
+    return samples_lookup
+    
 ####
 # this file should contain all sample information, sample name etc.
 ####
@@ -60,10 +76,10 @@ project_dir = '{project}'
 illumina_projects = config['illumina_projects']
 
 # get the samples
-smpls = [get_samples(illumina_project['sample_sheet'], illumina_project['flowcell_id']) for illumina_project in illumina_projects]
-samples = {}
-for s in smpls:
-    samples.update(s)
+project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in illumina_projects], ignore_index=True)
+
+samples = create_lookup_table(project_df)
+samples_list = project_df.T.to_dict().values()
 
 # create lookup table for flowcell-to-samplesheet
 # flowcell_id2samplesheet = {value['flowcell_id'] : value['sample_sheet'] for key, value in samples.items()}
@@ -174,24 +190,23 @@ dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_al
 # post dropseq and QC #
 #######################
 reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
-cell_number = data_root + '/cell_number.txt'
 cell_cummulative_plot = data_root + '/cell_cummulative.png'
 downstream_statistics = data_root + '/downstream_statistics.csv'
 qc_sheet_parameters_file = data_root + '/qc_sheet/qc_sheet_parameters.yaml'
-qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample_id}_{puck_id}.pdf'
+qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample}_{puck}.pdf'
 
 ################################
 # Final output file generation #
 ################################
 
-print(samples)
-
 def get_final_output_files(pattern, **kwargs):
-    out_files = [expand(pattern, project=key, sample=value['samples'], **kwargs) for key, value in samples.items()]
+    out_files = [expand(pattern,
+            project=s['project_id'], 
+            sample=s['sample_id'],
+            puck=s['puck_id'], **kwargs) for s in samples_list]
 
-    # flatten the list
     out_files = [item for sublist in out_files for item in sublist]
-
+    
     return out_files
 
 #############
@@ -199,15 +214,14 @@ def get_final_output_files(pattern, **kwargs):
 #############
 rule all:
     input:
-        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2])
-        #get_final_output_files(dge_out, dge_type = dge_types),
-        #get_final_output_files(cell_number),
-        #get_final_output_files(dropseq_final_bam_ix),
-        #get_final_output_files(qc_sheet)
+        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
+        get_final_output_files(dge_out, dge_type = dge_types),
+        get_final_output_files(dropseq_final_bam_ix),
+        get_final_output_files(qc_sheet)
 
 rule demultiplex_data:
     params:
-        samplesheet=lambda wildcards: samples[wildcards.project]['sample_sheet'],
+        sample_sheet=lambda wildcards: samples[wildcards.project]['sample_sheet'],
         flowcell_id=lambda wildcards: samples[wildcards.project]['flowcell_id'],
         output_dir= lambda wildcards: expand(demux_dir, project=wildcards.project)
     output:
@@ -219,7 +233,7 @@ rule demultiplex_data:
             --mask-short-adapter-reads 15 \
             --barcode-mismatch 1 \
             --output-dir {params.output_dir} \
-            --sample-sheet {params.samplesheet} \
+            --sample-sheet {params.sample_sheet} \
             --runfolder-dir /data/remote/basecalls/{params.flowcell_id}
 
         echo "demux finished: $(date)" > {output}
@@ -343,8 +357,7 @@ rule create_qc_sheet:
         substitution_error_report=substitution_error_report,
         parameters_file=qc_sheet_parameters_file,
         read_counts = dropseq_out_readcounts,
-        downstream_statistics = downstream_statistics,
-        cummulative_plot = cell_cummulative_plot,
+        downstream_statistics = downstream_statistics
     output:
         qc_sheet
     script:
