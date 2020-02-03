@@ -13,7 +13,7 @@ threshold = parameters$threshold
 
 print('Loading the DGE...')
 dge = fread(paste0('zcat < ', snakemake@input[['dge']]))
-dge_reads = fread(paste0('zcat < ', snakemake@input[['dge_reads']]))
+dge_reads = fread(paste0('zcat < ', snakemake@input[['dgeReads']]))
 
 # find beads which have the minimum number of UMIs
 sum_umis = colSums(dge[, 3:dim(dge)[2]])

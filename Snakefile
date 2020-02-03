@@ -27,7 +27,7 @@ configfile: 'config.yaml'
 # Global vars #
 ###############
 # set root output dir
-root_dir = 'sequencing_runs'
+run_dir = '{run}'
 
 # runs as a dictionary
 runs = config['illumina_runs']
@@ -39,23 +39,23 @@ samples = get_samples(runs)
 # Demux vars #
 ##############
 # demultiplexing root. for each run we demultiplex only once
-demux_out = root_dir + '/{run}/demux_data'
+demux_out = run_dir + '/demultiplexed_data'
 
 # Undetermined files pattern
 # they are the output of bcl2fastq, and serve as an indicator to see if the demultiplexing has finished
-demux_indicator = root_dir + '/{run}/demux_data/indicator.log'
+demux_indicator = run_dir + '/demux_data/indicator.log'
 
 ####################################
 # FASTQ file linking and reversing #
 ####################################
 reads_suffix = '.fastq.gz'
 
-raw_reads_prefix = root_dir + '/{run}/reads/raw/{sample}_R'
+raw_reads_prefix = run_dir + '/reads/raw/{sample}_R'
 raw_reads_pattern = raw_reads_prefix + '{mate}' + reads_suffix
 raw_reads_mate_1 = raw_reads_prefix + '1' + reads_suffix
 raw_reads_mate_2 = raw_reads_prefix + '2' + reads_suffix
 
-reverse_reads_prefix = root_dir + '/{run}/reads/reversed/{sample}_reversed_R'
+reverse_reads_prefix = run_dir + '/reads/reversed/{sample}_reversed_R'
 reverse_reads_pattern = reverse_reads_prefix + '{mate}' + reads_suffix
 reverse_reads_mate_1 = reverse_reads_prefix + '1' + reads_suffix
 reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
@@ -63,15 +63,10 @@ reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
 ###############
 # Fastqc vars #
 ###############
-fastqc_root = root_dir + '/{run}/fastqc/'
+fastqc_root = run_dir + '/reads/fastqc/'
 fastqc_pattern = fastqc_root + '{sample}_reversed_R{mate}_fastqc.{ext}'
 fastqc_command = '/data/rajewsky/shared_bins/FastQC-0.11.2/fastqc'
-
-# create fastqc out list
-fastqc_files_out = [expand(fastqc_pattern, run=key, sample=value, mate=[1,2], ext=['html', 'zip']) for key, value in samples.items()]
-
-# flatten the list
-fastqc_files_out = [item for sublist in fastqc_files_out for item in sublist]
+fastqc_ext = ['zip', 'html']
 
 #########################
 # Dropseq pipeline vars #
@@ -81,7 +76,7 @@ picard_tools = '/data/rajewsky/shared_bins/picard-tools-2.21.6/picard.jar'
 dropseq_tools = '/data/rajewsky/shared_bins/Drop-seq_tools-2.3.0'
 
 # set per sample vars
-dropseq_root = root_dir + '/{run}/data/{sample}'
+dropseq_root = run_dir + '/data/{sample}'
 data_root = dropseq_root
 dropseq_reports_dir = dropseq_root + '/reports'
 dropseq_tmp_dir = dropseq_root + '/tmp'
@@ -117,18 +112,18 @@ dropseq_mapped_sorted_reads = dropseq_root + '/star_Aligned.sorted.bam'
 dropseq_merged = dropseq_root + '/merged.bam'
 
 # tag gene with exon
-dropseq_gene_exon_tagged = dropseq_root + '/star_gene_exon_tagged.bam'
+dropseq_gene_tagged = dropseq_root + '/star_gene_tagged.bam'
 
 # detect bead substitution errors
 dropseq_bead_substitution_cleaned = dropseq_root + '/clean_substitution.bam'
 
 # detect bead synthesis errors
-dropseq_mapped_clean_reads = dropseq_root + '/clean.bam'
+dropseq_final_bam = dropseq_root + '/final.bam'
 synthesis_stats_summary = dropseq_reports_dir + '/detect_bead_synthesis_error.summary.txt'
 substitution_error_report = dropseq_reports_dir + '/detect_bead_substitution_error.report.txt'
 
 # index bam file
-dropseq_mapped_clean_reads_ix = dropseq_mapped_clean_reads + '.bai'
+dropseq_final_bam_ix = dropseq_final_bam + '.bai'
 
 # create readcounts file
 dropseq_out_readcounts = dropseq_root + '/out_readcounts.txt.gz'
@@ -138,13 +133,10 @@ dropseq_top_barcodes = dropseq_root + '/topBarcodes.txt'
 
 # dges
 dge_root = dropseq_root + '/dge'
-dge_exon_only =     dge_root + '/dge.txt.gz'
-dge_intron_only =   dge_root + '/dge_intron.txt.gz'
-dge_exon_intron =     dge_root + '/dge_all.txt.gz'
-
-dgeReads_exon_only =   dge_root + '/dgeReads.txt.gz'
-dgeReads_intron_only =   dge_root + '/dgeReads_intron.txt.gz'
-dgeReads_exon_intron =     dge_root + '/dgeReads_all.txt.gz'
+dge_out_prefix = dge_root + '/dge{dge_type}'
+dge_out = dge_out_prefix + '.txt.gz'
+dge_out_summary = dge_out_prefix + '_summary.txt'
+dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
 
 #######################
 # post dropseq and QC #
@@ -160,12 +152,12 @@ qc_sheet = data_root + '/qc_sheet/qc_sheet.pdf'
 # Final output file generation #
 ################################
 
-def get_final_output_files(pattern):
-    # create fastqc out list
-    out_files = [expand(pattern, run=key, sample=value, mate=[1,2]) for key, value in samples.items()]
+def get_final_output_files(pattern, **kwargs):
+    out_files = [expand(pattern, run=key, sample=value, **kwargs) for key, value in samples.items()]
 
     # flatten the list
     out_files = [item for sublist in out_files for item in sublist]
+    print(out_files)
 
     return out_files
 
@@ -174,9 +166,10 @@ def get_final_output_files(pattern):
 #############
 rule all:
     input:
-        get_final_output_files(dge_exon_only),
+        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
+        get_final_output_files(dge_out, dge_type = dge_types),
         get_final_output_files(cell_number),
-        get_final_output_files(dropseq_mapped_clean_reads_ix),
+        get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(qc_sheet)
 
 rule demultiplex_data:
@@ -207,9 +200,9 @@ rule link_raw_reads:
     # isntead of hard links the link is now relative 
     shell:
         """
-        mkdir -p {root_dir}/{wildcards.run}/reads/raw
+        mkdir -p {wildcards.run}/reads/raw
 
-        find {root_dir}/{wildcards.run}/demux_data -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -s ../../../../{{}} {output} \; 
+        find {wildcards.run}/demux_data -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -s ../../../../{{}} {output} \; 
         """
 
 rule reverse_first_mate:
@@ -218,7 +211,7 @@ rule reverse_first_mate:
     output:
         reverse_reads_mate_1
     params:
-        tmp_file_pattern = lambda wildcards: root_dir + '/' + wildcards.run + '/reads/reversed/' + wildcards.sample + '_small'
+        tmp_file_pattern = lambda wildcards: wildcards.run + '/reads/reversed/' + wildcards.sample + '_small'
     script:
         'reverse_fastq_file.py'
 
@@ -229,7 +222,7 @@ rule reverse_second_mate:
         reverse_reads_mate_2
     shell:
         """
-        mkdir -p {root_dir}/{wildcards.run}/reads/reversed
+        mkdir -p {wildcards.run}/reads/reversed
 
         ln -s ../../../../{input} {output}
         """
@@ -256,7 +249,7 @@ include: 'dropseq.smk'
 
 rule determine_precentages:
     input:
-        dropseq_mapped_clean_reads
+        dropseq_final_bam
     output:
         reads_type_out
     shell:
@@ -278,9 +271,9 @@ rule determine_precentages:
 
 rule index_bam_file:
     input:
-        dropseq_mapped_clean_reads
+        dropseq_final_bam
     output:
-        dropseq_mapped_clean_reads_ix 
+        dropseq_final_bam_ix 
     shell:
        "samtools index {input}"
 
@@ -303,10 +296,17 @@ rule create_qc_parameters:
     script:
         "qc_sequencing_create_parameters_from_sample_sheet.py"
 
+def get_dge_input_for_downstream_statistics(wildcards):
+    return {
+        'dge': expand(dge_out, run=wildcards.run, sample=wildcards.sample, dge_type ='_all'),
+        'dgeReads': expand(dge_out, run=wildcards.run, sample=wildcards.sample, dge_type ='Reads_all'),
+        'dge_summary': expand(dge_out_summary, run=wildcards.run, sample=wildcards.sample, dge_type ='_all'),
+        'dgeReads_summary': expand(dge_out_summary, run=wildcards.run, sample=wildcards.sample, dge_type ='Reads_all')
+    }
+
 rule create_downstream_statistics:
     input:
-        dge = dge_exon_intron,
-        dge_reads = dgeReads_exon_intron,
+        unpack(get_dge_input_for_downstream_statistics),
         parameters = qc_sheet_parameters_file
     output:
         downstream_statistics 

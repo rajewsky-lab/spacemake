@@ -10,7 +10,17 @@ rule merge_reads:
     output:
         pipe(dropseq_merged_reads)
     shell:
-        'java -jar {picard_tools} FastqToSam F1={input.R1} F2={input.R2} SM={wildcards.sample} O={output} TMP_DIR={params.tmp_dir} SO=queryname'
+        """
+        java -jar {picard_tools} FastqToSam i\
+            F1={input.R1} \
+            F2={input.R2} \
+            SM={wildcards.sample} \
+            O={output} \
+            TMP_DIR={params.tmp_dir} \
+            SO=queryname
+
+        rm -rf {params.tmp_dir}
+        """
 
 rule tag_cells:
     input:
@@ -117,6 +127,8 @@ rule sam_to_fastq:
             INPUT={input} \
             FASTQ={output} \
             TMP_DIR={params.tmp_dir}
+
+        rm -rf {params.tmp_dir}
         """
 
 def get_star_inputs(wildcards):
@@ -150,13 +162,15 @@ rule map_reads:
             --genomeDir  {input.index} \
             --readFilesIn {input.reads} \
             --outFileNamePrefix {params.star_prefix}
+
+        rm -rf {params.tmp_dir}
         """
 
 rule sort_mapped_reads:
     input:
         rules.map_reads.output.reads
     output:
-        dropseq_mapped_sorted_reads 
+        temporary(dropseq_mapped_sorted_reads)
     shell:
         """
         java -jar {picard_tools} SortSam \
@@ -191,6 +205,8 @@ rule merge_bam:
             INCLUDE_SECONDARY_ALIGNMENTS=false \
             PAIRED_RUN=false \
             TMP_DIR={params.tmp_dir}
+
+        rm -rf {params.tmp_dir}
         """
 
 def get_annotation(wildcards):
@@ -205,7 +221,7 @@ rule tag_read_with_gene:
         unpack(get_annotation), 
         reads=rules.merge_bam.output
     output:
-        dropseq_gene_exon_tagged
+        temporary(dropseq_gene_tagged)
     shell:
         """
         {dropseq_tools}/TagReadWithGeneFunction \
@@ -237,7 +253,7 @@ rule detect_bead_synthesis_errors:
     input:
         dropseq_bead_substitution_cleaned
     output:
-        reads=dropseq_mapped_clean_reads,
+        reads=dropseq_final_bam,
         summary=synthesis_stats_summary
     threads: 8
     params:
@@ -255,7 +271,7 @@ rule detect_bead_synthesis_errors:
          """
 rule bam_tag_histogram:
     input:
-        dropseq_mapped_clean_reads
+        dropseq_final_bam
     output:
         dropseq_out_readcounts
     shell:
@@ -274,122 +290,42 @@ rule create_top_barcodes_file:
     shell:
         "set +o pipefail; zcat {input} | cut -f2 | head -60000 > {output}"
 
-rule create_dge_exon_only:
+def get_dge_extra_params(wildcards):
+    dge_type = wildcards.dge_type
+    print(dge_type)
+
+    if dge_type == '_exon':
+        return ''
+    elif dge_type == '_intron':
+        return "LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
+    elif dge_type == '_all':
+        return "LOCUS_FUNCTION_LIST=INTRONIC"
+    if dge_type == 'Reads_exon':
+        return "OUTPUT_READS_INSTEAD=true"
+    elif dge_type == 'Reads_intron':
+        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
+    elif dge_type == 'Reads_all':
+        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=INTRONIC"
+        
+
+rule create_dge:
     input:
-        reads=dropseq_mapped_clean_reads,
+        reads=dropseq_final_bam,
         top_barcodes=dropseq_top_barcodes
     output:
-        dge_exon_only 
+        dge=dge_out,
+        dge_summary=dge_out_summary
     params:
-        dge_root = dge_root
+        dge_root = dge_root,
+        dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards)     
     shell:
         """
         mkdir -p {params.dge_root}
 
         {dropseq_tools}/DigitalExpression \
         I= {input.reads}\
-        O= {output} \
-        SUMMARY= {params.dge_root}/dge_summary.txt \
-        CELL_BC_FILE={input.top_barcodes}
-        """
-
-rule create_dge_intron_only:
-    input:
-        reads=dropseq_mapped_clean_reads,
-        top_barcodes=dropseq_top_barcodes
-    output:
-        dge_intron_only 
-    params:
-        dge_root = dge_root
-    shell:
-        """
-        mkdir -p {params.dge_root}
-
-        {dropseq_tools}/DigitalExpression \
-        I= {input.reads}\
-        O= {output} \
-        SUMMARY= {params.dge_root}/dge_intron_summary.txt \
+        O= {output.dge} \
+        SUMMARY= {output.dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
-        LOCUS_FUNCTION_LIST=null \
-        LOCUS_FUNCTION_LIST=INTRONIC
-        """
-
-rule create_dge_exon_intron:
-    input:
-        reads=dropseq_mapped_clean_reads,
-        top_barcodes=dropseq_top_barcodes
-    output:
-        dge_exon_intron
-    params:
-        dge_root = dge_root
-    shell:
-        """
-        mkdir -p {params.dge_root}
-
-        {dropseq_tools}/DigitalExpression \
-        I= {input.reads}\
-        O= {output} \
-        SUMMARY= {params.dge_root}/dge_all_summary.txt \
-        CELL_BC_FILE={input.top_barcodes} \
-        LOCUS_FUNCTION_LIST=INTRONIC
-        """
-
-rule create_dgeReads_exon_only:
-    input:
-        reads=dropseq_mapped_clean_reads,
-        top_barcodes=dropseq_top_barcodes
-    output:
-        dgeReads_exon_only 
-    params:
-        dge_root = dge_root
-    shell:
-        """
-        mkdir -p {params.dge_root}
-
-        {dropseq_tools}/DigitalExpression \
-        I= {input.reads}\
-        O= {output} \
-        SUMMARY= {params.dge_root}/dgeReads_summary.txt \
-        CELL_BC_FILE={input.top_barcodes}
-        """
-
-rule create_dgeReads_intron_only:
-    input:
-        reads=dropseq_mapped_clean_reads,
-        top_barcodes=dropseq_top_barcodes
-    output:
-        dgeReads_intron_only 
-    params:
-        dge_root = dge_root
-    shell:
-        """
-        mkdir -p {params.dge_root}
-
-        {dropseq_tools}/DigitalExpression \
-        I= {input.reads}\
-        O= {output} \
-        SUMMARY= {params.dge_root}/dgeReads_intron_summary.txt \
-        CELL_BC_FILE={input.top_barcodes} \
-        LOCUS_FUNCTION_LIST=null \
-        LOCUS_FUNCTION_LIST=INTRONIC
-        """
-
-rule create_dgeReads_exon_intron:
-    input:
-        reads=dropseq_mapped_clean_reads,
-        top_barcodes=dropseq_top_barcodes
-    output:
-        dgeReads_exon_intron
-    params:
-        dge_root = dge_root
-    shell:
-        """
-        mkdir -p {params.dge_root}
-
-        {dropseq_tools}/DigitalExpression \
-        I= {input.reads}\
-        O= {output} \
-        SUMMARY= {params.dge_root}/dgeReads_all_summary.txt \
-        CELL_BC_FILE={input.top_barcodes} \
-        LOCUS_FUNCTION_LIST=INTRONIC
+        {params.dge_extra_params}
         """
