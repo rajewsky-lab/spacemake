@@ -132,7 +132,7 @@ def load_bead_statistics(folder):
     plt.xlabel('Shannon entropy', fontsize=18)
     plt.ylabel('count', fontsize=18)
     plt.tight_layout()
-    plt.savefig(folder+'output_qc_sheet/barcode_entropies.png')
+    plt.savefig(folder+'barcode_entropies.png')
     plt.close()
 
     # calculate string compression for the barcodes
@@ -143,7 +143,7 @@ def load_bead_statistics(folder):
     plt.xlabel('string compression', fontsize=18)
     plt.ylabel('count', fontsize=18)
     plt.tight_layout()
-    plt.savefig(folder+'output_qc_sheet/barcode_string_compression.png')
+    plt.savefig(folder+'barcode_string_compression.png')
     plt.close()
 
     # calculate Shannon entropies for the barcodes
@@ -154,7 +154,7 @@ def load_bead_statistics(folder):
     plt.xlabel('Shannon entropy', fontsize=18)
     plt.ylabel('count', fontsize=18)
     plt.tight_layout()
-    plt.savefig(folder+'output_qc_sheet/barcode_entropies.png')
+    plt.savefig(folder+'barcode_entropies.png')
     plt.close()
 
     # calculate string compression for the barcodes
@@ -165,7 +165,7 @@ def load_bead_statistics(folder):
     plt.xlabel('string compression', fontsize=18)
     plt.ylabel('count', fontsize=18)
     plt.tight_layout()
-    plt.savefig(folder+'output_qc_sheet/barcode_string_compression.png')
+    plt.savefig(folder+'barcode_string_compression.png')
     plt.close()
 
     # read the synthesis errors summary from the dropseq toolkit
