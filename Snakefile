@@ -310,17 +310,6 @@ rule index_bam_file:
     shell:
        "samtools index {input}"
 
-rule estimate_cell_number:
-    input:
-        dropseq_out_readcounts = dropseq_out_readcounts
-    output:
-        cell_number=cell_number,
-        cummulative_plot = cell_cummulative_plot
-    params:
-        knee_limit = 250000
-    script:
-        "estimate_cell_number.R"
-
 rule create_qc_parameters:
     input:
         samplesheet=lambda wildcards: samples[wildcards.project]['sample_sheet'],
