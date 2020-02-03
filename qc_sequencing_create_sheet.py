@@ -146,6 +146,28 @@ def load_bead_statistics(folder):
     plt.savefig(folder+'output_qc_sheet/barcode_string_compression.png')
     plt.close()
 
+    # calculate Shannon entropies for the barcodes
+    barcode_entropies = np.round(np.array([compute_shannon_entropy(bc) for 
+        bc in readcounts['barcode'][:barcode_limit]]), 2)
+    bead_statistics['barcode_entropies'] = barcode_entropies
+    plt.hist(barcode_entropies, bins=100)
+    plt.xlabel('Shannon entropy', fontsize=18)
+    plt.ylabel('count', fontsize=18)
+    plt.tight_layout()
+    plt.savefig(folder+'output_qc_sheet/barcode_entropies.png')
+    plt.close()
+
+    # calculate string compression for the barcodes
+    barcode_string_compr = np.array([len(compress_string(bc)) for 
+        bc in readcounts['barcode'][:barcode_limit]])
+    bead_statistics['barcode_string_compression'] = barcode_string_compr
+    plt.hist(barcode_string_compr, bins=20)
+    plt.xlabel('string compression', fontsize=18)
+    plt.ylabel('count', fontsize=18)
+    plt.tight_layout()
+    plt.savefig(folder+'output_qc_sheet/barcode_string_compression.png')
+    plt.close()
+
     # read the synthesis errors summary from the dropseq toolkit
     with open(snakemake.input.synthesis_stats_summary, 'r') as fi:
         idx = 0
