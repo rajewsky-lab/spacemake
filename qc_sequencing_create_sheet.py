@@ -146,17 +146,24 @@ def load_downstream_statistics(folder, threshold):
     downstream_statistics = dict()
     downstream_statistics['minimum umis per bead'] = threshold
 
-    # read the result of the Rscript here through pandas
-    downstream_stats_R = pd.read_csv(snakemake.input.downstream_statistics, index_col=0)
+    # read the summary table of dge_all (containing intronic and exonic reads)
+    downstream_stats = pd.read_csv(snakemake.input.dge_all_summary,
+            # skip the first 5 rows as they contain comments
+            skiprows=6,
+            # rename the column, make column=0 the index
+            sep='\t', index_col=0).rename(columns={'NUM_GENIC_READS': 'reads', 'NUM_TRANSCRIPTS':'umis', 'NUM_GENES':'genes'})
+
+    # filter by threshold given in the qc_sequencing_parameters.yaml
+    downstream_stats = downstream_stats[downstream_stats['umis'] >= threshold]
     
     print ('[', round(time.time()-start_time, 2), 'seconds ]')
 
     # find beads which have the minimum number of UMIs
-    beads = downstream_stats_R.index.tolist()
+    beads = downstream_stats.index.tolist()
     downstream_statistics['beads'] = len(beads)
 
     # compute total reads per bead and plot histogram
-    reads_per_bead = downstream_stats_R['reads']
+    reads_per_bead = downstream_stats['reads']
     downstream_statistics['reads per bead'] = int(round(reads_per_bead.median()))
     ax = reads_per_bead.hist(bins=100, ylabelsize=18, xlabelsize=18)
     plt.xlabel('reads per bead', fontsize=18)
@@ -167,7 +174,7 @@ def load_downstream_statistics(folder, threshold):
     plt.close()
 
     # compute total genes per bead and plot histogram
-    genes_per_bead = downstream_stats_R['genes']
+    genes_per_bead = downstream_stats['genes']
     downstream_statistics['genes per bead'] = int(round(genes_per_bead.median()))
     ax = genes_per_bead.hist(bins=100, ylabelsize=18, xlabelsize=18)
     plt.xlabel('genes per bead', fontsize=18)
@@ -178,7 +185,7 @@ def load_downstream_statistics(folder, threshold):
     plt.close()
 
     # compute total umis per bead and plot histogram
-    umis_per_bead = downstream_stats_R['umis']
+    umis_per_bead = downstream_stats['umis']
     downstream_statistics['umis per bead'] = round(int(umis_per_bead.median()))
     ax = umis_per_bead.hist(bins=100, ylabelsize=18, xlabelsize=18)
     plt.xlabel('umis per bead', fontsize=18)

@@ -190,8 +190,6 @@ dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_al
 # post dropseq and QC #
 #######################
 reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
-cell_cummulative_plot = data_root + '/cell_cummulative.png'
-downstream_statistics = data_root + '/downstream_statistics.csv'
 qc_sheet_parameters_file = data_root + '/qc_sheet/qc_sheet_parameters.yaml'
 qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample}_{puck}.pdf'
 
@@ -332,23 +330,6 @@ rule create_qc_parameters:
     script:
         "qc_sequencing_create_parameters_from_sample_sheet.py"
 
-def get_dge_input_for_downstream_statistics(wildcards):
-    return {
-        'dge': expand(dge_out, project=wildcards.project, sample=wildcards.sample, dge_type ='_all'),
-        'dgeReads': expand(dge_out, project=wildcards.project, sample=wildcards.sample, dge_type ='Reads_all'),
-        'dge_summary': expand(dge_out_summary, project=wildcards.project, sample=wildcards.sample, dge_type ='_all'),
-        'dgeReads_summary': expand(dge_out_summary, project=wildcards.project, sample=wildcards.sample, dge_type ='Reads_all')
-    }
-
-rule create_downstream_statistics:
-    input:
-        unpack(get_dge_input_for_downstream_statistics),
-        parameters = qc_sheet_parameters_file
-    output:
-        downstream_statistics 
-    script:
-        'qc_sequencing_generate_downstream_statistics.R'
-
 rule create_qc_sheet:
     input:
         star_log = star_log_file,
@@ -357,7 +338,7 @@ rule create_qc_sheet:
         substitution_error_report=substitution_error_report,
         parameters_file=qc_sheet_parameters_file,
         read_counts = dropseq_out_readcounts,
-        downstream_statistics = downstream_statistics
+        dge_all_summary = dge_root + '/dge_all_summary.txt'
     output:
         qc_sheet
     script:
