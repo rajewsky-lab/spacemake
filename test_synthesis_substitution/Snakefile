@@ -1,0 +1,132 @@
+#########################
+# Snakefile for testing #
+# DropseqTools pipeline #
+# and its functions     #
+#########################
+
+#############
+# FUNCTIONS #
+#############
+def get_species_info(wildcards):
+    species = config['samples'][wildcards.sample]['species']
+
+    return {
+        'annotation': config['knowledge']['annotations'][species],
+        'genome': config['knowledge']['genomes'][species],
+        'index': config['knowledge']['indices'][species]['star']
+    }
+
+def get_dge_extra_params(wildcards):
+    # we do not create the dge-s here, so this wont be called
+    pass
+
+configfile: 'config.yaml'
+
+#set samples
+samples = config['samples'].keys()
+
+# set variables
+reads_root = 'reads'
+
+reads_prefix = reads_root + '/{sample}'
+reads_suffix = '.fastq.gz'
+
+reads_mate_1 = reads_prefix + '/R1' + reads_suffix
+reads_mate_2 = reads_prefix + '/R2' + reads_suffix
+reads_pattern = reads_prefix + '/{mate}' + reads_suffix
+
+dropseq_root = 'data/{sample}'
+
+#########################
+# Dropseq pipeline vars #
+#########################
+# set the tool script directories
+picard_tools = '/data/rajewsky/shared_bins/picard-tools-2.21.6/picard.jar'
+dropseq_tools = '/data/rajewsky/shared_bins/Drop-seq_tools-2.3.0'
+
+dropseq_reports_dir = dropseq_root + '/reports'
+dropseq_tmp_dir = dropseq_root + '/tmp'
+smart_adapter = config['adapters']['smart']
+
+# file containing R1 and R2 merged
+dropseq_merge_in_mate_1 = reads_mate_1
+dropseq_merge_in_mate_2 = reads_mate_2
+dropseq_merged_reads = dropseq_root + '/unaligned.bam'
+
+# tag reads with umis and cells
+dropseq_cell_tagged = dropseq_root + '/unaligned_tagged_umi_cell.bam'
+dropseq_umi_tagged = dropseq_root + '/unaligned_tagged_umi.bam'
+
+# filter out XC tag
+dropseq_tagged_filtered = dropseq_root + '/unaligned_tagged_filtered.bam'
+
+# trim smart adapter from the reads
+dropseq_tagged_filtered_trimmed = dropseq_root + '/unaligned_tagged_filtered_trimmed.bam'
+
+# trim polyA overheang if exists
+dropseq_tagged_filtered_trimmed_polyA = dropseq_root + '/unaligned_tagged_filtered_trimmed_polyA.bam'
+
+# create fastq file from the previous .bam to input into STAR
+dropseq_star_input = dropseq_root + '/unaligned_reads_star_input.fastq'
+
+# mapped reads
+dropseq_mapped_reads = dropseq_root + '/star_Aligned.out.sam'
+star_log_file = dropseq_root + '/star_Log.final.out'
+
+# sort reads and create bam
+dropseq_mapped_sorted_reads = dropseq_root + '/star_Aligned.sorted.bam'
+
+# merge bam files
+dropseq_merged = dropseq_root + '/merged.bam'
+
+# tag gene with exon
+dropseq_gene_tagged = dropseq_root + '/star_gene_tagged.bam'
+
+# detect bead substitution errors
+dropseq_bead_substitution_cleaned = dropseq_root + '/clean_substitution.bam'
+
+# detect bead synthesis errors
+dropseq_final_bam = dropseq_root + '/final.bam'
+synthesis_stats_summary = dropseq_reports_dir + '/detect_bead_synthesis_error.summary.txt'
+substitution_error_report = dropseq_reports_dir + '/detect_bead_substitution_error.report.txt'
+
+# index bam file
+dropseq_final_bam_ix = dropseq_final_bam + '.bai'
+
+# create readcounts file
+dropseq_out_readcounts = dropseq_root + '/out_readcounts.txt.gz'
+
+# create a file with the top barcodes
+dropseq_top_barcodes = dropseq_root + '/topBarcodes.txt'
+
+# dges
+dge_root = dropseq_root + '/dge'
+dge_out_prefix = dge_root + '/dge{dge_type}'
+dge_out = dge_out_prefix + '.txt.gz'
+dge_out_summary = dge_out_prefix + '_summary.txt'
+dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
+
+include: '../dropseq.smk'
+
+rule all:
+    input:
+       expand(substitution_error_report, sample = samples),
+       expand(synthesis_stats_summary, sample = samples),
+       expand(dropseq_top_barcodes, sample = samples)
+
+def get_raw_read_path(wildcards):
+    return [config['samples'][wildcards.sample][wildcards.mate]]
+
+rule link_raw_reads:
+    input:
+        unpack(get_raw_read_path) 
+    output:
+        reads_pattern
+    params:
+        reads_dir = reads_prefix
+    shell:
+        """
+        mkdir -p {params.reads_dir}
+
+        ln -s {input} {output}
+        """
