@@ -65,7 +65,7 @@ def create_lookup_table(df):
 ####
 # this file should contain all sample information, sample name etc.
 ####
-configfile: 'config.yaml'
+# configfile should be loaded from command line
 
 ###############
 # Global vars #
