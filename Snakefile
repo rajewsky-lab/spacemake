@@ -9,15 +9,59 @@
 # import necessary python packages
 ####
 import os
-from sample_sheet import SampleSheet
+import pandas as pd
 
-def get_samples(runs):
-    out_dict = {}
-    for key in runs.keys():
-        out_dict[key] = [sample['Sample_ID'] for sample in SampleSheet(runs[key]['samplesheet']).samples]
+####
+# get the sample info for each sample_sheet-flowcell_id pair
 
-    return(out_dict)
+def read_sample_sheet(sample_sheet_path, flowcell_id):
+    with open(sample_sheet_path) as sample_sheet:
+        ix = 0
+        for line in sample_sheet:
+            if '[Data]' in line:
+                break
+            else:
+                ix = ix + 1
 
+    df = pd.read_csv(sample_sheet_path, skiprows = ix+1)
+    df['species'] = df['Description'].str.split('_').str[1]
+
+    df.rename(columns={"Sample_ID":"sample_id", "Sample_Name":"puck_id", "Sample_Project":"project_id"}, inplace=True)
+    
+    df['flowcell_id'] = flowcell_id
+    df['sample_sheet'] = sample_sheet_path
+
+    return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id', 'species']]
+    
+
+
+def create_lookup_table(df):
+    samples_lookup = {}
+
+    projects = df.project_id.unique()
+
+    for p in projects:
+        sample_ids = df[df.project_id.eq(p)].sample_id.to_list()
+        species = df[df.project_id.eq(p)].species.to_list()
+        pucks = df[df.project_id.eq(p)].puck_id.to_list()
+        sample_sheet = df[df.project_id.eq(p)].sample_sheet.to_list()[0]
+        flowcell_id = df[df.project_id.eq(p)].flowcell_id.to_list()[0]
+
+        samples = {}
+        for i in range(len(sample_ids)):
+            samples[sample_ids[i]] = {
+                'species': species[i],
+                'puck': pucks[i]
+            }
+
+        samples_lookup[p] = {
+            'sample_sheet': sample_sheet,
+            'flowcell_id': flowcell_id,
+            'samples': samples
+        }
+
+    return samples_lookup
+    
 ####
 # this file should contain all sample information, sample name etc.
 ####
@@ -27,35 +71,38 @@ configfile: 'config.yaml'
 # Global vars #
 ###############
 # set root output dir
-root_dir = 'sequencing_runs'
+project_dir = '{project}'
 
-# runs as a dictionary
-runs = config['illumina_runs']
+illumina_projects = config['illumina_projects']
 
 # get the samples
-samples = get_samples(runs) 
+project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in illumina_projects], ignore_index=True)
+
+samples = create_lookup_table(project_df)
+samples_list = project_df.T.to_dict().values()
+
+# create lookup table for flowcell-to-samplesheet
+# flowcell_id2samplesheet = {value['flowcell_id'] : value['sample_sheet'] for key, value in samples.items()}
 
 ##############
 # Demux vars #
 ##############
-# demultiplexing root. for each run we demultiplex only once
-demux_out = root_dir + '/{run}/demux_data'
-
 # Undetermined files pattern
 # they are the output of bcl2fastq, and serve as an indicator to see if the demultiplexing has finished
-demux_indicator = root_dir + '/{run}/demux_data/indicator.log'
+demux_dir = project_dir + '/demultiplex_data'
+demux_indicator = demux_dir + '/indicator.log'
 
 ####################################
 # FASTQ file linking and reversing #
 ####################################
 reads_suffix = '.fastq.gz'
 
-raw_reads_prefix = root_dir + '/{run}/reads/raw/{sample}_R'
+raw_reads_prefix = project_dir + '/reads/raw/{sample}_R'
 raw_reads_pattern = raw_reads_prefix + '{mate}' + reads_suffix
 raw_reads_mate_1 = raw_reads_prefix + '1' + reads_suffix
 raw_reads_mate_2 = raw_reads_prefix + '2' + reads_suffix
 
-reverse_reads_prefix = root_dir + '/{run}/reads/reversed/{sample}_reversed_R'
+reverse_reads_prefix = project_dir + '/reads/reversed/{sample}_reversed_R'
 reverse_reads_pattern = reverse_reads_prefix + '{mate}' + reads_suffix
 reverse_reads_mate_1 = reverse_reads_prefix + '1' + reads_suffix
 reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
@@ -63,15 +110,10 @@ reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
 ###############
 # Fastqc vars #
 ###############
-fastqc_root = root_dir + '/{run}/fastqc/'
+fastqc_root = project_dir + '/reads/fastqc/'
 fastqc_pattern = fastqc_root + '{sample}_reversed_R{mate}_fastqc.{ext}'
 fastqc_command = '/data/rajewsky/shared_bins/FastQC-0.11.2/fastqc'
-
-# create fastqc out list
-fastqc_files_out = [expand(fastqc_pattern, run=key, sample=value, mate=[1,2], ext=['html', 'zip']) for key, value in samples.items()]
-
-# flatten the list
-fastqc_files_out = [item for sublist in fastqc_files_out for item in sublist]
+fastqc_ext = ['zip', 'html']
 
 #########################
 # Dropseq pipeline vars #
@@ -81,7 +123,8 @@ picard_tools = '/data/rajewsky/shared_bins/picard-tools-2.21.6/picard.jar'
 dropseq_tools = '/data/rajewsky/shared_bins/Drop-seq_tools-2.3.0'
 
 # set per sample vars
-dropseq_root = root_dir + '/{run}/data/{sample}'
+dropseq_root = project_dir + '/data/{sample}'
+
 data_root = dropseq_root
 dropseq_reports_dir = dropseq_root + '/reports'
 dropseq_tmp_dir = dropseq_root + '/tmp'
@@ -117,18 +160,18 @@ dropseq_mapped_sorted_reads = dropseq_root + '/star_Aligned.sorted.bam'
 dropseq_merged = dropseq_root + '/merged.bam'
 
 # tag gene with exon
-dropseq_gene_exon_tagged = dropseq_root + '/star_gene_exon_tagged.bam'
+dropseq_gene_tagged = dropseq_root + '/star_gene_tagged.bam'
 
 # detect bead substitution errors
 dropseq_bead_substitution_cleaned = dropseq_root + '/clean_substitution.bam'
 
 # detect bead synthesis errors
-dropseq_mapped_clean_reads = dropseq_root + '/clean.bam'
+dropseq_final_bam = dropseq_root + '/final.bam'
 synthesis_stats_summary = dropseq_reports_dir + '/detect_bead_synthesis_error.summary.txt'
 substitution_error_report = dropseq_reports_dir + '/detect_bead_substitution_error.report.txt'
 
 # index bam file
-dropseq_mapped_clean_reads_ix = dropseq_mapped_clean_reads + '.bai'
+dropseq_final_bam_ix = dropseq_final_bam + '.bai'
 
 # create readcounts file
 dropseq_out_readcounts = dropseq_root + '/out_readcounts.txt.gz'
@@ -138,35 +181,30 @@ dropseq_top_barcodes = dropseq_root + '/topBarcodes.txt'
 
 # dges
 dge_root = dropseq_root + '/dge'
-dge_exon_only =     dge_root + '/dge.txt.gz'
-dge_intron_only =   dge_root + '/dge_intron.txt.gz'
-dge_exon_intron =     dge_root + '/dge_all.txt.gz'
-
-dgeReads_exon_only =   dge_root + '/dgeReads.txt.gz'
-dgeReads_intron_only =   dge_root + '/dgeReads_intron.txt.gz'
-dgeReads_exon_intron =     dge_root + '/dgeReads_all.txt.gz'
+dge_out_prefix = dge_root + '/dge{dge_type}'
+dge_out = dge_out_prefix + '.txt.gz'
+dge_out_summary = dge_out_prefix + '_summary.txt'
+dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
 
 #######################
 # post dropseq and QC #
 #######################
 reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
-cell_number = data_root + '/cell_number.txt'
-cell_cummulative_plot = data_root + '/cell_cummulative.png'
-downstream_statistics = data_root + '/downstream_statistics.csv'
 qc_sheet_parameters_file = data_root + '/qc_sheet/qc_sheet_parameters.yaml'
-qc_sheet = data_root + '/qc_sheet/qc_sheet.pdf'
+qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample}_{puck}.pdf'
 
 ################################
 # Final output file generation #
 ################################
 
-def get_final_output_files(pattern):
-    # create fastqc out list
-    out_files = [expand(pattern, run=key, sample=value, mate=[1,2]) for key, value in samples.items()]
+def get_final_output_files(pattern, **kwargs):
+    out_files = [expand(pattern,
+            project=s['project_id'], 
+            sample=s['sample_id'],
+            puck=s['puck_id'], **kwargs) for s in samples_list]
 
-    # flatten the list
     out_files = [item for sublist in out_files for item in sublist]
-
+    
     return out_files
 
 #############
@@ -174,16 +212,16 @@ def get_final_output_files(pattern):
 #############
 rule all:
     input:
-        get_final_output_files(dge_exon_only),
-        get_final_output_files(cell_number),
-        get_final_output_files(dropseq_mapped_clean_reads_ix),
+        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
+        get_final_output_files(dge_out, dge_type = dge_types),
+        get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(qc_sheet)
 
 rule demultiplex_data:
     params:
-        samplesheet=lambda wildcards: runs[wildcards.run]['samplesheet'],
-        flowcell_id=lambda wildcards: runs[wildcards.run]['flowcell_id'],
-        output_dir= lambda wildcards: expand(demux_out, run=wildcards.run)
+        sample_sheet=lambda wildcards: samples[wildcards.project]['sample_sheet'],
+        flowcell_id=lambda wildcards: samples[wildcards.project]['flowcell_id'],
+        output_dir= lambda wildcards: expand(demux_dir, project=wildcards.project)
     output:
         demux_indicator
     shell:
@@ -193,7 +231,7 @@ rule demultiplex_data:
             --mask-short-adapter-reads 15 \
             --barcode-mismatch 1 \
             --output-dir {params.output_dir} \
-            --sample-sheet {params.samplesheet} \
+            --sample-sheet {params.sample_sheet} \
             --runfolder-dir /data/remote/basecalls/{params.flowcell_id}
 
         echo "demux finished: $(date)" > {output}
@@ -207,9 +245,9 @@ rule link_raw_reads:
     # isntead of hard links the link is now relative 
     shell:
         """
-        mkdir -p {root_dir}/{wildcards.run}/reads/raw
+        mkdir -p {wildcards.project}/reads/raw
 
-        find {root_dir}/{wildcards.run}/demux_data -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -s ../../../../{{}} {output} \; 
+        find {wildcards.project}/demultiplex_data -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -sr {{}} {output} \; 
         """
 
 rule reverse_first_mate:
@@ -218,7 +256,7 @@ rule reverse_first_mate:
     output:
         reverse_reads_mate_1
     params:
-        tmp_file_pattern = lambda wildcards: root_dir + '/' + wildcards.run + '/reads/reversed/' + wildcards.sample + '_small'
+        tmp_file_pattern = lambda wildcards: wildcards.project + '/reads/reversed/' + wildcards.sample + '_small'
     script:
         'reverse_fastq_file.py'
 
@@ -229,9 +267,9 @@ rule reverse_second_mate:
         reverse_reads_mate_2
     shell:
         """
-        mkdir -p {root_dir}/{wildcards.run}/reads/reversed
+        mkdir -p {wildcards.project}/reads/reversed
 
-        ln -s ../../../../{input} {output}
+        ln -sr {input} {output}
         """
 
 rule run_fastqc:
@@ -256,7 +294,7 @@ include: 'dropseq.smk'
 
 rule determine_precentages:
     input:
-        dropseq_mapped_clean_reads
+        dropseq_final_bam
     output:
         reads_type_out
     shell:
@@ -278,40 +316,19 @@ rule determine_precentages:
 
 rule index_bam_file:
     input:
-        dropseq_mapped_clean_reads
+        dropseq_final_bam
     output:
-        dropseq_mapped_clean_reads_ix 
+        dropseq_final_bam_ix 
     shell:
        "samtools index {input}"
 
-rule estimate_cell_number:
-    input:
-        dropseq_out_readcounts = dropseq_out_readcounts
-    output:
-        cell_number=cell_number,
-        cummulative_plot = cell_cummulative_plot
-    params:
-        knee_limit = 250000
-    script:
-        "estimate_cell_number.R"
-
 rule create_qc_parameters:
     input:
-        samplesheet=lambda wildcards: runs[wildcards.run]['samplesheet'],
+        samplesheet=lambda wildcards: samples[wildcards.project]['sample_sheet'],
     output:
         qc_sheet_parameters_file
     script:
         "qc_sequencing_create_parameters_from_sample_sheet.py"
-
-rule create_downstream_statistics:
-    input:
-        dge = dge_exon_intron,
-        dge_reads = dgeReads_exon_intron,
-        parameters = qc_sheet_parameters_file
-    output:
-        downstream_statistics 
-    script:
-        'qc_sequencing_generate_downstream_statistics.R'
 
 rule create_qc_sheet:
     input:
@@ -321,8 +338,7 @@ rule create_qc_sheet:
         substitution_error_report=substitution_error_report,
         parameters_file=qc_sheet_parameters_file,
         read_counts = dropseq_out_readcounts,
-        downstream_statistics = downstream_statistics,
-        cummulative_plot = cell_cummulative_plot,
+        dge_all_summary = dge_root + '/dge_all_summary.txt'
     output:
         qc_sheet
     script:

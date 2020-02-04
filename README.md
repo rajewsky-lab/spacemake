@@ -24,41 +24,40 @@ After everything is finished, a `python` script (containing an `R` part) is bein
 
 ## Snakemake
 
-The pipeline is implemented in snakemake. All metadata of the experiments (experiment\_name, flowcell\_id, species, etc) should be put in the `config.yaml` file. Structure description of the file soon...
+The pipeline is implemented in snakemake. All metadata of the experiments (experiment\_name, flowcell\_id, species, etc) should be put in a `config.yaml` file. An example `config.yaml` file is in the root of this repo.
 
 To run the snakemake script, the `snakemake` python library is required (installed with `pip` or `conda`). The script requires at least 6 threads to run, this is due to pipeing several commands one after the other to descrease runtime.
 
 **Example run:**
 
-`snakemake --cores 16`
+`snakemake --snakefile path_to_snakefile --configfile path_to_configfile`.
+
+This will create the output in the directory in which the command is run. Note, that all samplesheet-flowcell_id paris should be ideally in one configfile somewhere.
 
 ### Produced directory structure
 
 The following directory structure will be produced by the snakemake file
-
     .
-    └── sequencing_runs
-        └── <run_name_1>
-            ├── data
-            │   ├── <experiment_name_1>
-            │   │   ├── dge             # folder containing all DGEs
-            │   │   ├── qc_sheet        # folder with the qc sheet
-            │   │   ├── reports         # folder with all report, and summary files from the pipeline 
-            │   │   └── tmp             # temporary directory used during the pipeline
-            │   └── <experiment_name_2>
-            │       ├── dge
-            │       ├── qc_sheet
-            │       ├── reports
-            │       └── tmp
-            ├── demux_data              # demultiplexing root directory
-            │   ├── Reports
-            │   │   └── html
-            │   ├── Stats
-            │   └── <project_name_1>
-            │       ├── sts_01
-            │       └── sts_02
-            └── reads                   # reads root directory
-                ├── raw                 # directory containing symbolic links to the demultiplexed reads
-                └── reversed            # directory containing reversed R1 and symbolic link to R2 from raw reads
+    └── <run_name_1>
+        ├── data
+        │   ├── <experiment_name_1>
+        │   │   ├── dge             # folder containing all DGEs
+        │   │   ├── qc_sheet        # folder with the qc sheet
+        │   │   └── reports         # folder with all report, and summary files from the pipeline
+        │   └── <experiment_name_2>
+        │       ├── dge
+        │       ├── qc_sheet
+        │       └── reports
+        ├── demux_data              # demultiplexing root directory
+        │   ├── Reports
+        │   │   └── html
+        │   ├── Stats
+        │   └── <project_name_1>
+        │       ├── sts_01
+        │       └── sts_02
+        └── reads                   # reads root directory
+            ├── fastqc              # fastqc folder
+            ├── raw                 # directory containing symbolic links to the demultiplexed reads
+            └── reversed            # directory containing reversed R1 and symbolic link to R2 from raw reads
 
 23 directories, 0 files
