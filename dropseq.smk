@@ -3,8 +3,8 @@
 ###################################################
 rule merge_reads:
     input:
-        R1=reverse_reads_mate_1,
-        R2=reverse_reads_mate_2
+        R1=dropseq_merge_in_mate_1,
+        R2=dropseq_merge_in_mate_2
     params:
         tmp_dir = dropseq_tmp_dir
     output:
@@ -131,22 +131,9 @@ rule sam_to_fastq:
         rm -rf {params.tmp_dir}
         """
 
-def get_star_inputs(wildcards):
-    # This function will return 3 things required by STAR:
-    #    - annotation (.gtf file)
-    #    - genome (.fa file)
-    #    - index (a directory where the STAR index is)
-    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
-
-    return {
-        'annotation': config['knowledge']['annotations'][species],
-        'genome': config['knowledge']['genomes'][species],
-        'index': config['knowledge']['indices'][species]['star']
-    }
-
 rule map_reads:
     input:
-        unpack(get_star_inputs),
+        unpack(get_species_info),
         reads=rules.sam_to_fastq.output
     output:
         reads=temporary(dropseq_mapped_reads),
@@ -179,16 +166,9 @@ rule sort_mapped_reads:
             SO=queryname
         """
 
-def get_genome(wildcards):
-    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
-
-    return {
-        'genome': config['knowledge']['genomes'][species]
-    }
-
 rule merge_bam:
     input:
-        unpack(get_genome),
+        unpack(get_species_info),
         unmapped_bam=rules.remove_polyA.output,
         mapped=rules.sort_mapped_reads.output
     output:
@@ -209,16 +189,9 @@ rule merge_bam:
         rm -rf {params.tmp_dir}
         """
 
-def get_annotation(wildcards):
-    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
-
-    return {
-        'annotation': config['knowledge']['annotations'][species]
-    }
-
 rule tag_read_with_gene:
     input:
-        unpack(get_annotation), 
+        unpack(get_species_info), 
         reads=rules.merge_bam.output
     output:
         temporary(dropseq_gene_tagged)
@@ -289,22 +262,6 @@ rule create_top_barcodes_file:
         dropseq_top_barcodes
     shell:
         "set +o pipefail; zcat {input} | cut -f2 | head -60000 > {output}"
-
-def get_dge_extra_params(wildcards):
-    dge_type = wildcards.dge_type
-
-    if dge_type == '_exon':
-        return ''
-    elif dge_type == '_intron':
-        return "LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
-    elif dge_type == '_all':
-        return "LOCUS_FUNCTION_LIST=INTRONIC"
-    if dge_type == 'Reads_exon':
-        return "OUTPUT_READS_INSTEAD=true"
-    elif dge_type == 'Reads_intron':
-        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
-    elif dge_type == 'Reads_all':
-        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=INTRONIC"
         
 
 rule create_dge:

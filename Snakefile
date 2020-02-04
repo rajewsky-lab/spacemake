@@ -11,9 +11,10 @@
 import os
 import pandas as pd
 
-####
-# get the sample info for each sample_sheet-flowcell_id pair
 
+#############
+# FUNCTIONS #
+#############
 def read_sample_sheet(sample_sheet_path, flowcell_id):
     with open(sample_sheet_path) as sample_sheet:
         ix = 0
@@ -61,6 +62,35 @@ def create_lookup_table(df):
         }
 
     return samples_lookup
+
+def get_species_info(wildcards):
+    # This function will return 3 things required by STAR:
+    #    - annotation (.gtf file)
+    #    - genome (.fa file)
+    #    - index (a directory where the STAR index is)
+    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
+
+    return {
+        'annotation': config['knowledge']['annotations'][species],
+        'genome': config['knowledge']['genomes'][species],
+        'index': config['knowledge']['indices'][species]['star']
+    }
+
+def get_dge_extra_params(wildcards):
+    dge_type = wildcards.dge_type
+
+    if dge_type == '_exon':
+        return ''
+    elif dge_type == '_intron':
+        return "LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
+    elif dge_type == '_all':
+        return "LOCUS_FUNCTION_LIST=INTRONIC"
+    if dge_type == 'Reads_exon':
+        return "OUTPUT_READS_INSTEAD=true"
+    elif dge_type == 'Reads_intron':
+        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
+    elif dge_type == 'Reads_all':
+        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=INTRONIC"
     
 ####
 # this file should contain all sample information, sample name etc.
@@ -131,6 +161,8 @@ dropseq_tmp_dir = dropseq_root + '/tmp'
 smart_adapter = config['adapters']['smart']
 
 # file containing R1 and R2 merged
+dropseq_merge_in_mate_1 = reverse_reads_mate_1
+dropseq_merge_in_mate_2 = reverse_reads_mate_2
 dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 
 # tag reads with umis and cells
