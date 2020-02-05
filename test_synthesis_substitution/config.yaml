@@ -14,6 +14,16 @@ samples:
         R2: /scratch/home/tsztank/testing_spatial_pipeline/sts_017/reads/reversed/sts_017_8_reversed_R2.fastq.gz
         sequencing_type: 'sts' 
         species: mouse
+    wt_mouse_1:
+        R1: /data/rajewsky/sequencing/mouse/kettenmann_microglia/first_series/Kettenmann_NF1/WT/Kettenmann/NR_CK_126/ds072_1_S1_R1_001.fastq.gz
+        R2: /data/rajewsky/sequencing/mouse/kettenmann_microglia/first_series/Kettenmann_NF1/WT/Kettenmann/NR_CK_126/ds072_1_S1_R2_001.fastq.gz
+        sequencing_type: 'normal'
+        species: mouse
+    wt_mouse_2:
+        R1: /data/rajewsky/sequencing/mouse/kettenmann_microglia/first_series/Kettenmann_NF1/WT/Kettenmann/NR_CK_127/ds072_2_S2_R1_001.fastq.gz
+        R2: /data/rajewsky/sequencing/mouse/kettenmann_microglia/first_series/Kettenmann_NF1/WT/Kettenmann/NR_CK_127/ds072_2_S2_R2_001.fastq.gz
+        sequencing_type: 'normal'
+        species: mouse
 
 adapters:
     smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'

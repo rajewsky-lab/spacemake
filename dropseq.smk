@@ -1,3 +1,63 @@
+########################
+# COMMON PIPELINE VARS #
+########################
+# tag reads with umis and cells
+dropseq_cell_tagged = dropseq_root + '/unaligned_tagged_umi_cell.bam'
+dropseq_umi_tagged = dropseq_root + '/unaligned_tagged_umi.bam'
+
+# filter out XC tag
+dropseq_tagged_filtered = dropseq_root + '/unaligned_tagged_filtered.bam'
+
+# trim smart adapter from the reads
+dropseq_tagged_filtered_trimmed = dropseq_root + '/unaligned_tagged_filtered_trimmed.bam'
+
+# trim polyA overheang if exists
+dropseq_tagged_filtered_trimmed_polyA = dropseq_root + '/unaligned_tagged_filtered_trimmed_polyA.bam'
+
+# create fastq file from the previous .bam to input into STAR
+dropseq_star_input = dropseq_root + '/unaligned_reads_star_input.fastq'
+
+# mapped reads
+dropseq_mapped_reads = dropseq_root + '/star_Aligned.out.sam'
+star_log_file = dropseq_root + '/star_Log.final.out'
+
+# sort reads and create bam
+dropseq_mapped_sorted_reads = dropseq_root + '/star_Aligned.sorted.bam'
+
+# merge bam files
+dropseq_merged = dropseq_root + '/merged.bam'
+
+# tag gene with exon
+dropseq_gene_tagged = dropseq_root + '/star_gene_tagged.bam'
+
+# detect bead substitution errors
+dropseq_bead_substitution_cleaned = dropseq_root + '/clean_substitution.bam'
+
+# detect bead synthesis errors
+dropseq_final_bam = dropseq_root + '/final.bam'
+substitution_error_report = dropseq_reports_dir + '/detect_bead_substitution_error.report.txt'
+substitution_error_summary = dropseq_reports_dir + '/detect_bead_substitution_error.summary.txt'
+synthesis_error_summary = dropseq_reports_dir + '/detect_bead_synthesis_error.summary.txt'
+
+# index bam file
+dropseq_final_bam_ix = dropseq_final_bam + '.bai'
+
+# create readcounts file
+dropseq_out_readcounts = dropseq_root + '/out_readcounts.txt.gz'
+
+# create a file with the top barcodes
+dropseq_top_barcodes = dropseq_root + '/topBarcodes.txt'
+
+# dges
+dge_root = dropseq_root + '/dge'
+dge_out_prefix = dge_root + '/dge{dge_type}'
+dge_out = dge_out_prefix + '.txt.gz'
+dge_out_summary = dge_out_prefix + '_summary.txt'
+dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
+
+# reads type
+reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
+
 ###################################################
 # Snakefile containing the dropseq pipeline rules #
 ###################################################
@@ -208,7 +268,8 @@ rule detect_bead_substitution_error:
         rules.tag_read_with_gene.output
     output:
         reads=temporary(dropseq_bead_substitution_cleaned),
-        report=substitution_error_report
+        report=substitution_error_report,
+        summary=substitution_error_summary
     threads: 8
     params:
         reports_dir = dropseq_reports_dir
@@ -218,7 +279,7 @@ rule detect_bead_substitution_error:
             I={input} \
             O={output.reads} \
             OUTPUT_REPORT={output.report} \
-            OUTPUT_SUMMARY={params.reports_dir}/detect_bead_substitution_error.summary.txt \
+            OUTPUT_SUMMARY= {output.summary}\
             NUM_THREADS={threads}
         """
 
@@ -227,7 +288,7 @@ rule detect_bead_synthesis_errors:
         dropseq_bead_substitution_cleaned
     output:
         reads=dropseq_final_bam,
-        summary=synthesis_stats_summary
+        summary=synthesis_error_summary
     threads: 8
     params:
         reports_dir = dropseq_reports_dir

@@ -145,9 +145,9 @@ fastqc_pattern = fastqc_root + '{sample}_reversed_R{mate}_fastqc.{ext}'
 fastqc_command = '/data/rajewsky/shared_bins/FastQC-0.11.2/fastqc'
 fastqc_ext = ['zip', 'html']
 
-#########################
-# Dropseq pipeline vars #
-#########################
+########################
+# UNIQUE PIPELINE VARS #
+########################
 # set the tool script directories
 picard_tools = '/data/rajewsky/shared_bins/picard-tools-2.21.6/picard.jar'
 dropseq_tools = '/data/rajewsky/shared_bins/Drop-seq_tools-2.3.0'
@@ -165,65 +165,16 @@ dropseq_merge_in_mate_1 = reverse_reads_mate_1
 dropseq_merge_in_mate_2 = reverse_reads_mate_2
 dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 
-# tag reads with umis and cells
-dropseq_cell_tagged = dropseq_root + '/unaligned_tagged_umi_cell.bam'
-dropseq_umi_tagged = dropseq_root + '/unaligned_tagged_umi.bam'
-
-# filter out XC tag
-dropseq_tagged_filtered = dropseq_root + '/unaligned_tagged_filtered.bam'
-
-# trim smart adapter from the reads
-dropseq_tagged_filtered_trimmed = dropseq_root + '/unaligned_tagged_filtered_trimmed.bam'
-
-# trim polyA overheang if exists
-dropseq_tagged_filtered_trimmed_polyA = dropseq_root + '/unaligned_tagged_filtered_trimmed_polyA.bam'
-
-# create fastq file from the previous .bam to input into STAR
-dropseq_star_input = dropseq_root + '/unaligned_reads_star_input.fastq'
-
-# mapped reads
-dropseq_mapped_reads = dropseq_root + '/star_Aligned.out.sam'
-star_log_file = dropseq_root + '/star_Log.final.out'
-
-# sort reads and create bam
-dropseq_mapped_sorted_reads = dropseq_root + '/star_Aligned.sorted.bam'
-
-# merge bam files
-dropseq_merged = dropseq_root + '/merged.bam'
-
-# tag gene with exon
-dropseq_gene_tagged = dropseq_root + '/star_gene_tagged.bam'
-
-# detect bead substitution errors
-dropseq_bead_substitution_cleaned = dropseq_root + '/clean_substitution.bam'
-
-# detect bead synthesis errors
-dropseq_final_bam = dropseq_root + '/final.bam'
-synthesis_stats_summary = dropseq_reports_dir + '/detect_bead_synthesis_error.summary.txt'
-substitution_error_report = dropseq_reports_dir + '/detect_bead_substitution_error.report.txt'
-
-# index bam file
-dropseq_final_bam_ix = dropseq_final_bam + '.bai'
-
-# create readcounts file
-dropseq_out_readcounts = dropseq_root + '/out_readcounts.txt.gz'
-
-# create a file with the top barcodes
-dropseq_top_barcodes = dropseq_root + '/topBarcodes.txt'
-
-# dges
-dge_root = dropseq_root + '/dge'
-dge_out_prefix = dge_root + '/dge{dge_type}'
-dge_out = dge_out_prefix + '.txt.gz'
-dge_out_summary = dge_out_prefix + '_summary.txt'
-dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
-
 #######################
 # post dropseq and QC #
 #######################
-reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
 qc_sheet_parameters_file = data_root + '/qc_sheet/qc_sheet_parameters.yaml'
 qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample}_{puck}.pdf'
+
+# #######################
+# include dropseq rules #
+# #######################
+include: 'dropseq.smk'
 
 ################################
 # Final output file generation #
@@ -318,11 +269,6 @@ rule run_fastqc:
 
         {fastqc_command} -t {threads} -o {params.output_dir} {input}
         """
-# #######################
-# include dropseq rules #
-# #######################
-include: 'dropseq.smk'
-
 
 rule determine_precentages:
     input:
@@ -366,7 +312,7 @@ rule create_qc_sheet:
     input:
         star_log = star_log_file,
         reads_type_out=reads_type_out,
-        synthesis_stats_summary=synthesis_stats_summary,
+        synthesis_error_summary=synthesis_error_summary,
         substitution_error_report=substitution_error_report,
         parameters_file=qc_sheet_parameters_file,
         read_counts = dropseq_out_readcounts,

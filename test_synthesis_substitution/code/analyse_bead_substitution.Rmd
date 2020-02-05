@@ -1,0 +1,84 @@
+---
+title: "detect bead substitution error - report"
+author: "tsztank"
+date: "`r format(Sys.time(), '%d/%B/%Y')`"
+output:
+    pdf_document
+---
+
+```{r knitr_options, include=FALSE, cache=FALSE}
+knitr::opts_chunk$set(
+  cache = T,
+  autodep = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = NA,
+  cache.path = '.cacheL',
+  fig.path = 'figures/'
+)
+```
+
+```{r libraries, include = F, cache=F}
+library(plyr)
+library(tidyverse)
+library(cowplot)
+library(knitr)
+
+theme_set(theme_cowplot(12))
+```
+
+#### Detecting bead substitution 
+
+**NOTE**: please read carefully the original Dropseq pipeline .pdf file, before reading this document. The original pipeline description can be foud here: [https://github.com/broadinstitute/Drop-seq/blob/master/doc/Drop-seq_Alignment_Cookbook.pdf](https://github.com/broadinstitute/Drop-seq/blob/master/doc/Drop-seq_Alignment_Cookbook.pdf)
+
+
+It was reported previously () that sometimes two barcodes which are different are related, as one of the nucleotides changed during the substitution or even later during sequencing. This is problem is tackled by the DetectBeadSubstitutionErrors function of the Dropseq\_tools. First, the identify barcode pairs of hamming-distance=1 (where each barcode which has less than 20 UMIs is filtered out). Errors at the synthesis step should be systemic, so a change pattern should be seen across all barcodes. That's why, their second step is to look for these systemic changes in the pairs of barcodes (with hamming=1) and join two barcodes if this systemic pattern is seen.
+
+It might be the case, however, that substitution and synthesis error events do occur, but the search space (ie number of barcode) is so big, that these events will go unnoticed (as they do not occure more than by chance). In this case this problem is not solved, as there is no way to know if a substitution is indeed real, or if we have just an another barcode with hamming-distance 1.
+
+More info in the original document, and in the source code.
+
+#### Our case
+
+One difference with our illumina sequencing for the spacial transcriptomics project is that we use 10-times more barcodes (~100k vs ~10k), so the search space is also bigger. Ultimately this means, that the above mentioned DetectBeadSubstitutionErrors function will detect some systemic barcode switching, however these events will not occur more frequently than random. This basically means, that even if the substitution error is present, we cannot tell it apart from just a 'chance' event of getting barcodes with hamming-distance 1.
+
+See below plot: on the y-axis you have 12 nucleotide positions for each nucleotide, and on the x axis you have the number of barcodes which have this switch (as we are looking for systemic substitution errors).
+
+
+For the sts samples, you see no swap between any two nucleotides for any position, which would stand out for the rest. As a negative control, below we also plotted two examples from an another dropseq project (but this time with 10k barcodes). You can see, that there there are a few systemic conversions, which then will also be fixed by the script.
+
+```{r load_files, echo=F}
+summary_files <- snakemake@input$error_summaries 
+
+summary_file_names <- llply(strsplit(summary_files, '\\/'), function(x){
+    x[2]
+})
+
+summary_files <- snakemake@input$error_summaries %>%
+    set_names(summary_file_names) %>%
+    map_df(read_table2, .id = 'file_name')
+```
+
+```{r plot_summaries, echo = F, fig.width = 7, fig.height=12}
+summary_positions = summary_files %>%
+    unite('pos.nucl', position, intended_base, sep='.') %>%
+    # adding 0 to the positions 1-9 so that the factors follow each other the right way.
+    mutate(pos.nucl = paste0("0", pos.nucl)) %>%
+    mutate(pos.nucl = str_replace(pos.nucl, "0(.{4})", "\\1")) %>%
+    mutate(pos.nucl = factor(pos.nucl))
+
+summary_positions %>%
+    ggplot(aes(pos.nucl, count, fill = substitution_base)) +
+        geom_bar(stat='identity') +
+        coord_flip() +
+        facet_wrap(~file_name, ncol = 3) +
+        ggtitle('Nucleotide substitutions per position', subtitle='we do not observe any systemic substitutions in the STS samples')
+```
+
+#### Conclusion
+
+In our case, it seems that the search space of the barcodes (~100k) is too big, so even if there are some real substitution erros with the barcodes, this would not be found.
+
+This means in practice, that the DetectBeadSubstitutionErrors function will parse the .bam file, but then will not join/remove any barcodes from the analysis. So we decided to remove this function from the pipeline, at least for now.
+
+**Also**: The other important Dropseq function is the DetectBeadSynthesisErrors. This occurs, when the bead is not synthesised correctly, and one nucleotide of the UMI is read as part of the Cell Barcode, and the last nucleotide of the UMI will be a T from the polyT. However, this problem is a subset of the previous problem (as the synthesis is also ought to be systemic) so this function is also not needed.
