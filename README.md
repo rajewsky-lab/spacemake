@@ -20,7 +20,7 @@ Run it on all files. Do QC.
 After this the sequences are analyzed. It needs to be provided the (i) species to map onto and (ii) the filename of the sample. 
 
 ### Produce the QC sheet of the sequencing data
-After everything is finished, a `python` script (containing an `R` part) is being run to produce the QC sheet for the sample. There's the `qc_sequencing_parameters.yaml` file which contains metadata for the experiment/sample and currently needs to be created automatically. Could be automized, with taking info partially from the sample sheet.
+After everything is finished, a `python` script is being run to produce the QC sheet for the sample. There's the `qc_sequencing_parameters.yaml` file which contains metadata for the experiment/sample and currently needs to be created automatically. Could be automized, with taking info partially from the sample sheet.
 
 ## Snakemake
 
