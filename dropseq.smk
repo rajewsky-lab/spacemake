@@ -30,14 +30,8 @@ dropseq_merged = dropseq_root + '/merged.bam'
 # tag gene with exon
 dropseq_gene_tagged = dropseq_root + '/star_gene_tagged.bam'
 
-# detect bead substitution errors
-dropseq_bead_substitution_cleaned = dropseq_root + '/clean_substitution.bam'
-
-# detect bead synthesis errors
+# final dropseq bfinal dropseq bam
 dropseq_final_bam = dropseq_root + '/final.bam'
-substitution_error_report = dropseq_reports_dir + '/detect_bead_substitution_error.report.txt'
-substitution_error_summary = dropseq_reports_dir + '/detect_bead_substitution_error.summary.txt'
-synthesis_error_summary = dropseq_reports_dir + '/detect_bead_synthesis_error.summary.txt'
 
 # index bam file
 dropseq_final_bam_ix = dropseq_final_bam + '.bai'
@@ -254,7 +248,7 @@ rule tag_read_with_gene:
         unpack(get_species_info), 
         reads=rules.merge_bam.output
     output:
-        temporary(dropseq_gene_tagged)
+        dropseq_final_bam
     shell:
         """
         {dropseq_tools}/TagReadWithGeneFunction \
@@ -263,46 +257,6 @@ rule tag_read_with_gene:
             ANNOTATIONS_FILE={input.annotation}
         """
 
-rule detect_bead_substitution_error:
-    input:
-        rules.tag_read_with_gene.output
-    output:
-        reads=temporary(dropseq_bead_substitution_cleaned),
-        report=substitution_error_report,
-        summary=substitution_error_summary
-    threads: 8
-    params:
-        reports_dir = dropseq_reports_dir
-    shell:
-        """
-        {dropseq_tools}/DetectBeadSubstitutionErrors \
-            I={input} \
-            O={output.reads} \
-            OUTPUT_REPORT={output.report} \
-            OUTPUT_SUMMARY= {output.summary}\
-            NUM_THREADS={threads}
-        """
-
-rule detect_bead_synthesis_errors:
-    input:
-        dropseq_bead_substitution_cleaned
-    output:
-        reads=dropseq_final_bam,
-        summary=synthesis_error_summary
-    threads: 8
-    params:
-        reports_dir = dropseq_reports_dir
-    shell:
-         """
-         {dropseq_tools}/DetectBeadSynthesisErrors \
-            I={input} \
-            O={output.reads} \
-            REPORT={params.reports_dir}/detect_bead_synthesis_error.report.txt \
-            OUTPUT_STATS={params.reports_dir}/detect_bead_synthesis_error.stats.txt \
-            SUMMARY={output.summary} \
-            PRIMER_SEQUENCE={smart_adapter} \
-            NUM_THREADS={threads}
-         """
 rule bam_tag_histogram:
     input:
         dropseq_final_bam

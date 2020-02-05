@@ -168,29 +168,6 @@ def load_bead_statistics(folder):
     plt.savefig(folder+'barcode_string_compression.png')
     plt.close()
 
-    # read the synthesis errors summary from the dropseq toolkit
-    with open(snakemake.input.synthesis_stats_summary, 'r') as fi:
-        idx = 0
-        for line in fi.readlines():
-            if idx == 3:
-                entry = line.strip('\n').split('\t')
-                break
-            idx += 1
-    pct = int(entry[1]) / int(entry[0])
-    pct = round(pct * 100, 2)
-    bead_statistics['beads without synthesis errors'] = pct
-
-    with open(snakemake.input.substitution_error_report, 'r') as fi:
-        idx = 0
-        for line in fi.readlines():
-            entry = line.strip('\n').split('=')
-            if idx == 5:
-                total_barcodes_tested = int(entry[1])
-            if idx == 6:
-                barcodes_collapsed = int(entry[1])
-            idx += 1
-    bead_statistics['barcodes collapsed'] = barcodes_collapsed
-
     return bead_statistics
 
 def load_downstream_statistics(folder, threshold):
@@ -314,14 +291,9 @@ def create_qc_sheet(folder):
     pdf.cell(10)
     pdf.cell(30, 8, 'input # beads', 1, 0, 'C')
     pdf.cell(30, 8, 'total # beads', 1, 0, 'C')
-    pdf.cell(60, 8, 'beads without synth errors', 1, 0, 'C')
-    pdf.cell(30, 8, 'bc collapsed', 1, 1, 'C')
     pdf.cell(10)
     pdf.cell(30, 8, str(parameters['input_beads']), 1, 0, 'C')
     pdf.cell(30, 8, format(bead_statistics['total # of barcodes'], ','), 1, 0, 'C')
-    pdf.cell(60, 8, str(bead_statistics['beads without synthesis errors'])
-        +  '%', 1, 0, 'C')
-    pdf.cell(30, 8, format(bead_statistics['barcodes collapsed'], ','), 1, 1, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(10)
     pdf.image(folder+'cumulative_fraction.png', x=None, y=None, w=75, h=50, type='', link='')

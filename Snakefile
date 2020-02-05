@@ -312,8 +312,6 @@ rule create_qc_sheet:
     input:
         star_log = star_log_file,
         reads_type_out=reads_type_out,
-        synthesis_error_summary=synthesis_error_summary,
-        substitution_error_report=substitution_error_report,
         parameters_file=qc_sheet_parameters_file,
         read_counts = dropseq_out_readcounts,
         dge_all_summary = dge_root + '/dge_all_summary.txt'
