@@ -37,27 +37,27 @@ This will create the output in the directory in which the command is run. Note, 
 ### Produced directory structure
 
 The following directory structure will be produced by the snakemake file
+
     .
     └── <run_name_1>
         ├── data
-        │   ├── <experiment_name_1>
-        │   │   ├── dge             # folder containing all DGEs
-        │   │   ├── qc_sheet        # folder with the qc sheet
-        │   │   └── reports         # folder with all report, and summary files from the pipeline
-        │   └── <experiment_name_2>
-        │       ├── dge
-        │       ├── qc_sheet
-        │       └── reports
+        │   ├── <experiment_name_1>
+        │   │   ├── dge             # folder containing all DGEs
+        │   │   ├── qc_sheet        # folder with the qc sheet
+        │   │   └── reports         # folder with all report, and summary files from the pipeline
+        │   └── <experiment_name_2>
+        │       ├── dge
+        │       ├── qc_sheet
+        │       └── reports
         ├── demux_data              # demultiplexing root directory
-        │   ├── Reports
-        │   │   └── html
-        │   ├── Stats
-        │   └── <project_name_1>
-        │       ├── sts_01
-        │       └── sts_02
+        │   ├── Reports
+        │   │   └── html
+        │   ├── Stats
+        │   └── <project_name_1>
+        │       ├── sts_01
+        │       └── sts_02
         └── reads                   # reads root directory
             ├── fastqc              # fastqc folder
             ├── raw                 # directory containing symbolic links to the demultiplexed reads
             └── reversed            # directory containing reversed R1 and symbolic link to R2 from raw reads
 
-23 directories, 0 files
