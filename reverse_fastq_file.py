@@ -12,12 +12,10 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 import gzip
 import subprocess
 import os
-from tqdm import tqdm
 
 #############
 # functions #
 #############
-
 
 def estimate_num_lines(file_path):
     # read the size of the file
@@ -46,7 +44,7 @@ def reverse_fastq_file(input_fq, output_fq):
     # reverse the fastq file
     idx = 1
     with gzip.open(input_fq, 'rt') as fi, gzip.open(output_fq, 'wt') as fo:
-        for line in tqdm(fi, total=estimate_num_lines(input_fq)):
+        for line in fi:
             if (idx % 4 == 2) or (idx % 4 == 0):
                 line = line[:20] # read only UMI+barcode
                 line = line.strip('\n')
