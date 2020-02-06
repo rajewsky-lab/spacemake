@@ -44,7 +44,7 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
                 ix = ix + 1
 
     df = pd.read_csv(sample_sheet_path, skiprows = ix+1)
-    df['species'] = df['Description'].str.split('_').str[1]
+    df['species'] = df['Description'].str.split('_').str[-1]
 
     df.rename(columns={"Sample_ID":"sample_id", "Sample_Name":"puck_id", "Sample_Project":"project_id"}, inplace=True)
     
