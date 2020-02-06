@@ -1,13 +1,23 @@
 #########
 # about #
 #########
-# reversing a fastq file. code based on code from sequencing_preprocessing.py
-# this script will be called by the main Snakefile
+__version__ = '0.1.0'
+__author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
+__licence__ = 'GPL'
+__email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
+###########
+# imports #
+###########
 import gzip
 import subprocess
 import os
 from tqdm import tqdm
+
+#############
+# functions #
+#############
+
 
 def estimate_num_lines(file_path):
     # read the size of the file

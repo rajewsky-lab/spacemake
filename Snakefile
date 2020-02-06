@@ -1,9 +1,10 @@
-# snakemake root file to create pipeline for the spatial sequencing illumina data
-#
-# author: tsztank
-# email: tamasryszard.sztanka-toth@mdc-berlin.de
-#
-# ###
+#########
+# about #
+#########
+__version__ = '0.1.0'
+__author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
+__licence__ = 'GPL'
+__email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
 ####
 # import necessary python packages

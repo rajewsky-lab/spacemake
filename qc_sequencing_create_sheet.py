@@ -4,10 +4,10 @@
 # about #
 #########
 
-__version__ = '0.1.10'
-__author__ = ['Nikos Karaiskos']
+__version__ = '0.1.11'
+__author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
 __licence__ = 'GPL'
-__email__ = ['nikolaos.karaiskos@mdc-berlin.de']
+__email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
 ###########
 # imports #

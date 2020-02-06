@@ -1,6 +1,15 @@
+#########
+# about #
+#########
+__version__ = '0.1.0'
+__author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
+__licence__ = 'GPL'
+__email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
+
 ########################
 # COMMON PIPELINE VARS #
 ########################
+
 # tag reads with umis and cells
 dropseq_cell_tagged = dropseq_root + '/unaligned_tagged_umi_cell.bam'
 dropseq_umi_tagged = dropseq_root + '/unaligned_tagged_umi.bam'
