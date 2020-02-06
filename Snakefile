@@ -1,9 +1,10 @@
-# snakemake root file to create pipeline for the spatial sequencing illumina data
-#
-# author: tsztank
-# email: tamasryszard.sztanka-toth@mdc-berlin.de
-#
-# ###
+#########
+# about #
+#########
+__version__ = '0.1.0'
+__author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
+__licence__ = 'GPL'
+__email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
 ####
 # import necessary python packages
@@ -312,8 +313,6 @@ rule create_qc_sheet:
     input:
         star_log = star_log_file,
         reads_type_out=reads_type_out,
-        synthesis_error_summary=synthesis_error_summary,
-        substitution_error_report=substitution_error_report,
         parameters_file=qc_sheet_parameters_file,
         read_counts = dropseq_out_readcounts,
         dge_all_summary = dge_root + '/dge_all_summary.txt'
