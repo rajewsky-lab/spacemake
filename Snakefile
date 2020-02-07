@@ -229,6 +229,7 @@ rule demultiplex_data:
         output_dir=lambda wildcards: expand(demux_dir, project=wildcards.project)
     output:
         demux_indicator
+    threads: 15
     shell:
         """
         bcl2fastq \
