@@ -51,9 +51,10 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     df['flowcell_id'] = flowcell_id
     df['demux_barcode_mismatch'] = compute_max_barcode_mismatch(df['index'])
     df['sample_sheet'] = sample_sheet_path
+    df['demux_dir'] = df['sample_sheet'].str.split('/').str[-1].str.split('.').str[0]
 
     return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
-               'species', 'demux_barcode_mismatch']]    
+               'species', 'demux_barcode_mismatch', 'demux_dir']]    
 
 def create_lookup_table(df):
     samples_lookup = {}
@@ -67,6 +68,7 @@ def create_lookup_table(df):
         sample_sheet = df[df.project_id.eq(p)].sample_sheet.to_list()[0]
         flowcell_id = df[df.project_id.eq(p)].flowcell_id.to_list()[0]
         demux_barcode_mismatch = df[df.project_id.eq(p)].demux_barcode_mismatch.to_list()[0]
+        demux_dir = df[df.project_id.eq(p)].demux_dir.to_list()[0]
 
         samples = {}
         for i in range(len(sample_ids)):
@@ -79,10 +81,19 @@ def create_lookup_table(df):
             'sample_sheet': sample_sheet,
             'flowcell_id': flowcell_id,
             'samples': samples,
-            'demux_barcode_mismatch': demux_barcode_mismatch
+            'demux_barcode_mismatch': demux_barcode_mismatch,
+            'demux_dir': demux_dir
         }
 
     return samples_lookup
+
+def get_demux_dir(wildcards):
+    return samples[wildcards.project]['demux_dir']
+
+def get_demux_indicator(wildcards):
+    demux_dir = get_demux_dir(wildcards) 
+
+    return expand(demux_indicator, demux_dir=demux_dir)
 
 def get_species_info(wildcards):
     # This function will return 3 things required by STAR:
@@ -132,6 +143,10 @@ project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id'])
 samples = create_lookup_table(project_df)
 samples_list = project_df.T.to_dict().values()
 
+print(samples_list)
+
+demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
+
 # create lookup table for flowcell-to-samplesheet
 # flowcell_id2samplesheet = {value['flowcell_id'] : value['sample_sheet'] for key, value in samples.items()}
 
@@ -140,8 +155,8 @@ samples_list = project_df.T.to_dict().values()
 ##############
 # Undetermined files pattern
 # they are the output of bcl2fastq, and serve as an indicator to see if the demultiplexing has finished
-demux_dir = project_dir + '/demultiplex_data'
-demux_indicator = demux_dir + '/indicator.log'
+demux_dir_pattern = 'demultiplex_data/{demux_dir}'
+demux_indicator = demux_dir_pattern + '/indicator.log'
 
 ####################################
 # FASTQ file linking and reversing #
@@ -223,13 +238,14 @@ rule all:
 
 rule demultiplex_data:
     params:
-        sample_sheet=lambda wildcards: samples[wildcards.project]['sample_sheet'],
-        flowcell_id=lambda wildcards: samples[wildcards.project]['flowcell_id'],
-        demux_barcode_mismatch=lambda wildcards: samples[wildcards.project]['demux_barcode_mismatch'],
-        output_dir=lambda wildcards: expand(demux_dir, project=wildcards.project)
+        demux_barcode_mismatch=lambda wildcards: samples[demux_dir2project[wildcards.demux_dir]]['demux_barcode_mismatch'],
+        sample_sheet=lambda wildcards: samples[demux_dir2project[wildcards.demux_dir]]['sample_sheet'],
+        flowcell_id=lambda wildcards: samples[demux_dir2project[wildcards.demux_dir]]['flowcell_id'],
+        output_dir= lambda wildcards: expand(demux_dir_pattern, demux_dir=wildcards.demux_dir)
     output:
         demux_indicator
-    threads: 15
+    threads:
+        4
     shell:
         """
         bcl2fastq \
@@ -238,7 +254,8 @@ rule demultiplex_data:
             --barcode-mismatch {params.demux_barcode_mismatch} \
             --output-dir {params.output_dir} \
             --sample-sheet {params.sample_sheet} \
-            --runfolder-dir /data/remote/basecalls/{params.flowcell_id}
+            --runfolder-dir /data/remote/basecalls/{params.flowcell_id} \
+            -r {threads} -p {threads} -w {threads}
 
         echo "demux finished: $(date)" > {output}
         """
@@ -247,13 +264,14 @@ rule link_raw_reads:
     output:
         raw_reads_pattern
     input:
-        demux_indicator
-    # isntead of hard links the link is now relative 
+        unpack(get_demux_indicator)
+    params:
+        demux_dir = lambda wildcards: expand(demux_dir_pattern, demux_dir=get_demux_dir(wildcards))
     shell:
         """
         mkdir -p {wildcards.project}/reads/raw
 
-        find {wildcards.project}/demultiplex_data -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -sr {{}} {output} \; 
+        find {params.demux_dir} -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -sr {{}} {output} \; 
         """
 
 rule reverse_first_mate:
