@@ -285,7 +285,7 @@ rule create_top_barcodes_file:
     output:
         dropseq_top_barcodes
     shell:
-        "set +o pipefail; zcat {input} | cut -f2 | head -60000 > {output}"
+        "set +o pipefail; zcat {input} | cut -f2 | head -100000 > {output}"
         
 
 rule create_dge:

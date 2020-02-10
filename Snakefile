@@ -1,21 +1,39 @@
 #########
 # about #
 #########
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 __author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
 __licence__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
-####
-# import necessary python packages
-####
+###########
+# imports #
+###########
 import os
 import pandas as pd
-
+import math
 
 #############
 # FUNCTIONS #
 #############
+def hamming_distance(string1, string2):
+    return sum(c1 != c2 for c1, c2 in zip(string1, string2))
+
+def compute_max_barcode_mismatch(indices):
+    """computes the maximum number of mismatches allowed for demultiplexing based
+    on the indices present in the sample sheet."""
+    num_samples = len(indices)
+    
+    if num_samples == 1:
+        return 4
+    else:
+        max_mismatch = 3
+        for i in range(num_samples-1):
+            for j in range(i+1, num_samples):
+                hd = hamming_distance(indices[i], indices[j])
+                max_mismatch = min(max_mismatch, math.ceil(hd/2)-1)
+    return max_mismatch
+
 def read_sample_sheet(sample_sheet_path, flowcell_id):
     with open(sample_sheet_path) as sample_sheet:
         ix = 0
@@ -26,16 +44,16 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
                 ix = ix + 1
 
     df = pd.read_csv(sample_sheet_path, skiprows = ix+1)
-    df['species'] = df['Description'].str.split('_').str[1]
+    df['species'] = df['Description'].str.split('_').str[-1]
 
     df.rename(columns={"Sample_ID":"sample_id", "Sample_Name":"puck_id", "Sample_Project":"project_id"}, inplace=True)
     
     df['flowcell_id'] = flowcell_id
+    df['demux_barcode_mismatch'] = compute_max_barcode_mismatch(df['index'])
     df['sample_sheet'] = sample_sheet_path
 
-    return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id', 'species']]
-    
-
+    return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
+               'species', 'demux_barcode_mismatch']]    
 
 def create_lookup_table(df):
     samples_lookup = {}
@@ -48,6 +66,7 @@ def create_lookup_table(df):
         pucks = df[df.project_id.eq(p)].puck_id.to_list()
         sample_sheet = df[df.project_id.eq(p)].sample_sheet.to_list()[0]
         flowcell_id = df[df.project_id.eq(p)].flowcell_id.to_list()[0]
+        demux_barcode_mismatch = df[df.project_id.eq(p)].demux_barcode_mismatch.to_list()[0]
 
         samples = {}
         for i in range(len(sample_ids)):
@@ -59,7 +78,8 @@ def create_lookup_table(df):
         samples_lookup[p] = {
             'sample_sheet': sample_sheet,
             'flowcell_id': flowcell_id,
-            'samples': samples
+            'samples': samples,
+            'demux_barcode_mismatch': demux_barcode_mismatch
         }
 
     return samples_lookup
@@ -205,15 +225,17 @@ rule demultiplex_data:
     params:
         sample_sheet=lambda wildcards: samples[wildcards.project]['sample_sheet'],
         flowcell_id=lambda wildcards: samples[wildcards.project]['flowcell_id'],
-        output_dir= lambda wildcards: expand(demux_dir, project=wildcards.project)
+        demux_barcode_mismatch=lambda wildcards: samples[wildcards.project]['demux_barcode_mismatch'],
+        output_dir=lambda wildcards: expand(demux_dir, project=wildcards.project)
     output:
         demux_indicator
+    threads: 15
     shell:
         """
         bcl2fastq \
             --no-lane-splitting --fastq-compression-level=9 \
             --mask-short-adapter-reads 15 \
-            --barcode-mismatch 1 \
+            --barcode-mismatch {params.demux_barcode_mismatch} \
             --output-dir {params.output_dir} \
             --sample-sheet {params.sample_sheet} \
             --runfolder-dir /data/remote/basecalls/{params.flowcell_id}
