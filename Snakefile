@@ -143,8 +143,6 @@ project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id'])
 samples = create_lookup_table(project_df)
 samples_list = project_df.T.to_dict().values()
 
-print(samples_list)
-
 demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
 # create lookup table for flowcell-to-samplesheet
@@ -196,6 +194,9 @@ dropseq_reports_dir = dropseq_root + '/reports'
 dropseq_tmp_dir = dropseq_root + '/tmp'
 smart_adapter = config['adapters']['smart']
 
+# subsample vars
+downsample_root = project_dir + '/data/{sample}/downsapled'
+
 # file containing R1 and R2 merged
 dropseq_merge_in_mate_1 = reverse_reads_mate_1
 dropseq_merge_in_mate_2 = reverse_reads_mate_2
@@ -235,6 +236,19 @@ rule all:
         get_final_output_files(dge_out, dge_type = dge_types),
         get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(qc_sheet)
+
+###############
+# SUBSAMPLING #
+###############
+include: 'downsample.smk'
+
+rule subsample:
+    input:
+        get_final_output_files(downsample_qc_sheet, ratio = [10])
+
+#########
+# RULES #
+#########
 
 rule demultiplex_data:
     params:
