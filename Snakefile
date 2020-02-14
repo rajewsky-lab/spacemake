@@ -11,119 +11,19 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 ###########
 import os
 import pandas as pd
+import numpy as np
 import math
+
+################
+# Shell prefix #
+################
+shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx4g" ')
 
 #############
 # FUNCTIONS #
 #############
-def hamming_distance(string1, string2):
-    return sum(c1 != c2 for c1, c2 in zip(string1, string2))
+include: 'snakemake_helper_functions.py'
 
-def compute_max_barcode_mismatch(indices):
-    """computes the maximum number of mismatches allowed for demultiplexing based
-    on the indices present in the sample sheet."""
-    num_samples = len(indices)
-    
-    if num_samples == 1:
-        return 4
-    else:
-        max_mismatch = 3
-        for i in range(num_samples-1):
-            for j in range(i+1, num_samples):
-                hd = hamming_distance(indices[i], indices[j])
-                max_mismatch = min(max_mismatch, math.ceil(hd/2)-1)
-    return max_mismatch
-
-def read_sample_sheet(sample_sheet_path, flowcell_id):
-    with open(sample_sheet_path) as sample_sheet:
-        ix = 0
-        for line in sample_sheet:
-            if '[Data]' in line:
-                break
-            else:
-                ix = ix + 1
-
-    df = pd.read_csv(sample_sheet_path, skiprows = ix+1)
-    df['species'] = df['Description'].str.split('_').str[-1]
-
-    df.rename(columns={"Sample_ID":"sample_id", "Sample_Name":"puck_id", "Sample_Project":"project_id"}, inplace=True)
-    
-    df['flowcell_id'] = flowcell_id
-    df['demux_barcode_mismatch'] = compute_max_barcode_mismatch(df['index'])
-    df['sample_sheet'] = sample_sheet_path
-    df['demux_dir'] = df['sample_sheet'].str.split('/').str[-1].str.split('.').str[0]
-
-    return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
-               'species', 'demux_barcode_mismatch', 'demux_dir']]    
-
-def create_lookup_table(df):
-    samples_lookup = {}
-
-    projects = df.project_id.unique()
-
-    for p in projects:
-        sample_ids = df[df.project_id.eq(p)].sample_id.to_list()
-        species = df[df.project_id.eq(p)].species.to_list()
-        pucks = df[df.project_id.eq(p)].puck_id.to_list()
-        sample_sheet = df[df.project_id.eq(p)].sample_sheet.to_list()[0]
-        flowcell_id = df[df.project_id.eq(p)].flowcell_id.to_list()[0]
-        demux_barcode_mismatch = df[df.project_id.eq(p)].demux_barcode_mismatch.to_list()[0]
-        demux_dir = df[df.project_id.eq(p)].demux_dir.to_list()[0]
-
-        samples = {}
-        for i in range(len(sample_ids)):
-            samples[sample_ids[i]] = {
-                'species': species[i],
-                'puck': pucks[i]
-            }
-
-        samples_lookup[p] = {
-            'sample_sheet': sample_sheet,
-            'flowcell_id': flowcell_id,
-            'samples': samples,
-            'demux_barcode_mismatch': demux_barcode_mismatch,
-            'demux_dir': demux_dir
-        }
-
-    return samples_lookup
-
-def get_demux_dir(wildcards):
-    return samples[wildcards.project]['demux_dir']
-
-def get_demux_indicator(wildcards):
-    demux_dir = get_demux_dir(wildcards) 
-
-    return expand(demux_indicator, demux_dir=demux_dir)
-
-def get_species_info(wildcards):
-    # This function will return 3 things required by STAR:
-    #    - annotation (.gtf file)
-    #    - genome (.fa file)
-    #    - index (a directory where the STAR index is)
-    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
-
-    return {
-        'annotation': config['knowledge']['annotations'][species],
-        'genome': config['knowledge']['genomes'][species],
-        'index': config['knowledge']['indices'][species]['star']
-    }
-
-def get_dge_extra_params(wildcards):
-    dge_type = wildcards.dge_type
-
-    if dge_type == '_exon':
-        return ''
-    elif dge_type == '_intron':
-        return "LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
-    elif dge_type == '_all':
-        return "LOCUS_FUNCTION_LIST=INTRONIC"
-    if dge_type == 'Reads_exon':
-        return "OUTPUT_READS_INSTEAD=true"
-    elif dge_type == 'Reads_intron':
-        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
-    elif dge_type == 'Reads_all':
-        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=INTRONIC"
-    
 ####
 # this file should contain all sample information, sample name etc.
 ####
@@ -132,13 +32,16 @@ def get_dge_extra_params(wildcards):
 ###############
 # Global vars #
 ###############
-# set root output dir
-project_dir = '{project}'
+# set root dir where the processed_data goes
+project_dir = config['root_dir'] + '/projects/{project}'
 
 illumina_projects = config['illumina_projects']
 
 # get the samples
 project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in illumina_projects], ignore_index=True)
+
+# add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
+project_df = project_df.append(config['additional_illumina_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
 
 samples = create_lookup_table(project_df)
 samples_list = project_df.T.to_dict().values()
@@ -147,13 +50,23 @@ demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
 # create lookup table for flowcell-to-samplesheet
 # flowcell_id2samplesheet = {value['flowcell_id'] : value['sample_sheet'] for key, value in samples.items()}
+#################
+# DIRECTORY STR #
+#################
+raw_data_root = project_dir + '/raw_data'
+raw_data_illumina = raw_data_root + '/illumina'
+raw_data_illumina_reads = raw_data_illumina + '/reads/raw'
+raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
+
+processed_data_root = project_dir + '/processed_data'
+processed_data_illumina = processed_data_root + '/{sample}/illumina'
 
 ##############
 # Demux vars #
 ##############
 # Undetermined files pattern
 # they are the output of bcl2fastq, and serve as an indicator to see if the demultiplexing has finished
-demux_dir_pattern = 'demultiplex_data/{demux_dir}'
+demux_dir_pattern = config['root_dir'] + '/demultiplex_data/{demux_dir}'
 demux_indicator = demux_dir_pattern + '/indicator.log'
 
 ####################################
@@ -161,12 +74,12 @@ demux_indicator = demux_dir_pattern + '/indicator.log'
 ####################################
 reads_suffix = '.fastq.gz'
 
-raw_reads_prefix = project_dir + '/reads/raw/{sample}_R'
+raw_reads_prefix = raw_data_illumina_reads + '/{sample}_R'
 raw_reads_pattern = raw_reads_prefix + '{mate}' + reads_suffix
 raw_reads_mate_1 = raw_reads_prefix + '1' + reads_suffix
 raw_reads_mate_2 = raw_reads_prefix + '2' + reads_suffix
 
-reverse_reads_prefix = project_dir + '/reads/reversed/{sample}_reversed_R'
+reverse_reads_prefix = raw_data_illumina_reads_reversed + '/{sample}_reversed_R'
 reverse_reads_pattern = reverse_reads_prefix + '{mate}' + reads_suffix
 reverse_reads_mate_1 = reverse_reads_prefix + '1' + reads_suffix
 reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
@@ -174,8 +87,8 @@ reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
 ###############
 # Fastqc vars #
 ###############
-fastqc_root = project_dir + '/reads/fastqc/'
-fastqc_pattern = fastqc_root + '{sample}_reversed_R{mate}_fastqc.{ext}'
+fastqc_root = raw_data_illumina + '/fastqc'
+fastqc_pattern = fastqc_root + '/{sample}_reversed_R{mate}_fastqc.{ext}'
 fastqc_command = '/data/rajewsky/shared_bins/FastQC-0.11.2/fastqc'
 fastqc_ext = ['zip', 'html']
 
@@ -187,7 +100,7 @@ picard_tools = '/data/rajewsky/shared_bins/picard-tools-2.21.6/picard.jar'
 dropseq_tools = '/data/rajewsky/shared_bins/Drop-seq_tools-2.3.0'
 
 # set per sample vars
-dropseq_root = project_dir + '/data/{sample}'
+dropseq_root = processed_data_illumina + '/complete_data'
 
 data_root = dropseq_root
 dropseq_reports_dir = dropseq_root + '/reports'
@@ -195,7 +108,7 @@ dropseq_tmp_dir = dropseq_root + '/tmp'
 smart_adapter = config['adapters']['smart']
 
 # subsample vars
-downsample_root = project_dir + '/data/{sample}/downsapled'
+downsample_root = processed_data_illumina + '/downsampled_data'
 
 # file containing R1 and R2 merged
 dropseq_merge_in_mate_1 = reverse_reads_mate_1
@@ -227,28 +140,31 @@ def get_final_output_files(pattern, **kwargs):
     
     return out_files
 
+print(project_df)
+
 #############
 # Main rule a
 #############
 rule all:
     input:
-        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
         get_final_output_files(dge_out, dge_type = dge_types),
         get_final_output_files(dropseq_final_bam_ix),
-        get_final_output_files(qc_sheet)
+        get_final_output_files(qc_sheet),
+        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2])
 
 ###############
 # SUBSAMPLING #
 ###############
 include: 'downsample.smk'
 
-rule subsample:
+rule downsample:
     input:
         get_final_output_files(downsample_qc_sheet, ratio = [10])
 
 #########
 # RULES #
 #########
+ruleorder: link_raw_reads > link_demultiplexed_reads 
 
 rule demultiplex_data:
     params:
@@ -256,6 +172,8 @@ rule demultiplex_data:
         sample_sheet=lambda wildcards: samples[demux_dir2project[wildcards.demux_dir]]['sample_sheet'],
         flowcell_id=lambda wildcards: samples[demux_dir2project[wildcards.demux_dir]]['flowcell_id'],
         output_dir= lambda wildcards: expand(demux_dir_pattern, demux_dir=wildcards.demux_dir)
+    input:
+        unpack(get_basecalls_dir)
     output:
         demux_indicator
     threads:
@@ -268,24 +186,37 @@ rule demultiplex_data:
             --barcode-mismatch {params.demux_barcode_mismatch} \
             --output-dir {params.output_dir} \
             --sample-sheet {params.sample_sheet} \
-            --runfolder-dir /data/remote/basecalls/{params.flowcell_id} \
+            --runfolder-dir  {input} \
             -r {threads} -p {threads} -w {threads}
 
-        echo "demux finished: $(date)" > {output}
         """
 
-rule link_raw_reads:
-    output:
-        raw_reads_pattern
+rule link_demultiplexed_reads:
     input:
         unpack(get_demux_indicator)
+    output:
+        raw_reads_pattern
     params:
-        demux_dir = lambda wildcards: expand(demux_dir_pattern, demux_dir=get_demux_dir(wildcards))
+        demux_dir = lambda wildcards: expand(demux_dir_pattern, demux_dir=get_demux_dir(wildcards)),
+        reads_folder = raw_data_illumina_reads
     shell:
         """
-        mkdir -p {wildcards.project}/reads/raw
+        mkdir -p {params.reads_folder}
 
         find {params.demux_dir} -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -sr {{}} {output} \; 
+        """
+
+def get_reads(wildcards):
+    return [samples[wildcards.project]['samples'][wildcards.sample]['R'+wildcards.mate]]
+
+rule link_raw_reads:
+    input:
+        unpack(get_reads)
+    output:
+        raw_reads_pattern
+    shell:
+        """
+        ln -s {input} {output}
         """
 
 rule reverse_first_mate:
@@ -293,8 +224,6 @@ rule reverse_first_mate:
         raw_reads_mate_1
     output:
         reverse_reads_mate_1
-    params:
-        tmp_file_pattern = lambda wildcards: wildcards.project + '/reads/reversed/' + wildcards.sample + '_small'
     script:
         'reverse_fastq_file.py'
 
@@ -303,9 +232,11 @@ rule reverse_second_mate:
         raw_reads_mate_2
     output:
         reverse_reads_mate_2
+    params:
+        reads_folder = raw_data_illumina_reads_reversed
     shell:
         """
-        mkdir -p {wildcards.project}/reads/reversed
+        mkdir -p {params.reads_folder}
 
         ln -sr {input} {output}
         """
@@ -356,8 +287,14 @@ rule index_bam_file:
        "samtools index {input}"
 
 rule create_qc_parameters:
-    input:
-        samplesheet=lambda wildcards: samples[wildcards.project]['sample_sheet'],
+    params:
+        sample_id = lambda wildcards: wildcards.sample,
+        project_id = lambda wildcards: wildcards.project,
+        experiment = lambda wildcards: samples[wildcards.project]['samples'][wildcards.sample]['experiment'],
+        sequencing_date = lambda wildcards: samples[wildcards.project]['sequencing_date'],
+        puck_id = lambda wildcards: samples[wildcards.project]['samples'][wildcards.sample]['puck'],
+        input_beads = '60k-100k',
+        threshold= '100'
     output:
         qc_sheet_parameters_file
     script:

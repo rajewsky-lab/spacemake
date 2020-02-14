@@ -4,8 +4,8 @@ downsampled_readcounts = downsampled_sample_root + '/out_readcounts.txt.gz'
 downsampled_top_barcodes = downsampled_sample_root + '/topBarcodes.txt'
 
 # dges
-downsample_dge_root = downsampled_sample_root + '/dge'
-downsample_dge_out_prefix = downsample_dge_root + '/downsample_dge{dge_type}'
+downsample_dge_root = downsampled_sample_root + '/downsampled_dge'
+downsample_dge_out_prefix = downsample_dge_root + '/downsampled_dge{dge_type}'
 downsample_dge_out = downsample_dge_out_prefix + '.txt.gz'
 downsample_dge_out_summary = downsample_dge_out_prefix + '_summary.txt'
 downsample_dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
@@ -47,7 +47,7 @@ rule create_downsampled_top_barcodes_file:
     output:
         downsampled_top_barcodes
     shell:
-        "set +o pipefail; zcat {input} | cut -f2 | head -100000 > {output}"
+        "zcat {input} | cut -f2 | head -100000 > {output}"
         
 rule create_downsample_dge:
     input:
@@ -77,7 +77,7 @@ rule create_downsample_qc_sheet:
         reads_type_out=reads_type_out,
         parameters_file=qc_sheet_parameters_file,
         read_counts = dropseq_out_readcounts,
-        dge_all_summary = downsample_dge_root + '/dge_all_summary.txt'
+        dge_all_summary = downsample_dge_root + '/downsampled_dge_all_summary.txt'
     output:
         downsample_qc_sheet
     script:

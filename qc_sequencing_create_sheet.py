@@ -271,7 +271,7 @@ def create_qc_sheet(folder):
     pdf.cell(30, 8, 'total # beads', 1, 0, 'C')
     pdf.cell(10)
     pdf.cell(30, 8, str(parameters['input_beads']), 1, 0, 'C')
-    pdf.cell(30, 8, format(bead_statistics['total # of barcodes'], ','), 1, 0, 'C')
+    pdf.cell(30, 8, format(bead_statistics['total # of barcodes'], ','), 1, 1, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(10)
     pdf.image(folder+'cumulative_fraction.png', x=None, y=None, w=75, h=50, type='', link='')
