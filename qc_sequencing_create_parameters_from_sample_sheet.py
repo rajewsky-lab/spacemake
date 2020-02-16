@@ -37,7 +37,8 @@ if __name__ == '__main__':
 
         fo.write('sample_id: ' + params['sample_id'] + '\n')
         fo.write('puck_id: ' + params['puck_id'] + '\n')
+        fo.write('project_id: ' + params['project_id'] + '\n')
         fo.write('experiment: ' + params['experiment'] + '\n')
-        fo.write('date: ' + params['sequencing_date']  + '\n')
+        fo.write('sequencing_date: ' + params['sequencing_date']  + '\n')
         fo.write('input_beads: '+ params['input_beads'] + '\n')
         fo.write('threshold: ' + params['threshold'] + '\n')

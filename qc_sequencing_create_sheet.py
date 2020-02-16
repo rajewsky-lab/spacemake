@@ -245,12 +245,20 @@ def create_qc_sheet(folder):
     pdf.cell(90, 10, " ", 0, 1, 'C')
     pdf.cell(90, 10, " ", 0, 1, 'C')
     pdf.cell(10)
-    pdf.cell(100, 8, ", ".join([parameters['puck_id'], 
-                                parameters['experiment'], 
-                                str(parameters['date'])]), 0, 1, 'L')
+    pdf.cell(100, 5, "project_id: %s" % (parameters['project_id']), 0, 1, 'L')
     pdf.cell(10)
-    pdf.cell(100, 8, "sequencing QC v."+str(__version__)+ 
-        ", nikolaos.karaiskos@mdc-berlin.de", 0, 1, 'L')
+    pdf.cell(100, 5, "sample_id: %s" % (parameters['sample_id']), 0, 1, 'L')
+    pdf.cell(10)
+    pdf.cell(100, 5, "puck_id: %s" % (parameters['puck_id']), 0, 1, 'L')
+    pdf.cell(10)
+    pdf.cell(100, 5, "experiment: %s" % (parameters['experiment']), 0, 1, 'L')
+    pdf.cell(10)
+    pdf.cell(100, 5, "sequencing_date: %s" % (parameters['sequencing_date']), 0, 1, 'L')
+    pdf.cell(10)
+    pdf.cell(90, 5, " ", 0, 1, 'C')
+    pdf.cell(10)
+    pdf.cell(100, 5, "sequencing QC v."+str(__version__)+ 
+        ", nikolaos.karaiskos@mdc-berlin.de, tamasryszard.sztanka-toth@mdc-berlin.de", 0, 1, 'L')
     pdf.cell(90, 8, " ", 0, 1, 'C')
     pdf.cell(10)
     pdf.cell(30, 8, 'input reads', 1, 0, 'C')
@@ -275,7 +283,7 @@ def create_qc_sheet(folder):
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(10)
     pdf.image(folder+'cumulative_fraction.png', x=None, y=None, w=75, h=50, type='', link='')
-    pdf.image(folder+'nucleotide_composition.png', x=100, y=89, w=75, h=50, type='', link='')
+    pdf.image(folder+'nucleotide_composition.png', x=100, y=101, w=75, h=50, type='', link='')
     pdf.cell(90, 5, " ", 0, 1, 'C')
     pdf.cell(10)
     pdf.cell(20, 8, 'beads', 1, 0, 'C')
@@ -291,8 +299,9 @@ def create_qc_sheet(folder):
     pdf.cell(25, 8, format(downstream_statistics['minimum umis per bead'], ','), 1, 1, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.set_font('arial', '', 12)
+    pdf.cell(5)
     pdf.image(folder+'hist_reads_per_bead.png', x=None, y=None, w=75, h=50, type='', link='')
-    pdf.image(folder+'hist_genes_per_bead.png', x=100, y=162, w=75, h=50, type='', link='')
+    pdf.image(folder+'hist_genes_per_bead.png', x=100, y=173, w=75, h=50, type='', link='')
     pdf.image(folder+'hist_umis_per_bead.png', x=None, y=None, w=75, h=50, type='', link='')
     
     # 2nd page

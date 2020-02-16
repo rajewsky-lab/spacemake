@@ -140,8 +140,6 @@ def get_final_output_files(pattern, **kwargs):
     
     return out_files
 
-print(project_df)
-
 #############
 # Main rule a
 #############
@@ -291,9 +289,9 @@ rule create_qc_parameters:
     params:
         sample_id = lambda wildcards: wildcards.sample,
         project_id = lambda wildcards: wildcards.project,
+        puck_id = lambda wildcards: samples[wildcards.project]['samples'][wildcards.sample]['puck'],
         experiment = lambda wildcards: samples[wildcards.project]['samples'][wildcards.sample]['experiment'],
         sequencing_date = lambda wildcards: samples[wildcards.project]['sequencing_date'],
-        puck_id = lambda wildcards: samples[wildcards.project]['samples'][wildcards.sample]['puck'],
         input_beads = '60k-100k',
         threshold= '100'
     output:
