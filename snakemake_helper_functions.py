@@ -19,6 +19,9 @@ def compute_max_barcode_mismatch(indices):
 def read_sample_sheet(sample_sheet_path, flowcell_id):
     with open(sample_sheet_path) as sample_sheet:
         ix = 0
+        investigator = 'none'
+        sequencing_date = 'none'
+
         for line in sample_sheet:
             line = line.strip('\n')
             if 'Investigator' in line:

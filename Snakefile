@@ -188,7 +188,8 @@ rule demultiplex_data:
             --sample-sheet {params.sample_sheet} \
             --runfolder-dir  {input} \
             -r {threads} -p {threads} -w {threads}
-
+            
+            echo "demux finished: $(date)" > {output}
         """
 
 rule link_demultiplexed_reads:
