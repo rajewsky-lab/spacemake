@@ -157,7 +157,7 @@ include: 'downsample.smk'
 
 rule downsample:
     input:
-        get_final_output_files(downsample_qc_sheet, ratio = [10])
+        get_final_output_files(downsample_qc_sheet, ratio = [30])
 
 #########
 # RULES #
@@ -174,8 +174,7 @@ rule demultiplex_data:
         unpack(get_basecalls_dir)
     output:
         demux_indicator
-    threads:
-        4
+    threads: 8
     shell:
         """
         bcl2fastq \

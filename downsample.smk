@@ -19,13 +19,12 @@ rule downsample_bam:
         downsampled_bam
     params:
         downsample_dir = downsampled_sample_root
-    threads:
-        2
+    threads: 2
     shell:
         """
         mkdir -p {params.downsample_dir}
 
-        sambamba view -o {output} -f bam -t {threads} -s 0.{ratio} {input}
+        sambamba view -o {output} -f bam -t {threads} -s 0.{wildcards.ratio} {input}
         """
 
 rule downsample_bam_tag_histogram:
