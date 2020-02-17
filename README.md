@@ -38,26 +38,42 @@ This will create the output in the directory in which the command is run. Note, 
 
 The following directory structure will be produced by the snakemake file
 
-    .
-    └── <run_name_1>
-        ├── data
-        │   ├── <experiment_name_1>
-        │   │   ├── dge             # folder containing all DGEs
-        │   │   ├── qc_sheet        # folder with the qc sheet
-        │   │   └── reports         # folder with all report, and summary files from the pipeline
-        │   └── <experiment_name_2>
-        │       ├── dge
-        │       ├── qc_sheet
-        │       └── reports
-        ├── demux_data              # demultiplexing root directory
-        │   ├── Reports
-        │   │   └── html
-        │   ├── Stats
-        │   └── <project_name_1>
-        │       ├── sts_01
-        │       └── sts_02
-        └── reads                   # reads root directory
-            ├── fastqc              # fastqc folder
-            ├── raw                 # directory containing symbolic links to the demultiplexed reads
-            └── reversed            # directory containing reversed R1 and symbolic link to R2 from raw reads
-
+        .
+        |-- demultiplex_data                            # demultiplexed data folders, one per each samplesheet
+        |   |-- 200110_STS_017_4-7-8STS_018_1           # directory names are identical to the samplesheet names
+        |   |   |-- Stats
+        |   |   |-- sts_017
+        |   |   |-- sts_018
+        |   |   |-- Undetermined_S0_R1_001.fastq.gz
+        |   |   `-- Undetermined_S0_R2_001.fastq.gz
+        |   `-- 20191206_spatseq_smples3-4
+        |       |-- indicator.log
+        |       |-- Reports
+        |       |-- Stats
+        |       |-- sts_0xxx
+        |       |-- Undetermined_S0_R1_001.fastq.gz
+        |       `-- Undetermined_S0_R2_001.fastq.gz
+        |-- sts_017                                     # root output directory, one per project
+        |   |-- data
+        |   |   |-- sts_017_4                           # directory containing results of running the pipeline. one per sample 
+        |   |   |-- sts_017_7
+        |   |   `-- sts_017_8
+        |   `-- reads                                   # reads directory, one per sample
+        |       |-- fastqc
+        |       |-- raw
+        |       `-- reversed
+        |-- sts_018
+        |   |-- data
+        |   |   `-- sts_018_1
+        |   `-- reads
+        |       |-- fastqc
+        |       |-- raw
+        |       `-- reversed
+        `-- sts_0xxx
+            |-- data
+            |   |-- sts_01
+            |   `-- sts_02
+            `-- reads
+                |-- fastqc
+                |-- raw
+                `-- reversed
