@@ -135,4 +135,15 @@ def get_dge_extra_params(wildcards):
 def get_basecalls_dir(wildcards):
     flowcell_id = samples[demux_dir2project[wildcards.demux_dir]]['flowcell_id']
     
-    return ['/data/remote/basecalls/' + flowcell_id]
+    basecalls_dir = '/data/remote/basecalls/'
+    local_nextseq_raw = '/data/rajewsky/sequencing/nextSeqRaw/'
+
+    # check if flowcell_id exists in /data/remote/basecalls
+    if os.path.isdir(basecalls_dir + flowcell_id):
+        return [basecalls_dir + flowcell_id]
+    # if not, check if flowcell_id exists in local /data/rajewsky/sequencing/nextSeqRaw
+    elif os.path.isdir(local_nextseq_raw + flowcell_id):
+        return [local_nextseq_raw + flowcell_id]
+    # else return a fake path, which won't be present, so snakemake will fail for this, as input directory will be missing
+    else:
+        return [basecalls_dir + 'none'] 

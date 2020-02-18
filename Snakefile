@@ -142,10 +142,10 @@ def get_final_output_files(pattern, **kwargs):
 
 #############
 # Main rule a
-#############
+##############
 rule all:
     input:
-        get_final_output_files(dge_out, dge_type = dge_types),
+        #get_final_output_files(dge_out, dge_type = dge_types),
         get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(qc_sheet),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2])
@@ -174,7 +174,7 @@ rule demultiplex_data:
         unpack(get_basecalls_dir)
     output:
         demux_indicator
-    threads: 8
+    threads: 16
     shell:
         """
         bcl2fastq \
