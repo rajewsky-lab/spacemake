@@ -1,3 +1,11 @@
+#########
+# about #
+#########
+__version__ = '0.1.0'
+__author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
+__licence__ = 'GPL'
+__email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
+
 downsampled_sample_root = downsample_root + '/{ratio}'
 downsampled_bam = downsampled_sample_root + '/final_downsampled_{ratio}.bam'
 downsampled_readcounts = downsampled_sample_root + '/out_readcounts.txt.gz'
@@ -10,7 +18,11 @@ downsample_dge_out = downsample_dge_out_prefix + '.txt.gz'
 downsample_dge_out_summary = downsample_dge_out_prefix + '_summary.txt'
 downsample_dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
 
-downsample_qc_sheet = downsampled_sample_root + '/qc_sheet/qc_sheet_{sample}_{puck}_{ratio}.pdf'
+downsample_qc_sheet = downsampled_sample_root + '/qc_sheet/qc_sheet_{sample}_{puck}_downsampled_{ratio}.pdf'
+
+downsample_saturation_analysis = downsample_root + '/saturation_analysis.pdf'
+
+downsample_saturation_script = repo_dir + '/saturation_analysis.Rmd'
 
 rule downsample_bam:
     input:
@@ -19,7 +31,7 @@ rule downsample_bam:
         downsampled_bam
     params:
         downsample_dir = downsampled_sample_root
-    threads: 2
+    threads: 4
     shell:
         """
         mkdir -p {params.downsample_dir}
@@ -81,3 +93,33 @@ rule create_downsample_qc_sheet:
         downsample_qc_sheet
     script:
         "qc_sequencing_create_sheet.py"
+
+
+def get_saturation_analysis_input(wildcards):
+    # first create downsampling for 10, 20 .. 90
+    downsampling_ratios = range(10,100,10)
+
+    # create dictionary with the right downsampling files where ratio is the key
+    dge_summaries = {
+        'downsampled_' + str(x): expand(downsample_dge_out_summary,
+        project = wildcards.project,
+        sample = wildcards.sample,
+        dge_type = '_all',
+        ratio = x)[0] for x in range(10, 100, 10)
+    }
+    
+    dge_summaries['downsampled_100'] = expand(dge_out_summary,
+        project = wildcards.project,
+        sample = wildcards.sample,
+        dge_type = '_all')
+
+    return dge_summaries
+
+rule create_saturation_analysis:
+    input:
+        unpack(get_saturation_analysis_input),
+        parameters_file=qc_sheet_parameters_file
+    output:
+        downsample_saturation_analysis
+    script:
+        "/data/rajewsky/home/tsztank/repos/sts-sequencing/saturation_analysis.Rmd"

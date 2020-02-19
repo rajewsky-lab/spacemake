@@ -32,6 +32,9 @@ include: 'snakemake_helper_functions.py'
 ###############
 # Global vars #
 ###############
+
+repo_dir = '/data/rajewsky/home/tsztank/repos/sts-sequencing'
+
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
 
@@ -157,7 +160,7 @@ include: 'downsample.smk'
 
 rule downsample:
     input:
-        get_final_output_files(downsample_qc_sheet, ratio = [30])
+        get_final_output_files(downsample_saturation_analysis)
 
 #########
 # RULES #
