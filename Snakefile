@@ -38,6 +38,10 @@ repo_dir = '/data/rajewsky/home/tsztank/repos/sts-sequencing'
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
 
+microscopy_root = '/data/rajewsky/slideseq_microscopy'
+microscopy_raw = microscopy_root + '/raw'
+microscopy_qc = microscopy_root + '/qc'
+
 illumina_projects = config['illumina_projects']
 
 # get the samples
@@ -48,6 +52,9 @@ project_df = project_df.append(config['additional_illumina_projects'], ignore_in
 
 samples = create_lookup_table(project_df)
 samples_list = project_df.T.to_dict().values()
+
+project_puck_df = project_df.merge(get_sample_info(microscopy_raw), how='inner', on ='puck_id')[
+    ['puck_id', 'batch_id', 'project_id', 'sample_id']]
 
 demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
@@ -61,8 +68,13 @@ raw_data_illumina = raw_data_root + '/illumina'
 raw_data_illumina_reads = raw_data_illumina + '/reads/raw'
 raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
 
-processed_data_root = project_dir + '/processed_data'
-processed_data_illumina = processed_data_root + '/{sample}/illumina'
+raw_data_optical = raw_data_root + '/optical'
+raw_data_optical_images = raw_data_optical + '/{sample}'
+
+processed_data_root = project_dir + '/processed_data/{sample}'
+processed_data_illumina = processed_data_root + '/illumina'
+
+processed_data_optical = processed_data_root + '/optical'
 
 ##############
 # Demux vars #
@@ -124,6 +136,20 @@ dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 qc_sheet_parameters_file = data_root + '/qc_sheet/qc_sheet_parameters.yaml'
 qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample}_{puck}.pdf'
 
+############################
+# Link optical to illumina #
+############################
+optical_linked = []
+
+for i, row in project_puck_df.iterrows():
+    optical_linked = optical_linked + expand(raw_data_optical_images,
+                                       project = row['project_id'],
+                                       sample = row['sample_id'])
+    
+    optical_linked = optical_linked + expand(processed_data_optical,
+                                       project = row['project_id'],
+                                       sample = row['sample_id'])
+
 # #######################
 # include dropseq rules #
 # #######################
@@ -151,7 +177,9 @@ rule all:
         #get_final_output_files(dge_out, dge_type = dge_types),
         get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(qc_sheet),
-        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2])
+        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
+        # link optical raw data
+        optical_linked
 
 ###############
 # SUBSAMPLING #
@@ -312,3 +340,23 @@ rule create_qc_sheet:
         qc_sheet
     script:
         "qc_sequencing_create_sheet.py"
+
+rule link_raw_data_images:
+    input:
+        unpack(get_raw_data_optical_images_input)
+    output:
+        directory(raw_data_optical_images)
+    shell:
+        """
+        ln -s {input} {output}
+        """
+
+rule linked_processed_data_optical:
+    input:
+        unpack(get_processed_data_optical)
+    output:
+        directory(processed_data_optical)
+    shell:
+        """
+        ln -s {input} {output}
+        """

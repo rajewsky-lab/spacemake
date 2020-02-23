@@ -147,3 +147,39 @@ def get_basecalls_dir(wildcards):
     # else return a fake path, which won't be present, so snakemake will fail for this, as input directory will be missing
     else:
         return [basecalls_dir + 'none'] 
+
+###############################
+# Joining optical to illumina #
+###############################
+
+def get_sample_info(raw_folder):
+    batches = os.listdir(raw_folder)
+
+    df = pd.DataFrame(columns=['batch_id', 'puck_id'])
+
+    for batch in batches:
+        batch_dir = microscopy_raw + '/' + batch
+
+        puck_ids = os.listdir(batch_dir)
+
+        df = df.append(pd.DataFrame({'batch_id': batch, 'puck_id': puck_ids}), ignore_index=True)
+        
+    return df
+
+def get_raw_data_optical_images_input(wildcards):
+    row = project_puck_df[project_puck_df.project_id.eq(wildcards.project) &
+                          project_puck_df.sample_id.eq(wildcards.sample)]
+
+
+    in_dir = microscopy_raw + '/' + row['batch_id'] + '/' + row['puck_id']
+
+    return in_dir
+
+def get_processed_data_optical(wildcards):
+    row = project_puck_df[project_puck_df.project_id.eq(wildcards.project) &
+                          project_puck_df.sample_id.eq(wildcards.sample)]
+
+
+    in_dir = microscopy_qc + '/' + row['batch_id'] + '/' + row['puck_id']
+
+    return in_dir
