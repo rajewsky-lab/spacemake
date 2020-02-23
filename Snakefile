@@ -170,15 +170,20 @@ def get_final_output_files(pattern, **kwargs):
     return out_files
 
 #############
-# Main rule a
-##############
+# Main rule #
+#############
 rule all:
     input:
         #get_final_output_files(dge_out, dge_type = dge_types),
         get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(qc_sheet),
-        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        # link optical raw data
+        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2])
+
+########################
+# Rule to link optical #
+########################
+rule link_optical:
+    input:
         optical_linked
 
 ###############
