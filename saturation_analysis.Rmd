@@ -1,0 +1,81 @@
+---
+output: pdf_document
+version: 0.1.1
+author: Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos
+email: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc.berlin.de
+license: GPL
+---
+
+```{r knitr_options, include=FALSE, cache=FALSE}
+knitr::opts_chunk$set(
+  cache = F,
+  autodep = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = NA
+)
+```
+
+```{r load_libraries, echo =F}
+library(tidyverse)
+library(plyr)
+library(yaml)
+library(cowplot)
+
+theme_set(theme_cowplot(12))
+```
+
+```{r read_qc_params_file, echo = F}
+qc_params <- read_yaml(snakemake@input[['parameters_file']])
+```
+
+#### Run information
+
+- **Project**: `r qc_params$project_id`
+- **Sample**: `r qc_params$sample_id`
+- **Puck**: `r qc_params$puck_id`
+- **Experiment**: `r qc_params$experiment`
+- **Sequencing date**: `r qc_params$sequencing_date`
+
+
+
+saturation analysis v.0.1.1, generated on `r format(Sys.time(), '%d/%B/%Y')`
+
+contact: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc-berlin.de
+
+#### Saturation analysis
+
+In order to know whether we would gain more from sequencing deeper, we downsampled the data (the final.bam file) to contain 10%, 20%... 90% reads, and then we created the DigitalExpression matrix (as in the normal dropseq pipeline).
+
+This can give us insight, whether we have reached the saturation point (in terms of median umi per cell and median genes per cell) or whether we should sequence deeper.
+
+Results of this are plotted below.
+
+```{r read_summaries, echo = F}
+downsampled_summaries <- snakemake@input[startsWith(names(snakemake@input), 'downsampled')]
+
+dge_summary <- downsampled_summaries %>%
+    ldply(function(dge_sum){
+        read_table2(dge_sum, skip=6) %>%
+            rowwise() %>%
+            summarise(median_reads = median(NUM_GENIC_READS),
+                      median_umis = median(NUM_TRANSCRIPTS),
+                      median_genes = median(NUM_GENES))
+    }, .id = 'percentage') %>%
+    separate(percentage, into = c(NA, 'percentage')) %>%
+    gather('observation', 'value', median_reads:median_genes) %>% 
+    as_tibble() %>%
+    mutate(percentage = as.integer(percentage),
+           observation = factor(observation, levels = c(
+                      'median_reads', 
+                      'median_umis', 
+                      'median_genes')))
+```
+
+```{r plot_observations, echo = F}
+dge_summary %>%
+    ggplot(aes(percentage, value)) +
+        geom_bar(stat = 'identity', position = 'dodge', fill = '#56B4E9', color = 'black') + 
+        facet_wrap(~observation)
+```
+
