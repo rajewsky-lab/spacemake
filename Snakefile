@@ -32,7 +32,6 @@ include: 'snakemake_helper_functions.py'
 ###############
 # Global vars #
 ###############
-
 repo_dir = '/data/rajewsky/home/tsztank/repos/sts-sequencing'
 
 # set root dir where the processed_data goes
@@ -75,6 +74,10 @@ processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
 processed_data_optical = processed_data_root + '/optical'
+
+# metadata file created during the linking rule
+projects_puck_info = config['root_dir'] + '/.config/projects_puck_info.csv'
+
 
 ##############
 # Demux vars #
@@ -184,7 +187,8 @@ rule all:
 ########################
 rule link_optical:
     input:
-        optical_linked
+        optical_linked,
+        projects_puck_info
 
 ###############
 # SUBSAMPLING #
@@ -365,3 +369,9 @@ rule linked_processed_data_optical:
         """
         ln -s {input} {output}
         """
+
+rule create_projects_metadata:
+    output:
+        projects_puck_info
+    run:
+       project_puck_df.to_csv(output[0]) 

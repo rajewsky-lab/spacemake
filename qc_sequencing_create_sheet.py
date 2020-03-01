@@ -156,7 +156,6 @@ def load_downstream_statistics(folder, threshold):
 
     # the dictionary holding the values
     downstream_statistics = dict()
-    downstream_statistics['minimum umis per bead'] = threshold
 
     # read the summary table of dge_all (containing intronic and exonic reads)
     downstream_stats = pd.read_csv(snakemake.input.dge_all_summary,
@@ -164,6 +163,12 @@ def load_downstream_statistics(folder, threshold):
             skiprows=6,
             # rename the column, make column=0 the index
             sep='\t', index_col=0).rename(columns={'NUM_GENIC_READS': 'reads', 'NUM_TRANSCRIPTS':'umis', 'NUM_GENES':'genes'})
+
+    # we decrease the treshold if the output would be empty otherwise
+    while(sum(downstream_stats['umis'] >= threshold) == 0):
+        threshold = threshold - 10
+
+    downstream_statistics['minimum umis per bead'] = threshold
 
     # filter by threshold given in the qc_sequencing_parameters.yaml
     downstream_stats = downstream_stats[downstream_stats['umis'] >= threshold]

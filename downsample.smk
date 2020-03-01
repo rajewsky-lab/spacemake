@@ -122,4 +122,4 @@ rule create_saturation_analysis:
     output:
         downsample_saturation_analysis
     script:
-        "/data/rajewsky/home/tsztank/repos/sts-sequencing/saturation_analysis.Rmd"
+        "saturation_analysis.Rmd"
