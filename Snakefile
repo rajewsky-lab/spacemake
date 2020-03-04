@@ -32,7 +32,7 @@ include: 'snakemake_helper_functions.py'
 ###############
 # Global vars #
 ###############
-repo_dir = '/data/rajewsky/home/tsztank/repos/sts-sequencing'
+repo_dir = os.path.dirname(workflow.snakefile)
 
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
@@ -52,8 +52,7 @@ project_df = project_df.append(config['additional_illumina_projects'], ignore_in
 samples = create_lookup_table(project_df)
 samples_list = project_df.T.to_dict().values()
 
-project_puck_df = project_df.merge(get_sample_info(microscopy_raw), how='inner', on ='puck_id')[
-    ['puck_id', 'batch_id', 'project_id', 'sample_id']]
+project_puck_df = project_df.merge(get_sample_info(microscopy_raw), how='inner', on ='puck_id')
 
 demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
@@ -374,4 +373,4 @@ rule create_projects_metadata:
     output:
         projects_puck_info
     run:
-       project_puck_df.to_csv(output[0]) 
+        project_puck_df.to_csv(output[0], index=False) 
