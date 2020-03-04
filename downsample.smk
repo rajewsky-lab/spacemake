@@ -118,7 +118,9 @@ def get_saturation_analysis_input(wildcards):
 rule create_saturation_analysis:
     input:
         unpack(get_saturation_analysis_input),
-        parameters_file=qc_sheet_parameters_file
+        parameters_file=qc_sheet_parameters_file,
+        star_log = star_log_file,
+        reads_type_out=reads_type_out
     output:
         downsample_saturation_analysis
     script:

@@ -21,9 +21,26 @@ library(tidyverse)
 library(plyr)
 library(yaml)
 library(cowplot)
+library(knitr)
 
 theme_set(theme_cowplot(12))
 ```
+
+```{r functions, echo = F}
+readStarLog <- function(log_file){
+		out = list()
+		lines = readLines(log_file)
+	
+		out$input_reads = (lines[6] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
+
+		out$uniq_mapped_reads = (lines[9] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
+
+		#out$avg_length = (lines[11] %>% strsplit('\t') %>% unlist)[2] %>% as.numeric
+		
+        tibble(observation=names(out), value=unlist(unname(out)))
+	}
+```
+
 
 ```{r read_qc_params_file, echo = F}
 qc_params <- read_yaml(snakemake@input[['parameters_file']])
@@ -37,11 +54,35 @@ qc_params <- read_yaml(snakemake@input[['parameters_file']])
 - **Experiment**: `r qc_params$experiment`
 - **Sequencing date**: `r qc_params$sequencing_date`
 
-
-
 saturation analysis v.0.1.1, generated on `r format(Sys.time(), '%d/%B/%Y')`
 
 contact: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc-berlin.de
+
+#### Downstream stats
+
+```{r parse_metadata, echo = F}
+metadata <- readStarLog(snakemake@input$star_log) %>%
+    rbind(read_table2(snakemake@input$reads_type_out, col_names=c('observation', 'value'))) %>%
+    # convert to millions
+    mutate(value = round(value / 1e6, 2)) %>%
+    {
+        mutate(., input_reads = filter(., observation == 'input_reads')$value)
+    } %>%
+    mutate(label = ifelse(observation == 'input_reads', value, paste0(value, ' (', round(value/input_reads*100, 1), '%)'))) %>%
+    dplyr::select(observation, label) %>%
+    spread(observation, label) %>%
+    dplyr::rename(as.utr = UTR,
+                  intronic = INTRONIC,
+                  intergenic = INTERGENIC,
+                  as.cds = CODING) %>%
+    # reorder columns
+    dplyr::select(input_reads, uniq_mapped_reads, intergenic, intronic, as.cds, as.utr) %>%
+    kable
+
+metadata
+```
+
+
 
 #### Saturation analysis
 
@@ -63,19 +104,24 @@ dge_summary <- downsampled_summaries %>%
                       median_genes = median(NUM_GENES))
     }, .id = 'percentage') %>%
     separate(percentage, into = c(NA, 'percentage')) %>%
-    gather('observation', 'value', median_reads:median_genes) %>% 
+    mutate(median_pcr = median_reads / median_umis) %>%
+    gather('observation', 'value', median_reads:median_pcr) %>% 
     as_tibble() %>%
     mutate(percentage = as.integer(percentage),
            observation = factor(observation, levels = c(
                       'median_reads', 
                       'median_umis', 
-                      'median_genes')))
+                      'median_genes',
+                      'median_pcr')))
 ```
 
 ```{r plot_observations, echo = F}
 dge_summary %>%
     ggplot(aes(percentage, value)) +
-        geom_bar(stat = 'identity', position = 'dodge', fill = '#56B4E9', color = 'black') + 
-        facet_wrap(~observation)
+        geom_smooth(formula = y~log(x), color = '#56B4E9', size = 0.6) +
+        geom_point(size=2, fill = '#56B4E9', color = 'black', pch=21) + 
+        scale_x_continuous(breaks=seq(0, 100, 10)) +
+        facet_wrap(~observation, scales = 'free_y', ncol=2) +
+        labs(y='', x='downsampling percentage')
 ```
 
