@@ -183,3 +183,30 @@ def get_processed_data_optical(wildcards):
     in_dir = microscopy_qc + '/' + row['batch_id'] + '/' + row['puck_id']
 
     return in_dir
+###################
+# Merging samples #
+###################
+def get_project(sample):
+    # return the project id for a given sample id
+    return project_df[project_df.sample_id.eq(sample)].project_id.to_list()[0]
+
+def get_dropseq_final_bam(wildcards):
+    print('asd')
+    print(dropseq_final_bam)
+    return expand(dropseq_final_bam,
+            project = get_project(wildcards.sample),
+            sample = wildcards.sample)
+
+def get_merged_inputs(wildcards):
+    # pattern is: merged_{sample1}.{sample2}...
+    samples = wildcards.merged_name.split('.')
+    print(samples)
+
+    input_bams = []
+
+    for sample in samples:
+        input_bams = input_bams + expand(sample_tagged_bam, 
+                merged_name = wildcards.merged_name,
+                sample = sample)
+
+    return input_bams

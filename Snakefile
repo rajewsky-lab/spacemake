@@ -186,22 +186,31 @@ rule all:
         get_final_output_files(qc_sheet),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2])
 
-########################
-# Rule to link optical #
-########################
+###################
+# LINK TO OPTICAL #
+###################
 rule link_optical:
     input:
         optical_linked,
         projects_puck_info
 
-###############
-# SUBSAMPLING #
-###############
+################
+# DOWNSAMPLING #
+################
 include: 'downsample.smk'
 
 rule downsample:
     input:
         get_final_output_files(downsample_saturation_analysis, projects = config['downsample_projects'])
+
+#################
+# MERGE SAMPLES #
+#################
+include: 'merge_projects.smk'
+
+rule merge_projects:
+    input:
+        expand(merged_bam, merged_name = 'sts_010_5.sts_010_6')
 
 #########
 # RULES #
