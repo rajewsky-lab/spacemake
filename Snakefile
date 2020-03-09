@@ -161,11 +161,16 @@ include: 'dropseq.smk'
 # Final output file generation #
 ################################
 
-def get_final_output_files(pattern, **kwargs):
+def get_final_output_files(pattern, projects = 'all', **kwargs):
+    if projects == 'all':
+        samples = samples_list
+    else:
+        samples = [s for s in samples_list if s['project_id'] in projects]
+
     out_files = [expand(pattern,
             project=s['project_id'], 
             sample=s['sample_id'],
-            puck=s['puck_id'], **kwargs) for s in samples_list]
+            puck=s['puck_id'], **kwargs) for s in samples]
 
     out_files = [item for sublist in out_files for item in sublist]
     
@@ -196,7 +201,7 @@ include: 'downsample.smk'
 
 rule downsample:
     input:
-        get_final_output_files(downsample_saturation_analysis)
+        get_final_output_files(downsample_saturation_analysis, projects = config['downsample_projects'])
 
 #########
 # RULES #
