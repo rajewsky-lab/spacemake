@@ -138,6 +138,9 @@ dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 qc_sheet_parameters_file = data_root + '/qc_sheet/qc_sheet_parameters.yaml'
 qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample}_{puck}.pdf'
 
+# reads type
+reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
+
 ############################
 # Link optical to illumina #
 ############################
@@ -206,11 +209,11 @@ rule downsample:
 #################
 # MERGE SAMPLES #
 #################
-include: 'merge_projects.smk'
+include: 'merge_samples.smk'
 
-rule merge_projects:
+rule merge_samples:
     input:
-        expand(merged_bam, merged_name = 'sts_010_5.sts_010_6')
+        expand(merged_qc_sheet, merged_name = 'sts_010_5.sts_010_6')
 
 #########
 # RULES #

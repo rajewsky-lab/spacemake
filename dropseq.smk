@@ -58,9 +58,6 @@ dge_out = dge_out_prefix + '.txt.gz'
 dge_out_summary = dge_out_prefix + '_summary.txt'
 dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
 
-# reads type
-reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
-
 ###################################################
 # Snakefile containing the dropseq pipeline rules #
 ###################################################

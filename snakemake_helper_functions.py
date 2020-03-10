@@ -191,16 +191,13 @@ def get_project(sample):
     return project_df[project_df.sample_id.eq(sample)].project_id.to_list()[0]
 
 def get_dropseq_final_bam(wildcards):
-    print('asd')
-    print(dropseq_final_bam)
     return expand(dropseq_final_bam,
             project = get_project(wildcards.sample),
             sample = wildcards.sample)
 
-def get_merged_inputs(wildcards):
+def get_merged_bam_inputs(wildcards):
     # pattern is: merged_{sample1}.{sample2}...
     samples = wildcards.merged_name.split('.')
-    print(samples)
 
     input_bams = []
 
@@ -210,3 +207,15 @@ def get_merged_inputs(wildcards):
                 sample = sample)
 
     return input_bams
+
+def get_merged_star_log_inputs(wildcards):
+    samples = wildcards.merged_name.split('.')
+    
+    input_logs = []
+
+    for sample in samples:
+        input_logs = input_logs + expand(star_log_file,
+                project = get_project(sample),
+                sample = sample)
+
+    return input_logs
