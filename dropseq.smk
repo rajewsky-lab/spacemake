@@ -303,6 +303,7 @@ rule create_dge:
         mkdir -p {params.dge_root}
 
         {dropseq_tools}/DigitalExpression \
+        -m 8g \
         I= {input.reads}\
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \

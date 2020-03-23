@@ -17,7 +17,7 @@ import math
 ################
 # Shell prefix #
 ################
-shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx4g" ')
+shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ;')
 
 #############
 # FUNCTIONS #
@@ -230,7 +230,7 @@ rule demultiplex_data:
 
 rule link_demultiplexed_reads:
     input:
-        unpack(get_demux_indicator)
+        ancient(unpack(get_demux_indicator))
     output:
         raw_reads_pattern
     params:
