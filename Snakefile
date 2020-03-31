@@ -221,7 +221,7 @@ samples_to_merge = []
 
 # expect a list of lists in the config file. samples in each list will be merged
 if 'samples_to_merge' in config:
-    for merge_group in config['samples_to_merge']
+    for merge_group in config['samples_to_merge']:
         samples_to_merge = expand(merged_qc_sheet, merged_name = '.'.join(merge_group))
 
 rule merge_samples:
