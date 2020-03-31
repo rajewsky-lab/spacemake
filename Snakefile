@@ -17,7 +17,7 @@ import math
 ################
 # Shell prefix #
 ################
-shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ;')
+shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; umask g+w; ')
 
 #############
 # FUNCTIONS #
@@ -386,17 +386,23 @@ rule link_raw_data_images:
         directory(raw_data_optical_images)
     shell:
         """
-        ln -s {input} {output}
+        ln -sfn {input} {output}
+
+        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chmod 664 {{}} +
+        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chgrp AG_Rajewsky {{}} +
         """
 
 rule linked_processed_data_optical:
     input:
-        unpack(get_processed_data_optical)
+        ancient(unpack(get_processed_data_optical))
     output:
         directory(processed_data_optical)
     shell:
         """
-        ln -s {input} {output}
+        ln -sfn {input} {output}
+
+        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chmod 664 {{}} +
+        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chgrp AG_Rajewsky {{}} +
         """
 
 rule create_projects_metadata:
@@ -404,3 +410,4 @@ rule create_projects_metadata:
         projects_puck_info
     run:
         project_puck_df.to_csv(output[0], index=False) 
+        os.system('chmod 664 %s' % (output[0]))
