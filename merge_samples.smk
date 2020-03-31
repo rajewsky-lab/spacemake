@@ -124,6 +124,7 @@ rule create_merged_star_log:
             idx = 0
             for line in logs[0]:
                 entry = line.split('\t') 
+                print(idx)
                 if idx == 5:
                     fo.write('%s\t%s\n' % (entry[0], inp_reads))
                 elif idx == 8:

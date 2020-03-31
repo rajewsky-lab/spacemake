@@ -176,7 +176,7 @@ def load_downstream_statistics(folder, threshold):
     print ('[', round(time.time()-start_time, 2), 'seconds ]')
 
     # find beads which have the minimum number of UMIs
-    beads = downstream_stats.index.tolist()
+    beads = downstream_stats.index.str.split('.').str[0].to_list()
     downstream_statistics['beads'] = len(beads)
 
     # compute total reads per bead and plot histogram
