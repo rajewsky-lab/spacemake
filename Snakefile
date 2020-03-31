@@ -138,6 +138,9 @@ dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 qc_sheet_parameters_file = data_root + '/qc_sheet/qc_sheet_parameters.yaml'
 qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample}_{puck}.pdf'
 
+# reads type
+reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
+
 ############################
 # Link optical to illumina #
 ############################
@@ -161,11 +164,16 @@ include: 'dropseq.smk'
 # Final output file generation #
 ################################
 
-def get_final_output_files(pattern, **kwargs):
+def get_final_output_files(pattern, projects = 'all', **kwargs):
+    if projects == 'all':
+        samples = samples_list
+    else:
+        samples = [s for s in samples_list if s['project_id'] in projects]
+
     out_files = [expand(pattern,
             project=s['project_id'], 
             sample=s['sample_id'],
-            puck=s['puck_id'], **kwargs) for s in samples_list]
+            puck=s['puck_id'], **kwargs) for s in samples]
 
     out_files = [item for sublist in out_files for item in sublist]
     
@@ -181,22 +189,44 @@ rule all:
         get_final_output_files(qc_sheet),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2])
 
-########################
-# Rule to link optical #
-########################
+###################
+# LINK TO OPTICAL #
+###################
 rule link_optical:
     input:
-        optical_linked,
+        optical_linked
+
+########################
+# CREATE METADATA FILE #
+########################
+rule create_projects_puck_info:
+    input:
         projects_puck_info
 
-###############
-# SUBSAMPLING #
-###############
+################
+# DOWNSAMPLING #
+################
 include: 'downsample.smk'
 
 rule downsample:
     input:
-        get_final_output_files(downsample_saturation_analysis)
+        get_final_output_files(downsample_saturation_analysis, projects = config['downsample_projects'])
+
+#################
+# MERGE SAMPLES #
+#################
+include: 'merge_samples.smk'
+
+samples_to_merge = []
+
+# expect a list of lists in the config file. samples in each list will be merged
+if 'samples_to_merge' in config:
+    for merge_group in config['samples_to_merge']
+        samples_to_merge = expand(merged_qc_sheet, merged_name = '.'.join(merge_group))
+
+rule merge_samples:
+    input:
+        expand(merged_qc_sheet, merged_name = samples_to_merge)
 
 #########
 # RULES #
