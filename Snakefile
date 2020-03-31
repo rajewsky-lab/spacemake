@@ -194,7 +194,13 @@ rule all:
 ###################
 rule link_optical:
     input:
-        optical_linked,
+        optical_linked
+
+########################
+# CREATE METADATA FILE #
+########################
+rule create_projects_puck_info:
+    input:
         projects_puck_info
 
 ################
