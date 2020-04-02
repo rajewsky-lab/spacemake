@@ -15,20 +15,20 @@ merged_dge_out_prefix = merged_dge_root + '/dge{dge_type}'
 merged_dge_out = merged_dge_out_prefix + '.txt.gz'
 merged_dge_out_summary = merged_dge_out_prefix + '_summary.txt'
 
-rule tag_final_bam:
-    input:
-        unpack(get_dropseq_final_bam)
-    output:
-        temporary(sample_tagged_bam)
-    threads: 4
-    shell:
-        """sambamba view -t {threads} -h {input} | \
-            awk -v suffix=.{wildcards.sample} 'BEGIN{{OFS=FS="\t"}} /^@/ {{print $0; next}} $12=$12 suffix{{print $0}}' | \
-            sambamba view -t {threads} -S /dev/stdin -o {output} -f bam"""
+#rule tag_final_bam:
+#    input:
+#        unpack(get_dropseq_final_bam)
+#    output:
+#        temporary(sample_tagged_bam)
+#    threads: 4
+#    shell:
+#        """sambamba view -t {threads} -h {input} | \
+#            awk -v suffix=.{wildcards.sample} 'BEGIN{{OFS=FS="\t"}} /^@/ {{print $0; next}} $12=$12 suffix{{print $0}}' | \
+#            sambamba view -t {threads} -S /dev/stdin -o {output} -f bam"""
 
 rule create_merged_bam:
     input:
-        unpack(get_merged_bam_inputs)
+        unpack(get_dropseq_final_bam)
     output:
         merged_bam
     threads: 4

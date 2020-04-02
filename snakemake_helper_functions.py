@@ -191,12 +191,22 @@ def get_project(sample):
     return project_df[project_df.sample_id.eq(sample)].project_id.to_list()[0]
 
 def get_dropseq_final_bam(wildcards):
-    return expand(dropseq_final_bam,
-            project = get_project(wildcards.sample),
-            sample = wildcards.sample)
+    # merged_name contains all the samples which should be merged,
+    # separated by a dot each
+    samples = wildcards.merged_name.split('.')
+
+    input_bams = []
+
+    print(samples)
+
+    for sample in samples:
+        input_bams = input_bams + expand(dropseq_final_bam,
+            project = get_project(sample),
+            sample = sample)
+    return input_bams
 
 def get_merged_bam_inputs(wildcards):
-    # pattern is: merged_{sample1}.{sample2}...
+    # currently not used as we do not tag the bam files with the sample name
     samples = wildcards.merged_name.split('.')
 
     input_bams = []
