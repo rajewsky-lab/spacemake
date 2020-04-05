@@ -28,7 +28,7 @@ merged_dge_out_summary = merged_dge_out_prefix + '_summary.txt'
 
 rule create_merged_bam:
     input:
-        unpack(get_dropseq_final_bam)
+        ancient(unpack(get_dropseq_final_bam))
     output:
         merged_bam
     threads: 4

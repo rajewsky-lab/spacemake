@@ -221,8 +221,7 @@ samples_to_merge = []
 
 # expect a list of lists in the config file. samples in each list will be merged
 if 'samples_to_merge' in config:
-    for merge_group in config['samples_to_merge']:
-        samples_to_merge.append('.'.join(merge_group))
+    samples_to_merge = [key for key, value in config['samples_to_merge'].items()]
 
 rule merge_samples:
     input:

@@ -193,11 +193,9 @@ def get_project(sample):
 def get_dropseq_final_bam(wildcards):
     # merged_name contains all the samples which should be merged,
     # separated by a dot each
-    samples = wildcards.merged_name.split('.')
+    samples = config['samples_to_merge'][wildcards.merged_name]
 
     input_bams = []
-
-    print(samples)
 
     for sample in samples:
         input_bams = input_bams + expand(dropseq_final_bam,
@@ -207,7 +205,7 @@ def get_dropseq_final_bam(wildcards):
 
 def get_merged_bam_inputs(wildcards):
     # currently not used as we do not tag the bam files with the sample name
-    samples = wildcards.merged_name.split('.')
+    samples = config['samples_to_merge'][wildcards.merged_name]
 
     input_bams = []
 
@@ -219,7 +217,7 @@ def get_merged_bam_inputs(wildcards):
     return input_bams
 
 def get_merged_star_log_inputs(wildcards):
-    samples = wildcards.merged_name.split('.')
+    samples = config['samples_to_merge'][wildcards.merged_name]
     
     input_logs = []
 
