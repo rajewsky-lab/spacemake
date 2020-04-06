@@ -183,6 +183,7 @@ def get_processed_data_optical(wildcards):
     in_dir = microscopy_qc + '/' + row['batch_id'] + '/' + row['puck_id']
 
     return in_dir
+
 ###################
 # Merging samples #
 ###################
@@ -193,7 +194,7 @@ def get_project(sample):
 def get_dropseq_final_bam(wildcards):
     # merged_name contains all the samples which should be merged,
     # separated by a dot each
-    samples = config['samples_to_merge'][wildcards.merged_name]
+    samples = config['samples_to_merge'][wildcards.merged_project][wildcards.merged_sample]
 
     input_bams = []
 
@@ -205,19 +206,19 @@ def get_dropseq_final_bam(wildcards):
 
 def get_merged_bam_inputs(wildcards):
     # currently not used as we do not tag the bam files with the sample name
-    samples = config['samples_to_merge'][wildcards.merged_name]
+    samples = config['samples_to_merge'][wildcards.merged_project][wildcards.merged_sample]
 
     input_bams = []
 
     for sample in samples:
         input_bams = input_bams + expand(sample_tagged_bam, 
-                merged_name = wildcards.merged_name,
+                merged_sample = wildcards.merged_name,
                 sample = sample)
 
     return input_bams
 
 def get_merged_star_log_inputs(wildcards):
-    samples = config['samples_to_merge'][wildcards.merged_name]
+    samples = config['samples_to_merge'][wildcards.merged_project][wildcards.merged_sample]
     
     input_logs = []
 

@@ -56,8 +56,11 @@ project_puck_df = project_df.merge(get_sample_info(microscopy_raw), how='inner',
 
 demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
-# create lookup table for flowcell-to-samplesheet
-# flowcell_id2samplesheet = {value['flowcell_id'] : value['sample_sheet'] for key, value in samples.items()}
+# global wildcard constraints
+wildcard_constraints:
+    sample='(?!merged_).+',
+    project='(?!merged_).+'
+
 #################
 # DIRECTORY STR #
 #################
@@ -163,7 +166,6 @@ include: 'dropseq.smk'
 ################################
 # Final output file generation #
 ################################
-
 def get_final_output_files(pattern, projects = 'all', **kwargs):
     if projects == 'all':
         samples = samples_list
@@ -217,15 +219,16 @@ rule downsample:
 #################
 include: 'merge_samples.smk'
 
-samples_to_merge = []
+merged_qc_sheets = []
 
 # expect a list of lists in the config file. samples in each list will be merged
 if 'samples_to_merge' in config:
-    samples_to_merge = [key for key, value in config['samples_to_merge'].items()]
+    for merged_project in config['samples_to_merge']:
+        merged_qc_sheets = merged_qc_sheets + expand(merged_qc_sheet, merged_project =merged_project, merged_sample = config['samples_to_merge'][merged_project].keys())
 
 rule merge_samples:
     input:
-        expand(merged_qc_sheet, merged_name = samples_to_merge)
+        merged_qc_sheets
 
 #########
 # RULES #
@@ -322,7 +325,7 @@ rule run_fastqc:
         {fastqc_command} -t {threads} -o {params.output_dir} {input}
         """
 
-rule determine_precentages:
+rule determine_perecentages:
     input:
         dropseq_final_bam
     output:

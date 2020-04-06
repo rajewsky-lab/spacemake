@@ -1,13 +1,16 @@
-merged_dir = config['root_dir'] + '/projects/merged_{merged_name}'
+merged_dir = config['root_dir'] + '/projects/merged_{merged_project}/processed_data/merged_{merged_sample}/illumina/complete_data'
 
 sample_tagged_bam = merged_dir + '/{sample}_tagged.bam'
 merged_bam = merged_dir + '/merged.bam'
 merged_readcounts = merged_dir + '/merged_readcounts.txt.gz'
-merged_qc_sheet_parameters_file = merged_dir + '/qc_sheet_parameters.yaml'
-merged_qc_sheet = merged_dir + '/merged_{merged_name}_qc_sheet.pdf'
+merged_qc_dir = merged_dir + '/qc_sheet'
+
+merged_qc_sheet_parameters_file = merged_qc_dir + '/qc_sheet_parameters.yaml'
+merged_qc_sheet = merged_qc_dir + '/merged_{merged_sample}_qc_sheet.pdf'
+
 merged_reads_type_out = merged_dir + '/uniquely_mapped_reads_type.txt'
 merged_top_barcodes = merged_dir + '/topBarcodes.txt'
-merged_star_log_file = merged_dir + '/merged_star_log.txt'
+merged_star_log_file = merged_dir + '/merged_star_Log.final.out'
 
 # merged dge
 merged_dge_root = merged_dir + '/dge'
@@ -124,7 +127,6 @@ rule create_merged_star_log:
             idx = 0
             for line in logs[0]:
                 entry = line.split('\t') 
-                print(idx)
                 if idx == 5:
                     fo.write('%s\t%s\n' % (entry[0], inp_reads))
                 elif idx == 8:
@@ -135,7 +137,7 @@ rule create_merged_star_log:
 
 rule create_imerged_qc_parameters:
     params:
-        sample_id = lambda wildcards: wildcards.merged_name,
+        sample_id = lambda wildcards: wildcards.merged_sample,
         project_id = 'NA',
         puck_id = 'NA',
         experiment = 'NA',
