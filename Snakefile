@@ -52,7 +52,21 @@ project_df = project_df.append(config['additional_illumina_projects'], ignore_in
 samples = create_lookup_table(project_df)
 samples_list = project_df.T.to_dict().values()
 
-project_puck_df = project_df.merge(get_sample_info(microscopy_raw), how='inner', on ='puck_id')
+projects_puck_info = project_df.merge(get_sample_info(microscopy_raw), how='inner', on ='puck_id')
+projects_puck_info['type'] = 'normal'
+
+# added samples to merged to the projects_puck_info
+# this will be saved as a metadata file in .config/ directory
+if 'samples_to_merge' in config:
+    for project_id in config['samples_to_merge'].keys():
+        for sample_id in config['samples_to_merge'][project_id].keys():
+           row = projects_puck_info[(projects_puck_info.project_id == project_id) & (projects_puck_info.sample_id == sample_id)].iloc[0]
+
+           row.sample_id = 'merged_' + row.sample_id
+           row.project_id = 'merged_' + row.project_id
+           #row.type = 'merged'
+
+           projects_puck_info.append(row, ignore_index=True)
 
 demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
@@ -69,17 +83,10 @@ raw_data_illumina = raw_data_root + '/illumina'
 raw_data_illumina_reads = raw_data_illumina + '/reads/raw'
 raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
 
-raw_data_optical = raw_data_root + '/optical'
-raw_data_optical_images = raw_data_optical + '/{sample}'
-
 processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
-processed_data_optical = processed_data_root + '/optical'
-
-# metadata file created during the linking rule
-projects_puck_info = config['root_dir'] + '/.config/projects_puck_info.csv'
-
+projects_puck_info_file = config['root_dir'] + '/.config/projects_puck_info.csv'
 
 ##############
 # Demux vars #
@@ -144,19 +151,6 @@ qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample}_{puck}.pdf'
 # reads type
 reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
 
-############################
-# Link optical to illumina #
-############################
-optical_linked = []
-
-for i, row in project_puck_df.iterrows():
-    optical_linked = optical_linked + expand(raw_data_optical_images,
-                                       project = row['project_id'],
-                                       sample = row['sample_id'])
-    
-    optical_linked = optical_linked + expand(processed_data_optical,
-                                       project = row['project_id'],
-                                       sample = row['sample_id'])
 
 # #######################
 # include dropseq rules #
@@ -191,19 +185,13 @@ rule all:
         get_final_output_files(qc_sheet),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2])
 
-###################
-# LINK TO OPTICAL #
-###################
-rule link_optical:
-    input:
-        optical_linked
 
 ########################
 # CREATE METADATA FILE #
 ########################
-rule create_projects_puck_info:
+rule create_projects_puck_info_file:
     input:
-        projects_puck_info
+        projects_puck_info_file
 
 ################
 # DOWNSAMPLING #
@@ -224,7 +212,9 @@ merged_qc_sheets = []
 # expect a list of lists in the config file. samples in each list will be merged
 if 'samples_to_merge' in config:
     for merged_project in config['samples_to_merge']:
-        merged_qc_sheets = merged_qc_sheets + expand(merged_qc_sheet, merged_project =merged_project, merged_sample = config['samples_to_merge'][merged_project].keys())
+        merged_qc_sheets = merged_qc_sheets + expand(merged_qc_sheet,
+            merged_project = merged_project,
+            merged_sample = config['samples_to_merge'][merged_project].keys())
 
 rule merge_samples:
     input:
@@ -381,35 +371,9 @@ rule create_qc_sheet:
     script:
         "qc_sequencing_create_sheet.py"
 
-rule link_raw_data_images:
-    input:
-        unpack(get_raw_data_optical_images_input)
-    output:
-        directory(raw_data_optical_images)
-    shell:
-        """
-        ln -sfn {input} {output}
-
-        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chmod 664 {{}} +
-        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chgrp AG_Rajewsky {{}} +
-        """
-
-rule linked_processed_data_optical:
-    input:
-        ancient(unpack(get_processed_data_optical))
-    output:
-        directory(processed_data_optical)
-    shell:
-        """
-        ln -sfn {input} {output}
-
-        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chmod 664 {{}} +
-        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chgrp AG_Rajewsky {{}} +
-        """
-
 rule create_projects_metadata:
     output:
-        projects_puck_info
+        projects_puck_info_file
     run:
-        project_puck_df.to_csv(output[0], index=False) 
+        projects_puck_info.to_csv(output[0], index=False)
         os.system('chmod 664 %s' % (output[0]))

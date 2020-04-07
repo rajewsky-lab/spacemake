@@ -166,23 +166,6 @@ def get_sample_info(raw_folder):
         
     return df
 
-def get_raw_data_optical_images_input(wildcards):
-    row = project_puck_df[project_puck_df.project_id.eq(wildcards.project) &
-                          project_puck_df.sample_id.eq(wildcards.sample)]
-
-
-    in_dir = microscopy_raw + '/' + row['batch_id'] + '/' + row['puck_id']
-
-    return in_dir
-
-def get_processed_data_optical(wildcards):
-    row = project_puck_df[project_puck_df.project_id.eq(wildcards.project) &
-                          project_puck_df.sample_id.eq(wildcards.sample)]
-
-
-    in_dir = microscopy_qc + '/' + row['batch_id'] + '/' + row['puck_id']
-
-    return in_dir
 
 ###################
 # Merging samples #
