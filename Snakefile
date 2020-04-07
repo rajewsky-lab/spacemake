@@ -39,7 +39,6 @@ project_dir = config['root_dir'] + '/projects/{project}'
 
 microscopy_root = '/data/rajewsky/slideseq_microscopy'
 microscopy_raw = microscopy_root + '/raw'
-microscopy_qc = microscopy_root + '/qc'
 
 illumina_projects = config['illumina_projects']
 
@@ -64,10 +63,11 @@ if 'samples_to_merge' in config:
 
            row.sample_id = 'merged_' + row.sample_id
            row.project_id = 'merged_' + row.project_id
-           #row.type = 'merged'
+           row.type = 'merged'
 
-           projects_puck_info.append(row, ignore_index=True)
+           projects_puck_info = projects_puck_info.append(row, ignore_index=True)
 
+print(projects_puck_info)
 demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
 # global wildcard constraints
