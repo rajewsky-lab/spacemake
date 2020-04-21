@@ -31,7 +31,7 @@ def create_qc_sequencing_parameters(sample_sheet):
 if __name__ == '__main__':    
     # fill the config file for the qc creation. 
     # samplesheet is parsed, so all parameters are just passed on
-    params = snakemake.params
+    params = snakemake.params['sample_params']
 
     with open(snakemake.output[0], 'w') as fo:
 

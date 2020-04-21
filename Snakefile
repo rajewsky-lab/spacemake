@@ -51,7 +51,11 @@ project_df = project_df.append(config['additional_illumina_projects'], ignore_in
 samples = create_lookup_table(project_df)
 samples_list = project_df.T.to_dict().values()
 
-projects_puck_info = project_df.merge(get_sample_info(microscopy_raw), how='inner', on ='puck_id')
+# put all projects into projects_puck_info
+projects_puck_info = project_df.merge(get_sample_info(microscopy_raw), how='left', on ='puck_id').fillna('none')
+
+projects_puck_info.loc[~projects_puck_info.puck_id.str.startswith('PID_'), 'puck_id']= 'no_puck'
+
 projects_puck_info['type'] = 'normal'
 
 # added samples to merged to the projects_puck_info
@@ -67,7 +71,6 @@ if 'samples_to_merge' in config:
 
            projects_puck_info = projects_puck_info.append(row, ignore_index=True)
 
-print(projects_puck_info)
 demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
 # global wildcard constraints
@@ -145,12 +148,39 @@ dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 #######################
 # post dropseq and QC #
 #######################
-qc_sheet_parameters_file = data_root + '/qc_sheet/qc_sheet_parameters.yaml'
-qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample}_{puck}.pdf'
+# umi cutoffs. used by qc-s and automated reports
+umi_cutoffs = [10, 50, 100]
+
+#general qc sheet directory pattern
+qc_sheet_dir = '/qc_sheet/umi_cutoff_{umi_cutoff}'
+
+# parameters file for not merged samples
+qc_sheet_parameters_file = data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
+
+# qc generation for ALL samples, merged and non-merged
+united_root = config['root_dir'] + '/projects/{united_project}/processed_data/{united_sample}/illumina/complete_data'
+united_qc_sheet = united_root + qc_sheet_dir + '/qc_sheet_{united_sample}_{puck}.pdf'
+united_star_log = united_root + '/star_Log.final.out'
+united_reads_type_out = united_root + '/uniquely_mapped_reads_type.txt'
+united_qc_sheet_parameters_file = united_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
+united_read_counts = united_root + '/out_readcounts.txt.gz'
+united_dge_all_summary = united_root +  '/dge/dge_all_summary.txt'
+united_dge_all = united_root +  '/dge/dge_all.txt.gz'
+
+# automated analysis
+automated_analysis_root = united_root + '/automated_analysis/umi_cutoff_{umi_cutoff}'
+automated_figures_root = automated_analysis_root + '/figures'
+figure_suffix = '{united_sample}_{puck}.png'
+automated_figures_suffixes = ['violin_filtered', 'pca_first_components',
+    'umap_clusters','umap_top1_markers', 'umap_top2_markers']
+
+automated_figures = [automated_figures_root + '/' + f + '_' + figure_suffix for f in automated_figures_suffixes]
+automated_report = automated_analysis_root + '/{united_sample}_{puck}_automated_report.pdf'
+
+automated_results_file = automated_analysis_root + '/results.h5ad'
 
 # reads type
 reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
-
 
 # #######################
 # include dropseq rules #
@@ -175,15 +205,27 @@ def get_final_output_files(pattern, projects = 'all', **kwargs):
     
     return out_files
 
+def get_united_output_files(pattern, **kwargs):
+    out_files = []
+
+    for index, row in projects_puck_info.iterrows():
+        out_files = out_files + expand(pattern,
+            united_project = row['project_id'],
+            united_sample = row['sample_id'],
+            puck=row['puck_id'], 
+            **kwargs)
+
+    return out_files
+
 #############
 # Main rule #
 #############
 rule all:
     input:
-        #get_final_output_files(dge_out, dge_type = dge_types),
         get_final_output_files(dropseq_final_bam_ix),
-        get_final_output_files(qc_sheet),
-        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2])
+        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
+        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs)
+        #get_united_output_files(automated_report, umi_cutoff = [10, 50, 100])
 
 
 ########################
@@ -206,19 +248,6 @@ rule downsample:
 # MERGE SAMPLES #
 #################
 include: 'merge_samples.smk'
-
-merged_qc_sheets = []
-
-# expect a list of lists in the config file. samples in each list will be merged
-if 'samples_to_merge' in config:
-    for merged_project in config['samples_to_merge']:
-        merged_qc_sheets = merged_qc_sheets + expand(merged_qc_sheet,
-            merged_project = merged_project,
-            merged_sample = config['samples_to_merge'][merged_project].keys())
-
-rule merge_samples:
-    input:
-        merged_qc_sheets
 
 #########
 # RULES #
@@ -347,13 +376,7 @@ rule index_bam_file:
 
 rule create_qc_parameters:
     params:
-        sample_id = lambda wildcards: wildcards.sample,
-        project_id = lambda wildcards: wildcards.project,
-        puck_id = lambda wildcards: samples[wildcards.project]['samples'][wildcards.sample]['puck'],
-        experiment = lambda wildcards: samples[wildcards.project]['samples'][wildcards.sample]['experiment'],
-        sequencing_date = lambda wildcards: samples[wildcards.project]['sequencing_date'],
-        input_beads = '60k-100k',
-        threshold= '100'
+        sample_params=lambda wildcards: get_qc_sheet_parameters(wildcards.sample, wildcards.umi_cutoff)
     output:
         qc_sheet_parameters_file
     script:
@@ -361,15 +384,38 @@ rule create_qc_parameters:
 
 rule create_qc_sheet:
     input:
-        star_log = star_log_file,
-        reads_type_out=reads_type_out,
-        parameters_file=qc_sheet_parameters_file,
-        read_counts = dropseq_out_readcounts,
-        dge_all_summary = dge_root + '/dge_all_summary.txt'
+        star_log = united_star_log,
+        reads_type_out=united_reads_type_out,
+        parameters_file=united_qc_sheet_parameters_file,
+        read_counts = united_read_counts,
+        dge_all_summary = united_dge_all_summary
     output:
-        qc_sheet
+        united_qc_sheet
     script:
         "qc_sequencing_create_sheet.py"
+
+rule run_automated_analysis:
+    input:
+        united_dge_all
+    output:
+        res_file=automated_results_file
+    params:
+        fig_root=automated_figures_root
+    script:
+        'automated_analysis.py'
+        
+rule create_automated_report:
+    input:
+        star_log=united_star_log,
+        res_file=automated_results_file,
+        parameters_file=united_qc_sheet_parameters_file
+    output:
+        figures=automated_figures,
+        report=automated_report
+    params:
+        fig_root=automated_figures_root
+    script:
+        'automated_analysis_create_report.py'
 
 rule create_projects_metadata:
     output:

@@ -211,3 +211,15 @@ def get_merged_star_log_inputs(wildcards):
                 sample = sample)
 
     return input_logs
+
+def get_qc_sheet_parameters(sample_id, umi_cutoff=100):
+    # returns a single row for a given sample_id
+    # this will be the input of the parameters for the qc sheet parameter generation
+    out_dict = projects_puck_info.loc[projects_puck_info.sample_id == sample_id]\
+        .iloc[0]\
+        .to_dict()
+
+    out_dict['threshold'] = umi_cutoff
+    out_dict['input_beads'] = '60k-100k'
+
+    return out_dict
