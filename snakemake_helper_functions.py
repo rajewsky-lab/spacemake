@@ -219,7 +219,7 @@ def get_qc_sheet_parameters(sample_id, umi_cutoff=100):
         .iloc[0]\
         .to_dict()
 
-    out_dict['threshold'] = umi_cutoff
+    out_dict['umi_cutoff'] = umi_cutoff
     out_dict['input_beads'] = '60k-100k'
 
     return out_dict

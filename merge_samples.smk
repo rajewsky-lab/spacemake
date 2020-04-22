@@ -136,7 +136,7 @@ rule create_merged_star_log:
 
 rule create_merged_qc_parameters:
     params:
-        sample_params=lambda wildcards: get_qc_sheet_parameters(wildcards.merged_sample, wildcards.umi_cutoff)
+        sample_params=lambda wildcards: get_qc_sheet_parameters('merged_' + wildcards.merged_sample, wildcards.umi_cutoff)
     output:
         merged_qc_sheet_parameters_file
     script:

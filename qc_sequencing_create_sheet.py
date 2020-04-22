@@ -27,6 +27,7 @@ import yaml
 import subprocess
 import itertools
 import math
+from datetime import datetime
 
 #############
 # snakemake #
@@ -148,11 +149,11 @@ def load_bead_statistics(folder):
 
     return bead_statistics
 
-def load_downstream_statistics(folder, threshold):
+def load_downstream_statistics(folder, umi_cutoff):
     """Read the load_downstream_statistics.
     folder    -- The folder containing the sequencing data after analyzing it
               with the standard Dropseq pipeline.
-    threshold -- The minimum number of UMIs to keep a bead."""
+    umi_cutoff -- The minimum number of UMIs to keep a bead."""
 
     # the dictionary holding the values
     downstream_statistics = dict()
@@ -165,13 +166,13 @@ def load_downstream_statistics(folder, threshold):
             sep='\t', index_col=0).rename(columns={'NUM_GENIC_READS': 'reads', 'NUM_TRANSCRIPTS':'umis', 'NUM_GENES':'genes'})
 
     # we decrease the treshold if the output would be empty otherwise
-    while(sum(downstream_stats['umis'] >= threshold) == 0):
-        threshold = threshold - 10
+    while(sum(downstream_stats['umis'] >= umi_cutoff) == 0):
+        umi_cutoff = umi_cutoff - 10
 
-    downstream_statistics['minimum umis per bead'] = threshold
+    downstream_statistics['minimum umis per bead'] = umi_cutoff
 
-    # filter by threshold given in the qc_sequencing_parameters.yaml
-    downstream_stats = downstream_stats[downstream_stats['umis'] >= threshold]
+    # filter by umi_cutoff given in the qc_sequencing_parameters.yaml
+    downstream_stats = downstream_stats[downstream_stats['umis'] >= umi_cutoff]
     
     print ('[', round(time.time()-start_time, 2), 'seconds ]')
 
@@ -236,7 +237,7 @@ def create_qc_sheet(folder):
 
     read_statistics = load_read_statistics()
     bead_statistics = load_bead_statistics(folder)
-    downstream_statistics = load_downstream_statistics(folder, threshold=parameters['threshold'])
+    downstream_statistics = load_downstream_statistics(folder, umi_cutoff=parameters['umi_cutoff'])
 
     input_reads = read_statistics['input reads']
     uniq_mapped = read_statistics['uniquely mapped']
@@ -250,20 +251,25 @@ def create_qc_sheet(folder):
     pdf.cell(90, 10, " ", 0, 1, 'C')
     pdf.cell(90, 10, " ", 0, 1, 'C')
     pdf.cell(10)
-    pdf.cell(100, 5, "project_id: %s" % (parameters['project_id']), 0, 1, 'L')
+    pdf.cell(100, 5, "project_id: %s" % (parameters['project_id']), 0, 2, 'L')
+    pdf.cell(100, 5, "sample_id: %s" % (parameters['sample_id']), 0, 2, 'L')
+    pdf.cell(100, 5, "puck_id: %s" % (parameters['puck_id']), 0, 2, 'L')
+    # sometimes we have more experiment descriptions. this is when we have merged samples.
+    # in this case we need to print each experiment desc, one below the other
+    # first just print one cell titled experiment
+    pdf.cell(25, 5, "experiment: ", 0, 0, 'L')
+    # then right of it print one cell per experiment description. for merged they are split by ','
+    for experiment in parameters['experiment'].split(','):
+        pdf.cell(75, 5, experiment, 0, 2, 'L')
+    # create an empty cell to reposition
+    pdf.cell(75, 0, ' ', 0, 1, 'L')
     pdf.cell(10)
-    pdf.cell(100, 5, "sample_id: %s" % (parameters['sample_id']), 0, 1, 'L')
-    pdf.cell(10)
-    pdf.cell(100, 5, "puck_id: %s" % (parameters['puck_id']), 0, 1, 'L')
-    pdf.cell(10)
-    pdf.cell(100, 5, "experiment: %s" % (parameters['experiment']), 0, 1, 'L')
-    pdf.cell(10)
-    pdf.cell(100, 5, "sequencing_date: %s" % (parameters['sequencing_date']), 0, 1, 'L')
-    pdf.cell(10)
+    pdf.cell(100, 5, "sequencing_date: %s" % (' '.join(parameters['sequencing_date'].split(','))), 0, 2, 'L')
     pdf.cell(90, 5, " ", 0, 1, 'C')
     pdf.cell(10)
     pdf.cell(100, 5, "sequencing QC v."+str(__version__)+ 
-        ", nikolaos.karaiskos@mdc-berlin.de, tamasryszard.sztanka-toth@mdc-berlin.de", 0, 1, 'L')
+        ", nikolaos.karaiskos@mdc-berlin.de, tamasryszard.sztanka-toth@mdc-berlin.de", 0, 2, 'L')
+    pdf.cell(100, 5, "QC generated on %s" % (datetime.now().strftime('%d/%m/%Y %H:%M')), 0, 2, 'L')
     pdf.cell(90, 8, " ", 0, 1, 'C')
     pdf.cell(10)
     pdf.cell(30, 8, 'input reads', 1, 0, 'C')
@@ -288,14 +294,15 @@ def create_qc_sheet(folder):
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(10)
     pdf.image(folder+'cumulative_fraction.png', x=None, y=None, w=75, h=50, type='', link='')
-    pdf.image(folder+'nucleotide_composition.png', x=100, y=109, w=75, h=50, type='', link='')
+    pdf.set_xy(pdf.get_x()+85, pdf.get_y()-46)
+    pdf.image(folder+'nucleotide_composition.png', x=None, y=None, w=75, h=50, type='', link='')
     pdf.cell(90, 15, " ", 0, 1, 'C')
     pdf.cell(10)
     pdf.cell(20, 8, 'beads', 1, 0, 'C')
     pdf.cell(20, 8, 'reads', 1, 0, 'C')
     pdf.cell(20, 8, 'genes', 1, 0, 'C')
     pdf.cell(20, 8, 'umis', 1, 0, 'C')
-    pdf.cell(25, 8, 'threshold', 1, 1, 'C')
+    pdf.cell(25, 8, 'min umi cutoff', 1, 1, 'C')
     pdf.cell(10)
     pdf.cell(20, 8, format(downstream_statistics['beads'], ','), 1, 0, 'C')
     pdf.cell(20, 8, format(downstream_statistics['reads per bead'], ','), 1, 0, 'C')

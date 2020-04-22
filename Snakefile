@@ -63,13 +63,19 @@ projects_puck_info['type'] = 'normal'
 if 'samples_to_merge' in config:
     for project_id in config['samples_to_merge'].keys():
         for sample_id in config['samples_to_merge'][project_id].keys():
-           row = projects_puck_info[(projects_puck_info.project_id == project_id) & (projects_puck_info.sample_id == sample_id)].iloc[0]
+            samples_to_merge = config['samples_to_merge'][project_id][sample_id]
 
-           row.sample_id = 'merged_' + row.sample_id
-           row.project_id = 'merged_' + row.project_id
-           row.type = 'merged'
+            samples_to_merge = projects_puck_info.loc[projects_puck_info.sample_id.isin(samples_to_merge)]
 
-           projects_puck_info = projects_puck_info.append(row, ignore_index=True)
+            new_row = projects_puck_info[(projects_puck_info.project_id == project_id) & (projects_puck_info.sample_id == sample_id)].iloc[0]
+            new_row.sample_id = 'merged_' + new_row.sample_id
+            new_row.project_id = 'merged_' + new_row.project_id
+            new_row.type = 'merged'
+            new_row.experiment = ','.join(samples_to_merge.experiment.to_list())
+            new_row.investigator = ','.join(samples_to_merge.investigator.to_list())
+            new_row.sequencing_date = ','.join(samples_to_merge.sequencing_date.to_list())
+
+            projects_puck_info = projects_puck_info.append(new_row, ignore_index=True)
 
 demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
@@ -232,8 +238,11 @@ rule all:
 # CREATE METADATA FILE #
 ########################
 rule create_projects_puck_info_file:
-    input:
+    output:
         projects_puck_info_file
+    run:
+        projects_puck_info.to_csv(output[0], index=False)
+        os.system('chmod 664 %s' % (output[0]))
 
 ################
 # DOWNSAMPLING #
@@ -416,10 +425,3 @@ rule create_automated_report:
         fig_root=automated_figures_root
     script:
         'automated_analysis_create_report.py'
-
-rule create_projects_metadata:
-    output:
-        projects_puck_info_file
-    run:
-        projects_puck_info.to_csv(output[0], index=False)
-        os.system('chmod 664 %s' % (output[0]))
