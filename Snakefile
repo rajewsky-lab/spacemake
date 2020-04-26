@@ -182,6 +182,7 @@ automated_figures_suffixes = ['violin_filtered', 'pca_first_components',
 
 automated_figures = [automated_figures_root + '/' + f + '_' + figure_suffix for f in automated_figures_suffixes]
 automated_report = automated_analysis_root + '/{united_sample}_{puck}_automated_report.pdf'
+automated_results_metadata = automated_analysis_root + '/{united_sample}_{puck}_metadata.csv'
 
 automated_results_file = automated_analysis_root + '/results.h5ad'
 
@@ -230,8 +231,8 @@ rule all:
     input:
         get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs)
-        #get_united_output_files(automated_report, umi_cutoff = [10, 50, 100])
+        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
+        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs)
 
 
 ########################
@@ -420,7 +421,8 @@ rule create_automated_report:
         parameters_file=united_qc_sheet_parameters_file
     output:
         figures=automated_figures,
-        report=automated_report
+        report=automated_report,
+        results_metadata=automated_results_metadata
     params:
         fig_root=automated_figures_root
     script:

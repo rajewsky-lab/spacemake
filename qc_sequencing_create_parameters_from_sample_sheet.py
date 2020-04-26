@@ -42,3 +42,4 @@ if __name__ == '__main__':
         fo.write('sequencing_date: ' + params['sequencing_date']  + '\n')
         fo.write('input_beads: '+ params['input_beads'] + '\n')
         fo.write('umi_cutoff: ' + params['umi_cutoff'] + '\n')
+        fo.write('investigator: ' + params['investigator'] + '\n')

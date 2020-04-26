@@ -264,7 +264,8 @@ def create_qc_sheet(folder):
     # create an empty cell to reposition
     pdf.cell(75, 0, ' ', 0, 1, 'L')
     pdf.cell(10)
-    pdf.cell(100, 5, "sequencing_date: %s" % (' '.join(parameters['sequencing_date'].split(','))), 0, 2, 'L')
+    pdf.cell(100, 5, "sequencing_date: %s" % (', '.join(parameters['sequencing_date'].split(','))), 0, 2, 'L')
+    pdf.cell(100, 5, "investigator(s): %s" % (', '.join(parameters['investigator'].split(','))), 0, 2, 'L')
     pdf.cell(90, 5, " ", 0, 1, 'C')
     pdf.cell(10)
     pdf.cell(100, 5, "sequencing QC v."+str(__version__)+ 

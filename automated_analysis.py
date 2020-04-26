@@ -39,8 +39,11 @@ adata.obs['percent_mito'] = np.sum(adata[:, mito_genes].X, axis=1) / np.sum(adat
 adata.obs['n_counts'] = adata.X.sum(axis=1)
 
 # filter by percentage mito and n_genes
-adata = adata[adata.obs.n_genes < 2500, :]
-adata = adata[adata.obs.percent_mito < 0.05, :]
+if adata.shape[0] > 0:
+    adata = adata[adata.obs.n_genes < 2500, :]
+
+if adata.shape[0] > 0:
+    adata = adata[adata.obs.percent_mito < 0.05, :]
 
 # calculate log(cpm)
 sc.pp.normalize_total(adata, target_sum=1e6)
@@ -73,7 +76,11 @@ if nrow > 0 and ncol > 0:
     sc.pp.neighbors(adata, n_pcs=n_pcs)
     
     # compute UMAP
-    sc.tl.umap(adata)   
+    # for a very low number of cells, scipy will throw an error here
+    try:
+        sc.tl.umap(adata)   
+    except TypeError:
+        pass
     
     # find out the clusters
     sc.tl.leiden(adata)
