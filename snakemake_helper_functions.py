@@ -166,23 +166,7 @@ def get_sample_info(raw_folder):
         
     return df
 
-def get_raw_data_optical_images_input(wildcards):
-    row = project_puck_df[project_puck_df.project_id.eq(wildcards.project) &
-                          project_puck_df.sample_id.eq(wildcards.sample)]
 
-
-    in_dir = microscopy_raw + '/' + row['batch_id'] + '/' + row['puck_id']
-
-    return in_dir
-
-def get_processed_data_optical(wildcards):
-    row = project_puck_df[project_puck_df.project_id.eq(wildcards.project) &
-                          project_puck_df.sample_id.eq(wildcards.sample)]
-
-
-    in_dir = microscopy_qc + '/' + row['batch_id'] + '/' + row['puck_id']
-
-    return in_dir
 ###################
 # Merging samples #
 ###################
@@ -193,7 +177,7 @@ def get_project(sample):
 def get_dropseq_final_bam(wildcards):
     # merged_name contains all the samples which should be merged,
     # separated by a dot each
-    samples = config['samples_to_merge'][wildcards.merged_name]
+    samples = config['samples_to_merge'][wildcards.merged_project][wildcards.merged_sample]
 
     input_bams = []
 
@@ -205,19 +189,19 @@ def get_dropseq_final_bam(wildcards):
 
 def get_merged_bam_inputs(wildcards):
     # currently not used as we do not tag the bam files with the sample name
-    samples = config['samples_to_merge'][wildcards.merged_name]
+    samples = config['samples_to_merge'][wildcards.merged_project][wildcards.merged_sample]
 
     input_bams = []
 
     for sample in samples:
         input_bams = input_bams + expand(sample_tagged_bam, 
-                merged_name = wildcards.merged_name,
+                merged_sample = wildcards.merged_name,
                 sample = sample)
 
     return input_bams
 
 def get_merged_star_log_inputs(wildcards):
-    samples = config['samples_to_merge'][wildcards.merged_name]
+    samples = config['samples_to_merge'][wildcards.merged_project][wildcards.merged_sample]
     
     input_logs = []
 
@@ -227,3 +211,15 @@ def get_merged_star_log_inputs(wildcards):
                 sample = sample)
 
     return input_logs
+
+def get_qc_sheet_parameters(sample_id, umi_cutoff=100):
+    # returns a single row for a given sample_id
+    # this will be the input of the parameters for the qc sheet parameter generation
+    out_dict = projects_puck_info.loc[projects_puck_info.sample_id == sample_id]\
+        .iloc[0]\
+        .to_dict()
+
+    out_dict['umi_cutoff'] = umi_cutoff
+    out_dict['input_beads'] = '60k-100k'
+
+    return out_dict

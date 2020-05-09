@@ -39,7 +39,6 @@ project_dir = config['root_dir'] + '/projects/{project}'
 
 microscopy_root = '/data/rajewsky/slideseq_microscopy'
 microscopy_raw = microscopy_root + '/raw'
-microscopy_qc = microscopy_root + '/qc'
 
 illumina_projects = config['illumina_projects']
 
@@ -52,12 +51,39 @@ project_df = project_df.append(config['additional_illumina_projects'], ignore_in
 samples = create_lookup_table(project_df)
 samples_list = project_df.T.to_dict().values()
 
-project_puck_df = project_df.merge(get_sample_info(microscopy_raw), how='inner', on ='puck_id')
+# put all projects into projects_puck_info
+projects_puck_info = project_df.merge(get_sample_info(microscopy_raw), how='left', on ='puck_id').fillna('none')
+
+projects_puck_info.loc[~projects_puck_info.puck_id.str.startswith('PID_'), 'puck_id']= 'no_puck'
+
+projects_puck_info['type'] = 'normal'
+
+# added samples to merged to the projects_puck_info
+# this will be saved as a metadata file in .config/ directory
+if 'samples_to_merge' in config:
+    for project_id in config['samples_to_merge'].keys():
+        for sample_id in config['samples_to_merge'][project_id].keys():
+            samples_to_merge = config['samples_to_merge'][project_id][sample_id]
+
+            samples_to_merge = projects_puck_info.loc[projects_puck_info.sample_id.isin(samples_to_merge)]
+
+            new_row = projects_puck_info[(projects_puck_info.project_id == project_id) & (projects_puck_info.sample_id == sample_id)].iloc[0]
+            new_row.sample_id = 'merged_' + new_row.sample_id
+            new_row.project_id = 'merged_' + new_row.project_id
+            new_row.type = 'merged'
+            new_row.experiment = ','.join(samples_to_merge.experiment.to_list())
+            new_row.investigator = ','.join(samples_to_merge.investigator.to_list())
+            new_row.sequencing_date = ','.join(samples_to_merge.sequencing_date.to_list())
+
+            projects_puck_info = projects_puck_info.append(new_row, ignore_index=True)
 
 demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
-# create lookup table for flowcell-to-samplesheet
-# flowcell_id2samplesheet = {value['flowcell_id'] : value['sample_sheet'] for key, value in samples.items()}
+# global wildcard constraints
+wildcard_constraints:
+    sample='(?!merged_).+',
+    project='(?!merged_).+'
+
 #################
 # DIRECTORY STR #
 #################
@@ -66,17 +92,10 @@ raw_data_illumina = raw_data_root + '/illumina'
 raw_data_illumina_reads = raw_data_illumina + '/reads/raw'
 raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
 
-raw_data_optical = raw_data_root + '/optical'
-raw_data_optical_images = raw_data_optical + '/{sample}'
-
 processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
-processed_data_optical = processed_data_root + '/optical'
-
-# metadata file created during the linking rule
-projects_puck_info = config['root_dir'] + '/.config/projects_puck_info.csv'
-
+projects_puck_info_file = config['root_dir'] + '/.config/projects_puck_info.csv'
 
 ##############
 # Demux vars #
@@ -135,25 +154,40 @@ dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 #######################
 # post dropseq and QC #
 #######################
-qc_sheet_parameters_file = data_root + '/qc_sheet/qc_sheet_parameters.yaml'
-qc_sheet = data_root + '/qc_sheet/qc_sheet_{sample}_{puck}.pdf'
+# umi cutoffs. used by qc-s and automated reports
+umi_cutoffs = [10, 50, 100]
+
+#general qc sheet directory pattern
+qc_sheet_dir = '/qc_sheet/umi_cutoff_{umi_cutoff}'
+
+# parameters file for not merged samples
+qc_sheet_parameters_file = data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
+
+# qc generation for ALL samples, merged and non-merged
+united_root = config['root_dir'] + '/projects/{united_project}/processed_data/{united_sample}/illumina/complete_data'
+united_qc_sheet = united_root + qc_sheet_dir + '/qc_sheet_{united_sample}_{puck}.pdf'
+united_star_log = united_root + '/star_Log.final.out'
+united_reads_type_out = united_root + '/uniquely_mapped_reads_type.txt'
+united_qc_sheet_parameters_file = united_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
+united_read_counts = united_root + '/out_readcounts.txt.gz'
+united_dge_all_summary = united_root +  '/dge/dge_all_summary.txt'
+united_dge_all = united_root +  '/dge/dge_all.txt.gz'
+
+# automated analysis
+automated_analysis_root = united_root + '/automated_analysis/umi_cutoff_{umi_cutoff}'
+automated_figures_root = automated_analysis_root + '/figures'
+figure_suffix = '{united_sample}_{puck}.png'
+automated_figures_suffixes = ['violin_filtered', 'pca_first_components',
+    'umap_clusters','umap_top1_markers', 'umap_top2_markers']
+
+automated_figures = [automated_figures_root + '/' + f + '_' + figure_suffix for f in automated_figures_suffixes]
+automated_report = automated_analysis_root + '/{united_sample}_{puck}_automated_report.pdf'
+automated_results_metadata = automated_analysis_root + '/{united_sample}_{puck}_metadata.csv'
+
+automated_results_file = automated_analysis_root + '/results.h5ad'
 
 # reads type
 reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
-
-############################
-# Link optical to illumina #
-############################
-optical_linked = []
-
-for i, row in project_puck_df.iterrows():
-    optical_linked = optical_linked + expand(raw_data_optical_images,
-                                       project = row['project_id'],
-                                       sample = row['sample_id'])
-    
-    optical_linked = optical_linked + expand(processed_data_optical,
-                                       project = row['project_id'],
-                                       sample = row['sample_id'])
 
 # #######################
 # include dropseq rules #
@@ -163,7 +197,6 @@ include: 'dropseq.smk'
 ################################
 # Final output file generation #
 ################################
-
 def get_final_output_files(pattern, projects = 'all', **kwargs):
     if projects == 'all':
         samples = samples_list
@@ -179,29 +212,38 @@ def get_final_output_files(pattern, projects = 'all', **kwargs):
     
     return out_files
 
+def get_united_output_files(pattern, **kwargs):
+    out_files = []
+
+    for index, row in projects_puck_info.iterrows():
+        out_files = out_files + expand(pattern,
+            united_project = row['project_id'],
+            united_sample = row['sample_id'],
+            puck=row['puck_id'], 
+            **kwargs)
+
+    return out_files
+
 #############
 # Main rule #
 #############
 rule all:
     input:
-        #get_final_output_files(dge_out, dge_type = dge_types),
         get_final_output_files(dropseq_final_bam_ix),
-        get_final_output_files(qc_sheet),
-        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2])
+        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
+        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
+        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs)
 
-###################
-# LINK TO OPTICAL #
-###################
-rule link_optical:
-    input:
-        optical_linked
 
 ########################
 # CREATE METADATA FILE #
 ########################
-rule create_projects_puck_info:
-    input:
-        projects_puck_info
+rule create_projects_puck_info_file:
+    output:
+        projects_puck_info_file
+    run:
+        projects_puck_info.to_csv(output[0], index=False)
+        os.system('chmod 664 %s' % (output[0]))
 
 ################
 # DOWNSAMPLING #
@@ -216,16 +258,6 @@ rule downsample:
 # MERGE SAMPLES #
 #################
 include: 'merge_samples.smk'
-
-samples_to_merge = []
-
-# expect a list of lists in the config file. samples in each list will be merged
-if 'samples_to_merge' in config:
-    samples_to_merge = [key for key, value in config['samples_to_merge'].items()]
-
-rule merge_samples:
-    input:
-        expand(merged_qc_sheet, merged_name = samples_to_merge)
 
 #########
 # RULES #
@@ -322,7 +354,7 @@ rule run_fastqc:
         {fastqc_command} -t {threads} -o {params.output_dir} {input}
         """
 
-rule determine_precentages:
+rule determine_perecentages:
     input:
         dropseq_final_bam
     output:
@@ -354,13 +386,7 @@ rule index_bam_file:
 
 rule create_qc_parameters:
     params:
-        sample_id = lambda wildcards: wildcards.sample,
-        project_id = lambda wildcards: wildcards.project,
-        puck_id = lambda wildcards: samples[wildcards.project]['samples'][wildcards.sample]['puck'],
-        experiment = lambda wildcards: samples[wildcards.project]['samples'][wildcards.sample]['experiment'],
-        sequencing_date = lambda wildcards: samples[wildcards.project]['sequencing_date'],
-        input_beads = '60k-100k',
-        threshold= '100'
+        sample_params=lambda wildcards: get_qc_sheet_parameters(wildcards.sample, wildcards.umi_cutoff)
     output:
         qc_sheet_parameters_file
     script:
@@ -368,45 +394,36 @@ rule create_qc_parameters:
 
 rule create_qc_sheet:
     input:
-        star_log = star_log_file,
-        reads_type_out=reads_type_out,
-        parameters_file=qc_sheet_parameters_file,
-        read_counts = dropseq_out_readcounts,
-        dge_all_summary = dge_root + '/dge_all_summary.txt'
+        star_log = united_star_log,
+        reads_type_out=united_reads_type_out,
+        parameters_file=united_qc_sheet_parameters_file,
+        read_counts = united_read_counts,
+        dge_all_summary = united_dge_all_summary
     output:
-        qc_sheet
+        united_qc_sheet
     script:
         "qc_sequencing_create_sheet.py"
 
-rule link_raw_data_images:
+rule run_automated_analysis:
     input:
-        unpack(get_raw_data_optical_images_input)
+        united_dge_all
     output:
-        directory(raw_data_optical_images)
-    shell:
-        """
-        ln -sfn {input} {output}
-
-        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chmod 664 {{}} +
-        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chgrp AG_Rajewsky {{}} +
-        """
-
-rule linked_processed_data_optical:
+        res_file=automated_results_file
+    params:
+        fig_root=automated_figures_root
+    script:
+        'automated_analysis.py'
+        
+rule create_automated_report:
     input:
-        ancient(unpack(get_processed_data_optical))
+        star_log=united_star_log,
+        res_file=automated_results_file,
+        parameters_file=united_qc_sheet_parameters_file
     output:
-        directory(processed_data_optical)
-    shell:
-        """
-        ln -sfn {input} {output}
-
-        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chmod 664 {{}} +
-        find {input} -type f -name '.snakemake_timestamp' -user $USER -exec chgrp AG_Rajewsky {{}} +
-        """
-
-rule create_projects_metadata:
-    output:
-        projects_puck_info
-    run:
-        project_puck_df.to_csv(output[0], index=False) 
-        os.system('chmod 664 %s' % (output[0]))
+        figures=automated_figures,
+        report=automated_report,
+        results_metadata=automated_results_metadata
+    params:
+        fig_root=automated_figures_root
+    script:
+        'automated_analysis_create_report.py'

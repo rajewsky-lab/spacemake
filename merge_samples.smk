@@ -1,13 +1,15 @@
-merged_dir = config['root_dir'] + '/projects/merged_{merged_name}'
+merged_dir = config['root_dir'] + '/projects/merged_{merged_project}/processed_data/merged_{merged_sample}/illumina/complete_data'
 
 sample_tagged_bam = merged_dir + '/{sample}_tagged.bam'
 merged_bam = merged_dir + '/merged.bam'
-merged_readcounts = merged_dir + '/merged_readcounts.txt.gz'
-merged_qc_sheet_parameters_file = merged_dir + '/qc_sheet_parameters.yaml'
-merged_qc_sheet = merged_dir + '/merged_{merged_name}_qc_sheet.pdf'
+merged_readcounts = merged_dir + '/out_readcounts.txt.gz'
+merged_qc_dir = merged_dir + qc_sheet_dir
+
+merged_qc_sheet_parameters_file = merged_qc_dir + '/qc_sheet_parameters.yaml'
+
 merged_reads_type_out = merged_dir + '/uniquely_mapped_reads_type.txt'
 merged_top_barcodes = merged_dir + '/topBarcodes.txt'
-merged_star_log_file = merged_dir + '/merged_star_log.txt'
+merged_star_log_file = merged_dir + '/star_Log.final.out'
 
 # merged dge
 merged_dge_root = merged_dir + '/dge'
@@ -124,7 +126,6 @@ rule create_merged_star_log:
             idx = 0
             for line in logs[0]:
                 entry = line.split('\t') 
-                print(idx)
                 if idx == 5:
                     fo.write('%s\t%s\n' % (entry[0], inp_reads))
                 elif idx == 8:
@@ -133,28 +134,10 @@ rule create_merged_star_log:
                     fo.write('%s\t%s\n' % (entry[0], 'NA'))
                 idx = idx + 1
 
-rule create_imerged_qc_parameters:
+rule create_merged_qc_parameters:
     params:
-        sample_id = lambda wildcards: wildcards.merged_name,
-        project_id = 'NA',
-        puck_id = 'NA',
-        experiment = 'NA',
-        sequencing_date = 'NA',
-        input_beads = '60k-100k',
-        threshold= '100'
+        sample_params=lambda wildcards: get_qc_sheet_parameters('merged_' + wildcards.merged_sample, wildcards.umi_cutoff)
     output:
         merged_qc_sheet_parameters_file
     script:
         "qc_sequencing_create_parameters_from_sample_sheet.py"
-
-rule create_merged_qc_sheet:
-    input:
-        star_log=merged_star_log_file,
-        reads_type_out=merged_reads_type_out,
-        parameters_file=merged_qc_sheet_parameters_file,
-        read_counts=merged_readcounts,
-        dge_all_summary=merged_dge_root + '/dge_all_summary.txt'
-    output:
-        merged_qc_sheet
-    script:
-        "qc_sequencing_create_sheet.py"
