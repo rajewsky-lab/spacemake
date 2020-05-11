@@ -222,5 +222,5 @@ pdf.set_font('Arial', 'B', 14)
 pdf.cell(90, 20, " ", 0, 2, 'C')
 pdf.cell(100, 10, "Top marker gene plots - second top marker", 0, 2, 'L')
 pdf.image(figures_root + '/umap_top2_markers' + figures_suffix, w = 180, h = 100)
-pdf.output('/home/tsztank/report.pdf')
+
 pdf.output(snakemake.output['report'], 'F')

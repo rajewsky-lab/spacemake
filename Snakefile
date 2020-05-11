@@ -233,6 +233,7 @@ rule all:
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
         get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
         get_united_output_files(automated_report, umi_cutoff = umi_cutoffs)
+        #'/data/rajewsky/projects/slide_seq/projects/sts_030/processed_data/sts_030_1/illumina/complete_data/automated_analysis/umi_cutoff_100/sts_030_1_PID_B0006_1_automated_report.pdf'
 
 
 ########################
