@@ -38,7 +38,7 @@ sc.pl.violin(adata, ['n_genes', 'n_counts', 'percent_mito'],
                      log=True)
 
 # only print the first 5 pairs of components
-if 'neigbors' in adata.uns_keys():
+if 'neighbors' in adata.uns_keys():
     pcs = [str(x) for x in range(1, adata.uns['neighbors']['params']['n_pcs'] + 1)]
 else:
     pcs = []
@@ -52,7 +52,7 @@ if pcs == []:
 else:
     sc.pl.pca(adata, color='leiden', components = pc_components[:6], save='_first_components' + figures_suffix, ncols=3, title=['']*6)
 
-if 'umap' in adata.obsm_keys():
+if 'umap' in adata.uns_keys() and 'X_umap' in adata.obsm_keys():
     # save umap
     sc.pl.umap(adata, color = 'leiden', save='_clusters' + figures_suffix, size = 10, title='')
 
@@ -186,7 +186,7 @@ pdf.set_font('Arial', 'B', 11)
 pdf.cell(100, 10, 'Top marker genes per cluster', 0, 2, 'L')
 pdf.set_font('Arial', '', 11)
 pdf.cell(100, 10, 'Top 15 marker genes for each cluster, when compared to other clusters.', 0, 2, 'L')
-pdf.cell(100, 10, 'The higher the gene is in the table, the more differential it is', 0, 2, 'L')
+pdf.cell(100, 10, 'The higher the gene is in the table, the more differential it is', 0, 1, 'L')
 
 if 'rank_genes_groups' in adata.uns_keys():
     marker_genes = pd.DataFrame(adata.uns['rank_genes_groups']['names']).head(15)
@@ -194,6 +194,7 @@ if 'rank_genes_groups' in adata.uns_keys():
 
     for split in range(table_split + 1):
         pdf.set_font('Arial', 'B', 10)
+        pdf.cell(10)
         for c in marker_genes.columns[split*10:(split+1)*10]:
             pdf.cell(18, 4, c, 1, 0, 'C')
         
