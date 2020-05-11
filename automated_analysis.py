@@ -29,8 +29,8 @@ adata = sc.read_text(dge_path, delimiter='\t').T
 
 # filter out cells based on umi, and genes based on number of cells
 sc.pp.filter_cells(adata, min_counts=umi_cutoff)
-sc.pp.filter_cells(adata, min_genes=50)
-sc.pp.filter_genes(adata, min_cells=3)
+sc.pp.filter_cells(adata, min_genes=1)
+sc.pp.filter_genes(adata, min_cells=1)
 
 # calculate mitochondrial gene percentage
 mito_genes = adata.var_names.str.startswith('Mt-') | adata.var_names.str.startswith('mt-')
@@ -47,7 +47,7 @@ if adata.shape[0] > 0:
 
 # calculate log(cpm)
 sc.pp.normalize_total(adata, target_sum=1e6)
-sc.pp.log1p(adata)
+sc.pp.log1p(adata, base=2)
 
 # save the log-normalised counts in the .raw attribute
 adata.raw = adata
