@@ -6,6 +6,9 @@ __author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
 __licence__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
+# first create downsampling for 10, 20 .. 90
+downsampled_ratios = range(10,100,10)
+
 downsampled_sample_root = downsample_root + '/{ratio}'
 downsampled_bam = downsampled_sample_root + '/final_downsampled_{ratio}.bam'
 downsampled_readcounts = downsampled_sample_root + '/out_readcounts.txt.gz'
@@ -18,15 +21,15 @@ downsample_dge_out = downsample_dge_out_prefix + '.txt.gz'
 downsample_dge_out_summary = downsample_dge_out_prefix + '_summary.txt'
 downsample_dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
 
-downsample_qc_sheet = downsampled_sample_root + '/qc_sheet/qc_sheet_{sample}_{puck}_downsampled_{ratio}.pdf'
+downsample_qc_sheet = downsampled_sample_root + qc_sheet_dir + '/qc_sheet_{united_sample}_{puck}_downsampled_{ratio}.pdf'
 
-downsample_saturation_analysis = downsample_root + '/saturation_analysis.pdf'
+downsample_saturation_analysis = downsample_root + '/{united_sample}_saturation_analysis.pdf'
 
 downsample_saturation_script = repo_dir + '/saturation_analysis.Rmd'
 
 rule downsample_bam:
     input:
-        dropseq_final_bam
+        united_final_bam
     output:
         downsampled_bam
     params:
@@ -84,10 +87,10 @@ rule create_downsample_dge:
 
 rule create_downsample_qc_sheet:
     input:
-        star_log = star_log_file,
-        reads_type_out=reads_type_out,
-        parameters_file=qc_sheet_parameters_file,
-        read_counts = dropseq_out_readcounts,
+        star_log = united_star_log,
+        reads_type_out=united_reads_type_out,
+        parameters_file=united_qc_sheet_parameters_file,
+        read_counts=united_read_counts,
         dge_all_summary = downsample_dge_root + '/downsampled_dge_all_summary.txt'
     output:
         downsample_qc_sheet
@@ -96,31 +99,33 @@ rule create_downsample_qc_sheet:
 
 
 def get_saturation_analysis_input(wildcards):
-    # first create downsampling for 10, 20 .. 90
-    downsampling_ratios = range(10,100,10)
-
     # create dictionary with the right downsampling files where ratio is the key
     dge_summaries = {
         'downsampled_' + str(x): expand(downsample_dge_out_summary,
-        project = wildcards.project,
-        sample = wildcards.sample,
+        united_project = wildcards.united_project,
+        united_sample = wildcards.united_sample,
         dge_type = '_all',
-        ratio = x)[0] for x in range(10, 100, 10)
+        ratio = x)[0] for x in downsampled_ratios
     }
     
-    dge_summaries['downsampled_100'] = expand(dge_out_summary,
-        project = wildcards.project,
-        sample = wildcards.sample,
-        dge_type = '_all')
+    dge_summaries['downsampled_100'] = expand(united_dge_all_summary,
+        united_project = wildcards.united_project,
+        united_sample = wildcards.united_sample)
 
     return dge_summaries
+
+def get_united_qc_sheet_parameters_file(wildcards):
+    # read only qc sheet with min 10 UMI, as we only use it for metadata
+    # saturation report will be generated using all the beads, without filtering
+    return {'parameters_file': expand(united_qc_sheet_parameters_file,
+        umi_cutoff=10, **wildcards)}
 
 rule create_saturation_analysis:
     input:
         unpack(get_saturation_analysis_input),
-        parameters_file=qc_sheet_parameters_file,
-        star_log = star_log_file,
-        reads_type_out=reads_type_out
+        unpack(get_united_qc_sheet_parameters_file),
+        star_log = united_star_log,
+        reads_type_out=united_read_counts
     output:
         downsample_saturation_analysis
     script:

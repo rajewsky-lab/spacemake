@@ -2,6 +2,7 @@ merged_dir = config['root_dir'] + '/projects/merged_{merged_project}/processed_d
 
 sample_tagged_bam = merged_dir + '/{sample}_tagged.bam'
 merged_bam = merged_dir + '/merged.bam'
+merged_final_bam = merged_dir + '/final.bam'
 merged_readcounts = merged_dir + '/out_readcounts.txt.gz'
 merged_qc_dir = merged_dir + qc_sheet_dir
 
@@ -36,6 +37,14 @@ rule create_merged_bam:
     threads: 4
     shell:
         "sambamba merge -t {threads} {output} {input}"
+
+rule create_final_bam:
+    input:
+        merged_bam
+    output:
+        merged_final_bam
+    shell:
+       'ln -sr {input} {output}' 
 
 rule create_readcounts:
     input:

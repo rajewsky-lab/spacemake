@@ -143,9 +143,6 @@ dropseq_reports_dir = dropseq_root + '/reports'
 dropseq_tmp_dir = dropseq_root + '/tmp'
 smart_adapter = config['adapters']['smart']
 
-# subsample vars
-downsample_root = processed_data_illumina + '/downsampled_data'
-
 # file containing R1 and R2 merged
 dropseq_merge_in_mate_1 = reverse_reads_mate_1
 dropseq_merge_in_mate_2 = reverse_reads_mate_2
@@ -173,6 +170,9 @@ united_read_counts = united_root + '/out_readcounts.txt.gz'
 united_dge_all_summary = united_root +  '/dge/dge_all_summary.txt'
 united_dge_all = united_root +  '/dge/dge_all.txt.gz'
 
+# united final.bam
+united_final_bam = united_root + '/final.bam'
+
 # automated analysis
 automated_analysis_root = united_root + '/automated_analysis/umi_cutoff_{umi_cutoff}'
 automated_figures_root = automated_analysis_root + '/figures'
@@ -188,6 +188,9 @@ automated_results_file = automated_analysis_root + '/results.h5ad'
 
 # reads type
 reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
+
+# subsample vars
+downsample_root = united_root + '/downsampled_data'
 
 # #######################
 # include dropseq rules #
@@ -212,10 +215,14 @@ def get_final_output_files(pattern, projects = 'all', **kwargs):
     
     return out_files
 
-def get_united_output_files(pattern, **kwargs):
+def get_united_output_files(pattern, projects = None, **kwargs):
     out_files = []
+    df = projects_puck_info
 
-    for index, row in projects_puck_info.iterrows():
+    if projects is not None:
+        df = df[df.project_id.isin(projects)]
+
+    for index, row in df.iterrows():
         out_files = out_files + expand(pattern,
             united_project = row['project_id'],
             united_sample = row['sample_id'],
@@ -231,9 +238,8 @@ rule all:
     input:
         get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
-        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs)
-        #'/data/rajewsky/projects/slide_seq/projects/sts_030/processed_data/sts_030_1/illumina/complete_data/automated_analysis/umi_cutoff_100/sts_030_1_PID_B0006_1_automated_report.pdf'
+        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs)
+        #get_united_output_files(automated_report, umi_cutoff = umi_cutoffs)
 
 
 ########################
@@ -253,7 +259,8 @@ include: 'downsample.smk'
 
 rule downsample:
     input:
-        get_final_output_files(downsample_saturation_analysis, projects = config['downsample_projects'])
+        get_united_output_files(downsample_saturation_analysis, projects = config['downsample_projects'])
+        #get_united_output_files(downsample_qc_sheet, projects = config['downsample_projects'], umi_cutoff = umi_cutoffs, ratio=downsampled_ratios)
 
 #################
 # MERGE SAMPLES #
