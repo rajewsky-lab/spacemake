@@ -82,8 +82,6 @@ metadata <- readStarLog(snakemake@input$star_log) %>%
 metadata
 ```
 
-
-
 #### Saturation analysis
 
 In order to know whether we would gain more from sequencing deeper, we downsampled the data (the final.bam file) to contain 10%, 20%... 90% reads, and then we created the DigitalExpression matrix (as in the normal dropseq pipeline).

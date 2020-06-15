@@ -125,7 +125,7 @@ rule create_saturation_analysis:
         unpack(get_saturation_analysis_input),
         unpack(get_united_qc_sheet_parameters_file),
         star_log = united_star_log,
-        reads_type_out=united_read_counts
+        reads_type_out=united_reads_type_out,
     output:
         downsample_saturation_analysis
     script:

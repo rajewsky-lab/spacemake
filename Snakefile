@@ -152,7 +152,7 @@ dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 # post dropseq and QC #
 #######################
 # umi cutoffs. used by qc-s and automated reports
-umi_cutoffs = [10, 50, 100]
+umi_cutoffs = [1, 10, 50, 100]
 
 #general qc sheet directory pattern
 qc_sheet_dir = '/qc_sheet/umi_cutoff_{umi_cutoff}'
@@ -161,36 +161,37 @@ qc_sheet_dir = '/qc_sheet/umi_cutoff_{umi_cutoff}'
 qc_sheet_parameters_file = data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
 
 # qc generation for ALL samples, merged and non-merged
-united_root = config['root_dir'] + '/projects/{united_project}/processed_data/{united_sample}/illumina/complete_data'
-united_qc_sheet = united_root + qc_sheet_dir + '/qc_sheet_{united_sample}_{puck}.pdf'
-united_star_log = united_root + '/star_Log.final.out'
-united_reads_type_out = united_root + '/uniquely_mapped_reads_type.txt'
-united_qc_sheet_parameters_file = united_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
-united_read_counts = united_root + '/out_readcounts.txt.gz'
-united_dge_all_summary = united_root +  '/dge/dge_all_summary.txt'
-united_dge_all = united_root +  '/dge/dge_all.txt.gz'
+united_illumina_root = config['root_dir'] + '/projects/{united_project}/processed_data/{united_sample}/illumina'
+united_complete_data_root = united_illumina_root + '/complete_data'
+united_qc_sheet = united_complete_data_root + qc_sheet_dir + '/qc_sheet_{united_sample}_{puck}.pdf'
+united_star_log = united_complete_data_root + '/star_Log.final.out'
+united_reads_type_out = united_complete_data_root + '/uniquely_mapped_reads_type.txt'
+united_qc_sheet_parameters_file = united_complete_data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
+united_read_counts = united_complete_data_root + '/out_readcounts.txt.gz'
+united_dge_all_summary = united_complete_data_root +  '/dge/dge_all_summary.txt'
+united_dge_all = united_complete_data_root +  '/dge/dge_all.txt.gz'
 
 # united final.bam
-united_final_bam = united_root + '/final.bam'
+united_final_bam = united_complete_data_root + '/final.bam'
 
 # automated analysis
-automated_analysis_root = united_root + '/automated_analysis/umi_cutoff_{umi_cutoff}'
+automated_analysis_root = united_complete_data_root + '/automated_analysis/umi_cutoff_{umi_cutoff}'
 automated_figures_root = automated_analysis_root + '/figures'
 figure_suffix = '{united_sample}_{puck}.png'
 automated_figures_suffixes = ['violin_filtered', 'pca_first_components',
     'umap_clusters','umap_top1_markers', 'umap_top2_markers']
 
 automated_figures = [automated_figures_root + '/' + f + '_' + figure_suffix for f in automated_figures_suffixes]
-automated_report = automated_analysis_root + '/{united_sample}_{puck}_automated_report.pdf'
-automated_results_metadata = automated_analysis_root + '/{united_sample}_{puck}_metadata.csv'
+automated_report = automated_analysis_root + '/{united_sample}_{puck}_illumina_automated_report.pdf'
+automated_results_metadata = automated_analysis_root + '/{united_sample}_{puck}_illumina_automated_report_metadata.csv'
 
 automated_results_file = automated_analysis_root + '/results.h5ad'
 
 # reads type
 reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
 
-# subsample vars
-downsample_root = united_root + '/downsampled_data'
+# downsample vars
+downsample_root = united_illumina_root + '/downsampled_data'
 
 # #######################
 # include dropseq rules #
@@ -238,8 +239,8 @@ rule all:
     input:
         get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs)
-        #get_united_output_files(automated_report, umi_cutoff = umi_cutoffs)
+        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
+        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs)
 
 
 ########################
