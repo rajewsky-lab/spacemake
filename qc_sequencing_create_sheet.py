@@ -79,8 +79,7 @@ def compress_string(barcode):
 def load_read_statistics():
     read_statistics = dict()
 
-    # change this back to snakemake output before merging
-    with open('/data/rajewsky/projects/slide_seq/projects/sts_k_003/processed_data/sts_k_003_4/illumina/complete_data/star_Log.final.out', 'r') as fi:
+    with open(snakemake.input.star_log, 'r') as fi:
         idx = 0
         for line in fi.readlines():
             entry = line.strip('\n').split('\t')
@@ -90,8 +89,7 @@ def load_read_statistics():
                 read_statistics['uniquely mapped'] = int(entry[1])
             idx += 1
  
-    # change this back to snakemake output before merging           
-    with open('/data/rajewsky/projects/slide_seq/projects/sts_k_003/processed_data/sts_k_003_4/illumina/complete_data/uniquely_mapped_reads_type.txt', 'r') as fi:
+    with open(snakemake.input.reads_type_out, 'r') as fi:
         idx = 0
         for line in fi.readlines():
             entry = line.strip('\n').split(' ')
@@ -112,8 +110,7 @@ def load_bead_statistics(folder):
     bead_statistics = dict()
     
     # read readcounts for all barcodes seen in the data
-    # change this back to snakemake output before merging
-    readcounts = pd.read_csv('/data/rajewsky/projects/slide_seq/projects/sts_k_003/processed_data/sts_k_003_4/illumina/complete_data/out_readcounts.txt.gz', sep='\t', 
+    readcounts = pd.read_csv(snakemake.input.read_counts, sep='\t',
         skiprows=1, names=['reads', 'barcode'])
     bead_statistics['total # of barcodes'] = readcounts.shape[0]
 
@@ -174,7 +171,7 @@ def load_downstream_statistics(folder, umi_cutoff):
 
     # read the summary table of dge_all (containing intronic and exonic reads)
     # change this back to snakemake output before merging
-    downstream_stats = pd.read_csv('/data/rajewsky/projects/slide_seq/projects/sts_k_003/processed_data/sts_k_003_4/illumina/complete_data/dge/dge_all_summary.txt',
+    downstream_stats = pd.read_csv(snakemake.input.dge_all_summary,
             # skip the first 5 rows as they contain comments
             skiprows=6,
             # rename the column, make column=0 the index
@@ -200,9 +197,6 @@ def load_downstream_statistics(folder, umi_cutoff):
     # filter by umi_cutoff given in the qc_sequencing_parameters.yaml
     downstream_stats = downstream_stats[downstream_stats['umis'] >= umi_cutoff]
     
-    # I comment this out because it looks orphan?
-    # print ('[', round(time.time()-start_time, 2), 'seconds ]')
-
     # find beads which have the minimum number of UMIs
     beads = downstream_stats.index.str.split('.').str[0].to_list()
     downstream_statistics['beads'] = len(beads)
@@ -260,19 +254,19 @@ def load_downstream_statistics(folder, umi_cutoff):
 
 def create_qc_sheet(folder):
     # Uncomment the following 2 lines before merging
-    # with open(snakemake.input.parameters_file) as f:
-    #     parameters = yaml.load(f, Loader=yaml.FullLoader)
+    with open(snakemake.input.parameters_file) as f:
+        parameters = yaml.load(f, Loader=yaml.FullLoader)
 
     # Comment these lines before merging (keep them for future enhancements)
-    parameters = dict()
-    parameters['umi_cutoff'] = 100
-    parameters['project_id'] = 'some_id'
-    parameters['sample_id'] = 'some_id'
-    parameters['puck_id'] = 'some_id'
-    parameters['experiment'] = 'some_experiment'
-    parameters['sequencing_date'] = 'some_date'
-    parameters['investigator'] = 'some_name'
-    parameters['input_beads'] = '100000'    
+    # parameters = dict()
+    # parameters['umi_cutoff'] = 100
+    # parameters['project_id'] = 'some_id'
+    # parameters['sample_id'] = 'some_id'
+    # parameters['puck_id'] = 'some_id'
+    # parameters['experiment'] = 'some_experiment'
+    # parameters['sequencing_date'] = 'some_date'
+    # parameters['investigator'] = 'some_name'
+    # parameters['input_beads'] = '100000'    
 
     read_statistics = load_read_statistics()
     bead_statistics = load_bead_statistics(folder)
@@ -364,8 +358,7 @@ def create_qc_sheet(folder):
 
     sample_folder = folder.strip('/$').split('/')
     sample_folder = sample_folder[-1]
-    # pdf.output(snakemake.output[0], 'F') # uncomment before merging
-    pdf.output('./qc_sheet.pdf', 'F') # remove before meging
+    pdf.output(snakemake.output[0], 'F') # uncomment before merging
 
 
 ########
