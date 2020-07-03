@@ -88,7 +88,7 @@ def load_read_statistics():
             if idx == 8:
                 read_statistics['uniquely mapped'] = int(entry[1])
             idx += 1
-
+ 
     with open(snakemake.input.reads_type_out, 'r') as fi:
         idx = 0
         for line in fi.readlines():
@@ -110,7 +110,7 @@ def load_bead_statistics(folder):
     bead_statistics = dict()
     
     # read readcounts for all barcodes seen in the data
-    readcounts = pd.read_csv(snakemake.input.read_counts, sep='\t', 
+    readcounts = pd.read_csv(snakemake.input.read_counts, sep='\t',
         skiprows=1, names=['reads', 'barcode'])
     bead_statistics['total # of barcodes'] = readcounts.shape[0]
 
@@ -123,6 +123,17 @@ def load_bead_statistics(folder):
     plt.ylabel('cumulative fraction of reads', fontsize=18)
     plt.savefig(folder+'cumulative_fraction.png')
     plt.tight_layout()
+    plt.close()
+
+    # plot read number distribution for the first 100,000 beads
+    bead_reads = np.array(readcounts['reads'][:100000])
+    plt.hist(bead_reads, bins=1000)
+    plt.xlabel('# reads / bead', fontsize=18)
+    plt.ylabel('count', fontsize=18)
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.tight_layout()
+    plt.savefig(folder+'bead_reads_distribution.png')
     plt.close()
 
     # calculate Shannon entropies for the barcodes
@@ -159,11 +170,23 @@ def load_downstream_statistics(folder, umi_cutoff):
     downstream_statistics = dict()
 
     # read the summary table of dge_all (containing intronic and exonic reads)
+    # change this back to snakemake output before merging
     downstream_stats = pd.read_csv(snakemake.input.dge_all_summary,
             # skip the first 5 rows as they contain comments
             skiprows=6,
             # rename the column, make column=0 the index
             sep='\t', index_col=0).rename(columns={'NUM_GENIC_READS': 'reads', 'NUM_TRANSCRIPTS':'umis', 'NUM_GENES':'genes'})
+
+    # find bead number distribution as a function of the umi threshold
+    bead_dist = np.array([np.sum(np.array(downstream_stats['umis']) >= x) for x in range(100)])
+    # and plot this for the qc_sheet
+    plt.plot(np.arange(100), bead_dist)
+    plt.xlabel('UMI threshold', fontsize=18)
+    plt.ylabel('# beads', fontsize=18)
+    plt.yscale('log')
+    plt.tight_layout()
+    plt.savefig(folder+'bead_distribution_umi_threshold.png')
+    plt.close()
 
     # we decrease the treshold if the output would be empty otherwise
     while(sum(downstream_stats['umis'] >= umi_cutoff) == 0):
@@ -174,8 +197,6 @@ def load_downstream_statistics(folder, umi_cutoff):
     # filter by umi_cutoff given in the qc_sequencing_parameters.yaml
     downstream_stats = downstream_stats[downstream_stats['umis'] >= umi_cutoff]
     
-    print ('[', round(time.time()-start_time, 2), 'seconds ]')
-
     # find beads which have the minimum number of UMIs
     beads = downstream_stats.index.str.split('.').str[0].to_list()
     downstream_statistics['beads'] = len(beads)
@@ -232,8 +253,20 @@ def load_downstream_statistics(folder, umi_cutoff):
     return downstream_statistics
 
 def create_qc_sheet(folder):
+    # Uncomment the following 2 lines before merging
     with open(snakemake.input.parameters_file) as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
+
+    # Comment these lines before merging (keep them for future enhancements)
+    # parameters = dict()
+    # parameters['umi_cutoff'] = 100
+    # parameters['project_id'] = 'some_id'
+    # parameters['sample_id'] = 'some_id'
+    # parameters['puck_id'] = 'some_id'
+    # parameters['experiment'] = 'some_experiment'
+    # parameters['sequencing_date'] = 'some_date'
+    # parameters['investigator'] = 'some_name'
+    # parameters['input_beads'] = '100000'    
 
     read_statistics = load_read_statistics()
     bead_statistics = load_bead_statistics(folder)
@@ -296,7 +329,12 @@ def create_qc_sheet(folder):
     pdf.cell(10)
     pdf.image(folder+'cumulative_fraction.png', x=None, y=None, w=75, h=50, type='', link='')
     pdf.set_xy(pdf.get_x()+85, pdf.get_y()-46)
-    pdf.image(folder+'nucleotide_composition.png', x=None, y=None, w=75, h=50, type='', link='')
+    pdf.image(folder+'bead_reads_distribution.png', x=100, y=118, w=75, h=50, type='', link='')
+    pdf.image(folder+'bead_distribution_umi_threshold.png', x=20, y=180, w=75, h=50, type='', link='')
+    
+    # 2nd page
+    pdf.add_page()
+    pdf.set_xy(0, 0)
     pdf.cell(90, 15, " ", 0, 1, 'C')
     pdf.cell(10)
     pdf.cell(20, 8, 'beads', 1, 0, 'C')
@@ -311,19 +349,16 @@ def create_qc_sheet(folder):
     pdf.cell(20, 8, format(downstream_statistics['umis per bead'], ','), 1, 0, 'C')
     pdf.cell(25, 8, format(downstream_statistics['minimum umis per bead'], ','), 1, 1, 'C')
     pdf.cell(90, 8, " ", 0, 2, 'C')
-    
-    # 2nd page
-    pdf.add_page()
-    pdf.set_xy(0, 0)
-    pdf.image(folder+'hist_reads_per_bead.png', x=20, y=20, w=75, h=50, type='', link='')
-    pdf.image(folder+'hist_genes_per_bead.png', x=100, y=20, w=75, h=50, type='', link='')
-    pdf.image(folder+'hist_umis_per_bead.png', x=20, y=80, w=75, h=50, type='', link='')
-    pdf.image(folder+'barcode_entropies.png', x=100, y=80, w=75, h=50, type='', link='')
-    pdf.image(folder+'barcode_string_compression.png', x=20, y=140, w=75, h=50, type='', link='')
+    pdf.image(folder+'hist_reads_per_bead.png', x=20, y=50, w=75, h=50, type='', link='')
+    pdf.image(folder+'hist_genes_per_bead.png', x=100, y=50, w=75, h=50, type='', link='')
+    pdf.image(folder+'hist_umis_per_bead.png', x=20, y=110, w=75, h=50, type='', link='')
+    pdf.image(folder+'barcode_entropies.png', x=100, y=110, w=75, h=50, type='', link='')
+    pdf.image(folder+'barcode_string_compression.png', x=20, y=170, w=75, h=50, type='', link='')
+    pdf.image(folder+'nucleotide_composition.png', x=100, y=170, w=75, h=50, type='', link='')
 
     sample_folder = folder.strip('/$').split('/')
     sample_folder = sample_folder[-1]
-    pdf.output(snakemake.output[0], 'F')
+    pdf.output(snakemake.output[0], 'F') # uncomment before merging
 
 
 ########
@@ -335,10 +370,10 @@ if __name__ == '__main__':
     start_time = time.time()
 
     # provide the folder as an argument
-    qc_sheet_folder = os.path.dirname(snakemake.output[0]) + '/'
+    qc_sheet_folder = './' # change this back to snakemake call before merging
     print ('starting analysis for sample in folder', qc_sheet_folder, '... ')
 
-    subprocess.call('mkdir -p ' + qc_sheet_folder, shell=True)
+    # subprocess.call('mkdir -p ' + qc_sheet_folder, shell=True) # uncomment before merging
     
     create_qc_sheet(qc_sheet_folder)
 
