@@ -89,15 +89,18 @@ def load_read_statistics():
                 read_statistics['uniquely mapped'] = int(entry[1])
             idx += 1
  
-    with open(snakemake.input.reads_type_out, 'r') as fi:
-        idx = 0
-        for line in fi.readlines():
-            entry = line.strip('\n').split(' ')
-            if idx == 1:
-                read_statistics['intronic'] = int(entry[1])
-            if idx == 2:
-                read_statistics['intergenic'] = int(entry[1])
-            idx += 1
+    read_types = pd.read_csv(snakemake.input.reads_type_out, names=['name', 'num'], sep=' ') 
+
+    read_statistic_keys = ['intronic', 'intergenic', 'ambiguous']
+
+    for key in read_statistic_keys:
+        read_statistics[key] = 0
+
+        # get the read statistic count as a list. list has 1 element if staistic exist, 0 if it doesnt
+        count = read_types.num[read_types.name == key.upper()].to_list()
+
+        if len(count) == 1:
+            read_statistics[key] = count[0]
 
     return read_statistics
 
@@ -276,6 +279,7 @@ def create_qc_sheet(folder):
     uniq_mapped = read_statistics['uniquely mapped']
     intronic = read_statistics['intronic']
     intergenic = read_statistics['intergenic']
+    ambiguous = read_statistics['ambiguous']
 
     pdf = fpdf.FPDF()
     pdf.add_page()
@@ -306,27 +310,32 @@ def create_qc_sheet(folder):
     pdf.cell(100, 5, "QC generated on %s" % (datetime.now().strftime('%d/%m/%Y %H:%M')), 0, 2, 'L')
     pdf.cell(90, 8, " ", 0, 1, 'C')
     pdf.cell(10)
-    pdf.cell(30, 8, 'input reads', 1, 0, 'C')
-    pdf.cell(40, 8, 'uniquely mapped', 1, 0, 'C')
-    pdf.cell(40, 8, 'intergenic', 1, 0, 'C')
-    pdf.cell(40, 8, 'intronic', 1, 1, 'C')
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(35, 8, 'input reads', 1, 0, 'C')
+    pdf.cell(35, 8, 'uniquely mapped', 1, 0, 'C')
+    pdf.cell(35, 8, 'intergenic', 1, 0, 'C')
+    pdf.cell(35, 8, 'intronic', 1, 0, 'C')
+    pdf.cell(35, 8, 'ambiguous', 1, 1, 'C')
     pdf.cell(10)
-    pdf.cell(30, 8, format(input_reads, ','), 1, 0, 'C')
-    pdf.cell(40, 8, format(uniq_mapped, ',')
+    pdf.cell(35, 8, format(input_reads, ','), 1, 0, 'C')
+    pdf.cell(35, 8, format(uniq_mapped, ',')
         + ' (' + str(round(100*uniq_mapped/input_reads, 1)) + '%)' , 1, 0, 'C')
-    pdf.cell(40, 8, format(intergenic, ',') 
+    pdf.cell(35, 8, format(intergenic, ',') 
         + ' (' + str(round(100*intergenic/uniq_mapped, 1)) + '%)', 1, 0, 'C')
-    pdf.cell(40, 8, format(intronic, ',') 
-        + ' (' + str(round(100*intronic/uniq_mapped, 1)) + '%)', 1, 1, 'C')
+    pdf.cell(35, 8, format(intronic, ',') 
+        + ' (' + str(round(100*intronic/uniq_mapped, 1)) + '%)', 1, 0, 'C')
+    pdf.cell(35, 8, format(ambiguous, ',') 
+        + ' (' + str(round(100*ambiguous/uniq_mapped, 1)) + '%)', 1, 1, 'C')
     pdf.cell(90, 5, " ", 0, 1, 'C')
     pdf.cell(10)
-    pdf.cell(30, 8, 'input # beads', 1, 0, 'C')
-    pdf.cell(30, 8, 'total # beads', 1, 1, 'C')
+    pdf.cell(35, 8, 'input # beads', 1, 0, 'C')
+    pdf.cell(35, 8, 'total # beads', 1, 1, 'C')
     pdf.cell(10)
-    pdf.cell(30, 8, str(parameters['input_beads']), 1, 0, 'C')
-    pdf.cell(30, 8, format(bead_statistics['total # of barcodes'], ','), 1, 1, 'C')
+    pdf.cell(35, 8, str(parameters['input_beads']), 1, 0, 'C')
+    pdf.cell(35, 8, format(bead_statistics['total # of barcodes'], ','), 1, 1, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     pdf.cell(10)
+    pdf.set_font('Arial', '', 11)
     pdf.image(folder+'cumulative_fraction.png', x=None, y=None, w=75, h=50, type='', link='')
     pdf.set_xy(pdf.get_x()+85, pdf.get_y()-46)
     pdf.image(folder+'bead_reads_distribution.png', x=100, y=118, w=75, h=50, type='', link='')
@@ -370,7 +379,7 @@ if __name__ == '__main__':
     start_time = time.time()
 
     # provide the folder as an argument
-    qc_sheet_folder = './' # change this back to snakemake call before merging
+    qc_sheet_folder = os.path.dirname(snakemake.output[0]) + '/'
     print ('starting analysis for sample in folder', qc_sheet_folder, '... ')
 
     # subprocess.call('mkdir -p ' + qc_sheet_folder, shell=True) # uncomment before merging
