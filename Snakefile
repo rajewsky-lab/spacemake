@@ -170,6 +170,7 @@ united_qc_sheet_parameters_file = united_complete_data_root + qc_sheet_dir + '/q
 united_read_counts = united_complete_data_root + '/out_readcounts.txt.gz'
 united_dge_all_summary = united_complete_data_root +  '/dge/dge_all_summary.txt'
 united_dge_all = united_complete_data_root +  '/dge/dge_all.txt.gz'
+united_strand_info = united_complete_data_root + '/strand_info.txt'
 
 # united final.bam
 united_final_bam = united_complete_data_root + '/final.bam'
@@ -189,6 +190,13 @@ automated_results_file = automated_analysis_root + '/results.h5ad'
 
 # reads type
 reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
+
+united_split_reads_root = united_complete_data_root + '/split_reads/'
+united_split_reads_files = ['plus_plus.sam', 'plus_minus.sam', 'minus_minus.sam', 'minus_plus.sam', 'plus_AMB.sam',
+    'minus_AMB.sam', 'read_type_num.txt', 'strand_type_num.txt']
+
+# prepend root dir to every file
+united_split_reads_files = [united_split_reads_root + x for x in united_split_reads_files]
 
 # downsample vars
 downsample_root = united_illumina_root + '/downsampled_data'
@@ -240,7 +248,10 @@ rule all:
         get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
         get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
-        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs)
+        get_united_output_files(united_strand_info),
+        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
+        # first one is enough, as the rest will be anyways generated
+        get_united_output_files(united_split_reads_files[0])
 
 
 ########################
@@ -425,3 +436,21 @@ rule create_automated_report:
         fig_root=automated_figures_root
     script:
         'automated_analysis_create_report.py'
+
+rule create_strand_info:
+    input:
+        united_final_bam
+    output:
+        united_strand_info
+    shell:
+        "{repo_dir}/scripts/extract_strand_info.sh {input} > {output}"
+
+rule split_final_bam:
+    input:
+        united_final_bam
+    output:
+        united_split_reads_files
+    params:
+        prefix=united_split_reads_root
+    shell:
+        "sambamba view -h {input} | python {repo_dir}/scripts/split_reads_by_strand_info.py --prefix {params.prefix} /dev/stdin"
