@@ -202,6 +202,8 @@ united_split_reads_strand_type = united_split_reads_root + 'strand_type_num.txt'
 united_split_reads_read_type = united_split_reads_root + 'read_type_num.txt'
 
 # blast out
+blast_db_primers = repo_dir + '/sequences/primers.fa'
+blast_db_primers_files = [blast_db_primers + '.' + x for x in ['nhr', 'nin', 'nog', 'nsd', 'nsi', 'nsq']]
 blast_header_out = "qseqid sseqid pident length mismatch gapopen qstart qend sstart send sstrand evalue bitscore"
 united_barcode_blast_out = united_complete_data_root + '/cell_barcode_primer_blast_out.txt'
 
@@ -255,7 +257,6 @@ rule all:
         get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
         get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
-        get_united_output_files(united_strand_info),
         get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
         get_united_output_files(united_strand_info),
         # create blast results, blasting barcodes against primers
@@ -494,9 +495,18 @@ rule create_dge_barcode_fasta:
     shell:
         """tail -n +8 {input} | awk 'NF==4 && !/^TAG=XC*/{{print ">{wildcards.united_sample}_"$1"_"$2"_"$3"_"$4"\\n"$1}}' > {output}"""
 
+rule create_blast_db:
+    input:
+        blast_db_primers
+    output:
+        blast_db_primers_files
+    shell:
+        "makeblastdb -in {input} -parse_seqids -dbtype nucl"
+
 rule blast_dge_barcodes:
     input:
-        db=repo_dir + '/sequences/primers.fa',
+        blast_db_primers_files,
+        db=blast_db_primers,
         barcodes= united_dge_all_summary_fasta
     output:
         united_barcode_blast_out
