@@ -91,7 +91,7 @@ def load_read_statistics():
  
     read_types = pd.read_csv(snakemake.input.reads_type_out, names=['name', 'num'], sep=' ') 
 
-    read_statistic_keys = ['intronic', 'intergenic', 'ambiguous']
+    read_statistic_keys = ['intronic', 'intergenic', 'amb']
 
     for key in read_statistic_keys:
         read_statistics[key] = 0
@@ -279,7 +279,7 @@ def create_qc_sheet(folder):
     uniq_mapped = read_statistics['uniquely mapped']
     intronic = read_statistics['intronic']
     intergenic = read_statistics['intergenic']
-    ambiguous = read_statistics['ambiguous']
+    ambiguous = read_statistics['amb']
 
     pdf = fpdf.FPDF()
     pdf.add_page()

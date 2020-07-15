@@ -8,7 +8,6 @@ merged_qc_dir = merged_dir + qc_sheet_dir
 
 merged_qc_sheet_parameters_file = merged_qc_dir + '/qc_sheet_parameters.yaml'
 
-merged_reads_type_out = merged_dir + '/uniquely_mapped_reads_type.txt'
 merged_top_barcodes = merged_dir + '/topBarcodes.txt'
 merged_star_log_file = merged_dir + '/star_Log.final.out'
 
@@ -66,28 +65,6 @@ rule create_merged_top_barcodes_file:
         merged_top_barcodes
     shell:
         "set +o pipefail; zcat {input} | cut -f2 | head -100000 > {output}"
-
-rule get_reads_type_out:
-    input:
-        merged_bam
-    output:
-        merged_reads_type_out
-    shell:
-        ## Script taken from sequencing_analysis.sh
-        """
-        samtools view {input} | \
-          awk '!/GE:Z:/ && $5 == "255" && match ($0, "XF:Z:") split(substr($0, RSTART+5), a, "\t") {{print a[1]}}' | \
-          awk 'BEGIN {{ split("INTRONIC INTERGENIC CODING UTR", keyword)
-                      for (i in keyword) count[keyword[i]]=0
-                    }}
-              /INTRONIC/  {{ count["INTRONIC"]++ }}
-              /INTERGENIC/  {{ count["INTERGENIC"]++ }}
-              /CODING/ {{count["CODING"]++ }}
-              /UTR/ {{ count["UTR"]++ }}
-              END   {{
-                      for (i in keyword) print keyword[i], count[keyword[i]]
-                    }}' > {output}
-        """
 
 rule create_merged_dge:
     input:

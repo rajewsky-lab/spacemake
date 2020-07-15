@@ -42,9 +42,9 @@ with open(args.file_in, 'r') as fi:
             # go to next iteration
             continue
 
-        line = line.strip()
+        line_stripped = line.strip()
 
-        elements = line.split()
+        elements = line_stripped.split()
 
         last = elements[-1]
 

@@ -169,6 +169,7 @@ united_reads_type_out = united_complete_data_root + '/uniquely_mapped_reads_type
 united_qc_sheet_parameters_file = united_complete_data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
 united_read_counts = united_complete_data_root + '/out_readcounts.txt.gz'
 united_dge_all_summary = united_complete_data_root +  '/dge/dge_all_summary.txt'
+united_dge_all_summary_fasta= united_complete_data_root +  '/dge/dge_all_summary.fa'
 united_dge_all = united_complete_data_root +  '/dge/dge_all.txt.gz'
 united_strand_info = united_complete_data_root + '/strand_info.txt'
 
@@ -188,15 +189,21 @@ automated_results_metadata = automated_analysis_root + '/{united_sample}_{puck}_
 
 automated_results_file = automated_analysis_root + '/results.h5ad'
 
-# reads type
-reads_type_out = dropseq_root + '/uniquely_mapped_reads_type.txt'
-
 united_split_reads_root = united_complete_data_root + '/split_reads/'
-united_split_reads_files = ['plus_plus.sam', 'plus_minus.sam', 'minus_minus.sam', 'minus_plus.sam', 'plus_AMB.sam',
-    'minus_AMB.sam', 'read_type_num.txt', 'strand_type_num.txt']
+united_unmapped_bam = united_split_reads_root + 'unmapped.bam'
 
-# prepend root dir to every file
-united_split_reads_files = [united_split_reads_root + x for x in united_split_reads_files]
+united_split_reads_sam_names = ['plus_plus', 'plus_minus', 'minus_minus', 'minus_plus', 'plus_AMB', 'minus_AMB']
+united_split_reads_sam_pattern = united_split_reads_root + '{file_name}.sam'
+united_split_reads_bam_pattern = united_split_reads_root + '{file_name}.bam'
+
+united_split_reads_sam_files = [united_split_reads_root + x for x in united_split_reads_sam_names]
+
+united_split_reads_strand_type = united_split_reads_root + 'strand_type_num.txt'
+united_split_reads_read_type = united_split_reads_root + 'read_type_num.txt'
+
+# blast out
+blast_header_out = "qseqid sseqid pident length mismatch gapopen qstart qend sstart send sstrand evalue bitscore"
+united_barcode_blast_out = united_complete_data_root + '/cell_barcode_primer_blast_out.txt'
 
 # downsample vars
 downsample_root = united_illumina_root + '/downsampled_data'
@@ -250,8 +257,12 @@ rule all:
         get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
         get_united_output_files(united_strand_info),
         get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
-        # first one is enough, as the rest will be anyways generated
-        get_united_output_files(united_split_reads_files[0])
+        get_united_output_files(united_strand_info),
+        # create blast results, blasting barcodes against primers
+        get_united_output_files(united_barcode_blast_out),
+        # get all split bam files
+        get_united_output_files(united_unmapped_bam),
+        get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names)
 
 
 ########################
@@ -374,15 +385,15 @@ rule run_fastqc:
         {fastqc_command} -t {threads} -o {params.output_dir} {input}
         """
 
-rule determine_perecentages:
+rule get_united_reads_type_out:
     input:
-        dropseq_final_bam
+        united_split_reads_read_type
     output:
-        reads_type_out
+        united_reads_type_out
     shell:
         ## Script taken from sequencing_analysis.sh
         """
-        {repo_dir}/scripts/extract_read_types.sh {input} > {output}
+        ln -sr {input} {output}
         """
 
 rule index_bam_file:
@@ -439,18 +450,57 @@ rule create_automated_report:
 
 rule create_strand_info:
     input:
-        united_final_bam
+        united_split_reads_strand_type
     output:
         united_strand_info
     shell:
-        "{repo_dir}/scripts/extract_strand_info.sh {input} > {output}"
+        "ln -sr {input} {output}"
 
 rule split_final_bam:
     input:
         united_final_bam
     output:
-        united_split_reads_files
+        temp(united_split_reads_sam_files),
+        united_split_reads_read_type,
+        united_split_reads_strand_type
     params:
         prefix=united_split_reads_root
     shell:
-        "sambamba view -h {input} | python {repo_dir}/scripts/split_reads_by_strand_info.py --prefix {params.prefix} /dev/stdin"
+        "sambamba view -F 'mapping_quality==255' -h {input} | python {repo_dir}/scripts/split_reads_by_strand_info.py --prefix {params.prefix} /dev/stdin"
+
+rule split_reads_sam_to_bam:
+    input:
+        united_split_reads_sam_pattern
+    output:
+        united_split_reads_bam_pattern
+    threads: 2
+    shell:
+        "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
+
+rule get_unmapped_reads:
+    input:
+        united_final_bam
+    output:
+        united_unmapped_bam
+    threads: 2
+    shell:
+        "sambamba view -F 'unmapped' -h -f bam -t {threads} -o {output} {input}"
+
+rule create_dge_barcode_fasta:
+    input:
+        united_dge_all_summary
+    output:
+        united_dge_all_summary_fasta
+    shell:
+        """tail -n +8 {input} | awk 'NF==4 && !/^TAG=XC*/{{print ">{wildcards.united_sample}_"$1"_"$2"_"$3"_"$4"\\n"$1}}' > {output}"""
+
+rule blast_dge_barcodes:
+    input:
+        db=repo_dir + '/sequences/primers.fa',
+        barcodes= united_dge_all_summary_fasta
+    output:
+        united_barcode_blast_out
+    threads: 2
+    shell:
+        """
+        blastn -query {input.barcodes} -evalue 10 -task blastn-short -num_threads {threads} -outfmt "6 {blast_header_out}" -db {input.db} -out {output}"""
