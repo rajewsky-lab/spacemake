@@ -96,6 +96,7 @@ processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
 projects_puck_info_file = config['root_dir'] + '/.config/projects_puck_info.csv'
+sample_overview_file = config['root_dir'] + '/.config/sample_overview.html'
 
 ##############
 # Demux vars #
@@ -275,6 +276,14 @@ rule create_projects_puck_info_file:
     run:
         projects_puck_info.to_csv(output[0], index=False)
         os.system('chmod 664 %s' % (output[0]))
+
+rule create_sample_overview:
+    input:
+        projects_puck_info_file
+    output:
+        sample_overview_file
+    script:
+        'create_sample_overview.Rmd'
 
 ################
 # DOWNSAMPLING #
