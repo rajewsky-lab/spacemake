@@ -14,6 +14,7 @@ email: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc.berlin.de
 license: GPL
 title: Sample overview
 pagetitle: Sample overview
+date: "`r format(Sys.time(),'%d/%m/%y')`"
 ---
 
 ```{r knitr_options, include=FALSE, cache=FALSE}
@@ -122,9 +123,9 @@ read_dge_summary <- function(filename){
                 median_reads = median(NUM_GENIC_READS),
                 median_genes = median(NUM_GENES),
                 median_pcr = median(round(NUM_GENIC_READS / NUM_TRANSCRIPTS, 1)),
-                mean_umi = mean(NUM_TRANSCRIPTS),
-                mean_reads = mean(NUM_GENIC_READS),
-                mean_genes = mean(NUM_GENES),
+                mean_umi = as.integer(mean(NUM_TRANSCRIPTS)),
+                mean_reads = as.integer(mean(NUM_GENIC_READS)),
+                mean_genes = as.integer(mean(NUM_GENES)),
                 num_beads = n())
         
 }
