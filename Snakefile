@@ -197,7 +197,7 @@ united_split_reads_sam_names = ['plus_plus', 'plus_minus', 'minus_minus', 'minus
 united_split_reads_sam_pattern = united_split_reads_root + '{file_name}.sam'
 united_split_reads_bam_pattern = united_split_reads_root + '{file_name}.bam'
 
-united_split_reads_sam_files = [united_split_reads_root + x for x in united_split_reads_sam_names]
+united_split_reads_sam_files = [united_split_reads_root + x + '.sam' for x in united_split_reads_sam_names]
 
 united_split_reads_strand_type = united_split_reads_root + 'strand_type_num.txt'
 united_split_reads_read_type = united_split_reads_root + 'read_type_num.txt'
@@ -412,7 +412,7 @@ rule index_bam_file:
     output:
         dropseq_final_bam_ix 
     shell:
-       "samtools index {input}"
+       "sambamba index {input}"
 
 rule create_qc_parameters:
     params:

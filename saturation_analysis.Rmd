@@ -1,5 +1,8 @@
 ---
-output: pdf_document
+output:
+    pdf_document:
+        toc: true
+        toc_depth: 6
 version: 0.1.1
 author: Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos
 email: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc.berlin.de
@@ -18,7 +21,6 @@ knitr::opts_chunk$set(
 
 ```{r load_libraries, echo =F}
 library(tidyverse)
-library(plyr)
 library(yaml)
 library(cowplot)
 library(knitr)
@@ -93,33 +95,70 @@ Results of this are plotted below.
 ```{r read_summaries, echo = F}
 downsampled_summaries <- snakemake@input[startsWith(names(snakemake@input), 'downsampled')]
 
-dge_summary <- downsampled_summaries %>%
-    ldply(function(dge_sum){
-        read_table2(dge_sum, skip=6) %>%
-            rowwise() %>%
-            summarise(median_reads = median(NUM_GENIC_READS),
-                      median_umis = median(NUM_TRANSCRIPTS),
-                      median_genes = median(NUM_GENES))
-    }, .id = 'percentage') %>%
-    separate(percentage, into = c(NA, 'percentage')) %>%
-    mutate(median_pcr = median_reads / median_umis) %>%
-    gather('observation', 'value', median_reads:median_pcr) %>% 
+dge_data <- tibble(percentage = names(downsampled_summaries),
+                   filename = unlist(downsampled_summaries)) %>%
+            mutate(content = map(filename, 
+                                 ~ read_table2(., skip=6))) %>%
+            unnest(content) %>%
+            select(-filename) %>%
+            separate(percentage, into = c(NA, 'percentage')) %>%
+            mutate(pcr = NUM_GENIC_READS / NUM_TRANSCRIPTS)
+```
+
+```{r plot_observations, echo = F}
+plot_data <- function(umi_cutoff=1){
+    dge_data %>%
+        filter(NUM_TRANSCRIPTS > umi_cutoff) %>%
+        group_by(percentage) %>%
+        summarise(median_reads = median(NUM_GENIC_READS),
+                  median_umis = median(NUM_TRANSCRIPTS),
+                  median_genes = median(NUM_GENES),
+                  median_pcr = median(pcr),
+                  num_beads = n()) %>%
+    gather('observation', 'value', median_reads:num_beads) %>% 
     as_tibble() %>%
     mutate(percentage = as.integer(percentage),
            observation = factor(observation, levels = c(
                       'median_reads', 
                       'median_umis', 
                       'median_genes',
-                      'median_pcr')))
-```
-
-```{r plot_observations, echo = F}
-dge_summary %>%
+                      'median_pcr', 'num_beads'))) %>%
     ggplot(aes(percentage, value)) +
         geom_smooth(formula = y~log(x), color = '#56B4E9', size = 0.6) +
         geom_point(size=2, fill = '#56B4E9', color = 'black', pch=21) + 
         scale_x_continuous(breaks=seq(0, 100, 10)) +
         facet_wrap(~observation, scales = 'free_y', ncol=2) +
         labs(y='', x='downsampling percentage')
+}
+```
+\newpage
+
+##### With UMI cutoff 1
+
+```{r plot_umi_1, echo = F, fig.height = 7, fig.width = 7}
+plot_data(1) %>% print
 ```
 
+\newpage
+
+##### With UMI cutoff 10
+
+```{r plot_umi_10, echo = F, fig.height = 7, fig.width = 7}
+plot_data(10) %>% print
+```
+
+\newpage
+
+##### With UMI cutoff 50
+
+```{r plot_umi_50, echo = F, fig.height = 7, fig.width = 7}
+plot_data(50) %>% print
+```
+
+\newpage
+
+##### With UMI cutoff 100
+
+```{r plot_umi_100, echo = F, fig.height = 7, fig.width = 7}
+plot_data(100) %>% print
+```
