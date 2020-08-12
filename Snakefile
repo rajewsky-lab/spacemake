@@ -177,6 +177,14 @@ united_strand_info = united_complete_data_root + '/strand_info.txt'
 # united final.bam
 united_final_bam = united_complete_data_root + '/final.bam'
 
+# map paired-end to check errors
+paired_end_prefix = data_root + '/mapped_paired_end/'
+paired_end_sam = paired_end_prefix + '{sample}_paired_end.sam'
+paired_end_bam = paired_end_prefix + '{sample}_paired_end.bam'
+paired_end_flagstat = paired_end_prefix + '{sample}_paired_end_flagstat.txt'
+paired_end_log = paired_end_prefix + '{sample}_paired_end.log'
+paired_end_mapping_stats = paired_end_prefix + '{sample}_paired_end_mapping_stats.txt'
+
 # automated analysis
 automated_analysis_root = united_complete_data_root + '/automated_analysis/umi_cutoff_{umi_cutoff}'
 automated_figures_root = automated_analysis_root + '/figures'
@@ -219,27 +227,33 @@ include: 'dropseq.smk'
 ################################
 # Final output file generation #
 ################################
-def get_final_output_files(pattern, projects = 'all', **kwargs):
-    if projects == 'all':
-        samples = samples_list
-    else:
-        samples = [s for s in samples_list if s['project_id'] in projects]
+def get_final_output_files(pattern, projects = None, samples = None, **kwargs):
+    samples_to_run = samples_list
+
+    if projects is not None:
+        samples_to_run = [s for s in samples_to_run if s['project_id'] in projects]
+
+    if samples is not None:
+        samples_to_run = [s for s in samples_to_run if s['sample_id'] in samples]
 
     out_files = [expand(pattern,
             project=s['project_id'], 
             sample=s['sample_id'],
-            puck=s['puck_id'], **kwargs) for s in samples]
+            puck=s['puck_id'], **kwargs) for s in samples_to_run]
 
     out_files = [item for sublist in out_files for item in sublist]
     
     return out_files
 
-def get_united_output_files(pattern, projects = None, **kwargs):
+def get_united_output_files(pattern, projects = None, samples = None, **kwargs):
     out_files = []
     df = projects_puck_info
 
     if projects is not None:
         df = df[df.project_id.isin(projects)]
+
+    if samples is not None:
+        df = df[df.sample_id.isin(samples)]
 
     for index, row in df.iterrows():
         out_files = out_files + expand(pattern,
@@ -257,6 +271,7 @@ rule all:
     input:
         get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
+        get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued']),
         get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
         get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
         get_united_output_files(united_strand_info),
@@ -523,3 +538,41 @@ rule blast_dge_barcodes:
     shell:
         """
         blastn -query {input.barcodes} -evalue 10 -task blastn-short -num_threads {threads} -outfmt "6 {blast_header_out}" -db {input.db} -out {output}"""
+
+rule map_paired_end_bt2:
+    input:
+        R1 = reverse_reads_mate_1,
+        R2 = reverse_reads_mate_2
+    output:
+        sam=pipe(paired_end_sam),
+        logfile=paired_end_log
+    threads: 8
+    params:
+        index= lambda wildcards: get_bt2_index(wildcards)
+    shell:
+        """
+        bowtie2 -x {params.index} \
+            -p {threads} \
+            -1 {input.R1} \
+            -2 {input.R2} \
+            --end-to-end --sensitive \
+            -S {output.sam} 2>{output.logfile}
+        """
+
+rule paired_reads_sam_to_bam:
+    input:
+        paired_end_sam
+    output:
+        paired_end_bam
+    threads: 8
+    shell:
+        "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
+
+rule paired_reads_flagstat:
+    input:
+        paired_end_bam
+    threads: 4
+    output:
+        paired_end_flagstat
+    shell:
+        "sambamba flagstat -t {threads} {input} > {output}"

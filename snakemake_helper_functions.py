@@ -223,3 +223,9 @@ def get_qc_sheet_parameters(sample_id, umi_cutoff=100):
     out_dict['input_beads'] = '60k-100k'
 
     return out_dict
+
+def get_bt2_index(wildcards):
+    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
+
+    return config['knowledge']['indices'][species]['bt2']
+
