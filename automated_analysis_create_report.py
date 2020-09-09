@@ -130,8 +130,8 @@ pdf.cell(100, 5, "investigator(s): %s" % (', '.join(parameters['investigator'].s
 # print mapping stats
 input_reads = int(read_statistics['input_reads'])
 mapped_reads = int(read_statistics['uniquely_mapped'])
-pdf.cell(100, 5, "input reads: %s" % (f'{mapped_reads:,}'), 0, 2, 'l')
-pdf.cell(100, 5, "uniquely mapped reads: %s (%s)" % (f'{input_reads:,}', round(mapped_reads/input_reads, 3)), 0, 2, 'l')
+pdf.cell(100, 5, "input reads: %s" % (f'{input_reads:,}'), 0, 2, 'l')
+pdf.cell(100, 5, "uniquely mapped reads: %s (%s)" % (f'{mapped_reads:,}', round(mapped_reads/input_reads, 3)), 0, 2, 'l')
 
 # Downstream analysis
 pdf.add_page()
