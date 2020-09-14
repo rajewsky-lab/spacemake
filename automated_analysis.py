@@ -39,7 +39,8 @@ adata.raw = adata
 # identify highly variable genes if we have any observations
 nrow, ncol = adata.shape
 
-if nrow > 0 and ncol > 0:
+if nrow > 1 and ncol > 1:
+    print(adata)
     sc.pp.highly_variable_genes(adata, min_mean=1, max_mean = 50, min_disp=0.5)
     # filter out genes which are not highly variable
     adata = adata[:, adata.var.highly_variable]

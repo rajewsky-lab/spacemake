@@ -153,7 +153,7 @@ dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 # post dropseq and QC #
 #######################
 # umi cutoffs. used by qc-s and automated reports
-umi_cutoffs = [1, 10, 50, 100]
+umi_cutoffs = [10, 50, 100]
 
 #general qc sheet directory pattern
 qc_sheet_dir = '/qc_sheet/umi_cutoff_{umi_cutoff}'
