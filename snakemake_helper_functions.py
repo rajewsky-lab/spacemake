@@ -116,6 +116,13 @@ def get_species_info(wildcards):
         'index': config['knowledge']['indices'][species]['star']
     }
 
+def get_rRNA_index(wildcards):
+    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
+
+    return {
+        'rRNA_index': config['knowledge']['indices'][species]['bt2_rRNA']
+    }
+
 def get_dge_extra_params(wildcards):
     dge_type = wildcards.dge_type
 
