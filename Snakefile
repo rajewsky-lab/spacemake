@@ -219,6 +219,9 @@ united_barcode_blast_out = united_complete_data_root + '/cell_barcode_primer_bla
 # downsample vars
 downsample_root = united_illumina_root + '/downsampled_data'
 
+# in silico repo depletion
+ribo_depletion_log = data_root + '/ribo_depletion_log.txt'
+
 # #######################
 # include dropseq rules #
 # #######################
@@ -264,6 +267,8 @@ def get_united_output_files(pattern, projects = None, samples = None, **kwargs):
 
     return out_files
 
+human_mouse_samples = projects_puck_info[projects_puck_info.species.isin(['human', 'mouse'])].sample_id.to_list()
+
 #############
 # Main rule #
 #############
@@ -279,7 +284,8 @@ rule all:
         get_united_output_files(united_barcode_blast_out),
         # get all split bam files
         get_united_output_files(united_unmapped_bam),
-        get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names)
+        get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names),
+        get_final_output_files(ribo_depletion_log, samples = human_mouse_samples)
 
 
 ########################
@@ -576,3 +582,13 @@ rule paired_reads_flagstat:
         paired_end_flagstat
     shell:
         "sambamba flagstat -t {threads} {input} > {output}"
+
+rule map_to_rRNA:
+    input:
+        reverse_reads_mate_2
+    output:
+        ribo_depletion_log
+    params:
+        index= lambda wildcards: get_rRNA_index(wildcards)['rRNA_index'] 
+    shell:
+        "bowtie2 -x {params.index} -U {input} -p 20 --very-fast-local > /dev/null 2> {output}"
