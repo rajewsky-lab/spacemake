@@ -40,7 +40,7 @@ dropseq_merged = dropseq_root + '/merged.bam'
 dropseq_gene_tagged = dropseq_root + '/star_gene_tagged.bam'
 
 # final dropseq bfinal dropseq bam
-dropseq_final_bam = dropseq_root + '/final.bam'
+dropseq_final_bam = dropseq_root + '/untagged_final.bam'
 
 # index bam file
 dropseq_final_bam_ix = dropseq_final_bam + '.bai'

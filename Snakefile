@@ -175,7 +175,14 @@ united_dge_all = united_complete_data_root +  '/dge/dge_all.txt.gz'
 united_strand_info = united_complete_data_root + '/strand_info.txt'
 
 # united final.bam
-united_final_bam = united_complete_data_root + '/final.bam'
+united_final_bam = united_complete_data_root + '/untagged_final.bam'
+
+# primer analysis
+united_primer_tagged_final_bam = united_complete_data_root +  '/primer_tagged_final.bam'
+united_primer_tagged_summary = united_complete_data_root + '/primer_tagged_summary.txt'
+
+# kmer stats per position
+kmer_stats_file = data_root + '/kmer_stats/{kmer_len}mer_counts.csv'
 
 # map paired-end to check errors
 paired_end_prefix = data_root + '/mapped_paired_end/'
@@ -277,6 +284,7 @@ rule all:
         get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
         get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued']),
+        get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6]),
         get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
         get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
         get_united_output_files(united_strand_info),
@@ -285,7 +293,8 @@ rule all:
         # get all split bam files
         get_united_output_files(united_unmapped_bam),
         get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names),
-        get_final_output_files(ribo_depletion_log, samples = human_mouse_samples)
+        get_final_output_files(ribo_depletion_log, samples = human_mouse_samples),
+        get_united_output_files(united_primer_tagged_final_bam)
 
 
 ########################
@@ -592,3 +601,22 @@ rule map_to_rRNA:
         index= lambda wildcards: get_rRNA_index(wildcards)['rRNA_index'] 
     shell:
         "bowtie2 -x {params.index} -U {input} -p 20 --very-fast-local > /dev/null 2> {output}"
+
+rule tag_reads_with_primer_overlap:
+    input:
+        united_final_bam
+    output:
+        tagged_bam = united_primer_tagged_final_bam,
+        summary = united_primer_tagged_summary
+    script:
+        'scripts/r1_kmer_analysis.py'
+
+rule calculate_kmer_counts:
+    input:
+        raw_reads_mate_1
+    output:
+        kmer_stats_file
+    params:
+        kmer_len = lambda wildcards: wildcards.kmer_len
+    script:
+        'scripts/kmer_stats_from_fastq.py'
