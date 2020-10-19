@@ -50,6 +50,7 @@ dropseq_out_readcounts = dropseq_root + '/out_readcounts.txt.gz'
 
 # create a file with the top barcodes
 dropseq_top_barcodes = dropseq_root + '/topBarcodes.txt'
+dropseq_top_barcodes_clean = dropseq_root + '/topBarcodesClean.txt'
 
 # dges
 dge_root = dropseq_root + '/dge'
@@ -283,12 +284,19 @@ rule create_top_barcodes_file:
         dropseq_top_barcodes
     shell:
         "set +o pipefail; zcat {input} | cut -f2 | head -100000 > {output}"
-        
+
+rule clean_top_barcodes:
+    input:
+        rules.create_top_barcodes_file.output
+    output:
+        dropseq_top_barcodes_clean
+    script:
+        'scripts/clean_top_barcodes.py'
 
 rule create_dge:
     input:
         reads=dropseq_final_bam,
-        top_barcodes=dropseq_top_barcodes
+        top_barcodes=dropseq_top_barcodes_clean
     output:
         dge=dge_out,
         dge_summary=dge_out_summary
