@@ -58,4 +58,4 @@ def reverse_fastq_file(input_fq, output_fq):
 subprocess.call("mkdir -p " + os.path.dirname(str(snakemake.output)), shell=True)
 
 # reverse the sequence
-reverse_fastq_file(str(snakemake.input), str(snakemake.output))
+reverse_fastq_file(str(snakemake.input['R1']), str(snakemake.output))

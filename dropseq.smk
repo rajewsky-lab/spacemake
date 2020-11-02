@@ -54,10 +54,14 @@ dropseq_top_barcodes_clean = dropseq_root + '/topBarcodesClean.txt'
 
 # dges
 dge_root = dropseq_root + '/dge'
-dge_out_prefix = dge_root + '/dge{dge_type}'
+dge_out_prefix = dge_root + '/dge{dge_type}{dge_cleaned}'
 dge_out = dge_out_prefix + '.txt.gz'
 dge_out_summary = dge_out_prefix + '_summary.txt'
 dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
+
+wildcard_constraints:
+    dge_cleaned='|_cleaned',
+    dge_type = '|'.join(dge_types)
 
 ###################################################
 # Snakefile containing the dropseq pipeline rules #
@@ -295,8 +299,8 @@ rule clean_top_barcodes:
 
 rule create_dge:
     input:
-        reads=dropseq_final_bam,
-        top_barcodes=dropseq_top_barcodes_clean
+        unpack(get_top_barcodes),
+        reads=dropseq_final_bam
     output:
         dge=dge_out,
         dge_summary=dge_out_summary

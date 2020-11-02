@@ -228,6 +228,7 @@ downsample_root = united_illumina_root + '/downsampled_data'
 
 # in silico repo depletion
 ribo_depletion_log = data_root + '/ribo_depletion_log.txt'
+united_ribo_depletion_log = united_complete_data_root + '/ribo_depletion_log.txt'
 
 # #######################
 # include dropseq rules #
@@ -281,20 +282,19 @@ human_mouse_samples = projects_puck_info[projects_puck_info.species.isin(['human
 #############
 rule all:
     input:
-        get_final_output_files(dropseq_final_bam_ix),
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
         get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued']),
         get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6]),
-        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
         get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
+        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
         get_united_output_files(united_strand_info),
         # create blast results, blasting barcodes against primers
         get_united_output_files(united_barcode_blast_out),
         # get all split bam files
         get_united_output_files(united_unmapped_bam),
         get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names),
-        get_final_output_files(ribo_depletion_log, samples = human_mouse_samples),
-        get_united_output_files(united_primer_tagged_final_bam)
+        get_united_output_files(united_ribo_depletion_log)
+        #get_united_output_files(united_primer_tagged_final_bam)
 
 
 ########################
@@ -390,7 +390,8 @@ rule link_raw_reads:
 
 rule reverse_first_mate:
     input:
-        raw_reads_mate_1
+        R1=raw_reads_mate_1,
+        R2=raw_reads_mate_2
     output:
         reverse_reads_mate_1
     script:
@@ -458,7 +459,8 @@ rule create_qc_sheet:
         reads_type_out=united_reads_type_out,
         parameters_file=united_qc_sheet_parameters_file,
         read_counts = united_read_counts,
-        dge_all_summary = united_dge_all_summary
+        dge_all_summary = united_dge_all_summary,
+        strand_info = united_strand_info
     output:
         united_qc_sheet
     script:
@@ -599,8 +601,11 @@ rule map_to_rRNA:
         ribo_depletion_log
     params:
         index= lambda wildcards: get_rRNA_index(wildcards)['rRNA_index'] 
-    shell:
-        "bowtie2 -x {params.index} -U {input} -p 20 --very-fast-local > /dev/null 2> {output}"
+    run:
+        if wildcards.sample in human_mouse_samples:
+            shell("bowtie2 -x {rRNA_index.index} -U {input} -p 20 --very-fast-local > /dev/null 2> {output}")
+        else:
+            shell("echo 'no_rRNA_index' > {output}")
 
 rule tag_reads_with_primer_overlap:
     input:

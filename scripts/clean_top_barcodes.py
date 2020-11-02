@@ -33,4 +33,4 @@ with open(snakemake.input[0], 'r') as fi, open(snakemake.output[0], 'w') as fo:
             continue
         
         # write line to file
-        _ = fo.write(barcode + '\t' + str(pos_optical_primer) + '\t' + str(pos_barcode) + '\t' + str(kmer_len) + '\n')
+        _ = fo.write(barcode)

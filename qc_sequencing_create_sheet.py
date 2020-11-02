@@ -104,6 +104,17 @@ def load_read_statistics():
 
     return read_statistics
 
+def load_strand_types():
+    strand_types = dict()
+    
+    with open(snakemake.input.strand_info, 'r') as fi:
+        for line in fi.readlines():
+            entry = line.strip('\n').split(' ')
+
+            strand_types[entry[0]] = entry[1]
+        
+    return strand_types
+
 def load_bead_statistics(folder):
     """Read basic stastistics concerning the beads
     folder -- The folder containing the sequencing data after analyzing it
@@ -273,6 +284,7 @@ def create_qc_sheet(folder):
 
     read_statistics = load_read_statistics()
     bead_statistics = load_bead_statistics(folder)
+    strand_types = load_strand_types()
     downstream_statistics = load_downstream_statistics(folder, umi_cutoff=parameters['umi_cutoff'])
 
     input_reads = read_statistics['input reads']
@@ -309,6 +321,9 @@ def create_qc_sheet(folder):
         ", nikolaos.karaiskos@mdc-berlin.de, tamasryszard.sztanka-toth@mdc-berlin.de", 0, 2, 'L')
     pdf.cell(100, 5, "QC generated on %s" % (datetime.now().strftime('%d/%m/%Y %H:%M')), 0, 2, 'L')
     pdf.cell(90, 8, " ", 0, 1, 'C')
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(10)
+    pdf.cell(40, 8, 'Read statistics', 0, 1)
     pdf.cell(10)
     pdf.set_font('Arial', '', 10)
     pdf.cell(35, 8, 'input reads', 1, 0, 'C')
@@ -334,12 +349,30 @@ def create_qc_sheet(folder):
     pdf.cell(35, 8, str(parameters['input_beads']), 1, 0, 'C')
     pdf.cell(35, 8, format(bead_statistics['total # of barcodes'], ','), 1, 1, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
+    # set font to bold
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(10)
+    pdf.cell(40, 8, 'Strand info', 0, 2)
+    # set back
+    pdf.set_font('Arial', '', 10)
+    # print top row of cells for strand info
+    for key in strand_types.keys():
+        pdf.cell(30, 8, key, 1, 0, 'C')
+    pdf.ln()
+    # print bottom row of cells for strand info
+    pdf.cell(10)
+    for value in strand_types.values():
+        pdf.cell(30, 8, value, 1, 0, 'C')
+
+    pdf.ln()
     pdf.cell(10)
     pdf.set_font('Arial', '', 11)
+    pdf.cell(10, 8, '', 0, 2)
     pdf.image(folder+'cumulative_fraction.png', x=None, y=None, w=75, h=50, type='', link='')
-    pdf.set_xy(pdf.get_x()+85, pdf.get_y()-46)
-    pdf.image(folder+'bead_reads_distribution.png', x=100, y=118, w=75, h=50, type='', link='')
-    pdf.image(folder+'bead_distribution_umi_threshold.png', x=20, y=180, w=75, h=50, type='', link='')
+    pdf.set_xy(pdf.get_x(), pdf.get_y()+10)
+    pdf.image(folder+'bead_reads_distribution.png', x=None, y=None, w=75, h=50, type='', link='')
+    pdf.set_xy(pdf.get_x()+85, pdf.get_y()-105)
+    pdf.image(folder+'bead_distribution_umi_threshold.png', x=None, y=None, w=75, h=50, type='', link='')
     
     # 2nd page
     pdf.add_page()

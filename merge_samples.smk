@@ -10,6 +10,7 @@ merged_qc_sheet_parameters_file = merged_qc_dir + '/qc_sheet_parameters.yaml'
 
 merged_top_barcodes = merged_dir + '/topBarcodes.txt'
 merged_star_log_file = merged_dir + '/star_Log.final.out'
+merged_ribo_depletion_log = merged_dir + '/ribo_depletion_log.txt'
 
 # merged dge
 merged_dge_root = merged_dir + '/dge'
@@ -76,6 +77,14 @@ rule create_merged_dge:
         CELL_BC_FILE={input.top_barcodes} \
         {params.dge_extra_params}
         """
+
+rule create_merged_ribo_depletion_log:
+    input:
+        unpack(get_merged_ribo_depletion_log_inputs)
+    output:
+        merged_ribo_depletion_log
+    shell:
+        "cat {input} > {output}"
 
 rule create_merged_star_log:
     input:

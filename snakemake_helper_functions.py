@@ -119,8 +119,14 @@ def get_species_info(wildcards):
 def get_rRNA_index(wildcards):
     species = samples[wildcards.project]['samples'][wildcards.sample]['species']
 
+    index = ''
+
+    # return index only if it exists
+    if 'bt2_rRNA' in config['knowledge']['indices'][species]:
+        index = config['knowledge']['indices'][species]['bt2_rRNA']
+
     return {
-        'rRNA_index': config['knowledge']['indices'][species]['bt2_rRNA']
+        'rRNA_index': index
     }
 
 def get_dge_extra_params(wildcards):
@@ -219,6 +225,17 @@ def get_merged_star_log_inputs(wildcards):
 
     return input_logs
 
+def get_merged_ribo_depletion_log_inputs(wildcards):
+    samples = config['samples_to_merge'][wildcards.merged_project][wildcards.merged_sample]
+
+    ribo_depletion_logs = []
+
+    for sample in samples:
+        ribo_depletion_logs = ribo_depletion_logs + expand(ribo_depletion_log, 
+                project = get_project(sample),
+                sample = sample)
+
+    return ribo_depletion_logs
 def get_qc_sheet_parameters(sample_id, umi_cutoff=100):
     # returns a single row for a given sample_id
     # this will be the input of the parameters for the qc sheet parameter generation
@@ -236,3 +253,8 @@ def get_bt2_index(wildcards):
 
     return config['knowledge']['indices'][species]['bt2']
 
+def get_top_barcodes(wildcards):
+    if wildcards.dge_cleaned == '':
+        return {'top_barcodes': dropseq_top_barcodes}
+    else:
+        return {'top_barcodes': dropseq_top_barcodes_clean}
