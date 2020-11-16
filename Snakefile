@@ -277,6 +277,21 @@ def get_united_output_files(pattern, projects = None, samples = None, **kwargs):
 
 human_mouse_samples = projects_puck_info[projects_puck_info.species.isin(['human', 'mouse'])].sample_id.to_list()
 
+##################
+# include pacbio #
+##################
+processed_data_pacbio = processed_data_root + '/pacbio'
+pacbio_fq = raw_data_root + '/pacbio/{sample}.fq'
+pacbio_report = processed_data_pacbio + '/{sample}.report.pdf'
+pacbio_stats_file = processed_data_pacbio + '/{sample}.summary.tsv'
+pacbio_run_summary = processed_data_pacbio + '/{sample}.examples.txt'
+pacbio_rRNA_out = processed_data_pacbio + '/{sample}.rRNA.txt'
+pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf'
+pacbio_overview_csv = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.csv'
+pacbio_bead_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_bead_overview.pdf'
+
+include: 'pacbio.smk' 
+
 #############
 # Main rule #
 #############
@@ -394,9 +409,11 @@ rule reverse_first_mate:
         R2=raw_reads_mate_2
     output:
         reverse_reads_mate_1
-    script:
-        'reverse_fastq_file.py'
-
+    run:
+        if wildcards.sample in config['umi_from_r2']['samples'] or wildcards.project in config['umi_from_r2']['projects']:
+            shell('python {repo_dir}/scripts/reverse_reads_umi_from_r2.py --in_R1 {input.R1} --in_R2 {input.R2} --out_R1 {output}')
+        else:
+            shell('python {repo_dir}/scripts/reverse_fastq_file.py --in_R1 {input.R1} --out_R1 {output.R1}')
 rule reverse_second_mate:
     input:
         raw_reads_mate_2
@@ -603,7 +620,7 @@ rule map_to_rRNA:
         index= lambda wildcards: get_rRNA_index(wildcards)['rRNA_index'] 
     run:
         if wildcards.sample in human_mouse_samples:
-            shell("bowtie2 -x {rRNA_index.index} -U {input} -p 20 --very-fast-local > /dev/null 2> {output}")
+            shell("bowtie2 -x {params.index} -U {input} -p 20 --very-fast-local > /dev/null 2> {output}")
         else:
             shell("echo 'no_rRNA_index' > {output}")
 

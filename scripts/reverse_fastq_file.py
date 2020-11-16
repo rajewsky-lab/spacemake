@@ -14,6 +14,14 @@ import subprocess
 import os
 
 #############
+# argparser #
+#############
+parser = argparse.ArgumentParser(description='reverse R1 and output it')
+parser.add_argument('--in_R1', type=str, required=True, help = 'input R1 fastq.gz file')
+parser.add_argument('--out_R1', type=str, required=True, help = 'output R1 fastq.gz file')
+args = parser.parse_args()
+
+#############
 # functions #
 #############
 
@@ -55,7 +63,9 @@ def reverse_fastq_file(input_fq, output_fq):
     print('reversing finished')
 
 # create the directory for the reverse sequences
-subprocess.call("mkdir -p " + os.path.dirname(str(snakemake.output)), shell=True)
+subprocess.call("mkdir -p " + os.path.dirname(str(args.out_R1)), shell=True)
+
+print('started reversing R1 for %s' % (args.in_R1))
 
 # reverse the sequence
-reverse_fastq_file(str(snakemake.input['R1']), str(snakemake.output))
+reverse_fastq_file(args.in_R1, args.out_R1)
