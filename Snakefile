@@ -413,7 +413,7 @@ rule reverse_first_mate:
         if wildcards.sample in config['umi_from_r2']['samples'] or wildcards.project in config['umi_from_r2']['projects']:
             shell('python {repo_dir}/scripts/reverse_reads_umi_from_r2.py --in_R1 {input.R1} --in_R2 {input.R2} --out_R1 {output}')
         else:
-            shell('python {repo_dir}/scripts/reverse_fastq_file.py --in_R1 {input.R1} --out_R1 {output.R1}')
+            shell('python {repo_dir}/scripts/reverse_fastq_file.py --in_R1 {input.R1} --out_R1 {output}')
 rule reverse_second_mate:
     input:
         raw_reads_mate_2
