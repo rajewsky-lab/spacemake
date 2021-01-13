@@ -79,11 +79,6 @@ if 'samples_to_merge' in config:
 
 demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
-# global wildcard constraints
-wildcard_constraints:
-    sample='(?!merged_).+',
-    project='(?!merged_).+'
-
 #################
 # DIRECTORY STR #
 #################
@@ -103,7 +98,7 @@ sample_overview_file = config['root_dir'] + '/.config/sample_overview.html'
 ##############
 # Undetermined files pattern
 # they are the output of bcl2fastq, and serve as an indicator to see if the demultiplexing has finished
-demux_dir_pattern = config['root_dir'] + '/demultiplex_data/{demux_dir}'
+demux_dir_pattern = config['root_dir'] + '/raw_data/demultiplex_data/{demux_dir}'
 demux_indicator = demux_dir_pattern + '/indicator.log'
 
 ####################################
@@ -168,14 +163,26 @@ united_qc_sheet = united_complete_data_root + qc_sheet_dir + '/qc_sheet_{united_
 united_star_log = united_complete_data_root + '/star_Log.final.out'
 united_reads_type_out = united_complete_data_root + '/uniquely_mapped_reads_type.txt'
 united_qc_sheet_parameters_file = united_complete_data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
-united_read_counts = united_complete_data_root + '/out_readcounts.txt.gz'
-united_dge_all_summary = united_complete_data_root +  '/dge/dge_all_summary.txt'
-united_dge_all_summary_fasta= united_complete_data_root +  '/dge/dge_all_summary.fa'
-united_dge_all = united_complete_data_root +  '/dge/dge_all.txt.gz'
+united_barcode_readcounts = united_complete_data_root + '/out_readcounts.txt.gz'
 united_strand_info = united_complete_data_root + '/strand_info.txt'
 
 # united final.bam
-united_final_bam = united_complete_data_root + '/untagged_final.bam'
+united_final_bam = united_complete_data_root + '/final.bam'
+united_top_barcodes = united_complete_data_root + '/topBarcodes.txt'
+united_top_barcodes_clean = united_complete_data_root + '/topBarcodesClean.txt'
+
+# united dge
+dge_root = united_complete_data_root + '/dge'
+dge_out_prefix = dge_root + '/dge{dge_type}{dge_cleaned}'
+dge_out = dge_out_prefix + '.txt.gz'
+dge_out_summary = dge_out_prefix + '_summary.txt'
+dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
+
+dge_all_summary = united_complete_data_root +  '/dge/dge_all_summary.txt'
+dge_all_cleaned_summary = united_complete_data_root +  '/dge/dge_all_cleaned_summary.txt'
+dge_all_summary_fasta= united_complete_data_root +  '/dge/dge_all_summary.fa'
+dge_all = united_complete_data_root +  '/dge/dge_all.txt.gz'
+dge_all_cleaned = united_complete_data_root +  '/dge/dge_all_cleaned.txt.gz'
 
 # primer analysis
 united_primer_tagged_final_bam = united_complete_data_root +  '/primer_tagged_final.bam'
@@ -229,6 +236,13 @@ downsample_root = united_illumina_root + '/downsampled_data'
 # in silico repo depletion
 ribo_depletion_log = data_root + '/ribo_depletion_log.txt'
 united_ribo_depletion_log = united_complete_data_root + '/ribo_depletion_log.txt'
+
+# global wildcard constraints
+wildcard_constraints:
+    sample='(?!merged_).+',
+    project='(?!merged_).+',
+    dge_cleaned='|_cleaned',
+    dge_type = '|'.join(dge_types)
 
 # #######################
 # include dropseq rules #
@@ -300,16 +314,14 @@ rule all:
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
         get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued']),
         get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6]),
+        get_united_output_files(dge_all_summary),
+        # this will also create the clean dge
         get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
         get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
-        get_united_output_files(united_strand_info),
-        # create blast results, blasting barcodes against primers
-        get_united_output_files(united_barcode_blast_out),
         # get all split bam files
         get_united_output_files(united_unmapped_bam),
         get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names),
         get_united_output_files(united_ribo_depletion_log)
-        #get_united_output_files(united_primer_tagged_final_bam)
 
 
 ########################
@@ -462,6 +474,61 @@ rule index_bam_file:
     shell:
        "sambamba index {input}"
 
+rule get_barcode_readcounts:
+    # this rule takes the final.bam file (output of the dropseq pipeline) and creates a barcode read count file
+    input:
+        united_final_bam
+    output:
+        united_barcode_readcounts
+    shell:
+        """
+        {dropseq_tools}/BamTagHistogram \
+        I= {input} \
+        O= {output}\
+        TAG=XC
+        """
+
+rule create_top_barcodes:
+    input:
+        united_barcode_readcounts
+    output:
+        united_top_barcodes
+    shell:
+        "set +o pipefail; zcat {input} | cut -f2 | head -100000 > {output}"
+
+rule clean_top_barcodes:
+    input:
+        united_top_barcodes
+    output:
+        united_top_barcodes_clean
+    script:
+        'scripts/clean_top_barcodes.py'
+
+rule create_dge:
+    # creates the dge. depending on if the dge has _cleaned in the end it will require the
+    # topBarcodesClean.txt file or just the regular topBarcodes.txt
+    input:
+        unpack(get_top_barcodes),
+        reads=united_final_bam
+    output:
+        dge=dge_out,
+        dge_summary=dge_out_summary
+    params:
+        dge_root = dge_root,
+        dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards)     
+    shell:
+        """
+        mkdir -p {params.dge_root}
+
+        {dropseq_tools}/DigitalExpression \
+        -m 16g \
+        I= {input.reads}\
+        O= {output.dge} \
+        SUMMARY= {output.dge_summary} \
+        CELL_BC_FILE={input.top_barcodes} \
+        {params.dge_extra_params}
+        """
+
 rule create_qc_parameters:
     params:
         sample_params=lambda wildcards: get_qc_sheet_parameters(wildcards.sample, wildcards.umi_cutoff)
@@ -475,8 +542,8 @@ rule create_qc_sheet:
         star_log = united_star_log,
         reads_type_out=united_reads_type_out,
         parameters_file=united_qc_sheet_parameters_file,
-        read_counts = united_read_counts,
-        dge_all_summary = united_dge_all_summary,
+        read_counts = united_barcode_readcounts,
+        dge_all_summary = dge_all_cleaned_summary,
         strand_info = united_strand_info
     output:
         united_qc_sheet
@@ -485,7 +552,7 @@ rule create_qc_sheet:
 
 rule run_automated_analysis:
     input:
-        united_dge_all
+        dge_all_cleaned
     output:
         res_file=automated_results_file
     params:
@@ -547,9 +614,9 @@ rule get_unmapped_reads:
 
 rule create_dge_barcode_fasta:
     input:
-        united_dge_all_summary
+        dge_all_summary
     output:
-        united_dge_all_summary_fasta
+        dge_all_summary_fasta
     shell:
         """tail -n +8 {input} | awk 'NF==4 && !/^TAG=XC*/{{print ">{wildcards.united_sample}_"$1"_"$2"_"$3"_"$4"\\n"$1}}' > {output}"""
 
@@ -565,7 +632,7 @@ rule blast_dge_barcodes:
     input:
         blast_db_primers_files,
         db=blast_db_primers,
-        barcodes= united_dge_all_summary_fasta
+        barcodes= dge_all_summary_fasta
     output:
         united_barcode_blast_out
     threads: 2
@@ -642,3 +709,4 @@ rule calculate_kmer_counts:
         kmer_len = lambda wildcards: wildcards.kmer_len
     script:
         'scripts/kmer_stats_from_fastq.py'
+

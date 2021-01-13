@@ -90,7 +90,7 @@ rule create_downsample_qc_sheet:
         star_log = united_star_log,
         reads_type_out=united_reads_type_out,
         parameters_file=united_qc_sheet_parameters_file,
-        read_counts=united_read_counts,
+        read_counts=united_barcode_readcounts,
         dge_all_summary = downsample_dge_root + '/downsampled_dge_all_summary.txt'
     output:
         downsample_qc_sheet

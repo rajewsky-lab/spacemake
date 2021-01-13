@@ -40,28 +40,10 @@ dropseq_merged = dropseq_root + '/merged.bam'
 dropseq_gene_tagged = dropseq_root + '/star_gene_tagged.bam'
 
 # final dropseq bfinal dropseq bam
-dropseq_final_bam = dropseq_root + '/untagged_final.bam'
+dropseq_final_bam = dropseq_root + '/final.bam'
 
 # index bam file
 dropseq_final_bam_ix = dropseq_final_bam + '.bai'
-
-# create readcounts file
-dropseq_out_readcounts = dropseq_root + '/out_readcounts.txt.gz'
-
-# create a file with the top barcodes
-dropseq_top_barcodes = dropseq_root + '/topBarcodes.txt'
-dropseq_top_barcodes_clean = dropseq_root + '/topBarcodesClean.txt'
-
-# dges
-dge_root = dropseq_root + '/dge'
-dge_out_prefix = dge_root + '/dge{dge_type}{dge_cleaned}'
-dge_out = dge_out_prefix + '.txt.gz'
-dge_out_summary = dge_out_prefix + '_summary.txt'
-dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
-
-wildcard_constraints:
-    dge_cleaned='|_cleaned',
-    dge_type = '|'.join(dge_types)
 
 ###################################################
 # Snakefile containing the dropseq pipeline rules #
@@ -266,56 +248,4 @@ rule tag_read_with_gene:
             I={input.reads} \
             O={output} \
             ANNOTATIONS_FILE={input.annotation}
-        """
-
-rule bam_tag_histogram:
-    input:
-        dropseq_final_bam
-    output:
-        dropseq_out_readcounts
-    shell:
-        """
-        {dropseq_tools}/BamTagHistogram \
-        I= {input} \
-        O= {output}\
-        TAG=XC
-        """
-
-rule create_top_barcodes_file:
-    input:
-        rules.bam_tag_histogram.output
-    output:
-        dropseq_top_barcodes
-    shell:
-        "set +o pipefail; zcat {input} | cut -f2 | head -100000 > {output}"
-
-rule clean_top_barcodes:
-    input:
-        rules.create_top_barcodes_file.output
-    output:
-        dropseq_top_barcodes_clean
-    script:
-        'scripts/clean_top_barcodes.py'
-
-rule create_dge:
-    input:
-        unpack(get_top_barcodes),
-        reads=dropseq_final_bam
-    output:
-        dge=dge_out,
-        dge_summary=dge_out_summary
-    params:
-        dge_root = dge_root,
-        dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards)     
-    shell:
-        """
-        mkdir -p {params.dge_root}
-
-        {dropseq_tools}/DigitalExpression \
-        -m 16g \
-        I= {input.reads}\
-        O= {output.dge} \
-        SUMMARY= {output.dge_summary} \
-        CELL_BC_FILE={input.top_barcodes} \
-        {params.dge_extra_params}
         """

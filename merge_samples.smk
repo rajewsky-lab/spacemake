@@ -2,21 +2,13 @@ merged_dir = config['root_dir'] + '/projects/merged_{merged_project}/processed_d
 
 sample_tagged_bam = merged_dir + '/{sample}_tagged.bam'
 merged_bam = merged_dir + '/merged.bam'
-merged_final_bam = merged_dir + '/untagged_final.bam'
-merged_readcounts = merged_dir + '/out_readcounts.txt.gz'
+merged_final_bam = merged_dir + '/final.bam'
 merged_qc_dir = merged_dir + qc_sheet_dir
 
 merged_qc_sheet_parameters_file = merged_qc_dir + '/qc_sheet_parameters.yaml'
 
-merged_top_barcodes = merged_dir + '/topBarcodes.txt'
 merged_star_log_file = merged_dir + '/star_Log.final.out'
 merged_ribo_depletion_log = merged_dir + '/ribo_depletion_log.txt'
-
-# merged dge
-merged_dge_root = merged_dir + '/dge'
-merged_dge_out_prefix = merged_dge_root + '/dge{dge_type}'
-merged_dge_out = merged_dge_out_prefix + '.txt.gz'
-merged_dge_out_summary = merged_dge_out_prefix + '_summary.txt'
 
 rule create_merged_bam:
     input:
@@ -34,49 +26,6 @@ rule create_final_bam:
         merged_final_bam
     shell:
        'ln -sr {input} {output}' 
-
-rule create_readcounts:
-    input:
-        merged_bam 
-    output:
-        merged_readcounts
-    shell:
-        """
-        {dropseq_tools}/BamTagHistogram \
-        I= {input} \
-        O= {output}\
-        TAG=XC
-        """
-
-rule create_merged_top_barcodes_file:
-    input:
-        merged_readcounts
-    output:
-        merged_top_barcodes
-    shell:
-        "set +o pipefail; zcat {input} | cut -f2 | head -100000 > {output}"
-
-rule create_merged_dge:
-    input:
-        reads=merged_bam,
-        top_barcodes=merged_top_barcodes
-    output:
-        dge=merged_dge_out,
-        dge_summary=merged_dge_out_summary
-    params:
-        dge_root = merged_dge_root,
-        dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards)     
-    shell:
-        """
-        mkdir -p {params.dge_root}
-
-        {dropseq_tools}/DigitalExpression \
-        I= {input.reads}\
-        O= {output.dge} \
-        SUMMARY= {output.dge_summary} \
-        CELL_BC_FILE={input.top_barcodes} \
-        {params.dge_extra_params}
-        """
 
 rule create_merged_ribo_depletion_log:
     input:

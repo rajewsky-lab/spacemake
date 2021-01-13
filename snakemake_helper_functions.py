@@ -255,6 +255,6 @@ def get_bt2_index(wildcards):
 
 def get_top_barcodes(wildcards):
     if wildcards.dge_cleaned == '':
-        return {'top_barcodes': dropseq_top_barcodes}
+        return {'top_barcodes': united_top_barcodes}
     else:
-        return {'top_barcodes': dropseq_top_barcodes_clean}
+        return {'top_barcodes': united_top_barcodes_clean}
