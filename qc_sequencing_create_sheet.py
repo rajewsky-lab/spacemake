@@ -126,6 +126,7 @@ def load_bead_statistics(folder):
     # read readcounts for all barcodes seen in the data
     readcounts = pd.read_csv(snakemake.input.read_counts, sep='\t',
         skiprows=1, names=['reads', 'barcode'])
+
     bead_statistics['total # of barcodes'] = readcounts.shape[0]
 
     # select # barcodes for cumulative fraction
@@ -266,6 +267,34 @@ def load_downstream_statistics(folder, umi_cutoff):
 
     return downstream_statistics
 
+def parse_ribo_log(ribo_log_file):
+    input_reads = 0
+    aligned_reads = 0
+
+    line_n = 0
+
+    with open(ribo_log_file) as f:
+        for line in f:
+            stripped_line = line.strip()
+            
+            if stripped_line == 'no_rRNA_index':
+                input_reads = -1
+                aligned_reads = -1
+                break
+            
+            if line_n % 6 == 0:
+                input_reads = input_reads + int(stripped_line.split(' ')[0])
+            elif line_n % 6 == 3 or line_n % 6 == 4:
+                aligned_reads = aligned_reads + int(stripped_line.split(' ')[0])
+            
+            line_n = line_n + 1
+    
+    if input_reads <= 0:
+        return 'NA'
+    else:
+        return str(round(aligned_reads * 100 / input_reads, 2))
+
+
 def create_qc_sheet(folder):
     # Uncomment the following 2 lines before merging
     with open(snakemake.input.parameters_file) as f:
@@ -292,6 +321,8 @@ def create_qc_sheet(folder):
     intronic = read_statistics['intronic']
     intergenic = read_statistics['intergenic']
     ambiguous = read_statistics['amb']
+
+    mapping_to_rRNA = parse_ribo_log(snakemake.input['ribo_log'])
 
     pdf = fpdf.FPDF()
     pdf.add_page()
@@ -344,10 +375,12 @@ def create_qc_sheet(folder):
     pdf.cell(90, 5, " ", 0, 1, 'C')
     pdf.cell(10)
     pdf.cell(35, 8, 'input # beads', 1, 0, 'C')
-    pdf.cell(35, 8, 'total # beads', 1, 1, 'C')
+    pdf.cell(35, 8, 'total # beads', 1, 0, 'C')
+    pdf.cell(35, 8, 'mapping to rRNA', 1, 1, 'C')
     pdf.cell(10)
     pdf.cell(35, 8, str(parameters['input_beads']), 1, 0, 'C')
-    pdf.cell(35, 8, format(bead_statistics['total # of barcodes'], ','), 1, 1, 'C')
+    pdf.cell(35, 8, format(bead_statistics['total # of barcodes'], ','), 1, 0, 'C')
+    pdf.cell(35, 8, "%s %%" % (mapping_to_rRNA), 1, 1, 'C')
     pdf.cell(90, 5, " ", 0, 2, 'C')
     # set font to bold
     pdf.set_font('Arial', 'B', 10)

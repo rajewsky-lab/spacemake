@@ -320,10 +320,9 @@ rule all:
         #get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued']),
         #get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6]),
         get_united_output_files(dge_all_summary),
-        get_united_output_files(dge_all_cleaned_summary)
         # this will also create the clean dge
         #get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
-        #get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
+        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs)
         # get all split bam files
         #get_united_output_files(united_unmapped_bam),
         #get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names),
@@ -539,7 +538,8 @@ rule create_qc_sheet:
         parameters_file=united_qc_sheet_parameters_file,
         read_counts = united_barcode_readcounts,
         dge_all_summary = dge_all_cleaned_summary,
-        strand_info = united_strand_info
+        strand_info = united_strand_info,
+        ribo_log=united_ribo_depletion_log
     output:
         united_qc_sheet
     script:
