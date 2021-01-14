@@ -93,6 +93,9 @@ processed_data_illumina = processed_data_root + '/illumina'
 projects_puck_info_file = config['root_dir'] + '/.config/projects_puck_info.csv'
 sample_overview_file = config['root_dir'] + '/.config/sample_overview.html'
 
+united_illumina_root = config['root_dir'] + '/projects/{united_project}/processed_data/{united_sample}/illumina'
+united_complete_data_root = united_illumina_root + '/complete_data'
+
 ##############
 # Demux vars #
 ##############
@@ -144,9 +147,26 @@ dropseq_merge_in_mate_1 = reverse_reads_mate_1
 dropseq_merge_in_mate_2 = reverse_reads_mate_2
 dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 
+###
+# splitting the reads
+###
+
+united_split_reads_root = united_complete_data_root + '/split_reads/'
+united_unmapped_bam = united_split_reads_root + 'unmapped.bam'
+
+united_split_reads_sam_names = ['plus_plus', 'plus_minus', 'minus_minus', 'minus_plus', 'plus_AMB', 'minus_AMB']
+united_split_reads_sam_pattern = united_split_reads_root + '{file_name}.sam'
+united_split_reads_bam_pattern = united_split_reads_root + '{file_name}.bam'
+
+united_split_reads_sam_files = [united_split_reads_root + x + '.sam' for x in united_split_reads_sam_names]
+
+united_split_reads_strand_type = united_split_reads_root + 'strand_type_num.txt'
+united_split_reads_read_type = united_split_reads_root + 'read_type_num.txt'
+
 #######################
 # post dropseq and QC #
 #######################
+# qc generation for ALL samples, merged and non-merged
 # umi cutoffs. used by qc-s and automated reports
 umi_cutoffs = [10, 50, 100]
 
@@ -156,15 +176,12 @@ qc_sheet_dir = '/qc_sheet/umi_cutoff_{umi_cutoff}'
 # parameters file for not merged samples
 qc_sheet_parameters_file = data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
 
-# qc generation for ALL samples, merged and non-merged
-united_illumina_root = config['root_dir'] + '/projects/{united_project}/processed_data/{united_sample}/illumina'
-united_complete_data_root = united_illumina_root + '/complete_data'
 united_qc_sheet = united_complete_data_root + qc_sheet_dir + '/qc_sheet_{united_sample}_{puck}.pdf'
 united_star_log = united_complete_data_root + '/star_Log.final.out'
-united_reads_type_out = united_complete_data_root + '/uniquely_mapped_reads_type.txt'
+united_reads_type_out = united_split_reads_read_type
 united_qc_sheet_parameters_file = united_complete_data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
 united_barcode_readcounts = united_complete_data_root + '/out_readcounts.txt.gz'
-united_strand_info = united_complete_data_root + '/strand_info.txt'
+united_strand_info = united_split_reads_strand_type
 
 # united final.bam
 united_final_bam = united_complete_data_root + '/final.bam'
@@ -211,18 +228,6 @@ automated_report = automated_analysis_root + '/{united_sample}_{puck}_illumina_a
 automated_results_metadata = automated_analysis_root + '/{united_sample}_{puck}_illumina_automated_report_metadata.csv'
 
 automated_results_file = automated_analysis_root + '/results.h5ad'
-
-united_split_reads_root = united_complete_data_root + '/split_reads/'
-united_unmapped_bam = united_split_reads_root + 'unmapped.bam'
-
-united_split_reads_sam_names = ['plus_plus', 'plus_minus', 'minus_minus', 'minus_plus', 'plus_AMB', 'minus_AMB']
-united_split_reads_sam_pattern = united_split_reads_root + '{file_name}.sam'
-united_split_reads_bam_pattern = united_split_reads_root + '{file_name}.bam'
-
-united_split_reads_sam_files = [united_split_reads_root + x + '.sam' for x in united_split_reads_sam_names]
-
-united_split_reads_strand_type = united_split_reads_root + 'strand_type_num.txt'
-united_split_reads_read_type = united_split_reads_root + 'read_type_num.txt'
 
 # blast out
 blast_db_primers = repo_dir + '/sequences/primers.fa'
@@ -311,17 +316,18 @@ include: 'pacbio.smk'
 #############
 rule all:
     input:
-        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued']),
-        get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6]),
+        #get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
+        #get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued']),
+        #get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6]),
         get_united_output_files(dge_all_summary),
+        get_united_output_files(dge_all_cleaned_summary)
         # this will also create the clean dge
-        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
-        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
+        #get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
+        #get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs),
         # get all split bam files
-        get_united_output_files(united_unmapped_bam),
-        get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names),
-        get_united_output_files(united_ribo_depletion_log)
+        #get_united_output_files(united_unmapped_bam),
+        #get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names),
+        #get_united_output_files(united_ribo_depletion_log)
 
 
 ########################
@@ -455,17 +461,6 @@ rule run_fastqc:
         {fastqc_command} -t {threads} -o {params.output_dir} {input}
         """
 
-rule get_united_reads_type_out:
-    input:
-        united_split_reads_read_type
-    output:
-        united_reads_type_out
-    shell:
-        ## Script taken from sequencing_analysis.sh
-        """
-        ln -sr {input} {output}
-        """
-
 rule index_bam_file:
     input:
         dropseq_final_bam
@@ -573,14 +568,6 @@ rule create_automated_report:
         fig_root=automated_figures_root
     script:
         'automated_analysis_create_report.py'
-
-rule create_strand_info:
-    input:
-        united_split_reads_strand_type
-    output:
-        united_strand_info
-    shell:
-        "ln -sr {input} {output}"
 
 rule split_final_bam:
     input:
