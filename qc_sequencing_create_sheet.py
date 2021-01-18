@@ -27,6 +27,7 @@ import yaml
 import subprocess
 import itertools
 import math
+import re
 from datetime import datetime
 
 #############
@@ -268,8 +269,13 @@ def load_downstream_statistics(folder, umi_cutoff):
     return downstream_statistics
 
 def parse_ribo_log(ribo_log_file):
+    # before the log, there can be some perl warnings prepended. so we need to find the
+    # first line outputed by bwa mem
     input_reads = 0
     aligned_reads = 0
+
+    first_line_regex = r'^\d+ reads; of these:$'
+    first_line_found = False
 
     line_n = 0
 
@@ -281,6 +287,14 @@ def parse_ribo_log(ribo_log_file):
                 input_reads = -1
                 aligned_reads = -1
                 break
+
+            if not first_line_found:
+                if re.match(first_line_regex, stripped_line) is not None:
+                    first_line_found = True
+                else:
+                    # keep looking for first line
+                    continue
+
             
             if line_n % 6 == 0:
                 input_reads = input_reads + int(stripped_line.split(' ')[0])
