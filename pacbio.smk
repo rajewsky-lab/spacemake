@@ -1,4 +1,4 @@
-pacbio_projects, pacbio_samples = glob_wildcards(pacbio_fq)
+pacbio_projects, pacbio_samples, pacbio_ext = glob_wildcards(pacbio_fq)
 
 pacbio_reports = []
 pacbio_rRNA_counts = []

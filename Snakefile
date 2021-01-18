@@ -247,7 +247,8 @@ wildcard_constraints:
     sample='(?!merged_).+',
     project='(?!merged_).+',
     dge_cleaned='|_cleaned',
-    dge_type = '|'.join(dge_types)
+    dge_type = '|'.join(dge_types),
+    pacbio_ext = 'fq|fastq'
 
 # #######################
 # include dropseq rules #
@@ -300,7 +301,7 @@ human_mouse_samples = projects_puck_info[projects_puck_info.species.isin(['human
 # include pacbio #
 ##################
 processed_data_pacbio = processed_data_root + '/pacbio'
-pacbio_fq = raw_data_root + '/pacbio/{sample}.fq'
+pacbio_fq = raw_data_root + '/pacbio/{sample}.{pacbio_ext}'
 pacbio_report = processed_data_pacbio + '/{sample}.report.pdf'
 pacbio_stats_file = processed_data_pacbio + '/{sample}.summary.tsv'
 pacbio_run_summary = processed_data_pacbio + '/{sample}.examples.txt'
