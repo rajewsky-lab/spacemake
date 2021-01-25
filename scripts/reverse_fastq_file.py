@@ -12,6 +12,7 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 import gzip
 import subprocess
 import os
+import argparse
 
 #############
 # argparser #

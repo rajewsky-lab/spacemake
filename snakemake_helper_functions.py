@@ -52,54 +52,17 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
                'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'investigator', 'sequencing_date', 'experiment']]    
 
-def create_lookup_table(df):
-    samples_lookup = {}
+def get_metadata(field, **kwargs):
+    df = project_df
 
-    projects = df.project_id.unique()
+    for key, value in kwargs.items():
+        df = df.loc[df.loc[:, key] == value]
 
-    for p in projects:
-        sample_ids = df[df.project_id.eq(p)].sample_id.to_list()
-        sample_sheet = df[df.project_id.eq(p)].sample_sheet.to_list()[0]
-        flowcell_id = df[df.project_id.eq(p)].flowcell_id.to_list()[0]
-        demux_barcode_mismatch = df[df.project_id.eq(p)].demux_barcode_mismatch.to_list()[0]
-        demux_dir = df[df.project_id.eq(p)].demux_dir.to_list()[0]
-        investigator = df[df.project_id.eq(p)].investigator.to_list()[0]
-        sequencing_date = df[df.project_id.eq(p)].sequencing_date.to_list()[0]
-       
-        # per sample
-        species = df[df.project_id.eq(p)].species.to_list()
-        pucks = df[df.project_id.eq(p)].puck_id.to_list()
-        R1 = df[df.project_id.eq(p)].R1.to_list()
-        R2 = df[df.project_id.eq(p)].R2.to_list()
-        experiment = df[df.project_id.eq(p)].experiment.to_list()
-
-        samples = {}
-        for i in range(len(sample_ids)):
-            samples[sample_ids[i]] = {
-                'species': species[i],
-                'puck': pucks[i],
-                'R1': R1[i],
-                'R2': R2[i],
-                'experiment': experiment[i]
-            }
-
-        samples_lookup[p] = {
-            'sample_sheet': sample_sheet,
-            'flowcell_id': flowcell_id,
-            'samples': samples,
-            'demux_barcode_mismatch': int(demux_barcode_mismatch),
-            'demux_dir': demux_dir,
-            'investigator': investigator,
-            'sequencing_date': sequencing_date
-        }
-
-    return samples_lookup
-
-def get_demux_dir(wildcards):
-    return samples[wildcards.project]['demux_dir']
+    return(df[field].to_list()[0])
 
 def get_demux_indicator(wildcards):
-    demux_dir = get_demux_dir(wildcards) 
+    demux_dir = get_metadata('demux_dir', sample_id = wildcards.sample,
+                             project_id = wildcards.project)
 
     return expand(demux_indicator, demux_dir=demux_dir)
 
@@ -108,7 +71,8 @@ def get_species_info(wildcards):
     #    - annotation (.gtf file)
     #    - genome (.fa file)
     #    - index (a directory where the STAR index is)
-    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
+    species = get_metadata('species', project_id = wildcards.project,
+                           sample_id = wildcards.sample)
 
     return {
         'annotation': config['knowledge']['annotations'][species],
@@ -117,7 +81,8 @@ def get_species_info(wildcards):
     }
 
 def get_rRNA_index(wildcards):
-    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
+    species = get_metadata('species', project_id = wildcards.project,
+                           sample_id = wildcards.sample)
 
     index = ''
 
@@ -146,17 +111,17 @@ def get_dge_extra_params(wildcards):
         return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=INTRONIC"
 
 def get_basecalls_dir(wildcards):
-    flowcell_id = samples[demux_dir2project[wildcards.demux_dir]]['flowcell_id']
+    flowcell_id = get_metadata('flowcell_id', demux_dir = wildcards.demux_dir)
     
     basecalls_dir = '/data/remote/basecalls/'
     local_nextseq_raw = '/data/rajewsky/sequencing/nextSeqRaw/'
 
-    # check if flowcell_id exists in /data/remote/basecalls
-    if os.path.isdir(basecalls_dir + flowcell_id):
-        return [basecalls_dir + flowcell_id]
-    # if not, check if flowcell_id exists in local /data/rajewsky/sequencing/nextSeqRaw
-    elif os.path.isdir(local_nextseq_raw + flowcell_id):
+    # check if flowcell_id exists in local /data/rajewsky/sequencing/nextSeqRaw
+    if os.path.isdir(local_nextseq_raw + flowcell_id):
         return [local_nextseq_raw + flowcell_id]
+    # if not, check if flowcell_id exists in /data/remote/basecalls
+    elif os.path.isdir(basecalls_dir + flowcell_id):
+        return [basecalls_dir + flowcell_id]
     # else return a fake path, which won't be present, so snakemake will fail for this, as input directory will be missing
     else:
         return [basecalls_dir + 'none'] 
@@ -249,8 +214,9 @@ def get_qc_sheet_parameters(sample_id, umi_cutoff=100):
     return out_dict
 
 def get_bt2_index(wildcards):
-    species = samples[wildcards.project]['samples'][wildcards.sample]['species']
-
+    species = get_metadata('species', project_id = wildcards.project,
+                           sample_id = wildcards.sample)
+    
     return config['knowledge']['indices'][species]['bt2']
 
 def get_top_barcodes(wildcards):
@@ -258,3 +224,14 @@ def get_top_barcodes(wildcards):
         return {'top_barcodes': united_top_barcodes}
     else:
         return {'top_barcodes': united_top_barcodes_clean}
+
+def get_reverse_first_mate_inputs(wildcards):
+    out = {
+            'R1': raw_reads_mate_1}
+
+    umi_r2 = config['umi_from_r2']
+
+    if wildcards.sample in umi_r2['samples'] or wildcards.project in umi_r2['projects']:
+        out['R2'] = raw_reads_mate_2
+
+    return (out)

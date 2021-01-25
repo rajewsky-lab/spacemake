@@ -48,7 +48,8 @@ project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id'])
 # add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
 project_df = project_df.append(config['additional_illumina_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
 
-samples = create_lookup_table(project_df)
+print(get_metadata('R1', sample_id = 'sts_030_4'))
+
 samples_list = project_df.T.to_dict().values()
 
 # put all projects into projects_puck_info
@@ -76,8 +77,6 @@ if 'samples_to_merge' in config:
             new_row.sequencing_date = ','.join(samples_to_merge.sequencing_date.to_list())
 
             projects_puck_info = projects_puck_info.append(new_row, ignore_index=True)
-
-demux_dir2project = {s['demux_dir']: s['project_id'] for s in samples_list}
 
 #################
 # DIRECTORY STR #
@@ -123,7 +122,7 @@ reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
 # Fastqc vars #
 ###############
 fastqc_root = raw_data_illumina + '/fastqc'
-fastqc_pattern = fastqc_root + '/{sample}_reversed_R{mate}_fastqc.{ext}'
+fastqc_pattern = fastqc_root + '/{sample}_R{mate}_fastqc.{ext}'
 fastqc_command = '/data/rajewsky/shared_bins/FastQC-0.11.2/fastqc'
 fastqc_ext = ['zip', 'html']
 
@@ -276,7 +275,8 @@ def get_final_output_files(pattern, projects = None, samples = None, **kwargs):
     
     return out_files
 
-def get_united_output_files(pattern, projects = None, samples = None, **kwargs):
+def get_united_output_files(pattern, projects = None, samples = None,
+                            skip_projects = None, skip_samples = None, **kwargs):
     out_files = []
     df = projects_puck_info
 
@@ -285,6 +285,12 @@ def get_united_output_files(pattern, projects = None, samples = None, **kwargs):
 
     if samples is not None:
         df = df[df.sample_id.isin(samples)]
+
+    if skip_samples is not None:
+        df = df[~df.sample_id.isin(skip_samples)]
+
+    if skip_projects is not None:
+        df = df[~df.project_id.isin(skip_projects)]
 
     for index, row in df.iterrows():
         out_files = out_files + expand(pattern,
@@ -317,17 +323,17 @@ include: 'pacbio.smk'
 #############
 rule all:
     input:
-        #get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        #get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued']),
-        #get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6]),
-        get_united_output_files(dge_all_summary),
+        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
+        get_final_output_files(reverse_reads_pattern, mate = [1,2]),
+        #get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued'])
+        #get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6])
+        #get_united_output_files(dge_all_summary),
         # this will also create the clean dge
-        #get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
-        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs)
+        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs, skip_samples = ['sts_067_3', 'sts_067_5'] ),
+        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs, skip_samples= ['sts_067_3', 'sts_067_5'])
         # get all split bam files
         #get_united_output_files(united_unmapped_bam),
-        #get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names),
-        #get_united_output_files(united_ribo_depletion_log)
+        #get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names)
 
 
 ########################
@@ -356,7 +362,6 @@ include: 'downsample.smk'
 rule downsample:
     input:
         get_united_output_files(downsample_saturation_analysis, projects = config['downsample_projects'])
-        #get_united_output_files(downsample_qc_sheet, projects = config['downsample_projects'], umi_cutoff = umi_cutoffs, ratio=downsampled_ratios)
 
 #################
 # MERGE SAMPLES #
@@ -370,9 +375,9 @@ ruleorder: link_raw_reads > link_demultiplexed_reads
 
 rule demultiplex_data:
     params:
-        demux_barcode_mismatch=lambda wildcards: samples[demux_dir2project[wildcards.demux_dir]]['demux_barcode_mismatch'],
-        sample_sheet=lambda wildcards: samples[demux_dir2project[wildcards.demux_dir]]['sample_sheet'],
-        flowcell_id=lambda wildcards: samples[demux_dir2project[wildcards.demux_dir]]['flowcell_id'],
+        demux_barcode_mismatch=lambda wildcards: int(get_metadata('demux_barcode_mismatch', demux_dir = wildcards.demux_dir)),
+        sample_sheet=lambda wildcards: get_metadata('sample_sheet', demux_dir = wildcards.demux_dir),
+        flowcell_id=lambda wildcards:  get_metadata('flowcell_id', demux_dir = wildcards.demux_dir),
         output_dir= lambda wildcards: expand(demux_dir_pattern, demux_dir=wildcards.demux_dir)
     input:
         unpack(get_basecalls_dir)
@@ -388,8 +393,8 @@ rule demultiplex_data:
             --output-dir {params.output_dir} \
             --sample-sheet {params.sample_sheet} \
             --runfolder-dir  {input} \
-            -r {threads} -p {threads} -w {threads}
-            
+            -p {threads}            
+
             echo "demux finished: $(date)" > {output}
         """
 
@@ -399,7 +404,9 @@ rule link_demultiplexed_reads:
     output:
         raw_reads_pattern
     params:
-        demux_dir = lambda wildcards: expand(demux_dir_pattern, demux_dir=get_demux_dir(wildcards)),
+        demux_dir = lambda wildcards: expand(demux_dir_pattern,
+            demux_dir = get_metadata('demux_dir', sample_id = wildcards.sample,
+                                     project_id = wildcards.project)),
         reads_folder = raw_data_illumina_reads
     shell:
         """
@@ -409,7 +416,7 @@ rule link_demultiplexed_reads:
         """
 
 def get_reads(wildcards):
-    return [samples[wildcards.project]['samples'][wildcards.sample]['R'+wildcards.mate]]
+    return([get_metadata('R'+ wildcards.mate, sample_id = wildcards.sample, project_id = wildcards.project)])
 
 rule link_raw_reads:
     input:
@@ -423,8 +430,7 @@ rule link_raw_reads:
 
 rule reverse_first_mate:
     input:
-        R1=raw_reads_mate_1,
-        R2=raw_reads_mate_2
+        unpack(get_reverse_first_mate_inputs)
     output:
         reverse_reads_mate_1
     run:
@@ -448,12 +454,15 @@ rule reverse_second_mate:
 
 rule run_fastqc:
     input:
-        reverse_reads_pattern
+        # we need to use raw reads here, as later during "reversing" we do the umi
+        # extraction, and barcode identification (for the combinatorial barcoding)
+        # in order for R1 to have the same pattern
+        raw_reads_pattern
     output:
         fastqc_pattern
     params:
         output_dir = fastqc_root 
-    threads: 8
+    threads: 4
     shell:
         """
         mkdir -p {params.output_dir}
