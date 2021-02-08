@@ -91,6 +91,7 @@ processed_data_illumina = processed_data_root + '/illumina'
 
 projects_puck_info_file = config['root_dir'] + '/.config/projects_puck_info.csv'
 sample_overview_file = config['root_dir'] + '/.config/sample_overview.html'
+sample_read_metrics_db = config['root_dir'] + '/reports/sample_read_metrics_db.tsv'
 
 united_illumina_root = config['root_dir'] + '/projects/{united_project}/processed_data/{united_sample}/illumina'
 united_complete_data_root = united_illumina_root + '/complete_data'
@@ -280,11 +281,12 @@ def get_united_output_files(pattern, projects = None, samples = None,
     out_files = []
     df = projects_puck_info
 
-    if projects is not None:
-        df = df[df.project_id.isin(projects)]
+    if projects is None and samples is None:
+        projects = df.project_id.to_list()
+        samples = df.sample_id.to_list()
+        #df = df[df.sample_id.isin(samples)]
 
-    if samples is not None:
-        df = df[df.sample_id.isin(samples)]
+    df = df[df.sample_id.isin(samples) | df.project_id.isin(projects)]
 
     if skip_samples is not None:
         df = df[~df.sample_id.isin(skip_samples)]
@@ -329,8 +331,8 @@ rule all:
         #get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6])
         #get_united_output_files(dge_all_summary),
         # this will also create the clean dge
-        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs, skip_samples = ['sts_067_3', 'sts_067_5'] ),
-        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs, skip_samples= ['sts_067_3', 'sts_067_5'])
+        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
+        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs)
         # get all split bam files
         #get_united_output_files(united_unmapped_bam),
         #get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names)
@@ -354,6 +356,14 @@ rule create_sample_overview:
     script:
         'create_sample_overview.Rmd'
 
+rule create_sample_db:
+    input:
+        projects_puck_info_file
+    output:
+        sample_read_metrics_db
+    script:
+        'create_sample_db.R'
+
 ################
 # DOWNSAMPLING #
 ################
@@ -361,7 +371,7 @@ include: 'downsample.smk'
 
 rule downsample:
     input:
-        get_united_output_files(downsample_saturation_analysis, projects = config['downsample_projects'])
+        get_united_output_files(downsample_saturation_analysis, projects = config['downsample']['projects'], samples = config['downsample']['samples'])
 
 #################
 # MERGE SAMPLES #
@@ -438,6 +448,7 @@ rule reverse_first_mate:
             shell('python {repo_dir}/scripts/reverse_reads_umi_from_r2.py --in_R1 {input.R1} --in_R2 {input.R2} --out_R1 {output}')
         else:
             shell('python {repo_dir}/scripts/reverse_fastq_file.py --in_R1 {input.R1} --out_R1 {output}')
+
 rule reverse_second_mate:
     input:
         raw_reads_mate_2

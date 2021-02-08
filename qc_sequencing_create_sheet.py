@@ -274,6 +274,7 @@ def parse_ribo_log(ribo_log_file):
     input_reads = 0
     aligned_reads = 0
 
+    # ribo log summary line: first line of the summary
     first_line_regex = r'^\d+ reads; of these:$'
     first_line_found = False
 
@@ -296,12 +297,18 @@ def parse_ribo_log(ribo_log_file):
                     continue
 
             
-            if line_n % 6 == 0:
+            if line_n == 0:
                 input_reads = input_reads + int(stripped_line.split(' ')[0])
-            elif line_n % 6 == 3 or line_n % 6 == 4:
+                line_n = line_n + 1
+            elif line_n == 3 or line_n == 4:
                 aligned_reads = aligned_reads + int(stripped_line.split(' ')[0])
+                line_n = line_n + 1
+            # reset after the fifth line, this is needed if there are several ribolog files
+            # appended one after the other. this is the case for merged samples
+            elif line_n == 5:
+                first_line_found = False
+                line_n = 0
             
-            line_n = line_n + 1
     
     if input_reads <= 0:
         return 'NA'

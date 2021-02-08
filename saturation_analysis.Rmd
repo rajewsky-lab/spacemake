@@ -135,7 +135,7 @@ plot_data <- function(umi_cutoff=1){
 
 ##### With UMI cutoff 1
 
-```{r plot_umi_1, echo = F, fig.height = 7, fig.width = 7}
+```{r plot_umi_1, echo = F, fig.height = 7, fig.width = 7, fig.align='center'}
 plot_data(1) %>% print
 ```
 
@@ -143,7 +143,7 @@ plot_data(1) %>% print
 
 ##### With UMI cutoff 10
 
-```{r plot_umi_10, echo = F, fig.height = 7, fig.width = 7}
+```{r plot_umi_10, echo = F, fig.height = 7, fig.width = 7, fig.align='center'}
 plot_data(10) %>% print
 ```
 
@@ -151,7 +151,7 @@ plot_data(10) %>% print
 
 ##### With UMI cutoff 50
 
-```{r plot_umi_50, echo = F, fig.height = 7, fig.width = 7}
+```{r plot_umi_50, echo = F, fig.height = 7, fig.width = 7, fig.align='center'}
 plot_data(50) %>% print
 ```
 
@@ -159,6 +159,6 @@ plot_data(50) %>% print
 
 ##### With UMI cutoff 100
 
-```{r plot_umi_100, echo = F, fig.height = 7, fig.width = 7}
+```{r plot_umi_100, echo = F, fig.height = 7, fig.width = 7, fig.align='center'}
 plot_data(100) %>% print
 ```

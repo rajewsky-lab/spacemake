@@ -108,7 +108,7 @@ def get_saturation_analysis_input(wildcards):
         ratio = x)[0] for x in downsampled_ratios
     }
     
-    dge_summaries['downsampled_100'] = expand(united_dge_all_summary,
+    dge_summaries['downsampled_100'] = expand(dge_all_summary,
         united_project = wildcards.united_project,
         united_sample = wildcards.united_sample)
 
