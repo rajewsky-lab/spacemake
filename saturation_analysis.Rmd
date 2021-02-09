@@ -26,6 +26,7 @@ library(cowplot)
 library(knitr)
 
 theme_set(theme_cowplot(12))
+#snakemake = read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
 ```{r functions, echo = F}
@@ -102,17 +103,60 @@ dge_data <- tibble(percentage = names(downsampled_summaries),
             unnest(content) %>%
             select(-filename) %>%
             separate(percentage, into = c(NA, 'percentage')) %>%
-            mutate(pcr = NUM_GENIC_READS / NUM_TRANSCRIPTS)
+            mutate(pcr = NUM_GENIC_READS / NUM_TRANSCRIPTS) %>%
+            rename(umis = NUM_TRANSCRIPTS,
+                   genes = NUM_GENES,
+                   reads = NUM_GENIC_READS)
 ```
+
+\newpage 
+
+##### we bin the data into percentalise by reads per bead
+
+```{r plot_by_deciles, echo = F, fig.height=7, fig.width=7}
+decile_dat <- dge_data %>%
+    group_by(percentage) %>%
+    mutate(cumsum_reads = cumsum(reads),
+           decile_limit = sum(reads)/10,
+           # put beads into deciles by number of reads
+           decile = floor(cumsum_reads / decile_limit) + 1) %>%
+    # get top 10 deciles, 11 is an artifact of rounding, last beads
+    filter(decile < 11) %>%
+    group_by(percentage, decile) %>%
+    summarise(median_reads = median(reads),
+              median_genes = median(genes),
+              median_pcr = median(pcr),
+              median_umis = median(umis),
+              num_beads = n()) %>%
+    gather('observation', 'value', median_reads:num_beads) %>%
+    mutate(decile = factor(decile), 
+           percentage = as.integer(percentage),
+           observation = factor(observation, levels = c(
+                      'median_reads', 
+                      'median_umis', 
+                      'median_genes',
+                      'median_pcr', 'num_beads')))
+
+decile_dat %>%
+    ggplot(aes(percentage, value, color= decile, fill = decile)) +
+        geom_smooth(formula = y~log(x), size = 0.6) +
+        geom_point(size=2,  color = 'black', pch=21) + 
+        scale_x_continuous(breaks=seq(0, 100, 10)) +
+        facet_wrap(~observation, scales = 'free_y', ncol=2) +
+        labs(y='', x='downsampling percentage')
+```
+
+
+\newpage
 
 ```{r plot_observations, echo = F}
 plot_data <- function(umi_cutoff=1){
     dge_data %>%
-        filter(NUM_TRANSCRIPTS > umi_cutoff) %>%
+        filter(umis > umi_cutoff) %>%
         group_by(percentage) %>%
-        summarise(median_reads = median(NUM_GENIC_READS),
-                  median_umis = median(NUM_TRANSCRIPTS),
-                  median_genes = median(NUM_GENES),
+        summarise(median_reads = median(reads),
+                  median_umis = median(umis),
+                  median_genes = median(genes),
                   median_pcr = median(pcr),
                   num_beads = n()) %>%
     gather('observation', 'value', median_reads:num_beads) %>% 
