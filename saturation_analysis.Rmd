@@ -26,7 +26,6 @@ library(cowplot)
 library(knitr)
 
 theme_set(theme_cowplot(12))
-#snakemake = read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
 ```{r functions, echo = F}
@@ -111,6 +110,30 @@ dge_data <- tibble(percentage = names(downsampled_summaries),
 
 \newpage 
 
+#### Plot distribution of observations
+
+```{r plot_distributions_of_observations, echo =F}
+clrs = c('umis' = '#E69F00', 'pcr' = '#56B4E9', 'reads' = '#009E73')
+
+plot_observations <- function(metric, val_le){
+    dge_data %>%
+        select(CELL_BARCODE, percentage, pcr, umis, reads) %>%
+        gather('obs', 'val', umis, pcr, reads) %>%
+        filter(obs == metric, val < val_le) %>%
+        mutate(percentage = as.integer(percentage)) %>%
+        ggplot(aes(val, fill = obs)) +
+            geom_density() +
+            facet_grid(percentage~obs, scales = 'free_y') +
+            scale_fill_manual(values = clrs)
+}
+
+plot_observations('umis', 500)
+plot_observations('reads', 500)
+plot_observations('pcr', 2.5)
+```
+
+\newpage
+
 ##### we bin the data into percentalise by reads per bead
 
 ```{r plot_by_deciles, echo = F, fig.height=7, fig.width=7}
@@ -145,7 +168,6 @@ decile_dat %>%
         facet_wrap(~observation, scales = 'free_y', ncol=2) +
         labs(y='', x='downsampling percentage')
 ```
-
 
 \newpage
 
