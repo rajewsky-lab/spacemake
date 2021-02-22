@@ -1,8 +1,27 @@
+root_dir: /data/rajewsky/projects/slide_seq
+
 illumina_projects:
-    - sample_sheet: /scratch/home/tsztank/20191206_spatseq_smples3-4.csv
-      flowcell_id: 191206_NS500648_0416_AHY3KYBGXC
-    - sample_sheet: /data/rajewsky/home/tsztank/200110_STS_017_4-7-8STS_018_1.csv
-      flowcell_id: 200110_NS500648_0423_AHT5FHBGXC
+    # - sample_sheet: /scratch/home/tsztank/20191206_spatseq_smples3-4.csv
+    #   flowcell_id: 191206_NS500648_0416_AHY3KYBGXC
+    # - sample_sheet: /data/rajewsky/home/tsztank/200110_STS_017_4-7-8STS_018_1.csv
+    #   flowcell_id: 200110_NS500648_0423_AHT5FHBGXC
+    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210121_sts_067_1_3_5_Maria_organoids_C2_V2_sample_sheet.csv
+      flowcell_id: 210121_NB501326_0478_AHGKCFBGXG
+      barcode_flavor: "drop_noUMI"
+
+umi_from_r2:
+    samples:
+    projects:
+
+additional_illumina_projects:
+
+# downsample and saturation analysis
+downsample: 
+    projects:
+    samples:
+
+# in the output each will have an merged_ prepended to their root directory
+# samples_to_merge:`
 
 adapters:
     smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'
@@ -35,3 +54,5 @@ knowledge:
             score_threshold: 0.4
             cell_bc: "bc1[-6::-1]+bc2[-6::-1]"
             UMI: "r2[0:8]"
+
+default_barcode_flavor: "dropseq"
