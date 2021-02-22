@@ -43,12 +43,15 @@ microscopy_raw = microscopy_root + '/raw'
 illumina_projects = config['illumina_projects']
 
 # get the samples
-project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in illumina_projects], ignore_index=True)
+project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id'], ip) for ip in illumina_projects], ignore_index=True)
 
 # add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
 project_df = project_df.append(config['additional_illumina_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
-
-print(get_metadata('R1', sample_id = 'sts_030_4'))
+# print(project_df)
+# print(project_df.columns)
+# print(project_df['barcode_flavor'])
+# print(get_metadata('R1', sample_id = 'sts_030_4'))
+# print(get_metadata('R1', sample_id = 'sts_067_1'))
 
 samples_list = project_df.T.to_dict().values()
 
@@ -85,7 +88,6 @@ raw_data_root = project_dir + '/raw_data'
 raw_data_illumina = raw_data_root + '/illumina'
 raw_data_illumina_reads = raw_data_illumina + '/reads/raw'
 raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
-
 processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
@@ -438,16 +440,33 @@ rule link_raw_reads:
         ln -s {input} {output}
         """
 
+rule zcat_pipe:
+    input: "{name}.fastq.gz"
+    output: pipe("{name}.fastq")
+    shell: "zcat {input} >> {output}"
+
 rule reverse_first_mate:
     input:
-        unpack(get_reverse_first_mate_inputs)
+        R1=raw_reads_mate_1,
+        R2=raw_reads_mate_2,
+        R1_unpacked=raw_reads_mate_1.replace('fastq.gz', 'fastq'),
+        R2_unpacked=raw_reads_mate_2.replace('fastq.gz', 'fastq')
+    params:
+        bc=lambda wildcards: get_barcode_flavor_info(wildcards)
     output:
         reverse_reads_mate_1
-    run:
-        if wildcards.sample in config['umi_from_r2']['samples'] or wildcards.project in config['umi_from_r2']['projects']:
-            shell('python {repo_dir}/scripts/reverse_reads_umi_from_r2.py --in_R1 {input.R1} --in_R2 {input.R2} --out_R1 {output}')
-        else:
-            shell('python {repo_dir}/scripts/reverse_fastq_file.py --in_R1 {input.R1} --out_R1 {output}')
+    threads: 4  # 2 gzip decompress->1 python->1 gzip compress
+    shell:
+        "python {repo_dir}/scripts/preprocess_read1.py "
+        "--read1={input.R1_unpacked} "
+        "--read2={input.R2_unpacked} "
+        "--bc1-ref={params.bc.bc1_ref} "
+        "--bc2-ref={params.bc.bc2_ref} "
+        "--bc1-cache={params.bc.bc1_cache} "
+        "--bc2-cache={params.bc.bc2_cache} "
+        "--threshold={params.bc.score_threshold} "
+        "--cell-bc='{params.bc.cell_bc}' "
+        "--UMI='{params.bc.UMI}' | gzip > {output} "
 
 rule reverse_second_mate:
     input:
