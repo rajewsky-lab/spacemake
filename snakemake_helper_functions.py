@@ -16,7 +16,7 @@ def compute_max_barcode_mismatch(indices):
                 max_mismatch = min(max_mismatch, math.ceil(hd/2)-1)
     return max_mismatch
 
-def read_sample_sheet(sample_sheet_path, flowcell_id):
+def read_sample_sheet(sample_sheet_path, flowcell_id, ip):
     with open(sample_sheet_path) as sample_sheet:
         ix = 0
         investigator = 'none'
@@ -42,6 +42,11 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     df['R1'] = 'none'
     df['R2'] = 'none'
 
+    # assign the barcode layout we are using from the config.yaml:
+    # ip or default
+    bcf = ip.get("barcode_flavor", config["default_barcode_flavor"])
+    df['barcode_flavor'] = bcf
+
     df.rename(columns={"Sample_ID":"sample_id", "Sample_Name":"puck_id", "Sample_Project":"project_id", "Description": "experiment"}, inplace=True)
     
     df['flowcell_id'] = flowcell_id
@@ -50,15 +55,16 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     df['demux_dir'] = df['sample_sheet'].str.split('/').str[-1].str.split('.').str[0]
 
     return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
-               'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'investigator', 'sequencing_date', 'experiment']]    
+               'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'barcode_flavor', 'investigator', 'sequencing_date', 'experiment']]    
+
 
 def get_metadata(field, **kwargs):
     df = project_df
-
     for key, value in kwargs.items():
         df = df.loc[df.loc[:, key] == value]
 
     return(df[field].to_list()[0])
+
 
 def get_demux_indicator(wildcards):
     demux_dir = get_metadata('demux_dir', sample_id = wildcards.sample,
@@ -79,6 +85,29 @@ def get_species_info(wildcards):
         'genome': config['knowledge']['genomes'][species],
         'index': config['knowledge']['indices'][species]['star']
     }
+
+
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+
+bc_defaults = dict(bc1_ref="", bc2_ref="", score_threshold=0.0)
+def get_barcode_flavor_info(wildcards, defaults=bc_defaults):
+    # This function will return a dictionary of information
+    # on the read1 preprocessing, according to barcode_flavor
+    print(f"get_barcode_flavor_info {wildcards}")
+    flavor = get_metadata('barcode_flavor',
+                          project_id=wildcards.project,
+                          sample_id=wildcards.sample)
+
+    print(f"wc={wildcards} flavor->{flavor}")
+    d = dict(defaults)  # make a copy of the default values    
+    d.update(config['knowledge']['barcode_flavor'][flavor])
+    return dotdict(d)  # enable d.key access for convenience
+
 
 def get_rRNA_index(wildcards):
     species = get_metadata('species', project_id = wildcards.project,
@@ -225,13 +254,18 @@ def get_top_barcodes(wildcards):
     else:
         return {'top_barcodes': united_top_barcodes_clean}
 
+# TODO: need to clean up umi_r2 once barcode_flavor work is done
 def get_reverse_first_mate_inputs(wildcards):
     out = {
-            'R1': raw_reads_mate_1}
+            'R1': raw_reads_mate_1,
+            'R2': raw_reads_mate_2,
+            # 'R1_unpacked' : raw_reads_mate_1.replace('fastq.gz', 'fastq'),
+            # 'R2_unpacked' : raw_reads_mate_2.replace('fastq.gz', 'fastq'),
+        }
 
     umi_r2 = config['umi_from_r2']
 
     if wildcards.sample in umi_r2['samples'] or wildcards.project in umi_r2['projects']:
         out['R2'] = raw_reads_mate_2
-
+    # print(f"get_reverse_first_mate_inputs out={out}")
     return (out)
