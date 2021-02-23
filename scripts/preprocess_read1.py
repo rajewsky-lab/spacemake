@@ -551,7 +551,7 @@ def main_dropseq(args):
     N = defaultdict(int)
     # with mp.Pool(args.parallel) as pool:
     # iterate query sequences
-    for n, (fqid, r1, r2) in enumerate(read_source()):
+    for n, (fqid, r1, r2) in enumerate(read_source(args)):
         N['total'] += 1
         print(output(args, fqid, r1=r1, r2=r2))
 
