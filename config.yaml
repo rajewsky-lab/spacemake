@@ -7,7 +7,10 @@ illumina_projects:
     #   flowcell_id: 200110_NS500648_0423_AHT5FHBGXC
     - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210121_sts_067_1_3_5_Maria_organoids_C2_V2_sample_sheet.csv
       flowcell_id: 210121_NB501326_0478_AHGKCFBGXG
-      barcode_flavor: "drop_noUMI"
+      barcode_flavor: 
+          sts_067_1: "drop_noUMI"
+          sts_067_3: "comb1"
+          sts_067_5: "comb1"
 
 umi_from_r2:
     samples:
@@ -40,19 +43,19 @@ knowledge:
             star: /data/rajewsky/home/nkarais/mm10_GRCm38.p5_gencode.vM23_STAR_2.7.1a/STAR_index
     barcode_flavor:
         dropseq:
-            cell_bc: "r1[0:12:-1]"
+            cell_bc: "r1[0:12][::-1]"
             UMI: "r1[12:16]"
         drop_noUMI:
-            cell_bc: "r1[0:12:-1]"
+            cell_bc: "r1[0:12][::-1]"
             UMI: "r2[0:8]"
         comb1:
             segments: 2
             bc1_ref: "/data/rajewsky/projects/combbeads/two_segments/illumina/index_BC1_96.fa"
-            bc2_ref: "/data/rajewsky/projects/combbeads/two_segments/illumina/index_BC2_96.fa"
+            bc2_ref: "/data/rajewsky/projects/combbeads/two_segments/illumina/index_BC2_96_var.fa"
             bc1_cache: "/data/rajewsky/projects/combbeads/two_segments/illumina/bc1_cacheAD.tsv"
             bc2_cache: "/data/rajewsky/projects/combbeads/two_segments/illumina/bc2_cacheAD.tsv"
-            score_threshold: 0.4
-            cell_bc: "bc1[-6::-1]+bc2[-6::-1]"
+            score_threshold: 0.5
+            cell_bc: "bc1[-6:][::-1]+bc2[-6:][::-1]"
             UMI: "r2[0:8]"
 
 default_barcode_flavor: "dropseq"
