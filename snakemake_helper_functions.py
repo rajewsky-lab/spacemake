@@ -42,17 +42,21 @@ def read_sample_sheet(sample_sheet_path, flowcell_id, ip):
     df['R1'] = 'none'
     df['R2'] = 'none'
 
-    # assign the barcode layout we are using from the config.yaml:
-    # ip or default
-    bcf = ip.get("barcode_flavor", config["default_barcode_flavor"])
-    df['barcode_flavor'] = bcf
-
+    # merge additional info and sanitize column names
     df.rename(columns={"Sample_ID":"sample_id", "Sample_Name":"puck_id", "Sample_Project":"project_id", "Description": "experiment"}, inplace=True)
-    
     df['flowcell_id'] = flowcell_id
     df['demux_barcode_mismatch'] = compute_max_barcode_mismatch(df['index'])
     df['sample_sheet'] = sample_sheet_path
     df['demux_dir'] = df['sample_sheet'].str.split('/').str[-1].str.split('.').str[0]
+
+    # assign the barcode layout for each sample as pecified in the config.yaml
+    bcf = ip.get("barcode_flavor")
+    default_flavor = config["default_barcode_flavor"]
+
+    def flavor_choice(sample_id):
+        return bcf.get(sample_id, default_flavor)
+
+    df['barcode_flavor'] = df["sample_id"].map(flavor_choice)
 
     return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
                'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'barcode_flavor', 'investigator', 'sequencing_date', 'experiment']]    

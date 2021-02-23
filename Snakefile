@@ -36,7 +36,7 @@ repo_dir = os.path.dirname(workflow.snakefile)
 
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
-
+print(config['illumina_projects'][0]['barcode_flavor'])
 microscopy_root = '/data/rajewsky/slideseq_microscopy'
 microscopy_raw = microscopy_root + '/raw'
 
