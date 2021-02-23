@@ -68,10 +68,10 @@ class BarcodeMatcher:
 
             self.costs[l] = cost
 
-        self.logger.info(f"initialized from {len(self.names)} sequences from lmin={self.lmin} to lmax={self.lmax}")
+        self.logger.debug(f"initialized from {len(self.names)} sequences from lmin={self.lmin} to lmax={self.lmax}")
 
     def load_targets(self, fname):
-        self.logger.info(f"loading target sequences from '{fname}'")
+        self.logger.debug(f"loading target sequences from '{fname}'")
         names = []
         seqs = []
         for rec in SeqIO.parse(fname, "fasta"):
@@ -168,7 +168,7 @@ class TieBreaker:
             return results[i], queries[i]
 
     def load_cache(self, fname):
-        self.logger.info(f"pre-populating alignment cache from '{fname}'")
+        self.logger.debug(f"pre-populating alignment cache from '{fname}'")
         if fname:
             try:
                 df = pd.read_csv(fname, sep='\t', index_col=None, names=["query", "seq", "name", "score", "count"])
@@ -178,7 +178,7 @@ class TieBreaker:
                 for row in df.itertuples():
                     self.cache[row.query] = (row.name, row.seq, row.score)
 
-        self.logger.info(f"loaded {len(self.cache)} queries.")
+        self.logger.debug(f"loaded {len(self.cache)} queries.")
 
 
 def store_cache(fname, cache, query_count, mincount=2):
@@ -305,8 +305,8 @@ def opseq_local_align(seq, opseq="GAATCACGATACGTACACCAGT", min_opseq_score=22):
 def queue_iter(queue, stop_item=None):
     """
     Small generator/wrapper around multiprocessing.Queue allowing simple
-    for-loop semantics: 
-    
+    for-loop semantics:
+
         for item in queue_iter(queue):
             ...
     """
@@ -387,15 +387,25 @@ def process_fastq(Qfq, args):
     logging.debug("exiting process_fastq")
 
 
-def count_dict_add(src, dst):
-    for k, v in src.items():
-        if k in dst:
-            dst[k] += v
-        else:
-            dst[k] = v
+def count_dict_sum(sources):
+    dst = {}
+    for src in sources:
+        for k, v in src.items():
+            if k in dst:
+                dst[k] += v
+            else:
+                dst[k] = v
+    return dst
 
 
-def process_combinatorial(Qfq, Qres, args, stat_dicts):  #, bc1_cache, bc2_cache, bc1_query_counts, bc2_query_counts):
+def dict_merge(sources):
+    dst = {}
+    for src in sources:
+        dst.update(src)
+    return dst
+
+
+def process_combinatorial(Qfq, Qres, args, stat_lists):
     logging.debug(f"process_combinatorial starting up with Qfq={Qfq}, Qres={Qres} and args={args}")
     bc1_matcher = TieBreaker(args.bc1_ref, place="left")
     bc2_matcher = TieBreaker(args.bc2_ref, place="right")
@@ -438,17 +448,17 @@ def process_combinatorial(Qfq, Qres, args, stat_dicts):  #, bc1_cache, bc2_cache
     N['BC1_cache_hit'] = bc1_matcher.n_hit
     N['BC2_cache_hit'] = bc2_matcher.n_hit
 
-    logging.info("synchronizing cache and counts")
-    # add our counts and observations to the shared dictionaries
-    # via these proxies
-    N_main, qcache1, qcache2, qcount1, qcount2, bccount1, bccount2 = stat_dicts
-    count_dict_add(N, N_main)
-    qcache1.update(bc1_matcher.cache)
-    qcache2.update(bc2_matcher.cache)
-    count_dict_add(bc1_matcher.query_count, qcount1)
-    count_dict_add(bc2_matcher.query_count, qcount2)
-    count_dict_add(bc1_matcher.bc_count, bccount1)
-    count_dict_add(bc2_matcher.bc_count, bccount2)
+    # return our counts and observations
+    # via these list proxies
+    logging.debug("synchronizing cache and counts")
+    Ns, qcaches1, qcaches2, qcounts1, qcounts2, bccounts1, bccounts2 = stat_lists
+    Ns.append(N)
+    qcaches1.append(bc1_matcher.cache)
+    qcaches2.append(bc2_matcher.cache)
+    qcounts1.append(bc1_matcher.query_count)
+    qcounts2.append(bc2_matcher.query_count)
+    bccounts1.append(bc1_matcher.bc_count)
+    bccounts2.append(bc2_matcher.bc_count)
 
 
 def main_combinatorial(args):
@@ -458,21 +468,21 @@ def main_combinatorial(args):
 
     # Proxy objects to allow workers to report statistics about the run    
     manager = mp.Manager()
-    qcache1 = manager.dict()
-    qcache2 = manager.dict()
-    qcount1 = manager.dict()
-    qcount2 = manager.dict()
-    bccount1 = manager.dict()
-    bccount2 = manager.dict()
-    N = manager.dict()
-    stat_dicts = [N, qcache1, qcache2, qcount1, qcount2, bccount1, bccount2]
+    qcaches1 = manager.list()
+    qcaches2 = manager.list()
+    qcounts1 = manager.list()
+    qcounts2 = manager.list()
+    bccounts1 = manager.list()
+    bccounts2 = manager.list()
+    Ns = manager.list()
+    stat_lists = [Ns, qcaches1, qcaches2, qcounts1, qcounts2, bccounts1, bccounts2]
     # read FASTQ in chunks and put them in Qfq
     dispatcher = mp.Process(target=process_fastq,
                             name="dispatcher",
                             args=(Qfq, args))
     
     dispatcher.start()
-    logging.debug("MAIN: started dispatch")
+    logging.info("MAIN: started dispatch")
 
     # workers consume chunks of FASTQ from Qfq, 
     # process them, and put the results in Qres
@@ -480,22 +490,22 @@ def main_combinatorial(args):
     for i in range(args.parallel):
         w = mp.Process(target=process_combinatorial,
                        name=f"worker_{i}",
-                       args=(Qfq, Qres, args, stat_dicts))
+                       args=(Qfq, Qres, args, stat_lists))
         w.start()
         workers.append(w)
 
-    logging.debug("MAIN: started workers")
+    logging.info("MAIN: started workers")
     collector = mp.Process(target=process_ordered_results,
                            name="output",
                            args=(Qres,))
     collector.start()
-    logging.debug("MAIN: started collector")
+    logging.info("MAIN: started collector")
     # wait until all sequences have been thrown onto Qfq
     dispatcher.join()
-    logging.debug(f"dispatcher has exited. And all objects have been removed from the queue {Qfq.qsize()}")
+    logging.info(f"dispatcher has exited. And all reads have been removed from the queue.")
 
     # signal all workers to finish
-    logging.debug("signalling all workers to finish")
+    logging.info("signalling all workers to finish")
     for n in range(args.parallel):
         Qfq.put(None)  # each worker consumes exactly one None
 
@@ -504,21 +514,37 @@ def main_combinatorial(args):
         # workers to exit.
         w.join()
 
-    logging.debug("all worker processes have joined. Signalling collector to finish")
+    logging.info("all worker processes have joined. Signalling collector to finish")
     # signal the collector to stop
     Qres.put(None)
 
     # and wait until all output has been generated 
     collector.join()
-    logging.debug("collector has joined")
+    logging.info("collector has joined. Merging worker statistics")
 
-    report_stats(N)
+    N = count_dict_sum(Ns)
+    logging.info(f"Run completed. Overall combinatorial barcode assignment "
+                 f"rate was {100.0 * N['called']/N['total']}")
     if args.update_cache:
-        store_cache(args.bc1_cache, qcache1, qcount1)
-        store_cache(args.bc2_cache, qcache2, qcount2)
+        qcount1 = count_dict_sum(qcounts1)
+        qcount2 = count_dict_sum(qcounts2)
+        cache1 = dict_merge(qcaches1)
+        cache2 = dict_merge(qcaches2)
+        store_cache(args.bc1_cache, cache1, qcount1)
+        store_cache(args.bc2_cache, cache2, qcount2)
 
-    # report_stats(bccount1, prefix="BC1\t")
-    # report_stats(bccount2, prefix="BC2\t")
+    if args.save_stats:
+        bccount1 = count_dict_sum(bccounts1)
+        bccount2 = count_dict_sum(bccounts2)
+        with open(args.save_stats, 'w') as f:
+            for k, v in sorted(N.items()):
+                f.write(f"freq\t{k}\t{v}\t{100.0 * v/N['total']:.2f}\n")
+
+            for k, v in sorted(bccount1.items()):
+                f.write(f"BC1\t{k}\t{v}\t{100.0 * v/N['total']:.2f}\n")
+
+            for k, v in sorted(bccount2.items()):
+                f.write(f"BC2\t{k}\t{v}\t{100.0 * v/N['total']:.2f}\n")
 
 
 def main_dropseq(args):
@@ -547,6 +573,7 @@ if __name__ == '__main__':
     parser.add_argument("--UMI", default="r1[12:16]")
     parser.add_argument("--template", default="{cell}{UMI}")
     parser.add_argument("--bc1-ref", default="", help="load BC1 reference sequences from this FASTA")
+    parser.add_argument("--save-stats", default="preprocessing_stats.txt", help="store statistics in this file")
     parser.add_argument("--bc2-ref", default="", help="load BC2 reference sequences from this FASTA")
     parser.add_argument("--bc1-cache", default="", help="load cached BC1 alignments from here")
     parser.add_argument("--bc2-cache", default="", help="load cached BC2 alignments from here")
@@ -555,7 +582,7 @@ if __name__ == '__main__':
     parser.add_argument("--na", default="NNNNNNNN", help="code for ambiguous or unaligned barcode")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     logging.info(f"starting read1 preprocessing with {sorted(vars(args).items())}")
     t1 = ti.default_timer()
     if args.bc1_ref and args.bc2_ref:
