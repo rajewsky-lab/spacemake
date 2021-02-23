@@ -52,8 +52,8 @@ knowledge:
             segments: 2
             bc1_ref: "/data/rajewsky/projects/combbeads/two_segments/illumina/index_BC1_96.fa"
             bc2_ref: "/data/rajewsky/projects/combbeads/two_segments/illumina/index_BC2_96_var.fa"
-            bc1_cache: "/data/rajewsky/projects/combbeads/two_segments/illumina/bc1_cacheAD.tsv"
-            bc2_cache: "/data/rajewsky/projects/combbeads/two_segments/illumina/bc2_cacheAD.tsv"
+            bc1_cache: "/data/rajewsky/projects/combbeads/two_segments/illumina/bc1_cache.tsv"
+            bc2_cache: "/data/rajewsky/projects/combbeads/two_segments/illumina/bc2_cache.tsv"
             score_threshold: 0.5
             cell_bc: "bc1[-6:][::-1]+bc2[-6:][::-1]"
             UMI: "r2[0:8]"
