@@ -237,12 +237,13 @@ def match_BC1(bc1_matcher, seq, qstart, tstart, N):
     return bc1, BC1, ref1, score1
 
 
-def match_BC2(bc2_matcher, seq, qend, tend, N, lopseq=22):
+def match_BC2(bc2_matcher, seq, qend, tend, N):
     bc2_choices = [
-        seq[qend:],
-        seq[qend - 1:],
+        seq[qend:],  # assume local alignment catches entire opseq
+        seq[qend - 1:],  # assume the last opseq base is in fact BC
+        # (This indeed happens quite a bit for BC2)
     ]
-    # we have a possible deletion, or mutation. Check both options
+    # if the end-gap is in fact a mutation, BC would start later
     if tend:
         mut = seq[qend + tend:]
         if len(mut) >= 8:
@@ -269,9 +270,6 @@ def opseq_local_align(seq, opseq="GAATCACGATACGTACACCAGT", min_opseq_score=22):
                                   one_alignment_only=True,
                                   score_only=False)[0]
 
-    res = atype(*res) # convert unpickle-able Alignment class to named tuple
-    # print(pairwise2.format_alignment(*res, full_sequences=True))
-    # print(res)
     qstart = res.start
     qend = res.end
     tstart = 0
@@ -350,7 +348,7 @@ def process_ordered_results(res_queue):
         if t2-t1 > 30:
             dT = t2 - t0
             rate = n_rec/dT
-            logger.info("processed {0} reads in {1:.0f} seconds (average {2:.3f} records/second).".format(n_rec, dT, rate) )
+            logger.info("processed {0} reads in {1:.0f} seconds (average {2:.3f} reads/second).".format(n_rec, dT, rate) )
             t1 = t2
 
     # by the time None pops from the queue, all chunks 
@@ -358,7 +356,7 @@ def process_ordered_results(res_queue):
     assert len(heap) == 0
 
     dT = time.time() - t0
-    logger.info("finished processing {0} reads in {1:.0f} seconds (average {2:.3f} records/second)".format(n_rec, dT, n_rec/dT) )
+    logger.info("finished processing {0} reads in {1:.0f} seconds (average {2:.3f} reads/second)".format(n_rec, dT, n_rec/dT) )
 
 
 def chunkify(src, n_chunk=100):
@@ -388,13 +386,11 @@ def process_fastq(Qfq, args):
 
 
 def count_dict_sum(sources):
-    dst = {}
+    dst = defaultdict(float)
     for src in sources:
         for k, v in src.items():
-            if k in dst:
-                dst[k] += v
-            else:
-                dst[k] = v
+            dst[k] += v
+
     return dst
 
 
@@ -411,7 +407,6 @@ def process_combinatorial(Qfq, Qres, args, stat_lists):
     bc2_matcher = TieBreaker(args.bc2_ref, place="right")
     bc1_matcher.load_cache(args.bc1_cache)
     bc2_matcher.load_cache(args.bc2_cache)
-    lopseq = len(args.opseq)
 
     N = defaultdict(int)
     for n_chunk, reads in queue_iter(Qfq):
@@ -420,7 +415,7 @@ def process_combinatorial(Qfq, Qres, args, stat_lists):
         for fqid, r1, r2 in reads:
             N['total'] += 1
             # align opseq sequence to seq of read1
-            aln = opseq_local_align(r1.rstrip(), opseq=args.opseq, 
+            aln = opseq_local_align(r1.rstrip(), opseq=args.opseq,
                                     min_opseq_score=args.min_opseq_score)
             res, tstart, tend = aln
             if res is None:
@@ -430,8 +425,7 @@ def process_combinatorial(Qfq, Qres, args, stat_lists):
 
             # identify barcodes
             bc1, BC1, ref1, score1 = match_BC1(bc1_matcher, res.seqB, res.start, tstart, N)
-            bc2, BC2, ref2, score2 = match_BC2(bc2_matcher, res.seqB, res.end, tend, N,
-                                               lopseq=lopseq)
+            bc2, BC2, ref2, score2 = match_BC2(bc2_matcher, res.seqB, res.end, tend, N)
             # slo = sQSeq.lower()
             # sout = slo[:qstart] + sQSeq[qstart:qend] + slo[qend:]
             # print(sout, qstart, qend, tstart, tend, bc1, bc2)
@@ -461,7 +455,17 @@ def process_combinatorial(Qfq, Qres, args, stat_lists):
     bccounts2.append(bc2_matcher.bc_count)
 
 
+def safety_check_eval(s, danger="();."):
+    chars = set(list(s))
+    if chars & set(list(danger)):
+        return False
+    else:
+        return True
+
+
 def main_combinatorial(args):
+    assert safety_check_eval(args.UMI)
+    assert safety_check_eval(args.cell)
     # queues for communication between processes
     Qfq = mp.Queue()  # FASTQ reads from process_fastq->process_combinatorial
     Qres = mp.Queue()  # extracted BCs from process_combinatorial->collector
@@ -482,7 +486,7 @@ def main_combinatorial(args):
                             args=(Qfq, args))
     
     dispatcher.start()
-    logging.info("MAIN: started dispatch")
+    logging.info("Started dispatch")
 
     # workers consume chunks of FASTQ from Qfq, 
     # process them, and put the results in Qres
@@ -494,18 +498,18 @@ def main_combinatorial(args):
         w.start()
         workers.append(w)
 
-    logging.info("MAIN: started workers")
+    logging.info("Started workers")
     collector = mp.Process(target=process_ordered_results,
                            name="output",
                            args=(Qres,))
     collector.start()
-    logging.info("MAIN: started collector")
+    logging.info("Started collector")
     # wait until all sequences have been thrown onto Qfq
     dispatcher.join()
-    logging.info(f"dispatcher has exited. And all reads have been removed from the queue.")
+    logging.info("The dispatcher exited and all reads have been consumed.")
 
     # signal all workers to finish
-    logging.info("signalling all workers to finish")
+    logging.info("Signalling all workers to finish")
     for n in range(args.parallel):
         Qfq.put(None)  # each worker consumes exactly one None
 
@@ -514,17 +518,21 @@ def main_combinatorial(args):
         # workers to exit.
         w.join()
 
-    logging.info("all worker processes have joined. Signalling collector to finish")
+    logging.info("All worker processes have joined. Signalling collector to finish.")
     # signal the collector to stop
     Qres.put(None)
 
     # and wait until all output has been generated 
     collector.join()
-    logging.info("collector has joined. Merging worker statistics")
+    logging.info("Collector has joined. Merging worker statistics.")
 
     N = count_dict_sum(Ns)
-    logging.info(f"Run completed. Overall combinatorial barcode assignment "
-                 f"rate was {100.0 * N['called']/N['total']}")
+    if N['total']:
+        logging.info(f"Run completed. Overall combinatorial barcode assignment "
+                    f"rate was {100.0 * N['called']/N['total']}")
+    else:
+        logging.error("No reads were processed!")
+
     if args.update_cache:
         qcount1 = count_dict_sum(qcounts1)
         qcount2 = count_dict_sum(qcounts2)
@@ -538,13 +546,13 @@ def main_combinatorial(args):
         bccount2 = count_dict_sum(bccounts2)
         with open(args.save_stats, 'w') as f:
             for k, v in sorted(N.items()):
-                f.write(f"freq\t{k}\t{v}\t{100.0 * v/N['total']:.2f}\n")
+                f.write(f"freq\t{k}\t{v}\t{100.0 * v/N.get('total', 1):.2f}\n")
 
             for k, v in sorted(bccount1.items()):
-                f.write(f"BC1\t{k}\t{v}\t{100.0 * v/N['total']:.2f}\n")
+                f.write(f"BC1\t{k}\t{v}\t{100.0 * v/bccount1.get('total', 1):.2f}\n")
 
             for k, v in sorted(bccount2.items()):
-                f.write(f"BC2\t{k}\t{v}\t{100.0 * v/N['total']:.2f}\n")
+                f.write(f"BC2\t{k}\t{v}\t{100.0 * v/bccount2.get('total', 1):.2f}\n")
 
 
 def main_dropseq(args):
@@ -577,7 +585,7 @@ def test_bam_out():
 
 
 if __name__ == '__main__':
-    test_bam_out()
+    # test_bam_out()
     parser = argparse.ArgumentParser(description='Convert combinatorial barcode read1 sequences to Dropseq pipeline compatible read1 FASTQ')
     parser.add_argument("--read1", default="/dev/stdin", help="source from where to get read1 (FASTQ format)")
     parser.add_argument("--read2", default="", help="source from where to get read2 (FASTQ format)")
