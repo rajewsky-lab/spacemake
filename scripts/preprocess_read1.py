@@ -562,7 +562,22 @@ def main_dropseq(args):
     return N
 
 
+def test_bam_out():
+    import pysam
+    header = { 'HD': {'VN': '1.0'}, }
+    with pysam.AlignmentFile("testbam.bam", "wbu", header=header) as outf:
+        a = pysam.AlignedSegment()
+        a.query_name = "read_28833_29006_6945"
+        a.query_sequence = "AGCTTAGCTAGCTACCTATATCTTGGTCTTGGCCG"
+        a.flag = 4
+        a.query_qualities = pysam.qualitystring_to_array("<<<<<<<<<<<<<<<<<<<<<:<9/,&,22;;<<<")
+        a.tags = (("UMI", 1),
+                  ("RG", "L1"))
+        outf.write(a)
+
+
 if __name__ == '__main__':
+    test_bam_out()
     parser = argparse.ArgumentParser(description='Convert combinatorial barcode read1 sequences to Dropseq pipeline compatible read1 FASTQ')
     parser.add_argument("--read1", default="/dev/stdin", help="source from where to get read1 (FASTQ format)")
     parser.add_argument("--read2", default="", help="source from where to get read2 (FASTQ format)")

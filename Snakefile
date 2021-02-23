@@ -36,7 +36,6 @@ repo_dir = os.path.dirname(workflow.snakefile)
 
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
-print(config['illumina_projects'][0]['barcode_flavor'])
 microscopy_root = '/data/rajewsky/slideseq_microscopy'
 microscopy_raw = microscopy_root + '/raw'
 
@@ -445,6 +444,15 @@ rule zcat_pipe:
     output: pipe("{name}.fastq")
     shell: "zcat {input} >> {output}"
 
+
+def preprocessing_threads(wildcards):
+    bc = get_barcode_flavor_info(wildcards)
+    if bc.bc1_ref:
+        return 12
+    else:
+        return 1
+
+
 rule reverse_first_mate:
     input:
         R1=raw_reads_mate_1,
@@ -455,17 +463,19 @@ rule reverse_first_mate:
         bc=lambda wildcards: get_barcode_flavor_info(wildcards)
     output:
         reverse_reads_mate_1
-    threads: 4  # 2 gzip decompress->1 python->1 gzip compress
+    threads: preprocessing_threads
+    # 2 gzip decompress->up to 12 python->1 gzip compress
     shell:
         "python {repo_dir}/scripts/preprocess_read1.py "
         "--read1={input.R1_unpacked} "
         "--read2={input.R2_unpacked} "
+        "--parallel={threads} "
         "--bc1-ref={params.bc.bc1_ref} "
         "--bc2-ref={params.bc.bc2_ref} "
         "--bc1-cache={params.bc.bc1_cache} "
         "--bc2-cache={params.bc.bc2_cache} "
         "--threshold={params.bc.score_threshold} "
-        "--cell-bc='{params.bc.cell_bc}' "
+        "--cell='{params.bc.cell_bc}' "
         "--UMI='{params.bc.UMI}' | gzip > {output} "
 
 rule reverse_second_mate:
