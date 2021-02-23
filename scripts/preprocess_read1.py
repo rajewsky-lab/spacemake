@@ -19,7 +19,7 @@ def read_fq(fname):
         yield name.rstrip(), seq.rstrip(), qual.rstrip()
 
 
-def read_source():
+def read_source(args):
     if args.read2 and ("r2" in args.cell or "r2" in args.UMI):
         for (id1, seq1, qual1), (id2, seq2, qual2) in zip(read_fq(args.read1), read_fq(args.read2)):
             assert id1.split()[0] == id2.split()[0]
@@ -167,13 +167,6 @@ class TieBreaker:
         else:
             return results[i], queries[i]
 
-    def store_cache(self, fname, mincount=2):
-        with open(fname, 'w') as f:
-            for query in sorted(self.cache.keys(), key=lambda x: x[0] if len(x) else x):
-                if self.query_count[query] >= mincount:
-                    name, seq, score = self.cache[query]
-                    f.write(f"{query}\t{seq}\t{name}\t{score}\t{self.query_count[query]}\n")
-
     def load_cache(self, fname):
         self.logger.info(f"pre-populating alignment cache from '{fname}'")
         if fname:
@@ -188,7 +181,16 @@ class TieBreaker:
         self.logger.info(f"loaded {len(self.cache)} queries.")
 
 
-def output(rname, cell=None, UMI=None, bc1=None, bc2=None, qual="E", r1="", r2=""):
+def store_cache(fname, cache, query_count, mincount=2):
+    with open(fname, 'w') as f:
+        print(cache.keys())
+        for query in sorted(cache.keys()):
+            if query_count[query] >= mincount:
+                name, seq, score = cache[query]
+                f.write(f"{query}\t{seq}\t{name}\t{score}\t{query_count[query]}\n")
+
+
+def output(args, rname, cell=None, UMI=None, bc1=None, bc2=None, qual="E", r1="", r2=""):
     if bc1 is None:
         bc1 = args.na
 
@@ -203,7 +205,7 @@ def output(rname, cell=None, UMI=None, bc1=None, bc2=None, qual="E", r1="", r2="
     # print(bc1, bc2)
     # print(args.template)
     # print(seq)
-    print(f"{rname}\n{seq}\n+\n{qual*len(seq)}")
+    return f"{rname}\n{seq}\n+\n{qual*len(seq)}"
 
 
 def report_stats(N, prefix=""):
@@ -300,13 +302,101 @@ def opseq_local_align(seq, opseq="GAATCACGATACGTACACCAGT", min_opseq_score=22):
     return res, tstart, tend
 
 
-def map_opseq(fq):
-    fqid, seq1, seq2 = fq
-    res, tstart, tend = opseq_local_align(seq1.rstrip(), opseq=args.opseq, min_opseq_score=args.min_opseq_score)
-    return fqid, seq1, seq2, res, tstart, tend
+def queue_iter(queue, stop_item=None):
+    """
+    Small generator/wrapper around multiprocessing.Queue allowing simple
+    for-loop semantics: 
+    
+        for item in queue_iter(queue):
+            ...
+    """
+    # logging.debug(f"queue_iter({queue})")
+    while True:
+        item = queue.get()
+        if item == stop_item:
+            # signals end->exit
+            break
+        else:
+            # logging.debug(f"queue_iter->item {item}")
+            yield item
 
 
-def main_combinatorial(args):
+def process_ordered_results(res_queue):
+    import heapq
+    import time
+    heap = []
+    n_chunk_needed = 0
+    t0 = time.time()
+    t1 = t0
+    n_rec = 0
+
+    logger = logging.getLogger('ordered_results')
+
+    for n_chunk, results in queue_iter(res_queue):
+        heapq.heappush(heap, (n_chunk, results) )
+
+        # as long as the root of the heap is the next needed chunk
+        # pass results on to storage
+        while(heap and (heap[0][0] == n_chunk_needed)):
+            n_chunk, results = heapq.heappop(heap)  # retrieves heap[0]
+            for data in results:
+                print(data)
+                n_rec += 1
+
+            n_chunk_needed += 1
+
+        # debug output on average throughput
+        t2 = time.time()
+        if t2-t1 > 30:
+            dT = t2 - t0
+            rate = n_rec/dT
+            logger.info("processed {0} reads in {1:.0f} seconds (average {2:.3f} records/second).".format(n_rec, dT, rate) )
+            t1 = t2
+
+    # by the time None pops from the queue, all chunks 
+    # should have been processed!
+    assert len(heap) == 0
+
+    dT = time.time() - t0
+    logger.info("finished processing {0} reads in {1:.0f} seconds (average {2:.3f} records/second)".format(n_rec, dT, n_rec/dT) )
+
+
+def chunkify(src, n_chunk=100):
+    chunk = []
+    n = 0
+    for x in src:
+        chunk.append(x)
+        if len(chunk) >= n_chunk:
+            yield n, chunk
+            n += 1
+            chunk = []
+
+    if chunk:
+        yield n, chunk
+
+
+def process_fastq(Qfq, args):
+    """
+    reads from two fastq files, groups the input into chunks for
+    faster parallel processing, and puts these on a mp.Queue()
+    """
+    for chunk in chunkify(read_source(args)):
+        logging.debug(f"placing {chunk[0]} {len(chunk[1])} in queue")
+        Qfq.put(chunk)
+
+    logging.debug("exiting process_fastq")
+
+
+def count_dict_add(src, dst):
+    for k, v in src.items():
+        if k in dst:
+            dst[k] += v
+        else:
+            dst[k] = v
+
+
+def process_combinatorial(Qfq, Qres, args, stat_dicts):  #, bc1_cache, bc2_cache, bc1_query_counts, bc2_query_counts):
+    logging.debug(f"process_combinatorial starting up with Qfq={Qfq}, Qres={Qres} and args={args}")
     bc1_matcher = TieBreaker(args.bc1_ref, place="left")
     bc2_matcher = TieBreaker(args.bc2_ref, place="right")
     bc1_matcher.load_cache(args.bc1_cache)
@@ -314,19 +404,24 @@ def main_combinatorial(args):
     lopseq = len(args.opseq)
 
     N = defaultdict(int)
-    with mp.Pool(args.parallel) as pool:
-        # iterate query sequences
-        for n, (fqid, r1, r2, res, tstart, tend) in enumerate(pool.imap(map_opseq, read_source(), chunksize=1000)):
+    for n_chunk, reads in queue_iter(Qfq):
+        logging.debug(f"received chunk {n_chunk} of {len(reads)} reads")
+        results = []
+        for fqid, r1, r2 in reads:
             N['total'] += 1
+            # align opseq sequence to seq of read1
+            aln = opseq_local_align(r1.rstrip(), opseq=args.opseq, 
+                                    min_opseq_score=args.min_opseq_score)
+            res, tstart, tend = aln
             if res is None:
                 N['opseq_broken'] += 1
-                output(fqid, r1=r1, r2=r2)
+                results.append(output(args, fqid, r1=r1, r2=r2))
                 continue
 
+            # identify barcodes
             bc1, BC1, ref1, score1 = match_BC1(bc1_matcher, res.seqB, res.start, tstart, N)
             bc2, BC2, ref2, score2 = match_BC2(bc2_matcher, res.seqB, res.end, tend, N,
                                                lopseq=lopseq)
-
             # slo = sQSeq.lower()
             # sout = slo[:qstart] + sQSeq[qstart:qend] + slo[qend:]
             # print(sout, qstart, qend, tstart, tend, bc1, bc2)
@@ -336,25 +431,94 @@ def main_combinatorial(args):
             if BC1 != NO_CALL and BC2 != NO_CALL:
                 N["called"] += 1
 
-            output(fqid, bc1=BC1, bc2=BC2, r1=r1, r2=r2)
-            # print(sQId, sQSeq.rstrip(), "score", score, "target_begin:", tstart, "target_end", tend, "query_begin", qstart, "query_end", qend, sQSeq[qstart:qend], "bc1", bc1, "BC1", BC1, "score=", score1, "bc2", bc2, "BC2", BC2, "score=", score2)
+            results.append(output(args, fqid, bc1=BC1, bc2=BC2, r1=r1, r2=r2))
 
-            if n and n % 100000 == 0:
-                N['BC1_cache_hit'] = bc1_matcher.n_hit
-                N['BC2_cache_hit'] = bc2_matcher.n_hit
-                report_stats(N)
+        Qres.put((n_chunk, results))
 
     N['BC1_cache_hit'] = bc1_matcher.n_hit
     N['BC2_cache_hit'] = bc2_matcher.n_hit
+
+    logging.info("synchronizing cache and counts")
+    # add our counts and observations to the shared dictionaries
+    # via these proxies
+    N_main, qcache1, qcache2, qcount1, qcount2, bccount1, bccount2 = stat_dicts
+    count_dict_add(N, N_main)
+    qcache1.update(bc1_matcher.cache)
+    qcache2.update(bc2_matcher.cache)
+    count_dict_add(bc1_matcher.query_count, qcount1)
+    count_dict_add(bc2_matcher.query_count, qcount2)
+    count_dict_add(bc1_matcher.bc_count, bccount1)
+    count_dict_add(bc2_matcher.bc_count, bccount2)
+
+
+def main_combinatorial(args):
+    # queues for communication between processes
+    Qfq = mp.Queue()  # FASTQ reads from process_fastq->process_combinatorial
+    Qres = mp.Queue()  # extracted BCs from process_combinatorial->collector
+
+    # Proxy objects to allow workers to report statistics about the run    
+    manager = mp.Manager()
+    qcache1 = manager.dict()
+    qcache2 = manager.dict()
+    qcount1 = manager.dict()
+    qcount2 = manager.dict()
+    bccount1 = manager.dict()
+    bccount2 = manager.dict()
+    N = manager.dict()
+    stat_dicts = [N, qcache1, qcache2, qcount1, qcount2, bccount1, bccount2]
+    # read FASTQ in chunks and put them in Qfq
+    dispatcher = mp.Process(target=process_fastq,
+                            name="dispatcher",
+                            args=(Qfq, args))
+    
+    dispatcher.start()
+    logging.debug("MAIN: started dispatch")
+
+    # workers consume chunks of FASTQ from Qfq, 
+    # process them, and put the results in Qres
+    workers = []
+    for i in range(args.parallel):
+        w = mp.Process(target=process_combinatorial,
+                       name=f"worker_{i}",
+                       args=(Qfq, Qres, args, stat_dicts))
+        w.start()
+        workers.append(w)
+
+    logging.debug("MAIN: started workers")
+    collector = mp.Process(target=process_ordered_results,
+                           name="output",
+                           args=(Qres,))
+    collector.start()
+    logging.debug("MAIN: started collector")
+    # wait until all sequences have been thrown onto Qfq
+    dispatcher.join()
+    logging.debug(f"dispatcher has exited. And all objects have been removed from the queue {Qfq.qsize()}")
+
+    # signal all workers to finish
+    logging.debug("signalling all workers to finish")
+    for n in range(args.parallel):
+        Qfq.put(None)  # each worker consumes exactly one None
+
+    for w in workers:
+        # make sure all results are on Qres by waiting for 
+        # workers to exit.
+        w.join()
+
+    logging.debug("all worker processes have joined. Signalling collector to finish")
+    # signal the collector to stop
+    Qres.put(None)
+
+    # and wait until all output has been generated 
+    collector.join()
+    logging.debug("collector has joined")
+
     report_stats(N)
-
     if args.update_cache:
-        bc1_matcher.store_cache(args.bc1_cache)
-        bc2_matcher.store_cache(args.bc2_cache)
+        store_cache(args.bc1_cache, qcache1, qcount1)
+        store_cache(args.bc2_cache, qcache2, qcount2)
 
-    # report_stats(bc1_matcher.bc_count, prefix="BC1\t")
-    # report_stats(bc2_matcher.bc_count, prefix="BC2\t")
-    return N, bc1_matcher, bc2_matcher
+    # report_stats(bccount1, prefix="BC1\t")
+    # report_stats(bccount2, prefix="BC2\t")
 
 
 def main_dropseq(args):
@@ -363,7 +527,7 @@ def main_dropseq(args):
     # iterate query sequences
     for n, (fqid, r1, r2) in enumerate(read_source()):
         N['total'] += 1
-        output(fqid, r1=r1, r2=r2)
+        print(output(args, fqid, r1=r1, r2=r2))
 
         if n and n % 100000 == 0:
             report_stats(N)
