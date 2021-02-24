@@ -16,7 +16,7 @@ def compute_max_barcode_mismatch(indices):
                 max_mismatch = min(max_mismatch, math.ceil(hd/2)-1)
     return max_mismatch
 
-def read_sample_sheet(sample_sheet_path, flowcell_id, ip):
+def read_sample_sheet(sample_sheet_path, flowcell_id):
     with open(sample_sheet_path) as sample_sheet:
         ix = 0
         investigator = 'none'
@@ -50,13 +50,14 @@ def read_sample_sheet(sample_sheet_path, flowcell_id, ip):
     df['demux_dir'] = df['sample_sheet'].str.split('/').str[-1].str.split('.').str[0]
 
     # assign the barcode layout for each sample as pecified in the config.yaml
-    bcf = ip.get("barcode_flavor")
-    default_flavor = config["default_barcode_flavor"]
+    bcf = config["barcode_flavor"]
+    global_default = bcf.get("default", "dropseq")
 
-    def flavor_choice(sample_id):
-        return bcf.get(sample_id, default_flavor)
+    def flavor_choice(row):
+        project_default = bcf.get(row.project_id, global_default)
+        return bcf.get(row.sample_id, project_default)
 
-    df['barcode_flavor'] = df["sample_id"].map(flavor_choice)
+    df['barcode_flavor'] = df[["project_id", "sample_id"]].apply(flavor_choice, axis=1)
 
     return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
                'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'barcode_flavor', 'investigator', 'sequencing_date', 'experiment']]    
