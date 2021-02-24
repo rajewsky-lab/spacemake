@@ -359,7 +359,7 @@ def process_ordered_results(res_queue):
     logger.info("finished processing {0} reads in {1:.0f} seconds (average {2:.3f} reads/second)".format(n_rec, dT, n_rec/dT) )
 
 
-def chunkify(src, n_chunk=100):
+def chunkify(src, n_chunk=1000):
     chunk = []
     n = 0
     for x in src:
