@@ -3,7 +3,7 @@
 #########
 __version__ = '0.1.1'
 __author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
-__licence__ = 'GPL'
+__license__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
 ###########
@@ -42,7 +42,7 @@ microscopy_raw = microscopy_root + '/raw'
 illumina_projects = config['illumina_projects']
 
 # get the samples
-project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id'], ip) for ip in illumina_projects], ignore_index=True)
+project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in illumina_projects], ignore_index=True)
 
 # add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
 project_df = project_df.append(config['additional_illumina_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
@@ -444,7 +444,6 @@ rule zcat_pipe:
     output: pipe("{name}.fastq")
     shell: "zcat {input} >> {output}"
 
-
 def preprocessing_threads(wildcards):
     bc = get_barcode_flavor_info(wildcards)
     if bc.bc1_ref:
@@ -452,13 +451,11 @@ def preprocessing_threads(wildcards):
     else:
         return 1
 
-
 rule reverse_first_mate:
     input:
-        R1=raw_reads_mate_1,
-        R2=raw_reads_mate_2,
         R1_unpacked=raw_reads_mate_1.replace('fastq.gz', 'fastq'),
         R2_unpacked=raw_reads_mate_2.replace('fastq.gz', 'fastq')
+        # this implicitly depends on the raw reads via zcat_pipes
     params:
         bc=lambda wildcards: get_barcode_flavor_info(wildcards)
     output:
