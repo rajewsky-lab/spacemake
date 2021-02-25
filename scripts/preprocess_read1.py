@@ -566,7 +566,12 @@ def main_dropseq(args):
         if n and n % 100000 == 0:
             report_stats(N)
 
-    report_stats(N)
+    # report_stats(N)
+    if args.save_stats:
+        with open(args.save_stats, 'w') as f:
+            for k, v in sorted(N.items()):
+                f.write(f"freq\t{k}\t{v}\t{100.0 * v/N.get('total', 1):.2f}\n")
+
     return N
 
 
