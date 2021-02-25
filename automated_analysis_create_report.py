@@ -9,6 +9,7 @@ import yaml
 import scanpy as sc
 import numpy as np
 import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 from fpdf import FPDF
 import pickle
