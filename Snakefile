@@ -47,6 +47,9 @@ project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id'])
 
 # add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
 project_df = project_df.append(config['additional_illumina_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
+# moved barcode_flavor assignment here so that additional samples/projects are equally processed
+project_df = df_assign_bc_flavor(project_df)
+
 # print(project_df)
 # print(project_df.columns)
 # print(project_df['barcode_flavor'])
@@ -563,7 +566,7 @@ rule create_dge:
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
-        TMP_DIR={temp_dir}
+        TMP_DIR={temp_dir} \
         {params.dge_extra_params}
         """
 

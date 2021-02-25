@@ -50,6 +50,15 @@ def get_barcode_flavor(project_id, sample_id):
     return bc_flavor_data.samples.get(sample_id, project_default)
 
 
+def df_assign_bc_flavor(df):
+    # assign the barcode layout for each sample as specified in the config.yaml
+    def flavor_choice(row):
+        return get_barcode_flavor(row.project_id, row.sample_id)
+
+    df['barcode_flavor'] = df[["project_id", "sample_id"]].apply(flavor_choice, axis=1)
+    return df
+
+
 def get_bc_preprocess_settings(wildcards):
     """
     This function will return a dictionary of information
@@ -80,6 +89,7 @@ def get_bc_preprocessing_threads(wildcards):
         t = 1
     # print(f"no. threads {t} (bc={bc})")
     return t
+
 
 # all barcode flavor info from config.yaml 
 # is kept here for convenient lookup
@@ -137,14 +147,8 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     df['sample_sheet'] = sample_sheet_path
     df['demux_dir'] = df['sample_sheet'].str.split('/').str[-1].str.split('.').str[0]
 
-    # assign the barcode layout for each sample as specified in the config.yaml
-    def flavor_choice(row):
-        return get_barcode_flavor(row.project_id, row.sample_id)
-
-    df['barcode_flavor'] = df[["project_id", "sample_id"]].apply(flavor_choice, axis=1)
-
     return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
-               'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'barcode_flavor', 'investigator', 'sequencing_date', 'experiment']]    
+               'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'investigator', 'sequencing_date', 'experiment']]    
 
 
 def get_metadata(field, **kwargs):
