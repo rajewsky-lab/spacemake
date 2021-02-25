@@ -1,4 +1,7 @@
-root_dir: /data/rajewsky/projects/slide_seq
+root_dir: '/data/rajewsky/projects/slide_seq'
+microscopy_root: '/data/rajewsky/slideseq_microscopy'
+bin_dir: '/data/rajewsky/shared_bins'
+temp_dir: '/tmp'
 
 illumina_projects:
     # - sample_sheet: /scratch/home/tsztank/20191206_spatseq_smples3-4.csv
