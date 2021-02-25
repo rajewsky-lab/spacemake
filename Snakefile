@@ -563,7 +563,7 @@ rule create_dge:
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
-        TMP_DIR={config['temp_dir']}
+        TMP_DIR={temp_dir}
         {params.dge_extra_params}
         """
 
