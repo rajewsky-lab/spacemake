@@ -9,16 +9,23 @@ illumina_projects:
       flowcell_id: 210121_NB501326_0478_AHGKCFBGXG
 
 barcode_flavor: 
-    default: "dropseq"
-    sts_053_1: "drop_noUMI"
-    maria_organoids_ctrl_3: "drop_noUMI"
-    maria_organoids_ctrl_5: "drop_noUMI"
-    sts_067: "comb1"
-    sts_067_1: "drop_noUMI"
-    sts_067_1_reseq: "drop_noUMI"
-    sts_067_1_reseq2: "drop_noUMI"
-    sts_058: "drop_noUMI"
-    sts_070: "drop_noUMI"
+    dropseq: 'default'
+
+    drop_noUMI:
+        projects:
+            - sts_058
+            - sts_070
+        samples:
+            - sts_053_1
+            - sts_067_1
+            - sts_067_1_reseq
+            - sts_067_1_reseq2
+            - maria_organoids_ctrl_3
+            - maria_organoids_ctrl_5
+
+    comb1:
+        projects:
+            - sts_067
 
 additional_illumina_projects:
 

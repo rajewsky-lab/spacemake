@@ -1,3 +1,81 @@
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+
+def parse_barcode_flavors(config, bc_default_settings=dict(bc1_ref="", 
+                          bc2_ref="", score_threshold=0.0)):
+    """
+    Reads the 'barcode_flavor' top-level block of config.yaml as well 
+    as the corresponding block from 'knowledge'.
+    Gathers all mappings of project_id -> bc_flavor and sample_id -> bc_flavor
+    """
+    default_barcode_flavor = 'dropseq'
+    project_barcode_flavor = {}
+    sample_barcode_flavor = {}
+    preprocess_settings = {}
+    # print(config['barcode_flavor'])
+    for flavor, v in config['barcode_flavor'].items():
+        # for each flavor, also retrieve the configuration
+        # first make a copy of the default values
+        d = dict(bc_default_settings)  
+        d.update(config['knowledge']['barcode_flavor'][flavor])
+        preprocess_settings[flavor] = dotdict(d)
+
+        if v == 'default':
+            default_barcode_flavor = flavor
+            continue
+
+        for name in v.get("projects", []):
+            project_barcode_flavor[name] = flavor
+
+        for name in v.get("samples", []):
+            sample_barcode_flavor[name] = flavor
+
+    res = dotdict(dict(
+        default=default_barcode_flavor,
+        projects=project_barcode_flavor,
+        samples=sample_barcode_flavor,
+        preprocess_settings=preprocess_settings))
+
+    return res
+
+
+def get_barcode_flavor(project_id, sample_id):
+    default = bc_flavor_data.default
+    project_default = bc_flavor_data.projects.get(project_id, default)
+    return bc_flavor_data.samples.get(sample_id, project_default)
+
+
+def get_bc_preprocess_settings(wildcards):
+    """
+    This function will return a dictionary of information
+    on the read1 preprocessing, according to barcode_flavor
+    """
+    flavor = get_barcode_flavor(wildcards.project, wildcards.sample)
+    settings = bc_flavor_data.preprocess_settings[flavor]
+    # print(f"wc={wildcards}-> flavor={flavor} settings={settings}")
+    return settings
+
+
+def get_bc_preprocessing_threads(wildcards):
+    bc = get_bc_preprocess_settings(wildcards)
+    if bc.bc1_ref:
+        # perform multi-core opseq alignments
+        # 2 extra cores are needed for the zcat_pipes
+        t = workflow.cores - 2
+    else:
+        # just reversing + combining is single core
+        t = 1
+    # print(f"no. threads {t} (bc={bc})")
+    return t
+
+
+bc_flavor_data = parse_barcode_flavors(config)
+
+
 def hamming_distance(string1, string2):
     return sum(c1 != c2 for c1, c2 in zip(string1, string2))
 
@@ -50,12 +128,8 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     df['demux_dir'] = df['sample_sheet'].str.split('/').str[-1].str.split('.').str[0]
 
     # assign the barcode layout for each sample as pecified in the config.yaml
-    bcf = config["barcode_flavor"]
-    global_default = bcf.get("default", "dropseq")
-
     def flavor_choice(row):
-        project_default = bcf.get(row.project_id, global_default)
-        return bcf.get(row.sample_id, project_default)
+        return get_barcode_flavor(row.project_id, row.sample_id)
 
     df['barcode_flavor'] = df[["project_id", "sample_id"]].apply(flavor_choice, axis=1)
 
@@ -90,29 +164,6 @@ def get_species_info(wildcards):
         'genome': config['knowledge']['genomes'][species],
         'index': config['knowledge']['indices'][species]['star']
     }
-
-
-class dotdict(dict):
-    """dot.notation access to dictionary attributes"""
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
-
-
-bc_defaults = dict(bc1_ref="", bc2_ref="", score_threshold=0.0)
-def get_barcode_flavor_info(wildcards, defaults=bc_defaults):
-    # This function will return a dictionary of information
-    # on the read1 preprocessing, according to barcode_flavor
-    print(f"get_barcode_flavor_info {wildcards}")
-    flavor = get_metadata('barcode_flavor',
-                          project_id=wildcards.project,
-                          sample_id=wildcards.sample)
-
-    print(f"wc={wildcards} flavor->{flavor}")
-    d = dict(defaults)  # make a copy of the default values    
-    d.update(config['knowledge']['barcode_flavor'][flavor])
-    return dotdict(d)  # enable d.key access for convenience
-
 
 def get_rRNA_index(wildcards):
     species = get_metadata('species', project_id = wildcards.project,

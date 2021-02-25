@@ -444,24 +444,16 @@ rule zcat_pipe:
     output: pipe("{name}.fastq")
     shell: "zcat {input} >> {output}"
 
-def preprocessing_threads(wildcards):
-    bc = get_barcode_flavor_info(wildcards)
-    if bc.bc1_ref:
-        return 12
-    else:
-        return 1
-
 rule reverse_first_mate:
     input:
+        # these implicitly depend on the raw reads via zcat_pipes
         R1_unpacked=raw_reads_mate_1.replace('fastq.gz', 'fastq'),
         R2_unpacked=raw_reads_mate_2.replace('fastq.gz', 'fastq')
-        # this implicitly depends on the raw reads via zcat_pipes
     params:
-        bc=lambda wildcards: get_barcode_flavor_info(wildcards)
+        bc=lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
         reverse_reads_mate_1
-    threads: preprocessing_threads
-    # 2 gzip decompress->up to 12 python->1 gzip compress
+    threads: get_bc_preprocessing_threads
     shell:
         "python {repo_dir}/scripts/preprocess_read1.py "
         "--read1={input.R1_unpacked} "
