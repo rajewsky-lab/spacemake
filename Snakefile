@@ -32,11 +32,12 @@ include: 'snakemake_helper_functions.py'
 ###############
 # Global vars #
 ###############
+temp_dir = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
 
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
-microscopy_root = '/data/rajewsky/slideseq_microscopy'
+microscopy_root = config['microscopy_root']
 microscopy_raw = microscopy_root + '/raw'
 
 illumina_projects = config['illumina_projects']
@@ -123,17 +124,18 @@ reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
 ###############
 # Fastqc vars #
 ###############
+bin_dir = config['bin_dir']
 fastqc_root = raw_data_illumina + '/fastqc'
 fastqc_pattern = fastqc_root + '/{sample}_R{mate}_fastqc.{ext}'
-fastqc_command = '/data/rajewsky/shared_bins/FastQC-0.11.2/fastqc'
+fastqc_command = f'{bin_dir}/FastQC-0.11.2/fastqc'
 fastqc_ext = ['zip', 'html']
 
 ########################
 # UNIQUE PIPELINE VARS #
 ########################
 # set the tool script directories
-picard_tools = '/data/rajewsky/shared_bins/picard-tools-2.21.6/picard.jar'
-dropseq_tools = '/data/rajewsky/shared_bins/Drop-seq_tools-2.3.0'
+picard_tools = f'{bin_dir}/picard-tools-2.21.6/picard.jar'
+dropseq_tools = f'{bin_dir}/Drop-seq_tools-2.3.0'
 
 # set per sample vars
 dropseq_root = processed_data_illumina + '/complete_data'
@@ -447,25 +449,27 @@ rule zcat_pipe:
 rule reverse_first_mate:
     input:
         # these implicitly depend on the raw reads via zcat_pipes
-        R1_unpacked=raw_reads_mate_1.replace('fastq.gz', 'fastq'),
-        R2_unpacked=raw_reads_mate_2.replace('fastq.gz', 'fastq')
+        R1_unpacked = raw_reads_mate_1.replace('fastq.gz', 'fastq'),
+        R2_unpacked = raw_reads_mate_2.replace('fastq.gz', 'fastq')
     params:
-        bc=lambda wildcards: get_bc_preprocess_settings(wildcards)
+        bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
-        reverse_reads_mate_1
+        read1_out = reverse_reads_mate_1,
+        bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     threads: get_bc_preprocessing_threads
     shell:
         "python {repo_dir}/scripts/preprocess_read1.py "
         "--read1={input.R1_unpacked} "
         "--read2={input.R2_unpacked} "
         "--parallel={threads} "
+        "--save-stats={output.bc_stats} "
         "--bc1-ref={params.bc.bc1_ref} "
         "--bc2-ref={params.bc.bc2_ref} "
         "--bc1-cache={params.bc.bc1_cache} "
         "--bc2-cache={params.bc.bc2_cache} "
         "--threshold={params.bc.score_threshold} "
         "--cell='{params.bc.cell_bc}' "
-        "--UMI='{params.bc.UMI}' | gzip > {output} "
+        "--UMI='{params.bc.UMI}' | gzip > {output.read1_out} "
 
 rule reverse_second_mate:
     input:
@@ -559,6 +563,7 @@ rule create_dge:
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
+        TMP_DIR={config['temp_dir']}
         {params.dge_extra_params}
         """
 
