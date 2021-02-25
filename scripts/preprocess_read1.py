@@ -570,7 +570,7 @@ def main_dropseq(args):
     return N
 
 
-def test_bam_out():
+def test_bam_out(cell="AAAAAACCCCCC", UMI="12345678", RG="A"):
     import pysam
     header = { 'HD': {'VN': '1.0'}, }
     with pysam.AlignmentFile("testbam.bam", "wbu", header=header) as outf:
@@ -579,8 +579,9 @@ def test_bam_out():
         a.query_sequence = "AGCTTAGCTAGCTACCTATATCTTGGTCTTGGCCG"
         a.flag = 4
         a.query_qualities = pysam.qualitystring_to_array("<<<<<<<<<<<<<<<<<<<<<:<9/,&,22;;<<<")
-        a.tags = (("UMI", 1),
-                  ("RG", "L1"))
+        a.tags = (("XM", UMI),
+                  ("RG", RG),
+                  ("XC", cell))
         outf.write(a)
 
 
