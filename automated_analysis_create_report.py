@@ -46,7 +46,7 @@ else:
 
 pc_components = [','.join([a,b]) for a, b in zip(pcs[::2], pcs[1::2])] 
 
-if pcs == []:
+if pcs == [] or pc_components == []:
     plt.plot()
     plt.savefig(figures_root + '/pca_first_components' + figures_suffix)
     plt.close()

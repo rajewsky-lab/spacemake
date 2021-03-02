@@ -38,6 +38,19 @@ additional_illumina_projects:
       species: mouse
       R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_030_4_R1.fastq.gz
       R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_030_4_R2.fastq.gz
+    - project_id: test_001
+      sample_id: test_001_1
+      puck_id: NoOptical
+      species: human
+      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R1.fastq.gz
+      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R2.fastq.gz
+    - project_id: test_001
+      sample_id: test_001_2
+      puck_id: NoOptical
+      species: mouse
+      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R1.fastq.gz
+      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R2.fastq.gz
+
 
 # downsample and saturation analysis
 downsample: 
