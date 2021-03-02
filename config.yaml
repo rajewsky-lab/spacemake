@@ -101,11 +101,13 @@ knowledge:
 
     barcode_flavor:
         dropseq:
-            cell_bc: "r1[8:20][::-1]"
+            cell: "r1[8:20][::-1]"
             UMI: "r1[0:8]"
+            bam_tags: "CR:{cell},MI:{UMI}"
         drop_noUMI:
-            cell_bc: "r1[0:12][::-1]"
+            cell: "r1[0:12][::-1]"
             UMI: "r2[0:8]"
+            bam_tags: "CR:{cell},MI:{UMI}"
         comb1:
             segments: 2
             bc1_ref: "/data/rajewsky/projects/combbeads/two_segments/illumina/index_BC1_96.fa"
@@ -113,6 +115,7 @@ knowledge:
             bc1_cache: "/data/rajewsky/projects/combbeads/two_segments/illumina/bc1_cache.tsv"
             bc2_cache: "/data/rajewsky/projects/combbeads/two_segments/illumina/bc2_cache.tsv"
             score_threshold: 0.5
-            cell_bc: "bc1[-6:][::-1]+bc2[-6:][::-1]"
+            cell: "BC1[::-1][0:6]+BC2[::-1][0:6]"
+            cell_raw: bc1[::-1]+"_"+bc2[::-1]
             UMI: "r2[0:8]"
-
+            bam_tags: "CR:{raw},CB:{cell},MI:{UMI},RG:{assigned}"

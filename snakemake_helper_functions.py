@@ -7,7 +7,8 @@ class dotdict(dict):
 
 
 def parse_barcode_flavors(config, bc_default_settings=dict(bc1_ref="", 
-                          bc2_ref="", score_threshold=0.0)):
+                          bc2_ref="", cell_raw="None", score_threshold=0.0,
+                          bam_tags="CR:{cell},MI:{UMI}")):
     """
     Reads the 'barcode_flavor' top-level block of config.yaml as well 
     as the corresponding block from 'knowledge'.

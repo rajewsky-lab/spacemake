@@ -69,67 +69,67 @@ rule merge_reads:
         rm -rf {params.tmp_dir}
         """
 
-rule tag_cells:
-    input:
-        rules.merge_reads.output
-    output:
-        pipe(dropseq_cell_tagged)
-    params:
-        reports_dir = dropseq_reports_dir
-    shell:
-        """
-        mkdir -p {params.reports_dir}
+# rule tag_cells:
+#     input:
+#         rules.merge_reads.output
+#     output:
+#         pipe(dropseq_cell_tagged)
+#     params:
+#         reports_dir = dropseq_reports_dir
+#     shell:
+#         """
+#         mkdir -p {params.reports_dir}
 
-        {dropseq_tools}/TagBamWithReadSequenceExtended SUMMARY={params.reports_dir}/tag_cells.summary.txt \
-            BASE_RANGE=1-12 \
-            BASE_QUALITY=10 \
-            BARCODED_READ=1 \
-            DISCARD_READ=false \
-            TAG_NAME=XC \
-            NUM_BASES_BELOW_QUALITY=1 \
-            INPUT={input} \
-            OUTPUT={output} \
-            COMPRESSION_LEVEL=0
-        """
+#         {dropseq_tools}/TagBamWithReadSequenceExtended SUMMARY={params.reports_dir}/tag_cells.summary.txt \
+#             BASE_RANGE=1-12 \
+#             BASE_QUALITY=10 \
+#             BARCODED_READ=1 \
+#             DISCARD_READ=false \
+#             TAG_NAME=XC \
+#             NUM_BASES_BELOW_QUALITY=1 \
+#             INPUT={input} \
+#             OUTPUT={output} \
+#             COMPRESSION_LEVEL=0
+#         """
 
-rule tag_umis:
-    input:
-        rules.tag_cells.output
-    output:
-        pipe(dropseq_umi_tagged)
-    params:
-        reports_dir = dropseq_reports_dir
-    shell:
-        """
-        {dropseq_tools}/TagBamWithReadSequenceExtended SUMMARY={params.reports_dir}/tag_umis.summary.txt \
-            BASE_RANGE=13-20 \
-            BASE_QUALITY=10 \
-            BARCODED_READ=1 \
-            DISCARD_READ=True \
-            TAG_NAME=XM \
-            NUM_BASES_BELOW_QUALITY=1 \
-            INPUT={input} \
-            OUTPUT={output} \
-            COMPRESSION_LEVEL=0
-        """
+# rule tag_umis:
+#     input:
+#         rules.tag_cells.output
+#     output:
+#         pipe(dropseq_umi_tagged)
+#     params:
+#         reports_dir = dropseq_reports_dir
+#     shell:
+#         """
+#         {dropseq_tools}/TagBamWithReadSequenceExtended SUMMARY={params.reports_dir}/tag_umis.summary.txt \
+#             BASE_RANGE=13-20 \
+#             BASE_QUALITY=10 \
+#             BARCODED_READ=1 \
+#             DISCARD_READ=True \
+#             TAG_NAME=XM \
+#             NUM_BASES_BELOW_QUALITY=1 \
+#             INPUT={input} \
+#             OUTPUT={output} \
+#             COMPRESSION_LEVEL=0
+#         """
 
-rule remove_xc_tag:
-    input:
-        rules.tag_umis.output
-    output:
-        pipe(dropseq_tagged_filtered)
-    shell:
-        """
-        {dropseq_tools}/FilterBam \
-            TAG_REJECT=XQ \
-            INPUT={input} \
-            OUTPUT={output} \
-            COMPRESSION_LEVEL=0
-        """
+# rule remove_xc_tag:
+#     input:
+#         rules.tag_umis.output
+#     output:
+#         pipe(dropseq_tagged_filtered)
+#     shell:
+#         """
+#         {dropseq_tools}/FilterBam \
+#             TAG_REJECT=XQ \
+#             INPUT={input} \
+#             OUTPUT={output} \
+#             COMPRESSION_LEVEL=0
+#         """
 
 rule remove_smart_adapter:
     input:
-        rules.remove_xc_tag.output
+        dropseq_umi_tagged  # rules.remove_xc_tag.output
     output:
         pipe(dropseq_tagged_filtered_trimmed)
     params:
