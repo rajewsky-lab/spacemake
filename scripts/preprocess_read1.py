@@ -192,24 +192,6 @@ def store_cache(fname, cache, query_count, mincount=2):
                 f.write(f"{query}\t{seq}\t{name}\t{score}\t{query_count[query]}\n")
 
 
-# def output(args, rname, cell=None, UMI=None, bc1=None, bc2=None, qual="E", r1="", r2=""):
-#     if bc1 is None:
-#         bc1 = args.na
-
-#     if bc2 is None:
-#         bc2 = args.na
-
-#     # slightly concerned about security here... perhaps replace
-#     # all () and ; with sth else?
-#     cell = eval(args.cell)
-#     UMI = eval(args.UMI)
-#     seq = args.template.format(**locals())
-#     # print(bc1, bc2)
-#     # print(args.template)
-#     # print(seq)
-#     return f"{rname}\n{seq}\n+\n{qual*len(seq)}"
-
-
 def report_stats(N, prefix=""):
     for k, v in sorted(N.items()):
         logging.info(f"{prefix}{k}\t{v}\t{100.0 * v/N['total']:.2f}")
@@ -331,8 +313,7 @@ def process_ordered_results(res_queue, args):
     n_rec = 0
 
     logger = logging.getLogger('ordered_results')
-    out = Output(args.output_format, args.assigned_out, args.unassigned_out,
-                 args.cell, args.UMI, bc_na=args.na)
+    out = Output(args)
 
     for n_chunk, results in queue_iter(res_queue):
         heapq.heappush(heap, (n_chunk, results) )
@@ -355,6 +336,7 @@ def process_ordered_results(res_queue, args):
             logger.info("processed {0} reads in {1:.0f} seconds (average {2:.3f} reads/second).".format(n_rec, dT, rate) )
             t1 = t2
 
+    out.close()
     # by the time None pops from the queue, all chunks 
     # should have been processed!
     assert len(heap) == 0
@@ -423,8 +405,12 @@ def process_combinatorial(Qfq, Qres, args, stat_lists):
             # fallback values for bc1/bc2 so that some BC diversity
             # is maintained for debugging purposes in case we can not 
             # assign a decent & unambiguous match
+            # lower case bc is for original, uncorrected sequence
             out_d['bc1'] = r1[:12]
             out_d['bc2'] = r2[-12:]
+            # upper case BC is for assigned, corrected sequence
+            out_d['BC1'] = args.na
+            out_d['BC2'] = args.na
 
             # align opseq sequence to seq of read1
             aln = opseq_local_align(r1.rstrip(), opseq=args.opseq,
@@ -444,12 +430,20 @@ def process_combinatorial(Qfq, Qres, args, stat_lists):
             # print(f"bc1: {bc1} -> {ref1} -> {BC1} score={50.0*score1/len(bc1):.1f} %")
             # print(f"bc2: {bc2} -> {ref2} -> {BC2} score={50.0*score2/len(bc2):.1f} %")
 
+            # best matching pieces of sequence
+            out_d['bc1'] = bc1
+            out_d['bc2'] = bc2
+            # best attempt at assignment
+            out_d['BC1'] = BC1
+            out_d['BC2'] = BC2
+
             if BC1 != NO_CALL and BC2 != NO_CALL:
                 N["called"] += 1
+                assigned = True
+            else: 
+                assigned = False
 
-            out_d['bc1'] = BC1
-            out_d['bc2'] = BC2
-            results.append((True, out_d))
+            results.append((assigned, out_d))
 
         Qres.put((n_chunk, results))
 
@@ -471,7 +465,7 @@ def process_combinatorial(Qfq, Qres, args, stat_lists):
 
 def main_combinatorial(args):
     # queues for communication between processes
-    Qfq = mp.Queue()  # FASTQ reads from process_fastq->process_combinatorial
+    Qfq = mp.Queue(args.parallel * 5)  # FASTQ reads from process_fastq->process_combinatorial
     Qres = mp.Queue()  # extracted BCs from process_combinatorial->collector
 
     # Proxy objects to allow workers to report statistics about the run    
@@ -561,8 +555,7 @@ def main_combinatorial(args):
 
 def main_dropseq(args):
     N = defaultdict(int)
-    out = Output(args.output_format, args.assigned_out, args.unassigned_out,
-                 args.cell, args.UMI, bc_na=args.na)
+    out = Output(args)
 
     # iterate query sequences
     for n, (qname, r1, r2_qname, r2, r2_qual) in enumerate(read_source(args)):
@@ -571,6 +564,8 @@ def main_dropseq(args):
 
         if n and n % 100000 == 0:
             report_stats(N)
+
+    out.close()
 
     # report_stats(N)
     if args.save_stats:
@@ -582,27 +577,34 @@ def main_dropseq(args):
 
 
 class Output:
-    def __init__(self, fmt, fassigned, funassigned, cell, UMI, qual="E", bc_na="AAAAAA"):
-        assert Output.safety_check_eval(cell)
-        assert Output.safety_check_eval(UMI)
-        self.cell = cell
-        self.UMI = UMI
-        self.fq_qual = qual
-        self.bc_na = bc_na
+    def __init__(self, args):
+        assert Output.safety_check_eval(args.cell_raw)
+        assert Output.safety_check_eval(args.cell)
+        assert Output.safety_check_eval(args.UMI)
+        self.cell_raw = args.cell_raw
+        self.cell = args.cell
+        self.UMI = args.UMI
 
-        if fmt == "fastq":
+        self.fq_qual = args.fq_qual
+        self.bc_na = args.na
+
+        self.tags = []
+        for tag in args.bam_tags.split(','):
+            self.tags.append(tag.split(':'))
+
+        if args.out_format == "fastq":
             fopen = lambda x: open(x, "w")
             self._write = self.write_fastq
-        elif fmt == "bam":
+        elif args.out_format == "bam":
             header = {'HD': {'VN': '1.0'}, }
             fopen = lambda x: pysam.AlignmentFile(x, "wbu", header=header)
             self._write = self.write_bam
         else:
-            raise ValueError(f"unsopported output format 'fmt'")
+            raise ValueError(f"unsopported output format '{args.out_format}'")
 
-        self.out_assigned = fopen(fassigned)
-        if funassigned != fassigned:
-            self.out_unassigned = fopen(funassigned)
+        self.out_assigned = fopen(args.out_assigned)
+        if args.out_unassigned != args.out_assigned:
+            self.out_unassigned = fopen(args.out_unassigned)
         else:
             self.out_unassigned = self.out_assigned
 
@@ -614,66 +616,83 @@ class Output:
         else:
             return True
 
-    def write_bam(self, out, qname="qname", cell="cell", UMI="UMI", r1="r1", r2="r2", r2_qual="r2_qual", r2_qname="r2_qname", RG="assigned", **kw):
+    def write_bam(self, out, **kw):
         # sys.stderr.write(f"r2_qual={r2_qual}\n")
         a = pysam.AlignedSegment()
-        a.query_name = r2_qname
-        a.query_sequence = r2
+        a.query_name = kw['r2_qname']
+        a.query_sequence = kw['r2']
         a.flag = 4
-        a.query_qualities = pysam.qualitystring_to_array(r2_qual)
-        a.tags = (("XM", UMI),
-                  ("XC", cell),
-                  ("RG", RG))
+        a.query_qualities = pysam.qualitystring_to_array(kw['r2_qual'])
+        a.tags = [(name, templ.format(**kw)) for name, templ in self.tags]
         out.write(a)
 
-    def write_fastq(self, out, qname="qname", cell="cell", UMI="umi", r1="r1", r2="r2", r2_qual="r2qual", r2_qname="r2_qname", RG="assigned", **kw):
-        seq = cell + UMI
+    def write_fastq(self, out, **kw):
+        seq = kw['cell'] + kw['UMI']
         qual = self.fq_qual * len(seq)
-        out.write(f"{qname}\n{seq}\n+\n{qual}\n")
+        out.write(f"{kw['qname']}\n{seq}\n+\n{qual}\n")
 
     def write(self, assigned=True, **kw):
-        kw['cell'], kw['UMI'] = self.format(**kw)
+        kw['raw'], kw['cell'], kw['UMI'] = self.format(**kw)
+        kw['assigned'] = "assigned" if assigned else "unassigned"
         if assigned:
-            self._write(self.out_assigned, RG="assigned", **kw)
+            self._write(self.out_assigned, **kw)
         else:
-            self._write(self.out_unassigned, RG="unassigned", **kw)
+            self._write(self.out_unassigned, **kw)
 
-    def format(self, qname="qname1", r2_qname="qname2", r2_qual="", bc1=None, bc2=None, r1="", r2="", **kw):
-        if bc1 is None:
-            bc1 = args.na
+    def format(self, qname="qname1", r2_qname="qname2", r2_qual="", bc1=None, bc2=None, BC1=None, BC2=None, r1="", r2="", **kw):
+        if BC1 is None:
+            BC1 = args.na
 
-        if bc2 is None:
-            bc2 = args.na
+        if BC2 is None:
+            BC2 = args.na
 
         # slightly concerned about security here... perhaps replace
         # all () and ; with sth else?
         cell = eval(self.cell)
+        raw = eval(self.cell_raw)
         UMI = eval(self.UMI)
-        return cell, UMI
+        return raw, cell, UMI
 
+    def close(self):
+        self.out_assigned.close()
+        self.out_unassigned.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Convert combinatorial barcode read1 sequences to Dropseq pipeline compatible read1 FASTQ')
     parser.add_argument("--read1", default="/dev/stdin", help="source from where to get read1 (FASTQ format)")
     parser.add_argument("--read2", default="", help="source from where to get read2 (FASTQ format)")
+    parser.add_argument("--cell", default="r1[8:20][::-1]")
+    parser.add_argument("--cell-raw", default="None")
+    parser.add_argument("--UMI", default="r1[0:8]")
+    parser.add_argument("--out-format", default="bam", choices=["fastq", "bam"], help="'bam' for tagged, unaligned BAM, 'fastq' for preprocessed read1 as FASTQ")
+    parser.add_argument("--out-assigned", default="/dev/stdout", help="output for successful assignments (default=/dev/stdout) ")
+    parser.add_argument("--out-unassigned", default="/dev/stdout", help="output for un-successful assignments (default=/dev/stdout) ")
+    parser.add_argument("--save-stats", default="preprocessing_stats.txt", help="store statistics in this file")
+    parser.add_argument("--na", default="NNNNNNNN", help="code for ambiguous or unaligned barcode")
+    parser.add_argument("--fq-qual", default="E", help="phred qual for assigned barcode bases in FASTQ output (default='E')")
+
+    # combinatorial barcode specific options
     parser.add_argument("--parallel", default=1, type=int, help="how many processes to spawn")
     parser.add_argument("--opseq", default="GAATCACGATACGTACACCAGT", help="opseq primer site sequence")
     parser.add_argument("--min-opseq-score", default=22, type=float, help="minimal score for opseq alignment (default 22 [half of max])")
-    parser.add_argument("--cell", default="r1[8:20][::-1]")
-    parser.add_argument("--UMI", default="r1[0:8]")
-    parser.add_argument("--template", default="{cell}{UMI}")
+    parser.add_argument("--threshold", default=0.5, type=float, help="score threshold for calling a match (rel. to max for a given length)")
     parser.add_argument("--bc1-ref", default="", help="load BC1 reference sequences from this FASTA")
-    parser.add_argument("--save-stats", default="preprocessing_stats.txt", help="store statistics in this file")
     parser.add_argument("--bc2-ref", default="", help="load BC2 reference sequences from this FASTA")
     parser.add_argument("--bc1-cache", default="", help="load cached BC1 alignments from here")
     parser.add_argument("--bc2-cache", default="", help="load cached BC2 alignments from here")
-    parser.add_argument("--assigned-out", default="/dev/stdout", help="output for successful assignments (default=/dev/stdout) ")
-    parser.add_argument("--unassigned-out", default="/dev/stdout", help="output for un-successful assignments (default=/dev/stdout) ")
-    parser.add_argument("--output-format", default="bam", choices=["fastq", "bam"], help="'bam' for tagged, unaligned BAM, 'fastq' for preprocessed read1 as FASTQ")
     parser.add_argument("--update-cache", default=False, action="store_true", help="update cache when run is complete (default=False)")
-    parser.add_argument("--threshold", default=0.75, type=float, help="score threshold for calling a match (rel. to max for a given length)")
-    parser.add_argument("--na", default="NNNNNNNN", help="code for ambiguous or unaligned barcode")
+    # parser.add_argument("--template", default="{cell}{UMI}")
+
+    # bam r2 tagging. SAM standard now supports CB=corrected cell barcode, CR=original cell barcode, and MI=molecule identifier/UMI
+    parser.add_argument("--bam-tags", default="CB:{cell},MI:{UMI},RG:{assigned}", help="raw, uncorrected cell barcode")
     args = parser.parse_args()
+    NO_CALL = args.na
+
+    if args.out_format == 'bam' and not args.read2:
+        raise ValueError("bam output format requires --read2 parameter")
+
+    if ("bc" in args.cell or "bc" in args.cell_raw) and not (args.bc1_ref and args.bc2_ref):
+        raise ValueError("bc1/2 are referenced in --cell or --cell-raw, but no reference barcodes are specified via --bc{{1,2}}-ref")
 
     logging.basicConfig(level=logging.INFO)
     logging.info(f"starting read1 preprocessing with {sorted(vars(args).items())}")
