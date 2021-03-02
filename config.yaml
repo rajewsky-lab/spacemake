@@ -88,8 +88,8 @@ knowledge:
 
     barcode_flavor:
         dropseq:
-            cell_bc: "r1[0:12][::-1]"
-            UMI: "r1[12:16]"
+            cell_bc: "r1[8:20][::-1]"
+            UMI: "r1[0:8]"
         drop_noUMI:
             cell_bc: "r1[0:12][::-1]"
             UMI: "r2[0:8]"
