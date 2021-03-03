@@ -16,13 +16,13 @@ dropseq_umi_tagged = dropseq_root + '/unaligned_tagged_umi.bam'
 dropseq_tagged_filtered = dropseq_root + '/unaligned_tagged_filtered.bam'
 
 # trim smart adapter from the reads
-dropseq_tagged_filtered_trimmed = dropseq_root + '/unaligned_tagged_filtered_trimmed.bam'
+dropseq_tagged_trimmed = dropseq_root + '/unaligned_tagged_trimmed.bam'
 
 # trim polyA overheang if exists
-dropseq_tagged_filtered_trimmed_polyA = dropseq_root + '/unaligned_tagged_filtered_trimmed_polyA.bam'
+dropseq_tagged_trimmed_polyA = dropseq_root + '/unaligned_tagged_trimmed_polyA.bam'
 
 # mapped reads
-dropseq_mapped_reads = dropseq_root + '/star_Aligned.out.bam'
+dropseq_mapped_reads = dropseq_root + '/star_Aligned.sortedByCord.out.bam'
 star_log_file = dropseq_root + '/star_Log.final.out'
 
 # final dropseq bfinal dropseq bam
@@ -34,25 +34,11 @@ dropseq_final_bam_ix = dropseq_final_bam + '.bai'
 ###################################################
 # Snakefile containing the dropseq pipeline rules #
 ###################################################
-rule remove_xc_tag:
-    input:
-        dropseq_umi_tagged
-    output:
-        pipe(dropseq_tagged_filtered)
-    shell:
-        """
-        {dropseq_tools}/FilterBam \
-            TAG_REJECT=XQ \
-            INPUT={input} \
-            OUTPUT={output} \
-            COMPRESSION_LEVEL=0
-        """
-
 rule remove_smart_adapter:
     input:
         dropseq_umi_tagged  # rules.remove_xc_tag.output
     output:
-        pipe(dropseq_tagged_filtered_trimmed)
+        pipe(dropseq_tagged_trimmed)
     params:
         reports_dir = dropseq_reports_dir
     shell:
@@ -68,9 +54,9 @@ rule remove_smart_adapter:
 
 rule remove_polyA:
     input:
-        rules.remove_smart_adapter.output
+        dropseq_tagged_trimmed
     output:
-        temporary(dropseq_tagged_filtered_trimmed_polyA)
+        temporary(dropseq_tagged_trimmed_polyA)
     params:
         reports_dir = dropseq_reports_dir
     shell:
@@ -85,7 +71,7 @@ rule remove_polyA:
 rule map_reads:
     input:
         unpack(get_species_info),
-        reads=dropseq_tagged_filtered_trimmed_polyA
+        reads=dropseq_tagged_trimmed_polyA
     output:
         reads=temporary(dropseq_mapped_reads),
         log=star_log_file
@@ -101,7 +87,7 @@ rule map_reads:
             --readFilesIn {input.reads} \
             --readFilesType SAM SE \
             --readFilesCommand samtools view \
-            --outSAMtype BAM Unsorted \
+            --outSAMtype BAM SortedByCoordinate \
             --outFileNamePrefix {params.star_prefix}
 
         rm -rf {params.tmp_dir}
