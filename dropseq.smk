@@ -38,6 +38,8 @@ rule remove_smart_adapter:
         reports_dir = dropseq_reports_dir
     shell:
         """
+        mkdir -p {params.reports_dir}
+
         {dropseq_tools}/TrimStartingSequence OUTPUT_SUMMARY={params.reports_dir}/remove_smart_adapter.report.txt \
             INPUT={input} \
             OUTPUT={output} \
