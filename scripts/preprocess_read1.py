@@ -20,7 +20,7 @@ NO_CALL = "NNNNNNNN"
 
 def read_fq(fname):
     for name, seq, _, qual in grouper(open(fname), 4):
-        yield name.rstrip(), seq.rstrip(), qual.rstrip()
+        yield name.rstrip()[1:], seq.rstrip(), qual.rstrip()
 
 
 def read_source(args):
@@ -640,7 +640,7 @@ class Output:
     def write_fastq(self, out, **kw):
         seq = kw['cell'] + kw['UMI']
         qual = self.fq_qual * len(seq)
-        out.write(f"{kw['qname']}\n{seq}\n+\n{qual}\n")
+        out.write(f"@{kw['qname']}\n{seq}\n+\n{qual}\n")
 
     def write(self, assigned=True, **kw):
         kw['raw'], kw['cell'], kw['UMI'] = self.format(**kw)
