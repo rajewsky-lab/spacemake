@@ -463,6 +463,7 @@ rule reverse_first_mate:
     threads: get_bc_preprocessing_threads
     shell:
         "python {repo_dir}/scripts/preprocess_read1.py "
+        "--sample={wildcards.sample} "
         "--read1={input.R1_unpacked} "
         "--read2={input.R2_unpacked} "
         "--parallel={threads} "
@@ -476,6 +477,7 @@ rule reverse_first_mate:
         "--cell-raw='{params.bc.cell_raw}' "
         "--out-format=bam "
         "--UMI='{params.bc.UMI}' "
+        "--bam-tags='{params.bc.bam_tags}' "
         "| samtools view -bh /dev/stdin > {output.bam} "
 
 rule reverse_second_mate:
