@@ -10,6 +10,8 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 # COMMON PIPELINE VARS #
 ########################
 
+dropseq_umi_tagged = dropseq_root + '/unaligned_tagged_umi.bam'
+
 # filter out XC tag
 dropseq_tagged_filtered = dropseq_root + '/unaligned_tagged_filtered.bam'
 
