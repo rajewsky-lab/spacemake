@@ -332,7 +332,8 @@ include: 'pacbio.smk'
 rule all:
     input:
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        get_final_output_files(reverse_reads_pattern, mate = [1,2]),
+        get_final_output_files(dropseq_umi_tagged),
+        # get_final_output_files(reverse_reads_pattern, mate = [1,2]),
         #get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued'])
         #get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6])
         #get_united_output_files(dge_all_summary),
@@ -457,7 +458,7 @@ rule reverse_first_mate:
     params:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
-        read1_out = reverse_reads_mate_1,
+        bam = dropseq_umi_tagged,
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     threads: get_bc_preprocessing_threads
     shell:
@@ -471,8 +472,11 @@ rule reverse_first_mate:
         "--bc1-cache={params.bc.bc1_cache} "
         "--bc2-cache={params.bc.bc2_cache} "
         "--threshold={params.bc.score_threshold} "
-        "--cell='{params.bc.cell_bc}' "
-        "--UMI='{params.bc.UMI}' | gzip > {output.read1_out} "
+        "--cell='{params.bc.cell}' "
+        "--cell-raw='{params.bc.cell_raw}' "
+        "--out-format=bam "
+        "--UMI='{params.bc.UMI}' "
+        "| samtools view -bh /dev/stdin > {output.bam} "
 
 rule reverse_second_mate:
     input:

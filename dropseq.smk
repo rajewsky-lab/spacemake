@@ -48,7 +48,7 @@ rule remove_xc_tag:
 
 rule remove_smart_adapter:
     input:
-        rules.remove_xc_tag.output
+        dropseq_umi_tagged  # rules.remove_xc_tag.output
     output:
         pipe(dropseq_tagged_filtered_trimmed)
     params:
