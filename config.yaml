@@ -103,11 +103,11 @@ knowledge:
         dropseq:
             cell: "r1[8:20][::-1]"
             UMI: "r1[0:8]"
-            bam_tags: "CR:{cell},MI:{UMI}"
+            bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
         drop_noUMI:
             cell: "r1[0:12][::-1]"
             UMI: "r2[0:8]"
-            bam_tags: "CR:{cell},MI:{UMI}"
+            bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
         comb1:
             segments: 2
             bc1_ref: "/data/rajewsky/projects/combbeads/two_segments/illumina/index_BC1_96.fa"
