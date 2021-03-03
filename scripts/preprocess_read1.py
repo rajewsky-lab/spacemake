@@ -630,7 +630,8 @@ class Output:
     def write_bam(self, out, **kw):
         # sys.stderr.write(f"r2_qual={r2_qual}\n")
         a = pysam.AlignedSegment()
-        a.query_name = kw['r2_qname']
+        # STAR does not like spaces in read names so we have to split
+        a.query_name = kw['r2_qname'].split()[0]
         a.query_sequence = kw['r2']
         a.flag = 4
         a.query_qualities = pysam.qualitystring_to_array(kw['r2_qual'])
@@ -668,6 +669,8 @@ class Output:
         self.out_assigned.close()
         self.out_unassigned.close()
 
+
+# def setup_logging()
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Convert combinatorial barcode read1 sequences to Dropseq pipeline compatible read1 FASTQ')
     parser.add_argument("--sample", default="NA", help="source from where to get read1 (FASTQ format)")
