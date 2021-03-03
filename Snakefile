@@ -572,6 +572,8 @@ rule create_dge:
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
+        CELL_BARCODE_TAG=CB \
+        MOLECULAR_BARCODE_TAG=MI \
         TMP_DIR={temp_dir} \
         {params.dge_extra_params}
         """
