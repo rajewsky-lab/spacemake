@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-import sys
+__version__ = "0.9"
+__author__ = ["Marvin Jens", ]
+__license__ = "GPL"
+__email__ = ['marvin.jens@mdc-berlin.de', ]
+
 import argparse
 import logging
 import timeit as ti
@@ -11,9 +15,7 @@ from collections import defaultdict
 from more_itertools import grouper
 from Bio import pairwise2
 from Bio import SeqIO
-from collections import namedtuple
-atype = namedtuple("atype", "seqA seqB score start end")
-NO_CALL="NNNNNNNN"
+NO_CALL = "NNNNNNNN"
 
 
 def read_fq(fname):
@@ -596,7 +598,16 @@ class Output:
             fopen = lambda x: open(x, "w")
             self._write = self.write_fastq
         elif args.out_format == "bam":
-            header = {'HD': {'VN': '1.0'}, }
+            header = {
+                'HD': {'VN': '1.6'},
+                'PG': [
+                    {'ID': "preprocess_read1.py", 'VN': __version__},
+                ],
+                'RG': [
+                    {'ID': 'A', 'SM': args.sample},
+                    {'ID': 'U', 'SM': f"unassigned_{args.sample}"},
+                ],
+            } 
             fopen = lambda x: pysam.AlignmentFile(x, "wbu", header=header)
             self._write = self.write_bam
         else:
@@ -633,7 +644,7 @@ class Output:
 
     def write(self, assigned=True, **kw):
         kw['raw'], kw['cell'], kw['UMI'] = self.format(**kw)
-        kw['assigned'] = "assigned" if assigned else "unassigned"
+        kw['assigned'] = "A" if assigned else "U"
         if assigned:
             self._write(self.out_assigned, **kw)
         else:
@@ -659,6 +670,7 @@ class Output:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Convert combinatorial barcode read1 sequences to Dropseq pipeline compatible read1 FASTQ')
+    parser.add_argument("--sample", default="NA", help="source from where to get read1 (FASTQ format)")
     parser.add_argument("--read1", default="/dev/stdin", help="source from where to get read1 (FASTQ format)")
     parser.add_argument("--read2", default="", help="source from where to get read2 (FASTQ format)")
     parser.add_argument("--cell", default="r1[8:20][::-1]")
