@@ -17,7 +17,7 @@ dropseq_tagged_trimmed = dropseq_root + '/unaligned_tagged_trimmed.bam'
 dropseq_tagged_trimmed_polyA = dropseq_root + '/unaligned_tagged_trimmed_polyA.bam'
 
 # mapped reads
-dropseq_mapped_reads = dropseq_root + '/star_Aligned.out.bam'
+dropseq_mapped_reads = dropseq_root + '/star_Aligned.sortedByCord.out.bam'
 star_log_file = dropseq_root + '/star_Log.final.out'
 
 # final dropseq bfinal dropseq bam
@@ -82,7 +82,7 @@ rule map_reads:
             --readFilesIn {input.reads} \
             --readFilesType SAM SE \
             --readFilesCommand samtools view \
-            --outSAMtype BAM Unsorted \
+            --outSAMtype BAM SortedByCoordinate \
             --outFileNamePrefix {params.star_prefix}
 
         rm -rf {params.tmp_dir}
