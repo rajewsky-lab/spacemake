@@ -22,7 +22,7 @@ dropseq_tagged_trimmed = dropseq_root + '/unaligned_tagged_trimmed.bam'
 dropseq_tagged_trimmed_polyA = dropseq_root + '/unaligned_tagged_trimmed_polyA.bam'
 
 # mapped reads
-dropseq_mapped_reads = dropseq_root + '/star_Aligned.sortedByCord.out.bam'
+dropseq_mapped_reads = dropseq_root + '/star_Aligned.sortedByCoord.out.bam'
 star_log_file = dropseq_root + '/star_Log.final.out'
 
 # final dropseq bfinal dropseq bam
