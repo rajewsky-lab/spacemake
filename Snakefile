@@ -40,13 +40,18 @@ project_dir = config['root_dir'] + '/projects/{project}'
 microscopy_root = config['microscopy_root']
 microscopy_raw = microscopy_root + '/raw'
 
-illumina_projects = config['illumina_projects']
+illumina_projects = config.get('illumina_projects', [])
 
-# get the samples
-project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in illumina_projects], ignore_index=True)
+if illumina_projects is not None:
+    # get the samples
+    project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in illumina_projects], ignore_index=True)
 
-# add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
-project_df = project_df.append(config['additional_illumina_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
+    # add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
+    project_df = project_df.append(config['additional_illumina_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
+
+else:
+    project_df = pd.DataFrame(config['additional_illumina_projects']).replace(np.nan, 'none', regex=True)
+
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
 project_df = df_assign_bc_flavor(project_df)
 

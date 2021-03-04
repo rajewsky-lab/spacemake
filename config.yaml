@@ -8,8 +8,8 @@ illumina_projects:
     #   flowcell_id: 191206_NS500648_0416_AHY3KYBGXC
     # - sample_sheet: /data/rajewsky/home/tsztank/200110_STS_017_4-7-8STS_018_1.csv
     #   flowcell_id: 200110_NS500648_0423_AHT5FHBGXC
-    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210121_sts_067_1_3_5_Maria_organoids_C2_V2_sample_sheet.csv
-      flowcell_id: 210121_NB501326_0478_AHGKCFBGXG
+    #    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210121_sts_067_1_3_5_Maria_organoids_C2_V2_sample_sheet.csv
+    #      flowcell_id: 210121_NB501326_0478_AHGKCFBGXG
 
 barcode_flavor: 
     dropseq: 'default'
