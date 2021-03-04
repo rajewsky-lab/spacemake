@@ -465,6 +465,8 @@ rule reverse_first_mate:
     output:
         bam = dropseq_umi_tagged,
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
+    log:
+        reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
     threads: get_bc_preprocessing_threads
     shell:
         "python {repo_dir}/scripts/preprocess_read1.py "
@@ -473,6 +475,7 @@ rule reverse_first_mate:
         "--read2={input.R2_unpacked} "
         "--parallel={threads} "
         "--save-stats={output.bc_stats} "
+        "--log-file={log} "
         "--bc1-ref={params.bc.bc1_ref} "
         "--bc2-ref={params.bc.bc2_ref} "
         "--bc1-cache={params.bc.bc1_cache} "
