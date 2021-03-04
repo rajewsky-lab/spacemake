@@ -531,7 +531,7 @@ rule get_barcode_readcounts:
         {dropseq_tools}/BamTagHistogram \
         I= {input} \
         O= {output}\
-        TAG=XC
+        TAG=CB
         """
 
 rule create_top_barcodes:
