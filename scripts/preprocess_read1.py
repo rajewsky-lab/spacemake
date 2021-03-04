@@ -18,6 +18,13 @@ from Bio import pairwise2
 from Bio import SeqIO
 NO_CALL = "NNNNNNNN"
 
+# TODO:
+# * add support for three segments
+# * turn Output into a context manager
+# * load params from YAML (code from opseq)
+# * save params to YAML in run-folder to document
+# * get rid of ugly global NO_CALL
+# * refactor into multiple modules?
 
 def read_fq(fname):
     for name, seq, _, qual in grouper(open(fname), 4):
@@ -344,8 +351,8 @@ def join_with_empty_queues(proc, Qs, abort_flag, timeout=1):
     """
     joins() a process that writes data to queues Qs w/o deadlock. 
     In case of an abort, the subproces normally would not join 
-    until the Qs are emptied. join_or_drain() monitors a global
-    abort flag and empties the Qs if needed, allowing the sub-process
+    until the Qs are emptied. join_with_empty_queues() monitors a global
+    abort flag and empties the queues if needed, allowing the sub-process
     to terminate properly.
     """
     def drain(Q):
@@ -368,8 +375,6 @@ def join_with_empty_queues(proc, Qs, abort_flag, timeout=1):
                 content.extend(drain(Q))
     
     return contents
-
-            
 
 
 def process_ordered_results(res_queue, args, Qerr, abort_flag):
@@ -603,7 +608,7 @@ def main_combinatorial(args):
 
         for w in workers:
             # make sure all results are on Qres by waiting for 
-            # workers to exit.
+            # workers to exit. Or, empty queues if aborting.
             qres, qerr = join_with_empty_queues(w, [Qres, Qerr], abort_flag)
             if qres or qerr:
                 el.logger.info(f"{len(qres)} chunks were drained from Qres upon abort.")
