@@ -753,16 +753,13 @@ if __name__ == '__main__':
     setup_logging(args)
 
     with ExceptionLogging('main'):
-        1/0
+        if args.out_format == 'bam' and not args.read2:
+            raise ValueError("bam output format requires --read2 parameter")
 
-    if args.out_format == 'bam' and not args.read2:
-        raise ValueError("bam output format requires --read2 parameter")
+        if ("bc" in args.cell or "bc" in args.cell_raw) and not (args.bc1_ref and args.bc2_ref):
+            raise ValueError("bc1/2 are referenced in --cell or --cell-raw, but no reference barcodes are specified via --bc{{1,2}}-ref")
 
-    if ("bc" in args.cell or "bc" in args.cell_raw) and not (args.bc1_ref and args.bc2_ref):
-        raise ValueError("bc1/2 are referenced in --cell or --cell-raw, but no reference barcodes are specified via --bc{{1,2}}-ref")
-
-
-    if args.bc1_ref and args.bc2_ref:
-        main_combinatorial(args)
-    else:
-        main_dropseq(args)
+        if args.bc1_ref and args.bc2_ref:
+            main_combinatorial(args)
+        else:
+            main_dropseq(args)
