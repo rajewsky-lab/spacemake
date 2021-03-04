@@ -6,7 +6,7 @@ __email__ = ['marvin.jens@mdc-berlin.de', ]
 
 import argparse
 import logging
-import timeit as ti
+import time
 import pandas as pd
 import numpy as np
 import pysam
@@ -670,7 +670,53 @@ class Output:
         self.out_unassigned.close()
 
 
-# def setup_logging()
+class ExceptionLogging:
+    def __init__(self, name, Qerr=None):
+        # print('__init__ called')
+        self.Qerr = Qerr
+        self.name = name
+        self.logger = logging.getLogger(name)
+        
+    def __enter__(self):
+        self.t0 = time.time()
+        # print('__enter__ called')
+        return self
+    
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        # print('__exit__ called')
+        self.t1 = time.time()
+        self.logger.info(f"CPU time: {self.t1 - self.t0:.3f} seconds.")
+        if exc_type:
+            import traceback
+            lines = "\n".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            self.logger.error("")
+            self.logger.error(f'an unhandled exception occurred')
+            for l in lines.split('\n'):
+                self.logger.error(l)
+
+            if self.Qerr is not None:
+                self.Qerr.put( (self.name, lines) )
+
+
+def setup_logging(args):
+    FORMAT = f'%(asctime)-20s\t%(levelname)s\t{args.sample}\t%(name)s\t%(message)s'
+    formatter = logging.Formatter(FORMAT)
+    lvl = getattr(logging, args.log_level, logging.INFO)
+    logging.basicConfig(level=lvl, format=FORMAT)
+
+    fh = logging.FileHandler(filename=args.log_file, mode='a')
+    fh.setFormatter(logging.Formatter(FORMAT))
+    root = logging.getLogger('')
+    root.addHandler(fh)
+
+    logging.info(f"starting raw read preprocessing run")
+    for k, v in sorted(vars(args).items()):
+        logging.info(f"option\t{k}={v}")
+
+    # TODO: store options in YAML for quick 
+    # re-run with same options
+    # {sorted(vars(args).items())}
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Convert combinatorial barcode read1 sequences to Dropseq pipeline compatible read1 FASTQ')
     parser.add_argument("--sample", default="NA", help="source from where to get read1 (FASTQ format)")
@@ -683,6 +729,8 @@ if __name__ == '__main__':
     parser.add_argument("--out-assigned", default="/dev/stdout", help="output for successful assignments (default=/dev/stdout) ")
     parser.add_argument("--out-unassigned", default="/dev/stdout", help="output for un-successful assignments (default=/dev/stdout) ")
     parser.add_argument("--save-stats", default="preprocessing_stats.txt", help="store statistics in this file")
+    parser.add_argument("--log-file", default="preprocessing_run.log", help="store all log messages in this file (default=None)")
+    parser.add_argument("--log-level", default="INFO", help="set sensitivity of the python logging facility (default=INFO)")
     parser.add_argument("--na", default="NNNNNNNN", help="code for ambiguous or unaligned barcode")
     parser.add_argument("--fq-qual", default="E", help="phred qual for assigned barcode bases in FASTQ output (default='E')")
 
@@ -702,6 +750,10 @@ if __name__ == '__main__':
     parser.add_argument("--bam-tags", default="CB:{cell},MI:{UMI},RG:{assigned}", help="raw, uncorrected cell barcode")
     args = parser.parse_args()
     NO_CALL = args.na
+    setup_logging(args)
+
+    with ExceptionLogging('main'):
+        1/0
 
     if args.out_format == 'bam' and not args.read2:
         raise ValueError("bam output format requires --read2 parameter")
@@ -709,14 +761,8 @@ if __name__ == '__main__':
     if ("bc" in args.cell or "bc" in args.cell_raw) and not (args.bc1_ref and args.bc2_ref):
         raise ValueError("bc1/2 are referenced in --cell or --cell-raw, but no reference barcodes are specified via --bc{{1,2}}-ref")
 
-    logging.basicConfig(level=logging.INFO)
-    logging.info(f"starting read1 preprocessing with {sorted(vars(args).items())}")
 
-    t1 = ti.default_timer()
     if args.bc1_ref and args.bc2_ref:
         main_combinatorial(args)
     else:
         main_dropseq(args)
-
-    t2 = ti.default_timer()
-    logging.info(f'CPU time: {t2 - t1:.3f} seconds\n')
