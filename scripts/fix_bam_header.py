@@ -33,7 +33,7 @@ def merge_headers(orig, star):
     merged = dict(orig)
     merged['PG'].extend(star['PG'])
     merged['SQ'] = star['SQ']
-    merged['HD']['SO'] = star['HD']['SO']  # sorted by
+    # merged['HD']['SO'] = star['HD']['SO']  # sorted by
 
     return merged
 
