@@ -30,6 +30,8 @@ barcode_flavor:
     comb1:
         projects:
             - sts_067
+        samples:
+            - test_002_1
 
 additional_illumina_projects:
     - project_id: test_030
@@ -50,6 +52,13 @@ additional_illumina_projects:
       species: mouse
       R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R1.fastq.gz
       R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R2.fastq.gz
+    - project_id: test_002
+      # derived from sts_067_5. Combinatorial bead v1 data
+      sample_id: test_002_1
+      puck_id: NoOptical
+      species: mouse
+      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_002_1_R1.fastq.gz
+      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_002_1_R2.fastq.gz
 
 
 # downsample and saturation analysis
