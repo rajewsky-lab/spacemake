@@ -8,6 +8,7 @@ import argparse
 import logging
 import time
 import os
+import sys
 import pandas as pd
 import numpy as np
 import pysam
@@ -698,7 +699,7 @@ class Output:
             header = {
                 'HD': {'VN': '1.6'},
                 'PG': [
-                    {'ID': prog, 'VN': __version__},
+                    {'ID': 0, 'PN': prog, 'CL': " ".join(sys.argv[1:]), 'VN': __version__},
                 ],
                 'RG': [
                     {'ID': 'A', 'SM': args.sample},
