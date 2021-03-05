@@ -58,7 +58,7 @@ rule remove_polyA:
     input:
         dropseq_tagged_trimmed
     output:
-        temporary(dropseq_tagged_trimmed_polyA)
+        temp(dropseq_tagged_trimmed_polyA)
     params:
         reports_dir = dropseq_reports_dir
     shell:
@@ -75,8 +75,8 @@ rule map_reads:
         unpack(get_species_info),
         reads=dropseq_tagged_trimmed_polyA
     output:
-        reads=temporary(dropseq_mapped_reads),
-        log=star_log_file
+        reads=temp(dropseq_mapped_reads),
+    log: star_log_file
     threads: 8
     params:
         tmp_dir = dropseq_tmp_dir,
@@ -89,8 +89,12 @@ rule map_reads:
             --readFilesIn {input.reads} \
             --readFilesType SAM SE \
             --readFilesCommand samtools view \
-            --outSAMtype BAM SortedByCoordinate \
-            --outFileNamePrefix {params.star_prefix}
+            --outSAMtype BAM Unsorted \
+            --outStd BAM_Unsorted \
+            --outFileNamePrefix {params.star_prefix} \
+            | python {repo_dir}/scripts/fix_bam_header.py {input.reads} \
+            | sambamba sort -m 4G -o /dev/stdout -t 4 /dev/stdin \
+            > {output.reads}
 
         rm -rf {params.tmp_dir}
         """
@@ -98,7 +102,7 @@ rule map_reads:
 rule tag_read_with_gene:
     input:
         unpack(get_species_info), 
-        reads=dropseq_mapped_reads
+        reads=rules.map_reads.output
     output:
         dropseq_final_bam
     shell:
