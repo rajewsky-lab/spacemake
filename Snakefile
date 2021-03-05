@@ -337,7 +337,7 @@ include: 'pacbio.smk'
 rule all:
     input:
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        get_final_output_files(dropseq_umi_tagged),
+        # get_final_output_files(dropseq_tagged),
         # get_final_output_files(reverse_reads_pattern, mate = [1,2]),
         #get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued'])
         #get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6])
@@ -463,7 +463,8 @@ rule reverse_first_mate:
     params:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
-        bam = dropseq_umi_tagged,
+        bam = dropseq_tagged,
+        unassigned = dropseq_unassigned,
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
@@ -484,6 +485,7 @@ rule reverse_first_mate:
         "--cell='{params.bc.cell}' "
         "--cell-raw='{params.bc.cell_raw}' "
         "--out-format=bam "
+        "--out-unassigned={output.unassigned} "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
         "| samtools view -bh /dev/stdin > {output.bam} "

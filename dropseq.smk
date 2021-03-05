@@ -10,7 +10,8 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 # COMMON PIPELINE VARS #
 ########################
 
-dropseq_umi_tagged = dropseq_root + '/unaligned_tagged_umi.bam'
+dropseq_tagged = dropseq_root + '/unaligned_bc_tagged.bam'
+dropseq_unassigned = dropseq_root + '/unaligned_bc_unassigned.bam'
 
 # filter out XC tag
 dropseq_tagged_filtered = dropseq_root + '/unaligned_tagged_filtered.bam'
@@ -36,7 +37,7 @@ dropseq_final_bam_ix = dropseq_final_bam + '.bai'
 ###################################################
 rule remove_smart_adapter:
     input:
-        dropseq_umi_tagged  # rules.remove_xc_tag.output
+        dropseq_tagged  # rules.remove_xc_tag.output
     output:
         pipe(dropseq_tagged_trimmed)
     params:
