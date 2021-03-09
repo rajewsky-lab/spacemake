@@ -16,30 +16,15 @@ barcode_flavor:
 
     drop_noUMI:
         projects:
-            - sts_058
-            - sts_070
-            - test_030
+            - test_003
         samples:
-            - sts_053_1
-            - sts_067_1
-            - sts_067_1_reseq
-            - sts_067_1_reseq2
-            - maria_organoids_ctrl_3
-            - maria_organoids_ctrl_5
+            - test_003_1
 
     comb1:
-        projects:
-            - sts_067
         samples:
             - test_002_1
 
 additional_illumina_projects:
-    - project_id: test_030
-      sample_id: test_030_4
-      puck_id: NoOptical
-      species: mouse
-      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_030_4_R1.fastq.gz
-      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_030_4_R2.fastq.gz
     - project_id: test_001
       sample_id: test_001_1
       puck_id: NoOptical
@@ -59,6 +44,12 @@ additional_illumina_projects:
       species: mouse
       R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_002_1_R1.fastq.gz
       R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_002_1_R2.fastq.gz
+    - project_id: test_003
+      sample_id: test_003_1
+      puck_id: NoOptical
+      species: humanmouse
+      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_003_1_R1.fastq.gz
+      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_003_1_R2.fastq.gz
 
 
 # downsample and saturation analysis
@@ -80,6 +71,7 @@ knowledge:
         erccgfp: /data/rajewsky/home/nkarais/ercc_gfp_STAR_2.7.1a/ercc_gfp.gtf
         celegans: /data/rajewsky/annotation/filippos_sucks/ce11/ce11_filtered.gtf
         humancelegans: /data/rajewsky/home/nkarais/hg38_GRCh38.84_ce11_STAR_2.7.1a/MegaAnnotation.gtf
+        humanmouse: /data/rajewsky/annotation/GRCh38.p13_GRCm38.p6/GRCh38.p13_GRCm38.p6.gtf
 
     genomes:
         human: /data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/GRCh38.primary_assembly.genome.fa
@@ -88,6 +80,7 @@ knowledge:
         erccgfp: /data/rajewsky/home/nkarais/ercc_gfp_STAR_2.7.1a/ercc_gfp.fa
         celegans: /data/rajewsky/genomes/ce11_public/ce11.fa
         humancelegans: /data/rajewsky/home/nkarais/hg38_GRCh38.84_ce11_STAR_2.7.1a/MegaGenome.fa
+        humanmouse: /data/rajewsky/genomes/GRCh38_GRCm38_mixed_species/GRCh38_GRCm38.fa
 
     indices:
         human:
@@ -107,6 +100,10 @@ knowledge:
             star: /data/rajewsky/indices/ce11_star_2.7.1a
         humancelegans:
             star: /data/rajewsky/home/nkarais/hg38_GRCh38.84_ce11_STAR_2.7.1a/STAR_index
+        humanmouse:
+            star: /data/rajewsky/indices/GRCh38_GRCm38_STAR_2.7.1a
+            # for now only map to mouse
+            bt2: /data/local/rajewsky/indices/erccgfp_bowtie2.3.5.1/erccgfp_bt2_index
 
     barcode_flavor:
         dropseq:

@@ -153,9 +153,6 @@ dropseq_reports_dir = dropseq_root + '/reports'
 dropseq_tmp_dir = dropseq_root + '/tmp'
 smart_adapter = config['adapters']['smart']
 
-# file containing R1 and R2 merged
-dropseq_merge_in_mate_1 = reverse_reads_mate_1
-dropseq_merge_in_mate_2 = reverse_reads_mate_2
 dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 
 ###
@@ -338,7 +335,6 @@ rule all:
     input:
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
         # get_final_output_files(dropseq_tagged),
-        # get_final_output_files(reverse_reads_pattern, mate = [1,2]),
         #get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued'])
         #get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6])
         #get_united_output_files(dge_all_summary),
@@ -732,7 +728,7 @@ rule paired_reads_flagstat:
 
 rule map_to_rRNA:
     input:
-        reverse_reads_mate_2
+        raw_reads_mate_2
     output:
         ribo_depletion_log
     params:

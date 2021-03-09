@@ -52,7 +52,7 @@ rule downsample_bam_tag_histogram:
         {dropseq_tools}/BamTagHistogram \
         I= {input} \
         O= {output}\
-        TAG=XC
+        TAG=CB
         """
 
 rule create_downsampled_top_barcodes_file:
@@ -82,6 +82,8 @@ rule create_downsample_dge:
         O= {output.downsample_dge} \
         SUMMARY= {output.downsample_dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
+        CELL_BARCODE_TAG=CB \
+        MOLECULAR_BARCODE_TAG=MI \
         {params.downsample_dge_extra_params}
         """
 
