@@ -756,11 +756,15 @@ class Output:
         if BC2 is None:
             BC2 = args.na
 
-        # slightly concerned about security here... perhaps replace
-        # all () and ; with sth else?
+        # slightly concerned about security here...
+        # at least all () and ; raise an assertion in __init__
         cell = eval(self.cell)
         raw = eval(self.cell_raw)
         UMI = eval(self.UMI)
+        if (cell is None) or (UMI is None):
+            raise ValueError(f"one of cell=eval('{self.cell}')='{cell}' "
+                             f"UMI=eval('{self.UMI}')='{UMI}' evaluated to None")
+
         return raw, cell, UMI
 
     def close(self):
