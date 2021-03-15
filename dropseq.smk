@@ -10,34 +10,21 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 # COMMON PIPELINE VARS #
 ########################
 
-# tag reads with umis and cells
-dropseq_cell_tagged = dropseq_root + '/unaligned_tagged_umi_cell.bam'
-dropseq_umi_tagged = dropseq_root + '/unaligned_tagged_umi.bam'
+dropseq_tagged = dropseq_root + '/unaligned_bc_tagged.bam'
+dropseq_unassigned = dropseq_root + '/unaligned_bc_unassigned.bam'
 
 # filter out XC tag
 dropseq_tagged_filtered = dropseq_root + '/unaligned_tagged_filtered.bam'
 
 # trim smart adapter from the reads
-dropseq_tagged_filtered_trimmed = dropseq_root + '/unaligned_tagged_filtered_trimmed.bam'
+dropseq_tagged_trimmed = dropseq_root + '/unaligned_tagged_trimmed.bam'
 
 # trim polyA overheang if exists
-dropseq_tagged_filtered_trimmed_polyA = dropseq_root + '/unaligned_tagged_filtered_trimmed_polyA.bam'
-
-# create fastq file from the previous .bam to input into STAR
-dropseq_star_input = dropseq_root + '/unaligned_reads_star_input.fastq'
+dropseq_tagged_trimmed_polyA = dropseq_root + '/unaligned_tagged_trimmed_polyA.bam'
 
 # mapped reads
-dropseq_mapped_reads = dropseq_root + '/star_Aligned.out.sam'
+dropseq_mapped_reads = dropseq_root + '/star_Aligned.sortedByCoord.out.bam'
 star_log_file = dropseq_root + '/star_Log.final.out'
-
-# sort reads and create bam
-dropseq_mapped_sorted_reads = dropseq_root + '/star_Aligned.sorted.bam'
-
-# merge bam files
-dropseq_merged = dropseq_root + '/merged.bam'
-
-# tag gene with exon
-dropseq_gene_tagged = dropseq_root + '/star_gene_tagged.bam'
 
 # final dropseq bfinal dropseq bam
 dropseq_final_bam = dropseq_root + '/final.bam'
@@ -48,94 +35,17 @@ dropseq_final_bam_ix = dropseq_final_bam + '.bai'
 ###################################################
 # Snakefile containing the dropseq pipeline rules #
 ###################################################
-rule merge_reads:
+rule remove_smart_adapter:
     input:
-        R1=dropseq_merge_in_mate_1,
-        R2=dropseq_merge_in_mate_2
-    params:
-        tmp_dir = dropseq_tmp_dir
+        dropseq_tagged  # rules.remove_xc_tag.output
     output:
-        pipe(dropseq_merged_reads)
-    shell:
-        """
-        java -jar {picard_tools} FastqToSam \
-            F1={input.R1} \
-            F2={input.R2} \
-            SM={wildcards.sample} \
-            O={output} \
-            TMP_DIR={params.tmp_dir} \
-            SO=queryname
-
-        rm -rf {params.tmp_dir}
-        """
-
-rule tag_cells:
-    input:
-        rules.merge_reads.output
-    output:
-        pipe(dropseq_cell_tagged)
+        pipe(dropseq_tagged_trimmed)
     params:
         reports_dir = dropseq_reports_dir
     shell:
         """
         mkdir -p {params.reports_dir}
 
-        {dropseq_tools}/TagBamWithReadSequenceExtended SUMMARY={params.reports_dir}/tag_cells.summary.txt \
-            BASE_RANGE=1-12 \
-            BASE_QUALITY=10 \
-            BARCODED_READ=1 \
-            DISCARD_READ=false \
-            TAG_NAME=XC \
-            NUM_BASES_BELOW_QUALITY=1 \
-            INPUT={input} \
-            OUTPUT={output} \
-            COMPRESSION_LEVEL=0
-        """
-
-rule tag_umis:
-    input:
-        rules.tag_cells.output
-    output:
-        pipe(dropseq_umi_tagged)
-    params:
-        reports_dir = dropseq_reports_dir
-    shell:
-        """
-        {dropseq_tools}/TagBamWithReadSequenceExtended SUMMARY={params.reports_dir}/tag_umis.summary.txt \
-            BASE_RANGE=13-20 \
-            BASE_QUALITY=10 \
-            BARCODED_READ=1 \
-            DISCARD_READ=True \
-            TAG_NAME=XM \
-            NUM_BASES_BELOW_QUALITY=1 \
-            INPUT={input} \
-            OUTPUT={output} \
-            COMPRESSION_LEVEL=0
-        """
-
-rule remove_xc_tag:
-    input:
-        rules.tag_umis.output
-    output:
-        pipe(dropseq_tagged_filtered)
-    shell:
-        """
-        {dropseq_tools}/FilterBam \
-            TAG_REJECT=XQ \
-            INPUT={input} \
-            OUTPUT={output} \
-            COMPRESSION_LEVEL=0
-        """
-
-rule remove_smart_adapter:
-    input:
-        rules.remove_xc_tag.output
-    output:
-        pipe(dropseq_tagged_filtered_trimmed)
-    params:
-        reports_dir = dropseq_reports_dir
-    shell:
-        """
         {dropseq_tools}/TrimStartingSequence OUTPUT_SUMMARY={params.reports_dir}/remove_smart_adapter.report.txt \
             INPUT={input} \
             OUTPUT={output} \
@@ -147,9 +57,9 @@ rule remove_smart_adapter:
 
 rule remove_polyA:
     input:
-        rules.remove_smart_adapter.output
+        dropseq_tagged_trimmed
     output:
-        temporary(dropseq_tagged_filtered_trimmed_polyA)
+        temp(dropseq_tagged_trimmed_polyA)
     params:
         reports_dir = dropseq_reports_dir
     shell:
@@ -161,30 +71,13 @@ rule remove_polyA:
             OUTPUT={output} \
         """
 
-rule sam_to_fastq:
-    input:
-        rules.remove_polyA.output
-    output:
-        pipe(dropseq_star_input)
-    params:
-        tmp_dir = dropseq_tmp_dir
-    shell:
-        """
-        java -jar {picard_tools} SamToFastq \
-            INPUT={input} \
-            FASTQ={output} \
-            TMP_DIR={params.tmp_dir}
-
-        rm -rf {params.tmp_dir}
-        """
-
 rule map_reads:
     input:
         unpack(get_species_info),
-        reads=rules.sam_to_fastq.output
+        reads=dropseq_tagged_trimmed_polyA
     output:
-        reads=temporary(dropseq_mapped_reads),
-        log=star_log_file
+        reads=temp(dropseq_mapped_reads),
+    log: star_log_file
     threads: 8
     params:
         tmp_dir = dropseq_tmp_dir,
@@ -195,43 +88,14 @@ rule map_reads:
             --runThreadN {threads} \
             --genomeDir  {input.index} \
             --readFilesIn {input.reads} \
-            --outFileNamePrefix {params.star_prefix}
-
-        rm -rf {params.tmp_dir}
-        """
-
-rule sort_mapped_reads:
-    input:
-        rules.map_reads.output.reads
-    output:
-        temporary(dropseq_mapped_sorted_reads)
-    shell:
-        """
-        java -jar {picard_tools} SortSam \
-            I={input} \
-            O={output} \
-            SO=queryname
-        """
-
-rule merge_bam:
-    input:
-        unpack(get_species_info),
-        unmapped_bam=rules.remove_polyA.output,
-        mapped=rules.sort_mapped_reads.output
-    output:
-        pipe(dropseq_merged)
-    params:
-        tmp_dir = dropseq_tmp_dir
-    shell:
-        """
-        java -jar {picard_tools} MergeBamAlignment \
-            REFERENCE_SEQUENCE={input.genome} \
-            UNMAPPED_BAM={input.unmapped_bam} \
-            ALIGNED_BAM={input.mapped} \
-            OUTPUT={output} \
-            INCLUDE_SECONDARY_ALIGNMENTS=false \
-            PAIRED_RUN=false \
-            TMP_DIR={params.tmp_dir}
+            --readFilesType SAM SE \
+            --readFilesCommand samtools view \
+            --outSAMtype BAM Unsorted \
+            --outStd BAM_Unsorted \
+            --outFileNamePrefix {params.star_prefix} \
+            | python {repo_dir}/scripts/fix_bam_header.py {input.reads} \
+            | sambamba sort -m 4G -o /dev/stdout -t 4 /dev/stdin \
+            > {output.reads}
 
         rm -rf {params.tmp_dir}
         """
@@ -239,7 +103,7 @@ rule merge_bam:
 rule tag_read_with_gene:
     input:
         unpack(get_species_info), 
-        reads=rules.merge_bam.output
+        reads=rules.map_reads.output
     output:
         dropseq_final_bam
     shell:
