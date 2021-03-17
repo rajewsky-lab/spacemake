@@ -660,72 +660,6 @@ rule get_unmapped_reads:
     shell:
         "sambamba view -F 'unmapped' -h -f bam -t {threads} -o {output} {input}"
 
-rule create_dge_barcode_fasta:
-    input:
-        dge_all_summary
-    output:
-        dge_all_summary_fasta
-    shell:
-        """tail -n +8 {input} | awk 'NF==4 && !/^TAG=XC*/{{print ">{wildcards.united_sample}_"$1"_"$2"_"$3"_"$4"\\n"$1}}' > {output}"""
-
-rule create_blast_db:
-    input:
-        blast_db_primers
-    output:
-        blast_db_primers_files
-    shell:
-        "makeblastdb -in {input} -parse_seqids -dbtype nucl"
-
-rule blast_dge_barcodes:
-    input:
-        blast_db_primers_files,
-        db=blast_db_primers,
-        barcodes= dge_all_summary_fasta
-    output:
-        united_barcode_blast_out
-    threads: 2
-    shell:
-        """
-        blastn -query {input.barcodes} -evalue 10 -task blastn-short -num_threads {threads} -outfmt "6 {blast_header_out}" -db {input.db} -out {output}"""
-
-rule map_paired_end_bt2:
-    input:
-        R1 = reverse_reads_mate_1,
-        R2 = reverse_reads_mate_2
-    output:
-        sam=pipe(paired_end_sam),
-        logfile=paired_end_log
-    threads: 8
-    params:
-        index= lambda wildcards: get_bt2_index(wildcards)
-    shell:
-        """
-        bowtie2 -x {params.index} \
-            -p {threads} \
-            -1 {input.R1} \
-            -2 {input.R2} \
-            --end-to-end --sensitive \
-            -S {output.sam} 2>{output.logfile}
-        """
-
-rule paired_reads_sam_to_bam:
-    input:
-        paired_end_sam
-    output:
-        paired_end_bam
-    threads: 8
-    shell:
-        "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
-
-rule paired_reads_flagstat:
-    input:
-        paired_end_bam
-    threads: 4
-    output:
-        paired_end_flagstat
-    shell:
-        "sambamba flagstat -t {threads} {input} > {output}"
-
 rule map_to_rRNA:
     input:
         raw_reads_mate_2
@@ -738,15 +672,6 @@ rule map_to_rRNA:
             shell("bowtie2 -x {params.index} -U {input} -p 20 --very-fast-local > /dev/null 2> {output}")
         else:
             shell("echo 'no_rRNA_index' > {output}")
-
-rule tag_reads_with_primer_overlap:
-    input:
-        united_final_bam
-    output:
-        tagged_bam = united_primer_tagged_final_bam,
-        summary = united_primer_tagged_summary
-    script:
-        'scripts/r1_kmer_analysis.py'
 
 rule calculate_kmer_counts:
     input:
