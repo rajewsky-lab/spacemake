@@ -1,9 +1,12 @@
-root_dir: '/data/rajewsky/projects/slide_seq'
-microscopy_root: '/data/rajewsky/slideseq_microscopy'
+root_dir: '/scratch/home/tsztank/sts-sequencing'
 bin_dir: '/data/rajewsky/shared_bins'
 temp_dir: '/tmp'
 
-illumina_projects:
+puck_data:
+    root: '/data/rajewsky/slideseq_microscopy/qc'
+    barcode_file: predictions_ml.csv
+
+projects:
     # - sample_sheet: /scratch/home/tsztank/20191206_spatseq_smples3-4.csv
     #   flowcell_id: 191206_NS500648_0416_AHY3KYBGXC
     # - sample_sheet: /data/rajewsky/home/tsztank/200110_STS_017_4-7-8STS_018_1.csv
@@ -17,14 +20,11 @@ barcode_flavor:
     drop_noUMI:
         projects:
             - test_003
-        samples:
-            - test_003_1
-
     comb1:
         samples:
             - test_002_1
 
-additional_illumina_projects:
+additional_projects:
     - project_id: test_001
       sample_id: test_001_1
       puck_id: NoOptical
@@ -62,6 +62,7 @@ downsample:
 
 adapters:
     smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'
+    optical_primer: 'GAATCACGATACGTACACCA'
 
 knowledge:
     annotations:

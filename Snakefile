@@ -22,7 +22,7 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; umask g+w;
 #############
 # FUNCTIONS #
 #############
-include: 'snakemake_helper_functions.py'
+include: 'snakemake/snakemake_helper_functions.py'
 
 ####
 # this file should contain all sample information, sample name etc.
@@ -37,34 +37,30 @@ repo_dir = os.path.dirname(workflow.snakefile)
 
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
-microscopy_root = config['microscopy_root']
-microscopy_raw = microscopy_root + '/raw'
 
-illumina_projects = config.get('illumina_projects', [])
+puck_data = config.get('puck_data', None)
 
-if illumina_projects is not None:
+projects = config.get('projects', None)
+
+if projects is not None:
     # get the samples
-    project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in illumina_projects], ignore_index=True)
+    project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in projects], ignore_index=True)
 
     # add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
-    project_df = project_df.append(config['additional_illumina_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
+    project_df = project_df.append(config['additional_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
 
 else:
-    project_df = pd.DataFrame(config['additional_illumina_projects']).replace(np.nan, 'none', regex=True)
+    project_df = pd.DataFrame(config['additional_projects']).replace(np.nan, 'none', regex=True)
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
 project_df = df_assign_bc_flavor(project_df)
-
-# print(project_df)
-# print(project_df.columns)
-# print(project_df['barcode_flavor'])
-# print(get_metadata('R1', sample_id = 'sts_030_4'))
-# print(get_metadata('R1', sample_id = 'sts_067_1'))
+print(project_df)
 
 samples_list = project_df.T.to_dict().values()
 
 # put all projects into projects_puck_info
-projects_puck_info = project_df.merge(get_sample_info(microscopy_raw), how='left', on ='puck_id').fillna('none')
+#projects_puck_info = project_df.merge(get_sample_info(microscopy_raw), how='left', on ='puck_id').fillna.get('puck_data', None)
+projects_puck_info = project_df
 
 projects_puck_info.loc[~projects_puck_info.puck_id.str.startswith('PID_'), 'puck_id']= 'no_puck'
 
@@ -125,9 +121,7 @@ raw_reads_mate_1 = raw_reads_prefix + '1' + reads_suffix
 raw_reads_mate_2 = raw_reads_prefix + '2' + reads_suffix
 
 reverse_reads_prefix = raw_data_illumina_reads_reversed + '/{sample}_reversed_R'
-reverse_reads_pattern = reverse_reads_prefix + '{mate}' + reads_suffix
 reverse_reads_mate_1 = reverse_reads_prefix + '1' + reads_suffix
-reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
 
 ###############
 # Fastqc vars #
@@ -261,7 +255,7 @@ wildcard_constraints:
 # #######################
 # include dropseq rules #
 # #######################
-include: 'dropseq.smk'
+include: 'snakemake/dropseq.smk'
 
 ################################
 # Final output file generation #
@@ -326,7 +320,7 @@ pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf
 pacbio_overview_csv = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.csv'
 pacbio_bead_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_bead_overview.pdf'
 
-include: 'pacbio.smk' 
+include: 'snakemake/pacbio.smk' 
 
 #############
 # Main rule #
@@ -334,17 +328,9 @@ include: 'pacbio.smk'
 rule all:
     input:
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        # get_final_output_files(dropseq_tagged),
-        #get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued'])
-        #get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6])
-        #get_united_output_files(dge_all_summary),
         # this will also create the clean dge
         get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
         get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs)
-        # get all split bam files
-        #get_united_output_files(united_unmapped_bam),
-        #get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names)
-
 
 ########################
 # CREATE METADATA FILE #
@@ -375,7 +361,7 @@ rule create_sample_db:
 ################
 # DOWNSAMPLING #
 ################
-include: 'downsample.smk'
+include: 'snakemake/downsample.smk'
 
 rule downsample:
     input:
@@ -384,7 +370,7 @@ rule downsample:
 #################
 # MERGE SAMPLES #
 #################
-include: 'merge_samples.smk'
+include: 'snakemake/merge_samples.smk'
 
 #########
 # RULES #
@@ -466,7 +452,7 @@ rule reverse_first_mate:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
     threads: get_bc_preprocessing_threads
     shell:
-        "python {repo_dir}/scripts/preprocess_read1.py "
+        "python {repo_dir}/snakemake/scripts/preprocess_read1.py "
         "--sample={wildcards.sample} "
         "--read1={input.R1_unpacked} "
         "--read2={input.R2_unpacked} "
@@ -485,20 +471,6 @@ rule reverse_first_mate:
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
         "| samtools view -bh /dev/stdin > {output.bam} "
-
-rule reverse_second_mate:
-    input:
-        raw_reads_mate_2
-    output:
-        reverse_reads_mate_2
-    params:
-        reads_folder = raw_data_illumina_reads_reversed
-    shell:
-        """
-        mkdir -p {params.reads_folder}
-
-        ln -sr {input} {output}
-        """
 
 rule run_fastqc:
     input:
@@ -554,7 +526,7 @@ rule clean_top_barcodes:
     output:
         united_top_barcodes_clean
     script:
-        'scripts/clean_top_barcodes.py'
+        'snakemake/scripts/clean_top_barcodes.py'
 
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
@@ -640,7 +612,7 @@ rule split_final_bam:
     params:
         prefix=united_split_reads_root
     shell:
-        "sambamba view -F 'mapping_quality==255' -h {input} | python {repo_dir}/scripts/split_reads_by_strand_info.py --prefix {params.prefix} /dev/stdin"
+        "sambamba view -F 'mapping_quality==255' -h {input} | python {repo_dir}/snakemake/scripts/split_reads_by_strand_info.py --prefix {params.prefix} /dev/stdin"
 
 rule split_reads_sam_to_bam:
     input:
@@ -681,5 +653,5 @@ rule calculate_kmer_counts:
     params:
         kmer_len = lambda wildcards: wildcards.kmer_len
     script:
-        'scripts/kmer_stats_from_fastq.py'
+        'snakemake/scripts/kmer_stats_from_fastq.py'
 
