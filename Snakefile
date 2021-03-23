@@ -401,6 +401,8 @@ rule zcat_pipe:
     output: pipe("{name}.fastq")
     shell: "zcat {input} >> {output}"
 
+dropseq_tagged_pipe = dropseq_tagged.replace('.bam', '.uncompressed.bam')
+
 rule reverse_first_mate:
     input:
         # these implicitly depend on the raw reads via zcat_pipes
@@ -409,7 +411,7 @@ rule reverse_first_mate:
     params:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
-        bam = dropseq_tagged,
+        assigned = pipe(dropseq_tagged_pipe),
         unassigned = dropseq_unassigned,
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
@@ -432,9 +434,14 @@ rule reverse_first_mate:
         "--cell-raw='{params.bc.cell_raw}' "
         "--out-format=bam "
         "--out-unassigned={output.unassigned} "
+        "--out-assigned={output.assigned} "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
-        "| samtools view -bh /dev/stdin > {output.bam} "
+
+rule compress_dropseq_tagged:
+    input: dropseq_tagged_pipe
+    output: dropseq_tagged
+    shell: "sambamba view -h -l9 -f bam {input} > {output}"
 
 rule run_fastqc:
     input:
@@ -618,4 +625,3 @@ rule calculate_kmer_counts:
         kmer_len = lambda wildcards: wildcards.kmer_len
     script:
         'snakemake/scripts/kmer_stats_from_fastq.py'
-

@@ -694,7 +694,7 @@ class Output:
         if args.out_format == "fastq":
             fopen = lambda x: open(x, "w")
             self._write = self.write_fastq
-        elif args.out_format == "bam":
+        elif args.out_format in ['sam', 'bam']:
             prog = os.path.basename(__file__)
             header = {
                 'HD': {'VN': '1.6'},
@@ -706,7 +706,10 @@ class Output:
                     {'ID': 'U', 'SM': f"unassigned_{args.sample}"},
                 ],
             } 
-            fopen = lambda x: pysam.AlignmentFile(x, "wbu", header=header)
+            if args.out_format == 'bam':
+                fopen = lambda x: pysam.AlignmentFile(x, "wbu", header=header)
+            else:
+                fopen = lambda x: pysam.AlignmentFile(x, "w", header=header)
             self._write = self.write_bam
         else:
             raise ValueError(f"unsopported output format '{args.out_format}'")
@@ -841,7 +844,7 @@ if __name__ == '__main__':
         parser.add_argument("--cell", default="r1[8:20][::-1]")
         parser.add_argument("--cell-raw", default="None")
         parser.add_argument("--UMI", default="r1[0:8]")
-        parser.add_argument("--out-format", default="bam", choices=["fastq", "bam"], help="'bam' for tagged, unaligned BAM, 'fastq' for preprocessed read1 as FASTQ")
+        parser.add_argument("--out-format", default="bam", choices=["fastq","sam", "bam"], help="'sam|bam' for tagged, unaligned SAM|BAM, 'fastq' for preprocessed read1 as FASTQ")
         parser.add_argument("--out-assigned", default="/dev/stdout", help="output for successful assignments (default=/dev/stdout) ")
         parser.add_argument("--out-unassigned", default="/dev/stdout", help="output for un-successful assignments (default=/dev/stdout) ")
         parser.add_argument("--save-stats", default="preprocessing_stats.txt", help="store statistics in this file")
@@ -868,8 +871,8 @@ if __name__ == '__main__':
         NO_CALL = args.na
         setup_logging(args)
 
-        if args.out_format == 'bam' and not args.read2:
-            raise ValueError("bam output format requires --read2 parameter")
+        if args.out_format in ['sam', 'bam'] and not args.read2:
+            raise ValueError("sam|bam output format requires --read2 parameter")
 
         if ("bc" in args.cell or "bc" in args.cell_raw) and not (args.bc1_ref and args.bc2_ref):
             raise ValueError("bc1/2 are referenced in --cell or --cell-raw, but no reference barcodes are specified via --bc{{1,2}}-ref")

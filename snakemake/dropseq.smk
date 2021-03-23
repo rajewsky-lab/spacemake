@@ -23,7 +23,9 @@ dropseq_tagged_trimmed = dropseq_root + '/unaligned_tagged_trimmed.bam'
 dropseq_tagged_trimmed_polyA = dropseq_root + '/unaligned_tagged_trimmed_polyA.bam'
 
 # mapped reads
-dropseq_mapped_reads = dropseq_root + '/star_Aligned.sortedByCoord.out.bam'
+dropseq_mapped_reads_unsorted_headerless = dropseq_root + '/star_Aligned.unsorted.headerless.out.bam'
+dropseq_mapped_reads_unsorted = dropseq_root + '/star_Aligned.unsorted.out.bam'
+dropseq_mapped_reads = dropseq_root + '/star_Aligned.sorted.out.bam'
 star_log_file = dropseq_root + '/star_Log.final.out'
 
 # final dropseq bfinal dropseq bam
@@ -76,7 +78,7 @@ rule map_reads:
         unpack(get_species_info),
         reads=dropseq_tagged_trimmed_polyA
     output:
-        reads=temp(dropseq_mapped_reads),
+        pipe(dropseq_mapped_reads_unsorted_headerless)
     log: star_log_file
     threads: 8
     params:
@@ -92,18 +94,26 @@ rule map_reads:
             --readFilesCommand samtools view \
             --outSAMtype BAM Unsorted \
             --outStd BAM_Unsorted \
-            --outFileNamePrefix {params.star_prefix} \
-            | python {repo_dir}/scripts/fix_bam_header.py {input.reads} \
-            | sambamba sort -m 4G -o /dev/stdout -t 4 /dev/stdin \
-            > {output.reads}
+            --outFileNamePrefix {params.star_prefix} > {output}
 
         rm -rf {params.tmp_dir}
         """
 
+rule fix_star_bam_header:
+    input: dropseq_mapped_reads_unsorted_headerless 
+    output: pipe(dropseq_mapped_reads_unsorted)
+    shell: 'python {repo_dir}/scripts/fix_bam_header.py {input} > {output}'
+
+rule sort_dropseq_mapped_reads:
+    input: dropseq_mapped_reads_unsorted
+    output: temp(dropseq_mapped_reads)
+    threads: 4
+    shell:  'sambamba sort -m 4G -o {output} -t {threads} {input}' 
+
 rule tag_read_with_gene:
     input:
         unpack(get_species_info), 
-        reads=rules.map_reads.output
+        reads=dropseq_mapped_reads
     output:
         dropseq_final_bam
     shell:
