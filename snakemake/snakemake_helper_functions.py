@@ -1,3 +1,7 @@
+PROJECT_DF_COLUMNS = ['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
+    'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'investigator',
+    'sequencing_date', 'experiment', 'puck_barcode_file']
+
 # barcode flavor parsing and query functions
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
@@ -115,6 +119,33 @@ def compute_max_barcode_mismatch(indices):
                 max_mismatch = min(max_mismatch, math.ceil(hd/2)-1)
     return max_mismatch
 
+def get_barcode_file(path):
+    if path is None:
+        return 'none'
+
+    if os.path.isfile(path):
+        return path
+
+    return 'none'
+
+
+def find_barcode_file(puck_id):
+    # first find directory of puck file
+
+    def find_dir(name, path):
+        for root, dirs, files in os.walk(path):
+            if name in dirs:
+                return os.path.join(root, name)
+
+    puck_dir = find_dir(puck_id, config['puck_data']['root'])
+    path = None
+
+    if puck_dir is not None:
+        # puck dir exists, look for barcode file pattern
+        path = os.path.join(puck_dir, config['puck_data']['barcode_file'])
+
+    return get_barcode_file(path)
+    
 def read_sample_sheet(sample_sheet_path, flowcell_id):
     with open(sample_sheet_path) as sample_sheet:
         ix = 0
@@ -147,10 +178,51 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     df['demux_barcode_mismatch'] = compute_max_barcode_mismatch(df['index'])
     df['sample_sheet'] = sample_sheet_path
     df['demux_dir'] = df['sample_sheet'].str.split('/').str[-1].str.split('.').str[0]
+    df['puck_barcode_file'] = df.puck_id.apply(find_barcode_file)
 
-    return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
-               'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'investigator', 'sequencing_date', 'experiment']]    
+    return df[PROJECT_DF_COLUMNS]    
 
+
+def df_assign_merge_samples(project_df):
+    # added samples to merged to the project_df
+    # this will be saved as a metadata file in .config/ directory
+    if 'samples_to_merge' in config:
+        for project_id in config['samples_to_merge'].keys():
+            for sample_id in config['samples_to_merge'][project_id].keys():
+                samples_to_merge = config['samples_to_merge'][project_id][sample_id]
+
+                samples_to_merge = project_df.loc[project_df.sample_id.isin(samples_to_merge)]
+
+                new_row = project_df[(project_df.project_id == project_id) & (project_df.sample_id == sample_id)].iloc[0]
+                new_row.sample_id = 'merged_' + new_row.sample_id
+                new_row.project_id = 'merged_' + new_row.project_id
+                new_row.type = 'merged'
+                new_row.experiment = ','.join(samples_to_merge.experiment.to_list())
+                new_row.investigator = ','.join(samples_to_merge.investigator.to_list())
+                new_row.sequencing_date = ','.join(samples_to_merge.sequencing_date.to_list())
+
+                project_df = project_df.append(new_row, ignore_index=True)
+
+    return project_df
+
+def create_project_df():
+    project_df = pd.DataFrame(columns=PROJECT_DF_COLUMNS)
+
+    if projects is not None:
+        # if we have projects in the config file
+        # get the samples
+        project_df = project_df.append(pd.concat(
+            [read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in projects],
+            ignore_index=True), ignore_index=True)
+
+    # add additional samples from config.yaml, which have already been demultiplexed.
+    project_df = project_df.append(config['additional_projects'], ignore_index=True)
+
+    project_df = df_assign_merge_samples(project_df)
+
+    project_df = project_df.replace(np.nan, 'none')
+
+    return project_df
 
 def get_metadata(field, **kwargs):
     df = project_df
@@ -212,19 +284,14 @@ def get_dge_extra_params(wildcards):
 
 def get_basecalls_dir(wildcards):
     flowcell_id = get_metadata('flowcell_id', demux_dir = wildcards.demux_dir)
-    
-    basecalls_dir = '/data/remote/basecalls/'
-    local_nextseq_raw = '/data/rajewsky/sequencing/nextSeqRaw/'
 
-    # check if flowcell_id exists in local /data/rajewsky/sequencing/nextSeqRaw
-    if os.path.isdir(local_nextseq_raw + flowcell_id):
-        return [local_nextseq_raw + flowcell_id]
-    # if not, check if flowcell_id exists in /data/remote/basecalls
-    elif os.path.isdir(basecalls_dir + flowcell_id):
-        return [basecalls_dir + flowcell_id]
+    if 'basecall_folders' in config:
+        for folder in config['basecall_folders']:
+            bcl_folder = os.path.join(folder, flowcell_id)
+            if os.path.isdir(bcl_folder):
+                return [bcl_folder]
     # else return a fake path, which won't be present, so snakemake will fail for this, as input directory will be missing
-    else:
-        return [basecalls_dir + 'none'] 
+    return ['none'] 
 
 ###############################
 # Joining optical to illumina #
@@ -304,9 +371,11 @@ def get_merged_ribo_depletion_log_inputs(wildcards):
 def get_qc_sheet_parameters(sample_id, umi_cutoff=100):
     # returns a single row for a given sample_id
     # this will be the input of the parameters for the qc sheet parameter generation
-    out_dict = projects_puck_info.loc[projects_puck_info.sample_id == sample_id]\
+    out_dict = project_df.loc[project_df.sample_id == sample_id]\
         .iloc[0]\
         .to_dict()
+
+    print(out_dict)
 
     out_dict['umi_cutoff'] = umi_cutoff
     out_dict['input_beads'] = '60k-100k'
@@ -324,3 +393,4 @@ def get_top_barcodes(wildcards):
         return {'top_barcodes': united_top_barcodes}
     else:
         return {'top_barcodes': united_top_barcodes_clean}
+

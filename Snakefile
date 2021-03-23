@@ -34,56 +34,20 @@ include: 'snakemake/snakemake_helper_functions.py'
 ###############
 temp_dir = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
+# create puck_data root directory from pattern
+config['puck_data']['root'] = config['puck_data']['root'].format(root_dir = config['root_dir'])
 
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
 
-puck_data = config.get('puck_data', None)
-
 projects = config.get('projects', None)
 
-if projects is not None:
-    # get the samples
-    project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in projects], ignore_index=True)
-
-    # add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
-    project_df = project_df.append(config['additional_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
-
-else:
-    project_df = pd.DataFrame(config['additional_projects']).replace(np.nan, 'none', regex=True)
-
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
+project_df = create_project_df()
+
 project_df = df_assign_bc_flavor(project_df)
-print(project_df)
 
-samples_list = project_df.T.to_dict().values()
-
-# put all projects into projects_puck_info
-#projects_puck_info = project_df.merge(get_sample_info(microscopy_raw), how='left', on ='puck_id').fillna.get('puck_data', None)
-projects_puck_info = project_df
-
-projects_puck_info.loc[~projects_puck_info.puck_id.str.startswith('PID_'), 'puck_id']= 'no_puck'
-
-projects_puck_info['type'] = 'normal'
-
-# added samples to merged to the projects_puck_info
-# this will be saved as a metadata file in .config/ directory
-if 'samples_to_merge' in config:
-    for project_id in config['samples_to_merge'].keys():
-        for sample_id in config['samples_to_merge'][project_id].keys():
-            samples_to_merge = config['samples_to_merge'][project_id][sample_id]
-
-            samples_to_merge = projects_puck_info.loc[projects_puck_info.sample_id.isin(samples_to_merge)]
-
-            new_row = projects_puck_info[(projects_puck_info.project_id == project_id) & (projects_puck_info.sample_id == sample_id)].iloc[0]
-            new_row.sample_id = 'merged_' + new_row.sample_id
-            new_row.project_id = 'merged_' + new_row.project_id
-            new_row.type = 'merged'
-            new_row.experiment = ','.join(samples_to_merge.experiment.to_list())
-            new_row.investigator = ','.join(samples_to_merge.investigator.to_list())
-            new_row.sequencing_date = ','.join(samples_to_merge.sequencing_date.to_list())
-
-            projects_puck_info = projects_puck_info.append(new_row, ignore_index=True)
+project_df['type'] = 'normal'
 
 #################
 # DIRECTORY STR #
@@ -95,7 +59,7 @@ raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
 processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
-projects_puck_info_file = config['root_dir'] + '/.config/projects_puck_info.csv'
+project_df_file = config['root_dir'] + '/.config/project_df.csv'
 sample_overview_file = config['root_dir'] + '/.config/sample_overview.html'
 sample_read_metrics_db = config['root_dir'] + '/reports/sample_read_metrics_db.tsv'
 
@@ -261,7 +225,7 @@ include: 'snakemake/dropseq.smk'
 # Final output file generation #
 ################################
 def get_final_output_files(pattern, projects = None, samples = None, **kwargs):
-    samples_to_run = samples_list
+    samples_to_run = project_df.T.to_dict().values()
 
     if projects is not None:
         samples_to_run = [s for s in samples_to_run if s['project_id'] in projects]
@@ -281,7 +245,7 @@ def get_final_output_files(pattern, projects = None, samples = None, **kwargs):
 def get_united_output_files(pattern, projects = None, samples = None,
                             skip_projects = None, skip_samples = None, **kwargs):
     out_files = []
-    df = projects_puck_info
+    df = project_df
 
     if projects is None and samples is None:
         projects = df.project_id.to_list()
@@ -305,7 +269,7 @@ def get_united_output_files(pattern, projects = None, samples = None,
 
     return out_files
 
-human_mouse_samples = projects_puck_info[projects_puck_info.species.isin(['human', 'mouse'])].sample_id.to_list()
+human_mouse_samples = project_df[project_df.species.isin(['human', 'mouse'])].sample_id.to_list()
 
 ##################
 # include pacbio #
@@ -335,16 +299,16 @@ rule all:
 ########################
 # CREATE METADATA FILE #
 ########################
-rule create_projects_puck_info_file:
+rule create_project_df_file:
     output:
-        projects_puck_info_file
+        project_df_file
     run:
-        projects_puck_info.to_csv(output[0], index=False)
+        project_df.to_csv(output[0], index=False)
         os.system('chmod 664 %s' % (output[0]))
 
 rule create_sample_overview:
     input:
-        projects_puck_info_file
+        project_df_file
     output:
         sample_overview_file
     script:
@@ -352,7 +316,7 @@ rule create_sample_overview:
 
 rule create_sample_db:
     input:
-        projects_puck_info_file
+        project_df_file
     output:
         sample_read_metrics_db
     script:
@@ -562,7 +526,7 @@ rule create_qc_parameters:
     output:
         qc_sheet_parameters_file
     script:
-        "qc_sequencing_create_parameters_from_sample_sheet.py"
+        "analysis/qc_sequencing_create_parameters_from_sample_sheet.py"
 
 rule create_qc_sheet:
     input:
@@ -576,7 +540,7 @@ rule create_qc_sheet:
     output:
         united_qc_sheet
     script:
-        "qc_sequencing_create_sheet.py"
+        "analysis/qc_sequencing_create_sheet.py"
 
 rule run_automated_analysis:
     input:
@@ -586,7 +550,7 @@ rule run_automated_analysis:
     params:
         fig_root=automated_figures_root
     script:
-        'automated_analysis.py'
+        'analysis/automated_analysis.py'
         
 rule create_automated_report:
     input:
@@ -600,7 +564,7 @@ rule create_automated_report:
     params:
         fig_root=automated_figures_root
     script:
-        'automated_analysis_create_report.py'
+        'analysis/automated_analysis_create_report.py'
 
 rule split_final_bam:
     input:

@@ -3,10 +3,16 @@ bin_dir: '/data/rajewsky/shared_bins'
 temp_dir: '/tmp'
 
 puck_data:
-    root: '/data/rajewsky/slideseq_microscopy/qc'
+    root: '{root_dir}/puck_data'
     barcode_file: predictions_ml.csv
 
+basecall_folders:
+    - '/data/rajewsky/sequencing/nextSeqRaw'
+    - '/data/remote/basecalls'
+
 projects:
+    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/200507_sts_030_1_2_4_sample_sheet.csv
+      flowcell_id: 200507_NS500648_0456_AH52MTBGXF
     # - sample_sheet: /scratch/home/tsztank/20191206_spatseq_smples3-4.csv
     #   flowcell_id: 191206_NS500648_0416_AHY3KYBGXC
     # - sample_sheet: /data/rajewsky/home/tsztank/200110_STS_017_4-7-8STS_018_1.csv
@@ -25,25 +31,18 @@ barcode_flavor:
             - test_002_1
 
 additional_projects:
-    - project_id: test_001
-      sample_id: test_001_1
-      puck_id: NoOptical
-      species: human
-      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R1.fastq.gz
-      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R2.fastq.gz
-    - project_id: test_001
-      sample_id: test_001_2
-      puck_id: NoOptical
-      species: mouse
-      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R1.fastq.gz
-      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R2.fastq.gz
-    - project_id: test_002
-      # derived from sts_067_5. Combinatorial bead v1 data
-      sample_id: test_002_1
-      puck_id: NoOptical
-      species: mouse
-      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_002_1_R1.fastq.gz
-      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_002_1_R2.fastq.gz
+    #    - project_id: test_001
+    #      sample_id: test_001_1
+    #      puck_id: NoOptical
+    #      species: human
+    #      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R1.fastq.gz
+    #      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R2.fastq.gz
+    #    - project_id: test_001
+    #      sample_id: test_001_2
+    #      puck_id: NoOptical
+    #      species: mouse
+    #      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R1.fastq.gz
+    #      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R2.fastq.gz
     - project_id: test_003
       sample_id: test_003_1
       puck_id: NoOptical
