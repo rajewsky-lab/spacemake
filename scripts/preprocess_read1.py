@@ -35,7 +35,11 @@ def read_fq(fname):
 def read_source(args):
     if args.read2:
         for (id1, seq1, qual1), (id2, seq2, qual2) in zip(read_fq(args.read1), read_fq(args.read2)):
+<<<<<<< HEAD
             # assert id1.split()[0] == id2.split()[0]
+=======
+            assert id1.split()[0] == id2.split()[0]
+>>>>>>> 703ee943e9b422504c4997ec7277645b64f012cf
             yield id1, seq1, id2, seq2, qual2
     else:
         for id1, seq1, qual1 in read_fq(args.read1):
