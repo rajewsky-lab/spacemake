@@ -3,6 +3,71 @@ illumina_projects:
       flowcell_id: 191206_NS500648_0416_AHY3KYBGXC
     - sample_sheet: /data/rajewsky/home/tsztank/200110_STS_017_4-7-8STS_018_1.csv
       flowcell_id: 200110_NS500648_0423_AHT5FHBGXC
+    #    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210121_sts_067_1_3_5_Maria_organoids_C2_V2_sample_sheet.csv
+    #      flowcell_id: 210121_NB501326_0478_AHGKCFBGXG
+    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210121_sts_067_1_3_5_Maria_organoids_C2_V2_sample_sheet.csv
+      flowcell_id: 210121_NB501326_0478_AHGKCFBGXG
+    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210218_sts_67_70_reseq67_recycling70.csv
+      flowcell_id: 210218_NB501326_0484_AHGKCMBGXG
+    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210303_sts_074_1_3_sample_sheet.csv
+      flowcell_id: 210303_NB501326_0489_AHGJLCBGXG
+
+barcode_flavor: 
+    dropseq: 'default'
+
+    drop_noUMI:
+        projects:
+            - test_003
+        samples:
+            - test_003_1
+
+    comb1:
+        samples:
+            - test_002_1
+            - sts_067_3pb
+
+additional_illumina_projects:
+    - project_id: test_001
+      sample_id: test_001_1
+      puck_id: NoOptical
+      species: human
+      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R1.fastq.gz
+      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R2.fastq.gz
+    - project_id: test_001
+      sample_id: test_001_2
+      puck_id: NoOptical
+      species: mouse
+      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R1.fastq.gz
+      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R2.fastq.gz
+    - project_id: test_002
+      # derived from sts_067_5. Combinatorial bead v1 data
+      sample_id: test_002_1
+      puck_id: NoOptical
+      species: mouse
+      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_002_1_R1.fastq.gz
+      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_002_1_R2.fastq.gz
+    - project_id: test_003
+      sample_id: test_003_1
+      puck_id: NoOptical
+      species: humanmouse
+      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_003_1_R1.fastq.gz
+      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_003_1_R2.fastq.gz
+    - project_id: sts_067
+      sample_id: sts_067_3pb
+      puck_id: NoOptical
+      species: human
+      R1: /data/rajewsky/projects/slide_seq/projects/sts_067/raw_data/illumina/reads/raw/sts_067_3pb_R1.fastq.gz
+      R2: /data/rajewsky/projects/slide_seq/projects/sts_067/raw_data/illumina/reads/raw/sts_067_3pb_R2.fastq.gz
+
+
+
+# downsample and saturation analysis
+downsample: 
+    projects:
+    samples:
+
+# in the output each will have an merged_ prepended to their root directory
+# samples_to_merge:`
 
 adapters:
     smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'
