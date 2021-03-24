@@ -29,26 +29,27 @@ barcode_flavor:
     comb1:
         samples:
             - test_002_1
+    visium:
+        projects:
+            - cdr1as_ko_visium
 
 additional_projects:
-    #    - project_id: test_001
-    #      sample_id: test_001_1
-    #      puck_id: NoOptical
-    #      species: human
-    #      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R1.fastq.gz
-    #      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R2.fastq.gz
-    #    - project_id: test_001
-    #      sample_id: test_001_2
-    #      puck_id: NoOptical
-    #      species: mouse
-    #      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R1.fastq.gz
-    #      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_2_R2.fastq.gz
     - project_id: test_003
       sample_id: test_003_1
       puck_id: NoOptical
       species: humanmouse
       R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_003_1_R1.fastq.gz
       R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_003_1_R2.fastq.gz
+    - project_id: sts_030
+      sample_id: sts_030_1
+      expected_n_beads: 60000
+    - project_id: cdr1as_ko_visium
+      sample_id: cdr1as_ko_visium_wt_1
+      puck_id: NoOptical
+      species: mouse
+      R1: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R1_001.fastq.gz
+      R2: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R2_001.fastq.gz
+      expected_n_beads: 5000
 
 
 # downsample and saturation analysis
@@ -113,6 +114,10 @@ knowledge:
         drop_noUMI:
             cell: "r1[0:12][::-1]"
             UMI: "r2[0:8]"
+            bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        visium:
+            cell: "r1[0:16]"
+            UMI: "r1[16:28]"
             bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
         comb1:
             segments: 2

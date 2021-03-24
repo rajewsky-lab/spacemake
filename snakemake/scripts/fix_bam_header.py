@@ -10,9 +10,6 @@ import os
 import sys
 import logging
 
-bam_star = pysam.AlignmentFile('/dev/stdin', 'rb')
-bam_tagged = pysam.AlignmentFile(sys.argv[1], 'rb', check_sq=False)
-
 def print_header(header):
     for k, v in sorted(header.items()):
         if type(v) == dict:
@@ -37,19 +34,32 @@ def merge_headers(orig, star):
 
     return merged
 
-star_header = bam_star.header.to_dict()
-tagged_header = bam_tagged.header.to_dict()
-merged_header = merge_headers(tagged_header, star_header)
-# print(f"STAR header")
-# print_header(star_header)
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Fix .bam header of the STAR mapped output .bam')
 
-# print(f"original header")
-# print_header(tagged_header)
+    parser.add_argument('--in-bam-star', help='mapped star bam input')
+    parser.add_argument('--in-bam-tagged', help='unmapped dropseq tagged bam')
+    parser.add_argument('--out-bam', help='output bam')
 
-# print("merged header")
-# print_header(merged_header)
+    args = parser.parse_args()
 
-# copy input to output on stdout, just with the new header
-sam_out = pysam.AlignmentFile('/dev/stdout', 'wb', header=merged_header)
-for aln in bam_star.fetch(until_eof=True):
-    sam_out.write(aln)
+    bam_star = pysam.AlignmentFile(args.in_bam_star, 'rb')
+    bam_tagged = pysam.AlignmentFile(args.in_bam_tagged, 'rb', check_sq=False)
+
+
+    star_header = bam_star.header.to_dict()
+    tagged_header = bam_tagged.header.to_dict()
+    merged_header = merge_headers(tagged_header, star_header)
+    # print(f"STAR header")
+    # print_header(star_header)
+
+    # print(f"original header")
+    # print_header(tagged_header)
+
+    # print("merged header")
+    # print_header(merged_header)
+
+    # copy input to output, just with the new header
+    bam_out = pysam.AlignmentFile(args.out_bam,'wb', header=merged_header)
+    for aln in bam_star.fetch(until_eof=True):
+        bam_out.write(aln)

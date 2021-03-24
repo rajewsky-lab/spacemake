@@ -1,6 +1,6 @@
 PROJECT_DF_COLUMNS = ['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
     'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'investigator',
-    'sequencing_date', 'experiment', 'puck_barcode_file']
+    'sequencing_date', 'experiment', 'puck_barcode_file', 'expected_n_beads']
 
 # barcode flavor parsing and query functions
 class dotdict(dict):
@@ -172,6 +172,8 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     df['R1'] = 'none'
     df['R2'] = 'none'
 
+    df['expected_n_beads'] = 'none'
+
     # merge additional info and sanitize column names
     df.rename(columns={"Sample_ID":"sample_id", "Sample_Name":"puck_id", "Sample_Project":"project_id", "Description": "experiment"}, inplace=True)
     df['flowcell_id'] = flowcell_id
@@ -215,12 +217,25 @@ def create_project_df():
             [read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in projects],
             ignore_index=True), ignore_index=True)
 
-    # add additional samples from config.yaml, which have already been demultiplexed.
-    project_df = project_df.append(config['additional_projects'], ignore_index=True)
-
     project_df = df_assign_merge_samples(project_df)
 
+    # add additional samples from config.yaml, which have already been demultiplexed.
+    for project in config['additional_projects']:
+        project_series = pd.Series(project)
+        
+        project_index = project_df.loc[(project_df.project_id == project_series.project_id) & \
+                (project_df.sample_id == project_series.sample_id)].index
+        if not project_index.empty:
+            # if index not empty, that is there is a sample in the dataframe with this id, update
+            project_df.loc[project_index, project_series.keys()] = project_series.values
+        else:
+            # add project
+            project_df = project_df.append(project_series, ignore_index=True)
+
     project_df = project_df.replace(np.nan, 'none')
+
+    # fill with default expected_n_beads
+    project_df.loc[project_df[project_df.expected_n_beads == 'none'].index, 'expected_n_beads'] = 100000
 
     return project_df
 

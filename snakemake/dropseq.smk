@@ -78,7 +78,7 @@ rule map_reads:
         unpack(get_species_info),
         reads=dropseq_tagged_trimmed_polyA
     output:
-        pipe(dropseq_mapped_reads_unsorted_headerless)
+        temp(dropseq_mapped_reads_unsorted_headerless)
     log: star_log_file
     threads: 8
     params:
@@ -100,13 +100,21 @@ rule map_reads:
         """
 
 rule fix_star_bam_header:
-    input: dropseq_mapped_reads_unsorted_headerless 
+    input:
+        mapped_reads=dropseq_mapped_reads_unsorted_headerless,
+        unmapped_tagged_reads=dropseq_tagged_trimmed_polyA
     output: pipe(dropseq_mapped_reads_unsorted)
-    shell: 'python {repo_dir}/scripts/fix_bam_header.py {input} > {output}'
+    shell:
+        """
+        python {repo_dir}/snakemake/scripts/fix_bam_header.py \
+            --in-bam-star {input.mapped_reads} \
+            --in-bam-tagged {input.unmapped_tagged_reads} \
+            --out-bam {output}
+        """
 
 rule sort_dropseq_mapped_reads:
     input: dropseq_mapped_reads_unsorted
-    output: temp(dropseq_mapped_reads)
+    output: pipe(dropseq_mapped_reads)
     threads: 4
     shell:  'sambamba sort -m 4G -o {output} -t {threads} {input}' 
 

@@ -488,8 +488,10 @@ rule create_top_barcodes:
         united_barcode_readcounts
     output:
         united_top_barcodes
+    params:
+        n_beads=lambda wildcards: get_metadata('expected_n_beads', sample_id = wildcards.united_sample, project_id = wildcards.united_project),
     shell:
-        "set +o pipefail; zcat {input} | cut -f2 | head -100000 > {output}"
+        "set +o pipefail; zcat {input} | cut -f2 | head -{params.n_beads} > {output}"
 
 rule clean_top_barcodes:
     input:
