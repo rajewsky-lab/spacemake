@@ -3,7 +3,7 @@
 #########
 __version__ = '0.1.1'
 __author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
-__licence__ = 'GPL'
+__license__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
 ###########
@@ -32,23 +32,34 @@ include: 'snakemake_helper_functions.py'
 ###############
 # Global vars #
 ###############
+temp_dir = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
 
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
-
-microscopy_root = '/data/rajewsky/slideseq_microscopy'
+microscopy_root = config['microscopy_root']
 microscopy_raw = microscopy_root + '/raw'
 
-illumina_projects = config['illumina_projects']
+illumina_projects = config.get('illumina_projects', [])
 
-# get the samples
-project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in illumina_projects], ignore_index=True)
+if illumina_projects is not None:
+    # get the samples
+    project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in illumina_projects], ignore_index=True)
 
-# add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
-project_df = project_df.append(config['additional_illumina_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
+    # add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
+    project_df = project_df.append(config['additional_illumina_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
 
-print(get_metadata('R1', sample_id = 'sts_030_4'))
+else:
+    project_df = pd.DataFrame(config['additional_illumina_projects']).replace(np.nan, 'none', regex=True)
+
+# moved barcode_flavor assignment here so that additional samples/projects are equally processed
+project_df = df_assign_bc_flavor(project_df)
+
+# print(project_df)
+# print(project_df.columns)
+# print(project_df['barcode_flavor'])
+# print(get_metadata('R1', sample_id = 'sts_030_4'))
+# print(get_metadata('R1', sample_id = 'sts_067_1'))
 
 samples_list = project_df.T.to_dict().values()
 
@@ -85,7 +96,6 @@ raw_data_root = project_dir + '/raw_data'
 raw_data_illumina = raw_data_root + '/illumina'
 raw_data_illumina_reads = raw_data_illumina + '/reads/raw'
 raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
-
 processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
@@ -122,17 +132,18 @@ reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
 ###############
 # Fastqc vars #
 ###############
+bin_dir = config['bin_dir']
 fastqc_root = raw_data_illumina + '/fastqc'
 fastqc_pattern = fastqc_root + '/{sample}_R{mate}_fastqc.{ext}'
-fastqc_command = '/data/rajewsky/shared_bins/FastQC-0.11.2/fastqc'
+fastqc_command = f'{bin_dir}/FastQC-0.11.2/fastqc'
 fastqc_ext = ['zip', 'html']
 
 ########################
 # UNIQUE PIPELINE VARS #
 ########################
 # set the tool script directories
-picard_tools = '/data/rajewsky/shared_bins/picard-tools-2.21.6/picard.jar'
-dropseq_tools = '/data/rajewsky/shared_bins/Drop-seq_tools-2.3.0'
+picard_tools = f'{bin_dir}/picard-tools-2.21.6/picard.jar'
+dropseq_tools = f'{bin_dir}/Drop-seq_tools-2.3.0'
 
 # set per sample vars
 dropseq_root = processed_data_illumina + '/complete_data'
@@ -142,9 +153,6 @@ dropseq_reports_dir = dropseq_root + '/reports'
 dropseq_tmp_dir = dropseq_root + '/tmp'
 smart_adapter = config['adapters']['smart']
 
-# file containing R1 and R2 merged
-dropseq_merge_in_mate_1 = reverse_reads_mate_1
-dropseq_merge_in_mate_2 = reverse_reads_mate_2
 dropseq_merged_reads = dropseq_root + '/unaligned.bam'
 
 ###
@@ -326,7 +334,7 @@ include: 'pacbio.smk'
 rule all:
     input:
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        get_final_output_files(reverse_reads_pattern, mate = [1,2]),
+        # get_final_output_files(dropseq_tagged),
         #get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued'])
         #get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6])
         #get_united_output_files(dge_all_summary),
@@ -438,16 +446,45 @@ rule link_raw_reads:
         ln -s {input} {output}
         """
 
+rule zcat_pipe:
+    input: "{name}.fastq.gz"
+    output: pipe("{name}.fastq")
+    shell: "zcat {input} >> {output}"
+
 rule reverse_first_mate:
     input:
-        unpack(get_reverse_first_mate_inputs)
+        # these implicitly depend on the raw reads via zcat_pipes
+        R1_unpacked = raw_reads_mate_1.replace('fastq.gz', 'fastq'),
+        R2_unpacked = raw_reads_mate_2.replace('fastq.gz', 'fastq')
+    params:
+        bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
-        reverse_reads_mate_1
-    run:
-        if wildcards.sample in config['umi_from_r2']['samples'] or wildcards.project in config['umi_from_r2']['projects']:
-            shell('python {repo_dir}/scripts/reverse_reads_umi_from_r2.py --in_R1 {input.R1} --in_R2 {input.R2} --out_R1 {output}')
-        else:
-            shell('python {repo_dir}/scripts/reverse_fastq_file.py --in_R1 {input.R1} --out_R1 {output}')
+        bam = dropseq_tagged,
+        unassigned = dropseq_unassigned,
+        bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
+    log:
+        reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
+    threads: get_bc_preprocessing_threads
+    shell:
+        "python {repo_dir}/scripts/preprocess_read1.py "
+        "--sample={wildcards.sample} "
+        "--read1={input.R1_unpacked} "
+        "--read2={input.R2_unpacked} "
+        "--parallel={threads} "
+        "--save-stats={output.bc_stats} "
+        "--log-file={log} "
+        "--bc1-ref={params.bc.bc1_ref} "
+        "--bc2-ref={params.bc.bc2_ref} "
+        "--bc1-cache={params.bc.bc1_cache} "
+        "--bc2-cache={params.bc.bc2_cache} "
+        "--threshold={params.bc.score_threshold} "
+        "--cell='{params.bc.cell}' "
+        "--cell-raw='{params.bc.cell_raw}' "
+        "--out-format=bam "
+        "--out-unassigned={output.unassigned} "
+        "--UMI='{params.bc.UMI}' "
+        "--bam-tags='{params.bc.bam_tags}' "
+        "| samtools view -bh /dev/stdin > {output.bam} "
 
 rule reverse_second_mate:
     input:
@@ -500,7 +537,7 @@ rule get_barcode_readcounts:
         {dropseq_tools}/BamTagHistogram \
         I= {input} \
         O= {output}\
-        TAG=XC
+        TAG=CB
         """
 
 rule create_top_barcodes:
@@ -541,6 +578,9 @@ rule create_dge:
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
+        CELL_BARCODE_TAG=CB \
+        MOLECULAR_BARCODE_TAG=MI \
+        TMP_DIR={temp_dir} \
         {params.dge_extra_params}
         """
 
@@ -688,7 +728,7 @@ rule paired_reads_flagstat:
 
 rule map_to_rRNA:
     input:
-        reverse_reads_mate_2
+        raw_reads_mate_2
     output:
         ribo_depletion_log
     params:

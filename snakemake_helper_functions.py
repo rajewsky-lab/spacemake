@@ -1,3 +1,102 @@
+# barcode flavor parsing and query functions
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+
+def parse_barcode_flavors(config, bc_default_settings=dict(bc1_ref="", 
+                          bc2_ref="", cell_raw="None", score_threshold=0.0,
+                          bam_tags="CR:{cell},MI:{UMI}")):
+    """
+    Reads the 'barcode_flavor' top-level block of config.yaml as well 
+    as the corresponding block from 'knowledge'.
+    Gathers all mappings of project_id -> bc_flavor and sample_id -> bc_flavor
+    """
+    default_barcode_flavor = 'dropseq'
+    project_barcode_flavor = {}
+    sample_barcode_flavor = {}
+    preprocess_settings = {}
+    # print(config['barcode_flavor'])
+    for flavor, v in config['barcode_flavor'].items():
+        # for each flavor, also retrieve the configuration
+        # first make a copy of the default values
+        d = dict(bc_default_settings)  
+        d.update(config['knowledge']['barcode_flavor'][flavor])
+        preprocess_settings[flavor] = dotdict(d)
+
+        if v == 'default':
+            default_barcode_flavor = flavor
+            continue
+
+        for name in v.get("projects", []):
+            project_barcode_flavor[name] = flavor
+
+        for name in v.get("samples", []):
+            sample_barcode_flavor[name] = flavor
+
+    res = dotdict(dict(
+        default=default_barcode_flavor,
+        projects=project_barcode_flavor,
+        samples=sample_barcode_flavor,
+        preprocess_settings=preprocess_settings))
+
+    return res
+
+
+def get_barcode_flavor(project_id, sample_id):
+    default = bc_flavor_data.default
+    project_default = bc_flavor_data.projects.get(project_id, default)
+    return bc_flavor_data.samples.get(sample_id, project_default)
+
+
+def df_assign_bc_flavor(df):
+    # assign the barcode layout for each sample as specified in the config.yaml
+    def flavor_choice(row):
+        return get_barcode_flavor(row.project_id, row.sample_id)
+
+    df['barcode_flavor'] = df[["project_id", "sample_id"]].apply(flavor_choice, axis=1)
+    return df
+
+
+def get_bc_preprocess_settings(wildcards):
+    """
+    This function will return a dictionary of information
+    on the read1 preprocessing, according to barcode_flavor
+    """
+    flavor = get_barcode_flavor(wildcards.project, wildcards.sample)
+    settings = bc_flavor_data.preprocess_settings[flavor]
+    # print(f"wc={wildcards}-> flavor={flavor} settings={settings}")
+    return settings
+
+
+def get_bc_preprocessing_threads(wildcards):
+    bc = get_bc_preprocess_settings(wildcards)
+    if bc.bc1_ref:
+        # perform multi-core opseq alignments
+        # 2 extra cores are needed for the zcat_pipes
+        if hasattr(workflow, "cores"):
+            # from at least Snakemake version 5.13 on
+            t = workflow.cores - 2
+        else:
+            t = 8  # a safe default value?
+            import logging
+            logging.warning("can not determine number of cores in this "
+                            f"Snakemake version. Defaulting to {t} for "
+                            "barcode preprocessing")
+    else:
+        # just reversing + combining is single core
+        t = 1
+    # print(f"no. threads {t} (bc={bc})")
+    return t
+
+
+# all barcode flavor info from config.yaml 
+# is kept here for convenient lookup
+bc_flavor_data = parse_barcode_flavors(config)
+
+
 def hamming_distance(string1, string2):
     return sum(c1 != c2 for c1, c2 in zip(string1, string2))
 
@@ -42,8 +141,8 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     df['R1'] = 'none'
     df['R2'] = 'none'
 
+    # merge additional info and sanitize column names
     df.rename(columns={"Sample_ID":"sample_id", "Sample_Name":"puck_id", "Sample_Project":"project_id", "Description": "experiment"}, inplace=True)
-    
     df['flowcell_id'] = flowcell_id
     df['demux_barcode_mismatch'] = compute_max_barcode_mismatch(df['index'])
     df['sample_sheet'] = sample_sheet_path
@@ -52,13 +151,14 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     return df[['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
                'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'investigator', 'sequencing_date', 'experiment']]    
 
+
 def get_metadata(field, **kwargs):
     df = project_df
-
     for key, value in kwargs.items():
         df = df.loc[df.loc[:, key] == value]
 
     return(df[field].to_list()[0])
+
 
 def get_demux_indicator(wildcards):
     demux_dir = get_metadata('demux_dir', sample_id = wildcards.sample,
@@ -224,14 +324,3 @@ def get_top_barcodes(wildcards):
         return {'top_barcodes': united_top_barcodes}
     else:
         return {'top_barcodes': united_top_barcodes_clean}
-
-def get_reverse_first_mate_inputs(wildcards):
-    out = {
-            'R1': raw_reads_mate_1}
-
-    umi_r2 = config['umi_from_r2']
-
-    if wildcards.sample in umi_r2['samples'] or wildcards.project in umi_r2['projects']:
-        out['R2'] = raw_reads_mate_2
-
-    return (out)
