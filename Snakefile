@@ -261,10 +261,14 @@ def get_united_output_files(pattern, projects = None, samples = None,
         df = df[~df.project_id.isin(skip_projects)]
 
     for index, row in df.iterrows():
+        umi_cutoff = get_downstream_analysis_variables(project_id = row['project_id'],
+            sample_id = row['sample_id'])['umi_cutoff']
+
         out_files = out_files + expand(pattern,
             united_project = row['project_id'],
             united_sample = row['sample_id'],
             puck=row['puck_id'], 
+            umi_cutoff = umi_cutoff,
             **kwargs)
 
     return out_files
@@ -293,8 +297,8 @@ rule all:
     input:
         get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
-        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
-        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs)
+        get_united_output_files(automated_report),
+        get_united_output_files(united_qc_sheet)
 
 ########################
 # CREATE METADATA FILE #
@@ -489,7 +493,7 @@ rule create_top_barcodes:
     output:
         united_top_barcodes
     params:
-        n_beads=lambda wildcards: get_metadata('expected_n_beads', sample_id = wildcards.united_sample, project_id = wildcards.united_project),
+        n_beads=lambda wildcards: get_downsteam_analysis_variables(sample_id = wildcards.united_sample, project_id = wildcards.united_project)['expected_n_beads'],
     shell:
         "set +o pipefail; zcat {input} | cut -f2 | head -{params.n_beads} > {output}"
 

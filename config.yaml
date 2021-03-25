@@ -33,6 +33,17 @@ barcode_flavor:
         projects:
             - cdr1as_ko_visium
 
+downstream_analysis_variables:
+    default:
+        expected_n_beads: 100000
+        umi_cutoff: [10, 50, 100]
+    visium:
+        expected_n_beads: 5000
+        umi_cutoff: [1000]
+    less_beads:
+        expected_n_beads: 60000
+        umi_cutoff: [10, 20, 50, 100]
+
 additional_projects:
     - project_id: test_003
       sample_id: test_003_1
@@ -42,14 +53,14 @@ additional_projects:
       R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_003_1_R2.fastq.gz
     - project_id: sts_030
       sample_id: sts_030_1
-      expected_n_beads: 60000
+      downstream_analysis_type: 'less_beads'
     - project_id: cdr1as_ko_visium
       sample_id: cdr1as_ko_visium_wt_1
       puck_id: NoOptical
       species: mouse
       R1: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R1_001.fastq.gz
       R2: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R2_001.fastq.gz
-      expected_n_beads: 5000
+      downstream_analysis_type: 'visium'
 
 
 # downsample and saturation analysis

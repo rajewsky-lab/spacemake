@@ -1,6 +1,6 @@
 PROJECT_DF_COLUMNS = ['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
     'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'investigator',
-    'sequencing_date', 'experiment', 'puck_barcode_file', 'expected_n_beads']
+    'sequencing_date', 'experiment', 'puck_barcode_file', 'downstream_analysis_type']
 
 # barcode flavor parsing and query functions
 class dotdict(dict):
@@ -22,7 +22,7 @@ def parse_barcode_flavors(config, bc_default_settings=dict(bc1_ref="",
     project_barcode_flavor = {}
     sample_barcode_flavor = {}
     preprocess_settings = {}
-    # print(config['barcode_flavor'])
+
     for flavor, v in config['barcode_flavor'].items():
         # for each flavor, also retrieve the configuration
         # first make a copy of the default values
@@ -71,7 +71,7 @@ def get_bc_preprocess_settings(wildcards):
     """
     flavor = get_barcode_flavor(wildcards.project, wildcards.sample)
     settings = bc_flavor_data.preprocess_settings[flavor]
-    # print(f"wc={wildcards}-> flavor={flavor} settings={settings}")
+
     return settings
 
 
@@ -92,7 +92,7 @@ def get_bc_preprocessing_threads(wildcards):
     else:
         # just reversing + combining is single core
         t = 1
-    # print(f"no. threads {t} (bc={bc})")
+
     return t
 
 
@@ -172,7 +172,7 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     df['R1'] = 'none'
     df['R2'] = 'none'
 
-    df['expected_n_beads'] = 'none'
+    df['downstream_analysis_type'] = 'default'
 
     # merge additional info and sanitize column names
     df.rename(columns={"Sample_ID":"sample_id", "Sample_Name":"puck_id", "Sample_Project":"project_id", "Description": "experiment"}, inplace=True)
@@ -234,9 +234,9 @@ def create_project_df():
 
     project_df = project_df.replace(np.nan, 'none')
 
-    # fill with default expected_n_beads
-    project_df.loc[project_df[project_df.expected_n_beads == 'none'].index, 'expected_n_beads'] = 100000
-
+    # fill downstream variables with default
+    project_df.loc[project_df[project_df.downstream_analysis_type == 'none'].index, 'downstream_analysis_type'] = 'default'
+    
     return project_df
 
 def get_metadata(field, **kwargs):
@@ -280,6 +280,13 @@ def get_rRNA_index(wildcards):
     return {
         'rRNA_index': index
     }
+
+def get_downstream_analysis_variables(project_id, sample_id):
+    downstream_analysis_type = get_metadata('downstream_analysis_type',
+            project_id = project_id,
+            sample_id = sample_id)
+
+    return config['downstream_analysis_variables'][downstream_analysis_type]
 
 def get_dge_extra_params(wildcards):
     dge_type = wildcards.dge_type
@@ -389,8 +396,6 @@ def get_qc_sheet_parameters(sample_id, umi_cutoff=100):
     out_dict = project_df.loc[project_df.sample_id == sample_id]\
         .iloc[0]\
         .to_dict()
-
-    print(out_dict)
 
     out_dict['umi_cutoff'] = umi_cutoff
     out_dict['input_beads'] = '60k-100k'
