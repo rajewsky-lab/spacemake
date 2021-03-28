@@ -1,0 +1,181 @@
+---
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+version: 0.1.1
+author: Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos
+email: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc.berlin.de
+license: GPL
+---
+
+```{r knitr_options, include=FALSE, cache=FALSE}
+knitr::opts_chunk$set(
+  autodep = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = NA
+)
+```
+
+```{r libraries, include = F, cache=F}
+library(tidyverse)
+library(yaml)
+library(knitr)
+library(DESeq2)
+library(magrittr)
+library(kableExtra)
+library(cowplot)
+library(ggrepel)
+library('wesanderson')
+
+theme_set(theme_cowplot(12))
+
+cpalette <- list('orange' = '#D55E00', 'blue' = '#0072B2', 'green' = '#009E73', 'black' = '#000000', 'yellow' = '#F0E442', 
+				 'grey' = '#999999', 'light_orange' = "#E69F00", 'light_blue' = "#56B4E9")
+
+readStarLog <- function(log_file){
+
+		out = list()
+		lines = readLines(log_file)
+	
+		out$input_reads = (lines[6] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
+
+		out$uniq_mapped_reads = (lines[9] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
+
+		#out$avg_length = (lines[11] %>% strsplit('\t') %>% unlist)[2] %>% as.numeric
+		
+        tibble(observation=names(out), value=unlist(unname(out)))
+	}
+```
+
+```{r save_snakemake, echo = F}
+#write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
+
+snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
+```
+
+### Sample data
+
+```{r read_qc_parameters_yaml, echo = F}
+parameters <- read_yaml(snakemake@input$parameters_file)
+
+parameters %>%
+    as_tibble() %>%
+    gather('metric', 'value') %>%
+    kable(col.names=NULL)
+```
+
+
+### Read statistics
+
+```{r plot_read_statistics, echo =F}
+rRNA_stats <- read_table2(snakemake@input$ribo_log, col_names=c('observation', 'value')) %>%
+    spread(observation, value) %>%
+    mutate(mapped_to_rRNA = aligned_reads) %>%
+    gather('observation', 'value') %>%
+    filter(observation == 'mapped_to_rRNA')
+
+readStarLog(snakemake@input$star_log) %>%
+    rbind(rRNA_stats) %>%
+    rbind(read_table2(snakemake@input$reads_type_out, col_names=c('observation', 'value'))) %>%
+    # convert to millions
+    mutate(value = round(value / 1e6, 2)) %>%
+    {
+        mutate(., input_reads = filter(., observation == 'input_reads')$value)
+    } %>%
+    mutate(label = ifelse(observation == 'input_reads', value, paste0(value, ' (', round(value/input_reads*100, 1), '%)'))) %>%
+    dplyr::select(observation, label) %>%
+    spread(observation, label) %>%
+    dplyr::rename(as.utr = UTR,
+                  intronic = INTRONIC,
+                  intergenic = INTERGENIC,
+                  ambiguous = AMB,
+                  as.cds = CODING) %>%
+    # reorder columns
+    dplyr::select(input_reads, uniq_mapped_reads, mapped_to_rRNA, intergenic, intronic, as.cds, ambiguous, as.utr) %>%
+    kable
+```
+
+### QC plots
+
+#### 'Knee'-plot
+
+Expected number of barcodes is `r parameters$expected_n_beads`, here we plot a Knee-plot with `r parameters$expected_n_beads` beads.
+
+```{r knee_plot, echo = F}
+read_counts <- read_table2(snakemake@input$read_counts, skip=1, col_names=c('reads', 'cell_bc')) %>%
+    mutate(reads_cumsum = cumsum(reads),
+           ix = 1:n())
+
+read_counts %>%
+    slice_head(n=parameters$expected_n_beads) %>%
+    ggplot(aes(ix, reads_cumsum)) +
+        geom_line() +
+        ggtitle(paste0('Knee-plot, top ', parameters$expected_n_beads, ' beads')) +
+        labs(x='Beads sorted by number of reads', y='Cummulative fraction of reads')
+```
+
+#### Umi-cutoff plots
+
+```{r umi_cutoff_plot, echo = F}
+umi_cutoffs <- seq(0, 2*parameters$umi_cutoff, parameters$umi_cutoff / 50)
+
+dge_summary <- read_table2(snakemake@input$dge_all_summary, skip=7, col_names = c('cell_bc', 'reads', 'umis', 'genes'))
+
+summarise_dge_summary <- function(umi_cutoff){
+    dge_summary %>%
+        filter(umis > umi_cutoff) %>%
+        summarise(median_reads = median(reads),
+                  median_umis = median(umis),
+                  median_genes = median(genes),
+                  n_beads = n())
+}
+
+umi_cutoff_data <- tibble(umi_cutoffs = umi_cutoffs) %>%
+    mutate(dat = map(umi_cutoffs, ~ summarise_dge_summary(.))) %>%
+    unnest(dat)
+
+umi_cutoff_data %>%
+    gather('obs', 'value', -umi_cutoffs) %>%
+    ggplot(aes(umi_cutoffs, value)) +
+        geom_line() +
+        facet_wrap(~obs, ncol=2, scales='free') +
+        geom_vline(xintercept = parameters$umi_cutoff, linetype='dotted')
+```
+
+#### Distribution of metrics per bead
+
+```{r plot_n_reads_bead_hist, echo = F, fig.width=10, fig.height=3, dpi = 200}
+dge_summary %>%
+    gather('obs', 'val', -cell_bc) %>%
+    ggplot(aes(x = val)) +
+        geom_histogram(bins=100) +
+        scale_x_log10() +
+        annotation_logticks(sides='b') +
+        facet_wrap(~obs, ncol=3, scales='free_y')
+```
+
+```{r plot_nucl_freq, echo = F}
+cell_bc_len = nchar((dge_summary %$% cell_bc)[1])
+
+dge_summary_nucl <- dge_summary %>%
+    filter(nchar(cell_bc) == cell_bc_len,
+           umis > parameters$umi_cutoff)
+
+nucls <- dge_summary_nucl %$%
+    cell_bc %>% strsplit("")
+
+nucls <- tibble(cell_bc= dge_summary_nucl$cell_bc, nucl=nucls) %>%
+    unnest(nucl) %>%
+    group_by(cell_bc) %>%
+    mutate(pos = paste0('pos_', 100+1:n())) %>%
+    group_by(pos, nucl) %>%
+    summarise(nucl_count = n())
+
+nucls %>%
+    ggplot(aes(pos, nucl_count, fill = nucl)) +
+        geom_bar(stat='identity', position='dodge') +
+        scale_x_discrete(labels=seq(1, cell_bc_len, 1))
+```
+

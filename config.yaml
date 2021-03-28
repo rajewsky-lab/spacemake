@@ -11,8 +11,8 @@ basecall_folders:
     - '/data/remote/basecalls'
 
 projects:
-    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/200507_sts_030_1_2_4_sample_sheet.csv
-      flowcell_id: 200507_NS500648_0456_AH52MTBGXF
+    #    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/200507_sts_030_1_2_4_sample_sheet.csv
+    #      flowcell_id: 200507_NS500648_0456_AH52MTBGXF
     # - sample_sheet: /scratch/home/tsztank/20191206_spatseq_smples3-4.csv
     #   flowcell_id: 191206_NS500648_0416_AHY3KYBGXC
     # - sample_sheet: /data/rajewsky/home/tsztank/200110_STS_017_4-7-8STS_018_1.csv
@@ -37,23 +37,26 @@ downstream_analysis_variables:
     default:
         expected_n_beads: 100000
         umi_cutoff: [10, 50, 100]
+        clean_dge: True
     visium:
-        expected_n_beads: 5000
-        umi_cutoff: [1000]
+        expected_n_beads: 10000
+        umi_cutoff: [500]
+        clean_dge: False
     less_beads:
         expected_n_beads: 60000
         umi_cutoff: [10, 20, 50, 100]
+        clean_dge: True
 
 additional_projects:
-    - project_id: test_003
-      sample_id: test_003_1
-      puck_id: NoOptical
-      species: humanmouse
-      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_003_1_R1.fastq.gz
-      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_003_1_R2.fastq.gz
-    - project_id: sts_030
-      sample_id: sts_030_1
-      downstream_analysis_type: 'less_beads'
+    #    - project_id: test_003
+    #      sample_id: test_003_1
+    #      puck_id: NoOptical
+    #      species: humanmouse
+    #      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_003_1_R1.fastq.gz
+    #      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_003_1_R2.fastq.gz
+    #    - project_id: sts_030
+    #      sample_id: sts_030_1
+    #      downstream_analysis_type: 'less_beads'
     - project_id: cdr1as_ko_visium
       sample_id: cdr1as_ko_visium_wt_1
       puck_id: NoOptical

@@ -390,7 +390,8 @@ def get_merged_ribo_depletion_log_inputs(wildcards):
                 sample = sample)
 
     return ribo_depletion_logs
-def get_qc_sheet_parameters(sample_id, umi_cutoff=100):
+
+def get_qc_sheet_parameters(project_id, sample_id, umi_cutoff):
     # returns a single row for a given sample_id
     # this will be the input of the parameters for the qc sheet parameter generation
     out_dict = project_df.loc[project_df.sample_id == sample_id]\
@@ -398,7 +399,7 @@ def get_qc_sheet_parameters(sample_id, umi_cutoff=100):
         .to_dict()
 
     out_dict['umi_cutoff'] = umi_cutoff
-    out_dict['input_beads'] = '60k-100k'
+    out_dict['input_beads'] = str(get_downstream_analysis_variables(project_id, sample_id)['expected_n_beads'])
 
     return out_dict
 
@@ -409,8 +410,19 @@ def get_bt2_index(wildcards):
     return config['knowledge']['indices'][species]['bt2']
 
 def get_top_barcodes(wildcards):
+    print(wildcards)
     if wildcards.dge_cleaned == '':
         return {'top_barcodes': united_top_barcodes}
     else:
         return {'top_barcodes': united_top_barcodes_clean}
+
+def get_dge_type(wildcards):
+    downstream_analysis_type = get_metadata('downstream_analysis_type',
+            project_id = wildcards.united_project,
+            sample_id = wildcards.united_sample)
+
+    if config['downstream_analysis_variables'][downstream_analysis_type]['clean_dge']:
+        return {'dge_all_summary': dge_all_cleaned_summary, 'dge': dge_all_cleaned}
+    else:
+        return {'dge_all_summary': dge_all_summary, 'dge': dge_all}
 

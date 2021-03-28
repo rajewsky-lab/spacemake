@@ -1,0 +1,82 @@
+---
+output:
+  html_document:
+    toc: true
+version: 0.1.1
+author: Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos
+email: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc.berlin.de
+license: GPL
+---
+
+```{r knitr_options, include=FALSE, cache=FALSE}
+knitr::opts_chunk$set(
+  autodep = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = NA
+)
+```
+
+```{r libraries, include = F, cache=F}
+library(tidyverse)
+library(yaml)
+library(knitr)
+library(DESeq2)
+library(magrittr)
+library(kableExtra)
+library(cowplot)
+library(ggrepel)
+library('wesanderson')
+
+theme_set(theme_cowplot(12))
+
+cpalette <- list('orange' = '#D55E00', 'blue' = '#0072B2', 'green' = '#009E73', 'black' = '#000000', 'yellow' = '#F0E442', 
+				 'grey' = '#999999', 'light_orange' = "#E69F00", 'light_blue' = "#56B4E9")
+
+readStarLog <- function(log_file){
+
+		out = list()
+		lines = readLines(log_file)
+	
+		out$input_reads = (lines[6] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
+
+		out$uniq_mapped_reads = (lines[9] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
+
+		#out$avg_length = (lines[11] %>% strsplit('\t') %>% unlist)[2] %>% as.numeric
+		
+        tibble(observation=names(out), value=unlist(unname(out)))
+	}
+```
+
+```{r plot_umi_umap, echo = F, fig.size=10, fig.width=10}
+obs_df <- read_table2(snakemake@input$obs_df)
+
+coordinates <- read_table2('/data/rajewsky/projects/cdr1as_ko_visium/spaceranger-1.2.0/lib/python/cellranger/barcodes/visium-v1_coordinates.txt', col_names=c('cell_bc', 'x_pos', 'y_pos'))
+
+obs_df <- obs_df %>%
+    inner_join(coordinates, by='cell_bc') %>%
+    mutate(x_pos = x_pos,
+           y_pos = y_pos * 128 / 78,
+           cluster = factor(leiden_0.8))
+
+obs_df %>%
+    ggplot(aes(x_pos, y_pos, color = total_counts)) +
+        geom_point(size = 1)+
+        coord_fixed()+
+        scale_x_continuous(breaks = seq(0, 130, 10), limits=c(0, 130))+
+        scale_y_continuous(breaks = seq(0, 130, 10), limits=c(0, 130)) +
+        scale_color_gradient(low='white', high='red', limits=c(0, max(obs_df$total_counts)))
+
+obs_df %>%
+    ggplot(aes(umap_0, umap_1, color = cluster)) +
+        geom_point() +
+        coord_fixed()
+
+obs_df %>%
+    ggplot(aes(x_pos, y_pos, color = cluster)) +
+        geom_point(size = 1)+
+        coord_fixed()+
+        scale_x_continuous(breaks = seq(0, 130, 10), limits=c(0, 130))+
+        scale_y_continuous(breaks = seq(0, 130, 10), limits=c(0, 130))
+```
+

@@ -142,7 +142,7 @@ qc_sheet_dir = '/qc_sheet/umi_cutoff_{umi_cutoff}'
 # parameters file for not merged samples
 qc_sheet_parameters_file = data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
 
-united_qc_sheet = united_complete_data_root + qc_sheet_dir + '/qc_sheet_{united_sample}_{puck}.pdf'
+united_qc_sheet = united_complete_data_root + qc_sheet_dir + '/qc_sheet_{united_sample}_{puck}.html'
 united_star_log = united_complete_data_root + '/star_Log.final.out'
 united_reads_type_out = united_split_reads_read_type
 united_qc_sheet_parameters_file = united_complete_data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
@@ -184,16 +184,16 @@ paired_end_mapping_stats = paired_end_prefix + '{sample}_paired_end_mapping_stat
 
 # automated analysis
 automated_analysis_root = united_complete_data_root + '/automated_analysis/umi_cutoff_{umi_cutoff}'
-automated_figures_root = automated_analysis_root + '/figures'
-figure_suffix = '{united_sample}_{puck}.png'
-automated_figures_suffixes = ['violin_filtered', 'pca_first_components',
-    'umap_clusters','umap_top1_markers', 'umap_top2_markers']
+automated_report = automated_analysis_root + '/{united_sample}_{puck}_illumina_automated_report.html'
 
-automated_figures = [automated_figures_root + '/' + f + '_' + figure_suffix for f in automated_figures_suffixes]
-automated_report = automated_analysis_root + '/{united_sample}_{puck}_illumina_automated_report.pdf'
-automated_results_metadata = automated_analysis_root + '/{united_sample}_{puck}_illumina_automated_report_metadata.csv'
+automated_result_files = {
+    'res_file': '/results.h5ad',
+    'cluster_markers': '/top10_cluster_markers.csv',
+    'obs_df': '/obs_df.csv',
+    }
 
-automated_results_file = automated_analysis_root + '/results.h5ad'
+# prepend automated_result_root
+automated_result_files = {key: automated_analysis_root + value for key, value in automated_result_files.items()}
 
 # blast out
 blast_db_primers = repo_dir + '/sequences/primers.fa'
@@ -207,6 +207,7 @@ downsample_root = united_illumina_root + '/downsampled_data'
 # in silico repo depletion
 ribo_depletion_log = data_root + '/ribo_depletion_log.txt'
 united_ribo_depletion_log = united_complete_data_root + '/ribo_depletion_log.txt'
+united_parsed_ribo_depletion_log = united_complete_data_root + '/parsed_ribo_depletion_log.txt'
 
 # global wildcard constraints
 wildcard_constraints:
@@ -250,7 +251,6 @@ def get_united_output_files(pattern, projects = None, samples = None,
     if projects is None and samples is None:
         projects = df.project_id.to_list()
         samples = df.sample_id.to_list()
-        #df = df[df.sample_id.isin(samples)]
 
     df = df[df.sample_id.isin(samples) | df.project_id.isin(projects)]
 
@@ -493,7 +493,7 @@ rule create_top_barcodes:
     output:
         united_top_barcodes
     params:
-        n_beads=lambda wildcards: get_downsteam_analysis_variables(sample_id = wildcards.united_sample, project_id = wildcards.united_project)['expected_n_beads'],
+        n_beads=lambda wildcards: get_downstream_analysis_variables(sample_id = wildcards.united_sample, project_id = wildcards.united_project)['expected_n_beads'],
     shell:
         "set +o pipefail; zcat {input} | cut -f2 | head -{params.n_beads} > {output}"
 
@@ -535,49 +535,48 @@ rule create_dge:
 
 rule create_qc_parameters:
     params:
-        sample_params=lambda wildcards: get_qc_sheet_parameters(wildcards.sample, wildcards.umi_cutoff)
+        sample_params=lambda wildcards: get_qc_sheet_parameters(wildcards.project, wildcards.sample, wildcards.umi_cutoff)
     output:
         qc_sheet_parameters_file
     script:
         "analysis/qc_sequencing_create_parameters_from_sample_sheet.py"
 
+rule parse_ribo_log:
+    input: united_ribo_depletion_log
+    output: united_parsed_ribo_depletion_log
+    script: 'snakemake/scripts/parse_ribo_log.py'
+
 rule create_qc_sheet:
     input:
+        unpack(get_dge_type),
         star_log = united_star_log,
         reads_type_out=united_reads_type_out,
         parameters_file=united_qc_sheet_parameters_file,
         read_counts = united_barcode_readcounts,
-        dge_all_summary = dge_all_cleaned_summary,
         strand_info = united_strand_info,
-        ribo_log=united_ribo_depletion_log
+        ribo_log=united_parsed_ribo_depletion_log
     output:
         united_qc_sheet
     script:
-        "analysis/qc_sequencing_create_sheet.py"
+        "analysis/qc_sequencing_create_sheet.Rmd"
 
 rule run_automated_analysis:
     input:
-        dge_all_cleaned
+        unpack(get_dge_type)
     output:
-        res_file=automated_results_file
-    params:
-        fig_root=automated_figures_root
+       **automated_result_files
     script:
         'analysis/automated_analysis.py'
         
 rule create_automated_report:
     input:
         star_log=united_star_log,
-        res_file=automated_results_file,
-        parameters_file=united_qc_sheet_parameters_file
+        parameters_file=united_qc_sheet_parameters_file,
+        **automated_result_files
     output:
-        figures=automated_figures,
-        report=automated_report,
-        results_metadata=automated_results_metadata
-    params:
-        fig_root=automated_figures_root
+        automated_report
     script:
-        'analysis/automated_analysis_create_report.py'
+        'analysis/automated_analysis_create_report.Rmd'
 
 rule split_final_bam:
     input:
