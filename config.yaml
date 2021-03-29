@@ -11,8 +11,8 @@ basecall_folders:
     - '/data/remote/basecalls'
 
 projects:
-    #    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/200507_sts_030_1_2_4_sample_sheet.csv
-    #      flowcell_id: 200507_NS500648_0456_AH52MTBGXF
+    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210329_NR_Sts_79.csv
+      flowcell_id: 210329_NS500648_0564_AHGJLMBGXG
     # - sample_sheet: /scratch/home/tsztank/20191206_spatseq_smples3-4.csv
     #   flowcell_id: 191206_NS500648_0416_AHY3KYBGXC
     # - sample_sheet: /data/rajewsky/home/tsztank/200110_STS_017_4-7-8STS_018_1.csv
@@ -26,6 +26,7 @@ barcode_flavor:
     drop_noUMI:
         projects:
             - test_003
+            - sts_079
     comb1:
         samples:
             - test_002_1

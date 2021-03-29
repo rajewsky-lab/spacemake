@@ -52,22 +52,34 @@ readStarLog <- function(log_file){
 ```{r save_snakemake, echo = F}
 #write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
 
-snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
+#snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
-### Sample data
+### Overview
 
 ```{r read_qc_parameters_yaml, echo = F}
 parameters <- read_yaml(snakemake@input$parameters_file)
 
-parameters %>%
+parameter_stats <- parameters %>%
     as_tibble() %>%
-    gather('metric', 'value') %>%
-    kable(col.names=NULL)
+    gather('metric', 'value')
+
+cPalette = list('grey'= "#999999", 'light_orange'="#E69F00",
+         'light_blue'="#56B4E9", 'green' = "#009E73",
+         'yellow' = "#F0E442", 'blue'= "#0072B2", 'orange'="#D55E00",
+         'pink'="#CC79A7")
+
+clrs = c('umis'=cPalette$light_orange, 'genes' = cPalette$light_blue, 'reads'=cPalette$green,
+         'pcr'=cPalette$pink, 'n_beads'= 'black')
+
+median_clrs = clrs
+names(median_clrs) = paste0('median_', names(clrs))
+clrs = c(clrs, median_clrs)
+nucl_clrs = c('A'='#F5C900',
+              'C'='#F55D59',
+              'T'='#3AA861',
+              'G'='#7772F5')
 ```
-
-
-### Read statistics
 
 ```{r plot_read_statistics, echo =F}
 rRNA_stats <- read_table2(snakemake@input$ribo_log, col_names=c('observation', 'value')) %>%
@@ -76,7 +88,7 @@ rRNA_stats <- read_table2(snakemake@input$ribo_log, col_names=c('observation', '
     gather('observation', 'value') %>%
     filter(observation == 'mapped_to_rRNA')
 
-readStarLog(snakemake@input$star_log) %>%
+read_stats <- readStarLog(snakemake@input$star_log) %>%
     rbind(rRNA_stats) %>%
     rbind(read_table2(snakemake@input$reads_type_out, col_names=c('observation', 'value'))) %>%
     # convert to millions
@@ -94,7 +106,14 @@ readStarLog(snakemake@input$star_log) %>%
                   as.cds = CODING) %>%
     # reorder columns
     dplyr::select(input_reads, uniq_mapped_reads, mapped_to_rRNA, intergenic, intronic, as.cds, ambiguous, as.utr) %>%
-    kable
+    gather('metric', 'value')
+
+parameter_stats %>%
+    bind_rows(read_stats) %>%
+    kbl(col.names=NULL) %>%
+    kable_classic_2(full_width=F) %>%
+    pack_rows('Sample info', 1, 7) %>%
+    pack_rows('Read statistics', 8, 15)
 ```
 
 ### QC plots
@@ -118,10 +137,17 @@ read_counts %>%
 
 #### Umi-cutoff plots
 
-```{r umi_cutoff_plot, echo = F}
-umi_cutoffs <- seq(0, 2*parameters$umi_cutoff, parameters$umi_cutoff / 50)
+```{r umi_cutoff_plot, echo = F, fig.width = 10, fig.height=5, dpi=300}
+umi_cutoffs <- seq(0, 1000, 10)
 
-dge_summary <- read_table2(snakemake@input$dge_all_summary, skip=7, col_names = c('cell_bc', 'reads', 'umis', 'genes'))
+dge_summary <- read_table2(snakemake@input$dge_all_summary, skip=7, col_names = c('cell_bc', 'reads', 'umis', 'genes')) %>%
+    mutate(pcr = reads/ umis)
+
+cell_bc_len = nchar((dge_summary %$% cell_bc)[1])
+
+dge_summary <- dge_summary %>%
+    filter(nchar(cell_bc) == cell_bc_len) %>%
+    mutate(quartile = ntile(1:n(), 4))
 
 summarise_dge_summary <- function(umi_cutoff){
     dge_summary %>%
@@ -129,6 +155,7 @@ summarise_dge_summary <- function(umi_cutoff){
         summarise(median_reads = median(reads),
                   median_umis = median(umis),
                   median_genes = median(genes),
+                  median_pcr = median(pcr),
                   n_beads = n())
 }
 
@@ -138,44 +165,74 @@ umi_cutoff_data <- tibble(umi_cutoffs = umi_cutoffs) %>%
 
 umi_cutoff_data %>%
     gather('obs', 'value', -umi_cutoffs) %>%
-    ggplot(aes(umi_cutoffs, value)) +
+    ggplot(aes(umi_cutoffs, value, color=obs)) +
         geom_line() +
-        facet_wrap(~obs, ncol=2, scales='free') +
-        geom_vline(xintercept = parameters$umi_cutoff, linetype='dotted')
+        scale_color_manual(values=clrs) +
+        facet_wrap(~obs, ncol=3, scales='free') +
+        ggtitle('Summarised metrics based on UMI-cutoff') + 
+        theme(legend.position = 'bottom')
 ```
 
 #### Distribution of metrics per bead
 
-```{r plot_n_reads_bead_hist, echo = F, fig.width=10, fig.height=3, dpi = 200}
+```{r plot_n_reads_bead_hist, echo = F, fig.width=10, dpi=300}
 dge_summary %>%
-    gather('obs', 'val', -cell_bc) %>%
-    ggplot(aes(x = val)) +
+    gather('obs', 'val', -cell_bc, -quartile) %>%
+    ggplot(aes(x = val, fill=obs)) +
         geom_histogram(bins=100) +
         scale_x_log10() +
         annotation_logticks(sides='b') +
-        facet_wrap(~obs, ncol=3, scales='free_y')
+        scale_fill_manual(values=clrs) +
+        facet_wrap(~obs, ncol=2, scales='free') +
+        ggtitle('Distribution of metrics over beads') +
+        theme(legend.position = 'bottom')
 ```
 
-```{r plot_nucl_freq, echo = F}
-cell_bc_len = nchar((dge_summary %$% cell_bc)[1])
+#### Nucleotide distribution per beads
 
-dge_summary_nucl <- dge_summary %>%
-    filter(nchar(cell_bc) == cell_bc_len,
-           umis > parameters$umi_cutoff)
+```{r plot_nucl_freq, echo = F, fig.height=7, fig.width=10}
 
-nucls <- dge_summary_nucl %$%
+nucls <- dge_summary %$%
     cell_bc %>% strsplit("")
 
-nucls <- tibble(cell_bc= dge_summary_nucl$cell_bc, nucl=nucls) %>%
+nucls <- dge_summary %>%
+    select(cell_bc, quartile) %>%
+    bind_cols(tibble(nucl=nucls)) %>%
     unnest(nucl) %>%
     group_by(cell_bc) %>%
     mutate(pos = paste0('pos_', 100+1:n())) %>%
-    group_by(pos, nucl) %>%
+    group_by(pos, nucl, quartile) %>%
     summarise(nucl_count = n())
 
 nucls %>%
     ggplot(aes(pos, nucl_count, fill = nucl)) +
         geom_bar(stat='identity', position='dodge') +
-        scale_x_discrete(labels=seq(1, cell_bc_len, 1))
+        scale_fill_manual(values=nucl_clrs) +
+        scale_x_discrete(labels=seq(1, cell_bc_len, 1)) +
+        facet_wrap(~quartile, ncol=2) +
+        ggtitle('Nucleotide distributions per nucleotide position and bead quartile')
+```
+
+#### Shannon entropy and string compression
+
+```{r shannon_entropy_plot, echo = F}
+calc_shannon_entropy <- function(barcode){
+    counts <- strsplit(barcode, '')[[1]] %>% table
+    len <- nchar(barcode) 
+
+    (-1*sum(counts/len * log2(counts/len)))
+}
+
+#theoretical <- tibble(id = 1:parameters$expected_n_beads) %>%
+#    mutate(entropy = map(id, ~ calc_shannon_entropy(paste(sample(c('A', 'C', 'T', 'G', cell_bc_len, T)), collapse=''))))
+#
+dge_summary <- dge_summary %>%
+    mutate(entropy = map(cell_bc, ~ calc_shannon_entropy(.))) %>%
+    unnest(entropy)
+
+dge_summary %>%
+    ggplot(aes(entropy)) +
+        geom_histogram(bins=100, color='black', fill=cPalette$grey) +
+        ggtitle('Shannon entropy distribution of beads')
 ```
 

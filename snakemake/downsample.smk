@@ -21,7 +21,7 @@ downsample_dge_out = downsample_dge_out_prefix + '.txt.gz'
 downsample_dge_out_summary = downsample_dge_out_prefix + '_summary.txt'
 downsample_dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
 
-downsample_qc_sheet = downsampled_sample_root + qc_sheet_dir + '/qc_sheet_{united_sample}_{puck}_downsampled_{ratio}.pdf'
+downsample_qc_sheet = downsampled_sample_root  + '/qc_sheet_{united_sample}_{puck}_downsampled_{ratio}.html'
 
 downsample_saturation_analysis = downsample_root + '/{united_sample}_saturation_analysis.pdf'
 
@@ -97,7 +97,7 @@ rule create_downsample_qc_sheet:
     output:
         downsample_qc_sheet
     script:
-        "qc_sequencing_create_sheet.py"
+        "analysis/qc_sequencing_create_sheet.Rmd"
 
 
 def get_saturation_analysis_input(wildcards):
@@ -116,16 +116,10 @@ def get_saturation_analysis_input(wildcards):
 
     return dge_summaries
 
-def get_united_qc_sheet_parameters_file(wildcards):
-    # read only qc sheet with min 10 UMI, as we only use it for metadata
-    # saturation report will be generated using all the beads, without filtering
-    return {'parameters_file': expand(united_qc_sheet_parameters_file,
-        umi_cutoff=10, **wildcards)}
-
 rule create_saturation_analysis:
     input:
         unpack(get_saturation_analysis_input),
-        unpack(get_united_qc_sheet_parameters_file),
+        parameters_file=united_qc_sheet_parameters_file,
         star_log = united_star_log,
         reads_type_out=united_reads_type_out,
     output:

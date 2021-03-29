@@ -391,14 +391,13 @@ def get_merged_ribo_depletion_log_inputs(wildcards):
 
     return ribo_depletion_logs
 
-def get_qc_sheet_parameters(project_id, sample_id, umi_cutoff):
+def get_qc_sheet_parameters(project_id, sample_id):
     # returns a single row for a given sample_id
     # this will be the input of the parameters for the qc sheet parameter generation
     out_dict = project_df.loc[project_df.sample_id == sample_id]\
         .iloc[0]\
         .to_dict()
 
-    out_dict['umi_cutoff'] = umi_cutoff
     out_dict['input_beads'] = str(get_downstream_analysis_variables(project_id, sample_id)['expected_n_beads'])
 
     return out_dict

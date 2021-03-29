@@ -3,9 +3,8 @@ merged_dir = config['root_dir'] + '/projects/merged_{merged_project}/processed_d
 sample_tagged_bam = merged_dir + '/{sample}_tagged.bam'
 merged_bam = merged_dir + '/merged.bam'
 merged_final_bam = merged_dir + '/final.bam'
-merged_qc_dir = merged_dir + qc_sheet_dir
 
-merged_qc_sheet_parameters_file = merged_qc_dir + '/qc_sheet_parameters.yaml'
+merged_qc_sheet_parameters_file = merged_dir + '/qc_sheet_parameters.yaml'
 
 merged_star_log_file = merged_dir + '/star_Log.final.out'
 merged_ribo_depletion_log = merged_dir + '/ribo_depletion_log.txt'
@@ -69,8 +68,8 @@ rule create_merged_star_log:
 
 rule create_merged_qc_parameters:
     params:
-        sample_params=lambda wildcards: get_qc_sheet_parameters('merged_' + wildcards.merged_sample, wildcards.umi_cutoff)
+        sample_params=lambda wildcards: get_qc_sheet_parameters('merged_' + wildcards.project, 'merged_' + wildcards.sample)
     output:
         merged_qc_sheet_parameters_file
     script:
-        "qc_sequencing_create_parameters_from_sample_sheet.py"
+        "analysis/qc_sequencing_create_parameters_from_sample_sheet.py"

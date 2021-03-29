@@ -136,16 +136,13 @@ united_split_reads_read_type = united_split_reads_root + 'read_type_num.txt'
 # umi cutoffs. used by qc-s and automated reports
 umi_cutoffs = [10, 50, 100]
 
-#general qc sheet directory pattern
-qc_sheet_dir = '/qc_sheet/umi_cutoff_{umi_cutoff}'
-
 # parameters file for not merged samples
-qc_sheet_parameters_file = data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
+qc_sheet_parameters_file = data_root + '/qc_sheet_parameters.yaml'
 
-united_qc_sheet = united_complete_data_root + qc_sheet_dir + '/qc_sheet_{united_sample}_{puck}.html'
+united_qc_sheet = united_complete_data_root +'/qc_sheet_{united_sample}_{puck}.html'
 united_star_log = united_complete_data_root + '/star_Log.final.out'
 united_reads_type_out = united_split_reads_read_type
-united_qc_sheet_parameters_file = united_complete_data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
+united_qc_sheet_parameters_file = united_complete_data_root + '/qc_sheet_parameters.yaml'
 united_barcode_readcounts = united_complete_data_root + '/out_readcounts.txt.gz'
 united_strand_info = united_split_reads_strand_type
 
@@ -535,7 +532,7 @@ rule create_dge:
 
 rule create_qc_parameters:
     params:
-        sample_params=lambda wildcards: get_qc_sheet_parameters(wildcards.project, wildcards.sample, wildcards.umi_cutoff)
+        sample_params=lambda wildcards: get_qc_sheet_parameters(wildcards.project, wildcards.sample)
     output:
         qc_sheet_parameters_file
     script:
