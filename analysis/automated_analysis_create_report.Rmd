@@ -26,7 +26,6 @@ library(magrittr)
 library(kableExtra)
 library(cowplot)
 library(ggrepel)
-library('wesanderson')
 
 theme_set(theme_cowplot(12))
 
@@ -48,35 +47,83 @@ readStarLog <- function(log_file){
 	}
 ```
 
-```{r plot_umi_umap, echo = F, fig.size=10, fig.width=10}
-obs_df <- read_table2(snakemake@input$obs_df)
-
-coordinates <- read_table2('/data/rajewsky/projects/cdr1as_ko_visium/spaceranger-1.2.0/lib/python/cellranger/barcodes/visium-v1_coordinates.txt', col_names=c('cell_bc', 'x_pos', 'y_pos'))
-
-obs_df <- obs_df %>%
-    inner_join(coordinates, by='cell_bc') %>%
-    mutate(x_pos = x_pos,
-           y_pos = y_pos * 128 / 78,
-           cluster = factor(leiden_0.8))
-
-obs_df %>%
-    ggplot(aes(x_pos, y_pos, color = total_counts)) +
-        geom_point(size = 1)+
-        coord_fixed()+
-        scale_x_continuous(breaks = seq(0, 130, 10), limits=c(0, 130))+
-        scale_y_continuous(breaks = seq(0, 130, 10), limits=c(0, 130)) +
-        scale_color_gradient(low='white', high='red', limits=c(0, max(obs_df$total_counts)))
-
-obs_df %>%
-    ggplot(aes(umap_0, umap_1, color = cluster)) +
-        geom_point() +
-        coord_fixed()
-
-obs_df %>%
-    ggplot(aes(x_pos, y_pos, color = cluster)) +
-        geom_point(size = 1)+
-        coord_fixed()+
-        scale_x_continuous(breaks = seq(0, 130, 10), limits=c(0, 130))+
-        scale_y_continuous(breaks = seq(0, 130, 10), limits=c(0, 130))
+```{r save_snakemake_object, echo = F}
+#write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
+#snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
+#### Histogram plots of metrics
+
+```{r read_data, echo = F}
+obs_df <- read_table2(snakemake@input$obs_df)
+```
+
+```{r plot_histogram_of_metrics, echo = F}
+
+obs_df %>%
+    select(cell_bc, n_counts, n_genes, pct_counts_mt) %>%
+    gather('obs', 'value', -cell_bc) %>%
+    ggplot(aes(value, fill=obs)) +
+        geom_histogram(bins=100) +
+        scale_x_log10() +
+        annotation_logticks(sides='b') +
+        facet_wrap(~obs, ncol=1, scales='free')
+```
+
+#### UMAP plots using different resolutions
+
+```{r plot_umi_umap, echo = F, fig.size=10, fig.width=10}
+obs_df <- obs_df %>%
+    gather('res', 'cluster', starts_with('leiden')) %>%
+    mutate(cluster = factor(cluster))
+
+#coordinates <- read_table2('/data/rajewsky/projects/cdr1as_ko_visium/spaceranger-1.2.0/lib/python/cellranger/barcodes/visium-v1_coordinates.txt', col_names=c('cell_bc', 'x_pos', 'y_pos'))
+#
+#obs_df <- obs_df %>%
+#    inner_join(coordinates, by='cell_bc') %>%
+#    mutate(x_pos = x_pos,
+#           y_pos = y_pos * 128 / 78,
+#           cluster = factor(leiden_0.8))
+#
+#obs_df %>%
+#    ggplot(aes(x_pos, y_pos, color = total_counts)) +
+#        geom_point(size = 1)+
+#        coord_fixed()+
+#        scale_x_continuous(breaks = seq(0, 130, 10), limits=c(0, 130))+
+#        scale_y_continuous(breaks = seq(0, 130, 10), limits=c(0, 130)) +
+#        scale_color_gradient(low='white', high='red', limits=c(0, max(obs_df$total_counts)))
+
+plots <- list()
+
+for (i in obs_df %$% res %>% unique){
+    pl <- obs_df %>%
+        filter(res == i) %>%
+        ggplot(aes(umap_0, umap_1, color = cluster)) +
+            geom_point(size=0.2, alpha=0.8) +
+            coord_fixed() +
+            facet_wrap(~res, ncol = 2) +
+            guides(colour = guide_legend(override.aes = list(size=3)))
+
+    print(pl)
+}
+
+
+#obs_df %>%
+#    ggplot(aes(x_pos, y_pos, color = cluster)) +
+#        geom_point(size = 1)+
+#        coord_fixed()+
+#        scale_x_continuous(breaks = seq(0, 130, 10), limits=c(0, 130))+
+#        scale_y_continuous(breaks = seq(0, 130, 10), limits=c(0, 130))
+```
+
+##### Marker tables
+
+```{r load_top_cluster_markers, echo = F}
+top10_marker_table <- read_table2(snakemake@input$cluster_markers)
+
+top10_marker_table %>%
+    filter(pvals_adj <0.5, pts > 0.01) %>%
+    filter(resolution == 0.2) %>%
+    kbl() %>%
+    kable_classic_2(full_width = F)
+```

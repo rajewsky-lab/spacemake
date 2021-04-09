@@ -246,10 +246,16 @@ def get_united_output_files(pattern, projects = None, samples = None,
     df = project_df
 
     if projects is None and samples is None:
-        projects = df.project_id.to_list()
-        samples = df.sample_id.to_list()
+        # nothing is set, assume we need to use all samples
+        pass
+    elif samples is None and projects is not None:
+        df = df[df.project_id.isin(projects)]
+    elif samples is not None and projects is None:
+        df = df[df.sample_id.isin(samples)]
+    else:
+        # both are set
+        df = df[df.sample_id.isin(samples) | df.project_id.isin(projects)]
 
-    df = df[df.sample_id.isin(samples) | df.project_id.isin(projects)]
 
     if skip_samples is not None:
         df = df[~df.sample_id.isin(skip_samples)]
@@ -268,6 +274,7 @@ def get_united_output_files(pattern, projects = None, samples = None,
             umi_cutoff = umi_cutoff,
             **kwargs)
 
+    print(out_files)
     return out_files
 
 human_mouse_samples = project_df[project_df.species.isin(['human', 'mouse'])].sample_id.to_list()

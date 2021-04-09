@@ -37,7 +37,7 @@ barcode_flavor:
 downstream_analysis_variables:
     default:
         expected_n_beads: 100000
-        umi_cutoff: [10, 50, 100]
+        umi_cutoff: [100]
         clean_dge: True
     visium:
         expected_n_beads: 10000
@@ -71,6 +71,9 @@ additional_projects:
 downsample: 
     projects:
     samples:
+        - sts_079_1
+        - sts_079_3
+        - sts_079_5
 
 # in the output each will have an merged_ prepended to their root directory
 # samples_to_merge:`

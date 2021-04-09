@@ -9,7 +9,6 @@ umi_cutoff = int(snakemake.wildcards['umi_cutoff'])
 
 adata = sc.read_text(dge_path, delimiter='\t').T
 
-
 # filter out cells based on umi, and genes based on number of cells
 sc.pp.filter_cells(adata, min_counts=umi_cutoff)
 sc.pp.filter_cells(adata, min_genes=1)
@@ -59,23 +58,29 @@ if nrow > 1 and ncol > 1:
     
     # find out the clusters
     # restrict to max 20 clusters
-    resolution = [0.6, 0.8, 1.0, 1.2]
-
+    resolution = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2]
+    
     top_10_marker_dfs = []
-
+    
     for res in resolution:
         res_key = 'leiden_' + str(res)
-
+        
         sc.tl.leiden(adata, resolution = res, key_added = res_key)
         
         # finding marker genes
-        sc.tl.rank_genes_groups(adata, res_key, method='t-test', key_added = 'rank_genes_groups_' + res_key)
-
+        sc.tl.rank_genes_groups(adata, res_key, method='t-test', key_added = 'rank_genes_groups_' + res_key, pts=True)
+        
         #save top10 cluster markers
         df = pd.DataFrame(adata.uns['rank_genes_groups_'+res_key]['names'])\
-                .head(20).melt(var_name = 'cluster', value_name = 'gene')
-        df['resolution'] = res
+                .head(10).melt(var_name = 'cluster', value_name = 'gene')
 
+        for key in ['logfoldchanges', 'pvals', 'pvals_adj', 'pts', 'pts_rest']:
+            df_key = pd.DataFrame(adata.uns['rank_genes_groups_'+res_key][key])\
+                .head(10).melt(var_name = 'cluster', value_name = key)
+            df[key] = df_key[key]
+             
+        df['resolution'] = res
+        
         top_10_marker_dfs.append(df)
 
 pd.concat(top_10_marker_dfs).to_csv(snakemake.output['cluster_markers'], index=False, sep = '\t')
@@ -108,3 +113,4 @@ def create_long_df(expr_matrix, id_vars = ['cell_bc']):
 #create_long_df(expr_matrix).to_csv(snakemake.output['long_expr_df'], index=False, sep = '\t')
 #
 #adata.write(snakemake.output['result'])
+
