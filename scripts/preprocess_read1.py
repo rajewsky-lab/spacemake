@@ -539,34 +539,33 @@ def process_combinatorial(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
                 res, tstart, tend = aln
                 if res is None:
                     N["opseq_broken"] += 1
-                    results.append((False, out_d))
-                    continue
-
-                # identify barcodes
-                bc1, BC1, ref1, score1 = match_BC1(
-                    bc1_matcher, res.seqB, res.start, tstart, N
-                )
-                bc2, BC2, ref2, score2 = match_BC2(
-                    bc2_matcher, res.seqB, res.end, tend, N
-                )
-                # slo = sQSeq.lower()
-                # sout = slo[:qstart] + sQSeq[qstart:qend] + slo[qend:]
-                # print(sout, qstart, qend, tstart, tend, bc1, bc2)
-                # print(f"bc1: {bc1} -> {ref1} -> {BC1} score={50.0*score1/len(bc1):.1f} %")
-                # print(f"bc2: {bc2} -> {ref2} -> {BC2} score={50.0*score2/len(bc2):.1f} %")
-
-                # best matching pieces of sequence
-                out_d["bc1"] = bc1
-                out_d["bc2"] = bc2
-                # best attempt at assignment
-                out_d["BC1"] = BC1
-                out_d["BC2"] = BC2
-
-                if BC1 != NO_CALL and BC2 != NO_CALL:
-                    N["called"] += 1
-                    assigned = True
-                else:
                     assigned = False
+                else:
+                    # identify barcodes
+                    bc1, BC1, ref1, score1 = match_BC1(
+                        bc1_matcher, res.seqB, res.start, tstart, N
+                    )
+                    bc2, BC2, ref2, score2 = match_BC2(
+                        bc2_matcher, res.seqB, res.end, tend, N
+                    )
+                    # slo = sQSeq.lower()
+                    # sout = slo[:qstart] + sQSeq[qstart:qend] + slo[qend:]
+                    # print(sout, qstart, qend, tstart, tend, bc1, bc2)
+                    # print(f"bc1: {bc1} -> {ref1} -> {BC1} score={50.0*score1/len(bc1):.1f} %")
+                    # print(f"bc2: {bc2} -> {ref2} -> {BC2} score={50.0*score2/len(bc2):.1f} %")
+
+                    # best matching pieces of sequence
+                    out_d["bc1"] = bc1
+                    out_d["bc2"] = bc2
+                    # best attempt at assignment
+                    out_d["BC1"] = BC1
+                    out_d["BC2"] = BC2
+
+                    if BC1 != NO_CALL and BC2 != NO_CALL:
+                        N["called"] += 1
+                        assigned = True
+                    else:
+                        assigned = False
 
                 out_d["assigned"] = assigned
                 rec = out.make_record(**out_d)
@@ -822,10 +821,7 @@ def main_dropseq(args):
 
         N = count_dict_sum(Ns)
         if N["total"]:
-            el.logger.info(
-                f"Run completed. Overall combinatorial barcode assignment "
-                f"rate was {100.0 * N['called']/N['total']}"
-            )
+            el.logger.info(f"Run completed, {N['total']} reads processed.")
         else:
             el.logger.error("No reads were processed!")
 
