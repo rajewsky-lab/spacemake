@@ -118,43 +118,15 @@ knowledge:
     annotations:
         human: /data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/gencode.v32.primary_assembly.annotation.gtf
         mouse: /data/rajewsky/home/nkarais/mm10_GRCm38.p5_gencode.vM23_STAR_2.7.1a/gencode.vM23.primary_assembly.annotation.gtf
-        ercc: /data/rajewsky/home/nkarais/ercc_STAR_2.7.1a/ERCC92.gtf
-        erccgfp: /data/rajewsky/home/nkarais/ercc_gfp_STAR_2.7.1a/ercc_gfp.gtf
-        celegans: /data/rajewsky/annotation/filippos_sucks/ce11/ce11_filtered.gtf
-        humancelegans: /data/rajewsky/home/nkarais/hg38_GRCh38.84_ce11_STAR_2.7.1a/MegaAnnotation.gtf
-        humanmouse: /data/rajewsky/annotation/GRCh38.p13_GRCm38.p6/GRCh38.p13_GRCm38.p6.gtf
-
     genomes:
         human: /data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/GRCh38.primary_assembly.genome.fa
         mouse: /data/rajewsky/home/nkarais/mm10_GRCm38.p5_gencode.vM23_STAR_2.7.1a/GRCm38.primary_assembly.genome.fa
-        ercc: /data/rajewsky/home/nkarais/ercc_STAR_2.7.1a/ERCC92.fa
-        erccgfp: /data/rajewsky/home/nkarais/ercc_gfp_STAR_2.7.1a/ercc_gfp.fa
-        celegans: /data/rajewsky/genomes/ce11_public/ce11.fa
-        humancelegans: /data/rajewsky/home/nkarais/hg38_GRCh38.84_ce11_STAR_2.7.1a/MegaGenome.fa
-        humanmouse: /data/rajewsky/genomes/GRCh38_GRCm38_mixed_species/GRCh38_GRCm38.fa
-
     indices:
         human:
             star: /data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/STAR_index
-            bt2: /data/local/rajewsky/indices/hg38_GRCh38_gencode.v32_bowtie2.3.5.1/hg38_GRCh38_bt2_index
-            bt2_rRNA: /data/rajewsky/indices/hsa_rrna_ncbi_bowtie_2.3.2/hsa_rrna_ncbi 
         mouse:
             star: /data/rajewsky/home/nkarais/mm10_GRCm38.p5_gencode.vM23_STAR_2.7.1a/STAR_index
-            bt2: /data/local/rajewsky/indices/mm10_GRCm38.p5_gencode.vM23_bowtie2.3.5.1/mm10_GRCm38_bt2_index
             bt2_rRNA: /data/rajewsky/indices/mm10_rRNA_bowtie2_2.3.3.1/mouse_rRNA
-        ercc:
-            star: /data/rajewsky/home/nkarais/ercc_STAR_2.7.1a/STAR_index
-        erccgfp:
-            star: /data/rajewsky/home/nkarais/ercc_gfp_STAR_2.7.1a/STAR_index
-            bt2: /data/local/rajewsky/indices/erccgfp_bowtie2.3.5.1/erccgfp_bt2_index
-        celegans:
-            star: /data/rajewsky/indices/ce11_star_2.7.1a
-        humancelegans:
-            star: /data/rajewsky/home/nkarais/hg38_GRCh38.84_ce11_STAR_2.7.1a/STAR_index
-        humanmouse:
-            star: /data/rajewsky/indices/GRCh38_GRCm38_STAR_2.7.1a
-            # for now only map to mouse
-            bt2: /data/local/rajewsky/indices/erccgfp_bowtie2.3.5.1/erccgfp_bt2_index
 
     barcode_flavor:
         dropseq:
@@ -173,14 +145,3 @@ knowledge:
             cell: "r1[0:16]"
             UMI: "r1[16:28]"
             bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
-        comb1:
-            segments: 2
-            bc1_ref: "/data/rajewsky/projects/combbeads/two_segments/illumina/index_BC1_96.fa"
-            bc2_ref: "/data/rajewsky/projects/combbeads/two_segments/illumina/index_BC2_96_var.fa"
-            bc1_cache: "/data/rajewsky/projects/combbeads/two_segments/illumina/bc1_cache.tsv"
-            bc2_cache: "/data/rajewsky/projects/combbeads/two_segments/illumina/bc2_cache.tsv"
-            score_threshold: 0.5
-            cell: "BC1[::-1][0:6]+BC2[::-1][0:6]"
-            cell_raw: bc1[::-1]+"_"+bc2[::-1]
-            UMI: "r2[0:8]"
-            bam_tags: "CR:{raw},CB:{cell},MI:{UMI},RG:{assigned}"
