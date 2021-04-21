@@ -12,16 +12,13 @@ adata = sc.read_text(dge_path, delimiter='\t').T
 # filter out cells based on umi, and genes based on number of cells
 sc.pp.filter_cells(adata, min_counts=umi_cutoff)
 sc.pp.filter_cells(adata, min_genes=1)
-sc.pp.filter_genes(adata, min_cells=3)
+sc.pp.filter_cells(adata, max_genes=4000)
+sc.pp.filter_genes(adata, min_cells=10)
 
 # calculate mitochondrial gene percentage
 adata.var['mt'] = adata.var_names.str.startswith('Mt-') | adata.var_names.str.startswith('mt-')
 
 sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
-
-# calculate log(cpm)
-sc.pp.normalize_total(adata, target_sum=1e4)
-sc.pp.log1p(adata, base=2)
 
 # save the log-normalised counts in the .raw attribute
 adata.raw = adata
@@ -30,12 +27,11 @@ adata.raw = adata
 nrow, ncol = adata.shape
 
 if nrow > 1 and ncol > 1:
-    sc.pp.highly_variable_genes(adata, n_top_genes=2000)
-    # filter out genes which are not highly variable
-    #adata = adata[:, adata.var.highly_variable]
-    
-    #sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'])
-    #sc.pp.scale(adata)
+    sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=5000)
+
+    # calculate log(cpm)
+    sc.pp.normalize_total(adata, target_sum=1e4)
+    sc.pp.log1p(adata, base=2)
     
     # PCA ANALYSIS
     sc.tl.pca(adata, svd_solver='arpack')
@@ -44,7 +40,7 @@ if nrow > 1 and ncol > 1:
     # less than 50 cells pass the threshold
     n_pcs = adata.uns['pca']['variance'].size
     # limit the number of pcs to 50
-    n_pcs = n_pcs if n_pcs < 50 else 50
+    n_pcs = n_pcs if n_pcs < 40 else 40
     
     # Compute the neighborhood graph
     sc.pp.neighbors(adata, n_pcs=n_pcs)
@@ -104,13 +100,11 @@ def create_long_df(expr_matrix, id_vars = ['cell_bc']):
     long_df = long_df[long_df.expr > 0]
     
     return long_df
-# create expr_matrix from raw
-#
-#expr_matrix = pd.DataFrame(adata.raw.X)
-#expr_matrix.columns = adata.raw.var.index
-#expr_matrix['cell_bc'] = adata.obs.index
-#
-#create_long_df(expr_matrix).to_csv(snakemake.output['long_expr_df'], index=False, sep = '\t')
-#
-#adata.write(snakemake.output['result'])
 
+# create expr_matrix from raw
+
+expr_matrix = pd.DataFrame(adata.raw.X)
+expr_matrix.columns = adata.raw.var.index
+expr_matrix['cell_bc'] = adata.obs.index
+
+create_long_df(expr_matrix).to_csv(snakemake.output['long_expr_df'], index=False, sep = '\t')

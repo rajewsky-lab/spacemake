@@ -49,7 +49,7 @@ readStarLog <- function(log_file){
 
 ```{r save_snakemake_object, echo = F}
 #write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
-#snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
+snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
 #### Histogram plots of metrics
@@ -77,34 +77,41 @@ obs_df <- obs_df %>%
     gather('res', 'cluster', starts_with('leiden')) %>%
     mutate(cluster = factor(cluster))
 
-#coordinates <- read_table2('/data/rajewsky/projects/cdr1as_ko_visium/spaceranger-1.2.0/lib/python/cellranger/barcodes/visium-v1_coordinates.txt', col_names=c('cell_bc', 'x_pos', 'y_pos'))
-#
-#obs_df <- obs_df %>%
-#    inner_join(coordinates, by='cell_bc') %>%
-#    mutate(x_pos = x_pos,
-#           y_pos = y_pos * 128 / 78,
-#           cluster = factor(leiden_0.8))
-#
-#obs_df %>%
-#    ggplot(aes(x_pos, y_pos, color = total_counts)) +
-#        geom_point(size = 1)+
-#        coord_fixed()+
-#        scale_x_continuous(breaks = seq(0, 130, 10), limits=c(0, 130))+
-#        scale_y_continuous(breaks = seq(0, 130, 10), limits=c(0, 130)) +
-#        scale_color_gradient(low='white', high='red', limits=c(0, max(obs_df$total_counts)))
+coordinates <- read_csv('/data/rajewsky/home/tsztank/projects/spatial/sts-downsample-comparisons/Puck_200115_08_bead_locations.csv', col_names=c('cell_bc', 'x_pos', 'y_pos'), skip=1)
+
+obs_df <- obs_df %>%
+    left_join(coordinates, by='cell_bc')
+
+obs_df <- obs_df %>%
+    mutate(log1p_total_counts = log2(1+total_counts))
+obs_df %>%
+    filter(res == 'leiden_0.2') %>%
+    mutate(log1p_total_counts = log2(1+total_counts)) %>%
+    ggplot(aes(x_pos, y_pos, color = log1p_total_counts)) +
+        geom_point(size = 0.5)+
+        coord_fixed()+
+        scale_color_gradient(low='white', high='red', limits=c(0, max(obs_df$log1p_total_counts)))
 
 plots <- list()
 
 for (i in obs_df %$% res %>% unique){
-    pl <- obs_df %>%
+    pl1 <- obs_df %>%
         filter(res == i) %>%
         ggplot(aes(umap_0, umap_1, color = cluster)) +
             geom_point(size=0.2, alpha=0.8) +
             coord_fixed() +
-            facet_wrap(~res, ncol = 2) +
+            facet_wrap(~res, ncol = 1) +
             guides(colour = guide_legend(override.aes = list(size=3)))
 
-    print(pl)
+    pl2 <- obs_df %>%
+        filter(res == i) %>%
+        ggplot(aes(x_pos, y_pos, color = cluster)) +
+            geom_point(size=0.1, alpha=0.8) +
+            coord_fixed() +
+            facet_wrap(~res, ncol = 1) +
+            guides(colour = guide_legend(override.aes = list(size=3)))
+
+    print(plot_grid(pl1, pl2))
 }
 
 
@@ -127,3 +134,26 @@ top10_marker_table %>%
     kbl() %>%
     kable_classic_2(full_width = F)
 ```
+
+```{r read_expr_df, echo = F}
+expr_df <- read_table2(snakemake@input$long_expr_df)
+```
+
+```{r plot, echo = F}
+gene_expr <- expr_df %>%
+    filter(gene %in% c('Slc17a7'))
+
+gene_expr <- obs_df %>%
+    filter(res == 'leiden_0.2') %>%
+    left_join(gene_expr, by = 'cell_bc') %>%
+    replace_na(list(expr = 0, gene='Slc17a7'))
+
+gene_expr %>%
+    arrange(expr) %>%
+    ggplot(aes(x_pos, y_pos, color = expr)) +
+        geom_point(size=0.1) +
+        coord_fixed() +
+        facet_wrap(~gene) +
+        scale_color_viridis_c(option = "inferno", direction=-1)
+```
+

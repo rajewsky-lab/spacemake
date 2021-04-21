@@ -1,6 +1,6 @@
 PROJECT_DF_COLUMNS = ['sample_id', 'puck_id', 'project_id', 'sample_sheet', 'flowcell_id',
     'species', 'demux_barcode_mismatch', 'demux_dir', 'R1', 'R2', 'investigator',
-    'sequencing_date', 'experiment', 'puck_barcode_file', 'downstream_analysis_type']
+    'sequencing_date', 'experiment', 'puck_barcode_file', 'downstream_analysis_type', 'bam']
 
 # barcode flavor parsing and query functions
 class dotdict(dict):
@@ -100,7 +100,6 @@ def get_bc_preprocessing_threads(wildcards):
 # is kept here for convenient lookup
 bc_flavor_data = parse_barcode_flavors(config)
 
-
 def hamming_distance(string1, string2):
     return sum(c1 != c2 for c1, c2 in zip(string1, string2))
 
@@ -171,6 +170,9 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     # mock R1 and R2
     df['R1'] = 'none'
     df['R2'] = 'none'
+
+    # mock bam
+    df['bam'] = 'none'
 
     df['downstream_analysis_type'] = 'default'
 
@@ -280,6 +282,16 @@ def get_rRNA_index(wildcards):
     return {
         'rRNA_index': index
     }
+
+def get_rRNA_pattern(wildcards):
+    bam = get_metadata('bam',
+            project_id = wildcards.project,
+            sample_id = wildcards.sample)
+
+    if bam == 'none':
+        return raw_reads_mate_2
+    else:
+        return dropseq_tagged_fastq
 
 def get_downstream_analysis_variables(project_id, sample_id):
     downstream_analysis_type = get_metadata('downstream_analysis_type',
@@ -409,7 +421,6 @@ def get_bt2_index(wildcards):
     return config['knowledge']['indices'][species]['bt2']
 
 def get_top_barcodes(wildcards):
-    print(wildcards)
     if wildcards.dge_cleaned == '':
         return {'top_barcodes': united_top_barcodes}
     else:
@@ -424,4 +435,19 @@ def get_dge_type(wildcards):
         return {'dge_all_summary': dge_all_cleaned_summary, 'dge': dge_all_cleaned}
     else:
         return {'dge_all_summary': dge_all_summary, 'dge': dge_all}
+
+def get_bam_tag_names(project_id, sample_id):
+    barcode_flavor = get_metadata('barcode_flavor',
+            project_id = project_id, sample_id = sample_id)
+
+    bam_tags = config['knowledge']['barcode_flavor'][barcode_flavor]['bam_tags'] 
+
+    tag_names = {}
+
+    for tag in bam_tags.split(','):
+        tag_name, tag_variable = tag.split(':')
+
+        tag_names[tag_variable] = tag_name
+
+    return tag_names
 

@@ -215,7 +215,7 @@ nucls %>%
 
 #### Shannon entropy and string compression
 
-```{r shannon_entropy_plot, echo = F}
+```{r calc_shannon, echo = F}
 calc_shannon_entropy <- function(barcode){
     counts <- strsplit(barcode, '')[[1]] %>% table
     len <- nchar(barcode) 
@@ -223,16 +223,26 @@ calc_shannon_entropy <- function(barcode){
     (-1*sum(counts/len * log2(counts/len)))
 }
 
-#theoretical <- tibble(id = 1:parameters$expected_n_beads) %>%
-#    mutate(entropy = map(id, ~ calc_shannon_entropy(paste(sample(c('A', 'C', 'T', 'G', cell_bc_len, T)), collapse=''))))
-#
-dge_summary <- dge_summary %>%
-    mutate(entropy = map(cell_bc, ~ calc_shannon_entropy(.))) %>%
-    unnest(entropy)
+theoretical <- c()
+    
+for(i in seq(1, dge_summary %>% nrow, 1)){
+    theoretical[i] = paste(sample(c('A', 'C', 'T', 'G'), cell_bc_len, T), collapse='')
+}
 
+dge_summary <- dge_summary %>%
+    add_column(theoretical_entropy = map(theoretical, ~ calc_shannon_entropy(.))) %>%
+    mutate(entropy = map(cell_bc, ~ calc_shannon_entropy(.))) %>%
+    unnest(entropy) %>%
+    unnest(theoretical_entropy)
+
+```
+
+```{r plot_shannon, echo = F}
 dge_summary %>%
-    ggplot(aes(entropy)) +
-        geom_histogram(bins=100, color='black', fill=cPalette$grey) +
+    gather('obs', 'val', entropy, theoretical_entropy) %>%
+    ggplot(aes(val, fill = obs)) +
+        geom_histogram(bins=20, color='black', position='dodge') +
+        scale_fill_manual(values=c(cpalette$grey, cpalette$orange)) +
         ggtitle('Shannon entropy distribution of beads')
 ```
 

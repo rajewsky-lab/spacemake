@@ -187,6 +187,7 @@ automated_result_files = {
     'res_file': '/results.h5ad',
     'cluster_markers': '/top10_cluster_markers.csv',
     'obs_df': '/obs_df.csv',
+    'long_expr_df': '/long_expr_df.csv'
     }
 
 # prepend automated_result_root
@@ -214,9 +215,35 @@ wildcard_constraints:
     dge_type = '|'.join(dge_types),
     pacbio_ext = 'fq|fastq'
 
-# #######################
-# include dropseq rules #
-# #######################
+# #########################
+#  dropseq rules and vars #
+# #########################
+dropseq_tagged = dropseq_root + '/unaligned_bc_tagged.bam'
+dropseq_tagged_fastq = dropseq_tagged.replace('.bam', '.fastq') 
+dropseq_unassigned = dropseq_root + '/unaligned_bc_unassigned.bam'
+
+# filter out XC tag
+dropseq_tagged_filtered = dropseq_root + '/unaligned_tagged_filtered.bam'
+
+# trim smart adapter from the reads
+dropseq_tagged_trimmed = dropseq_root + '/unaligned_tagged_trimmed.bam'
+
+# trim polyA overheang if exists
+dropseq_tagged_trimmed_polyA = dropseq_root + '/unaligned_tagged_trimmed_polyA.bam'
+
+# mapped reads
+dropseq_mapped_reads_unsorted_headerless = dropseq_root + '/star_Aligned.unsorted.headerless.out.bam'
+dropseq_mapped_reads_unsorted = dropseq_root + '/star_Aligned.unsorted.out.bam'
+dropseq_mapped_reads = dropseq_root + '/star_Aligned.sorted.out.bam'
+star_log_file = dropseq_root + '/star_Log.final.out'
+
+# final dropseq bfinal dropseq bam
+dropseq_final_bam = dropseq_root + '/final.bam'
+
+# index bam file
+dropseq_final_bam_ix = dropseq_final_bam + '.bai'
+
+# include dropseq
 include: 'snakemake/dropseq.smk'
 
 ################################
@@ -274,7 +301,6 @@ def get_united_output_files(pattern, projects = None, samples = None,
             umi_cutoff = umi_cutoff,
             **kwargs)
 
-    print(out_files)
     return out_files
 
 human_mouse_samples = project_df[project_df.species.isin(['human', 'mouse'])].sample_id.to_list()
@@ -299,7 +325,7 @@ include: 'snakemake/pacbio.smk'
 #############
 rule all:
     input:
-        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
+        #get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
         get_united_output_files(automated_report),
         get_united_output_files(united_qc_sheet)
@@ -348,6 +374,7 @@ include: 'snakemake/merge_samples.smk'
 # RULES #
 #########
 ruleorder: link_raw_reads > link_demultiplexed_reads 
+ruleorder: link_dropseq_tagged_bam > reverse_first_mate
 
 rule demultiplex_data:
     params:
@@ -451,6 +478,21 @@ rule compress_dropseq_tagged:
     output: dropseq_tagged
     shell: "sambamba view -h -l9 -f bam {input} > {output}"
 
+def get_dropseq_tagged_bam(wildcards):
+    out = [get_metadata('bam', sample_id = wildcards.sample, project_id = wildcards.project)]
+    print(out)
+    return(out)
+
+rule link_dropseq_tagged_bam:
+    input:
+        unpack(get_dropseq_tagged_bam)
+    output:
+        dropseq_tagged
+    shell:
+        """
+        ln -s {input} {output}
+        """
+
 rule run_fastqc:
     input:
         # we need to use raw reads here, as later during "reversing" we do the umi
@@ -483,12 +525,16 @@ rule get_barcode_readcounts:
         united_final_bam
     output:
         united_barcode_readcounts
+    params:
+        cell_barcode_tag = lambda wildcards: get_bam_tag_names(
+            project_id = wildcards.united_project,
+            sample_id = wildcards.united_sample)['{cell}'],
     shell:
         """
         {dropseq_tools}/BamTagHistogram \
         I= {input} \
         O= {output}\
-        TAG=CB
+        TAG={params.cell_barcode_tag}
         """
 
 rule create_top_barcodes:
@@ -520,7 +566,13 @@ rule create_dge:
         dge_summary=dge_out_summary
     params:
         dge_root = dge_root,
-        dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards)     
+        dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
+        cell_barcode_tag = lambda wildcards: get_bam_tag_names(
+            project_id = wildcards.united_project,
+            sample_id = wildcards.united_sample)['{cell}'],
+        umi_tag = lambda wildcards: get_bam_tag_names(
+            project_id = wildcards.united_project,
+            sample_id = wildcards.united_sample)['{UMI}']
     shell:
         """
         mkdir -p {params.dge_root}
@@ -531,8 +583,8 @@ rule create_dge:
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
-        CELL_BARCODE_TAG=CB \
-        MOLECULAR_BARCODE_TAG=MI \
+        CELL_BARCODE_TAG={params.cell_barcode_tag} \
+        MOLECULAR_BARCODE_TAG={params.umi_tag} \
         TMP_DIR={temp_dir} \
         {params.dge_extra_params}
         """
@@ -612,9 +664,17 @@ rule get_unmapped_reads:
     shell:
         "sambamba view -F 'unmapped' -h -f bam -t {threads} -o {output} {input}"
 
+rule dropseq_tagged_to_fastq:
+    input:
+        dropseq_tagged
+    output:
+        temp(dropseq_tagged_fastq)
+    shell:
+        "java -jar {picard_tools} SamToFastq I={input} FASTQ={output}"
+
 rule map_to_rRNA:
     input:
-        raw_reads_mate_2
+        lambda wildcards: get_rRNA_pattern(wildcards)
     output:
         ribo_depletion_log
     params:

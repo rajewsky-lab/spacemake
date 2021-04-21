@@ -47,12 +47,16 @@ rule downsample_bam_tag_histogram:
         downsampled_bam
     output:
         downsampled_readcounts
+    params:
+        cell_barcode_tag = lambda wildcards: get_bam_tag_names(
+            project_id = wildcards.united_project,
+            sample_id = wildcards.united_sample)['{cell}'],
     shell:
         """
         {dropseq_tools}/BamTagHistogram \
         I= {input} \
         O= {output}\
-        TAG=CB
+        TAG={params.cell_barcode_tag}
         """
 
 rule create_downsampled_top_barcodes_file:
@@ -72,7 +76,13 @@ rule create_downsample_dge:
         downsample_dge_summary=downsample_dge_out_summary
     params:
         downsample_dge_root = downsample_dge_root,
-        downsample_dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards)     
+        downsample_dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
+        cell_barcode_tag = lambda wildcards: get_bam_tag_names(
+            project_id = wildcards.united_project,
+            sample_id = wildcards.united_sample)['{cell}'],
+        umi_tag = lambda wildcards: get_bam_tag_names(
+            project_id = wildcards.united_project,
+            sample_id = wildcards.united_sample)['{UMI}']
     shell:
         """
         mkdir -p {params.downsample_dge_root}
@@ -82,8 +92,8 @@ rule create_downsample_dge:
         O= {output.downsample_dge} \
         SUMMARY= {output.downsample_dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
-        CELL_BARCODE_TAG=CB \
-        MOLECULAR_BARCODE_TAG=MI \
+        CELL_BARCODE_TAG={params.cell_barcode_tag} \
+        MOLECULAR_BARCODE_TAG={params.umi_tag} \
         {params.downsample_dge_extra_params}
         """
 

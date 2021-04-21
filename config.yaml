@@ -33,11 +33,14 @@ barcode_flavor:
     visium:
         projects:
             - cdr1as_ko_visium
+    slideseq:
+        projects:
+            - slideseq_v2
 
 downstream_analysis_variables:
     default:
         expected_n_beads: 100000
-        umi_cutoff: [100]
+        umi_cutoff: [100, 300]
         clean_dge: True
     visium:
         expected_n_beads: 10000
@@ -47,8 +50,18 @@ downstream_analysis_variables:
         expected_n_beads: 60000
         umi_cutoff: [10, 20, 50, 100]
         clean_dge: True
+    slideseq:
+        expected_n_beads: 100000
+        umi_cutoff: [100, 300]
+        clean_dge: False
 
 additional_projects:
+    #    - project_id: test_001
+    #      sample_id: test_001_1
+    #      puck_id: NoOptical
+    #      species: human
+    #      R1: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R1.fastq.gz
+    #      R2: /data/rajewsky/projects/slide_seq/raw_data/test_data/test_001_1_R2.fastq.gz
     #    - project_id: test_003
     #      sample_id: test_003_1
     #      puck_id: NoOptical
@@ -58,18 +71,37 @@ additional_projects:
     #    - project_id: sts_030
     #      sample_id: sts_030_1
     #      downstream_analysis_type: 'less_beads'
-    - project_id: cdr1as_ko_visium
-      sample_id: cdr1as_ko_visium_wt_1
-      puck_id: NoOptical
+    #- project_id: cdr1as_ko_visium
+    #  sample_id: cdr1as_ko_visium_wt_1
+    #  puck_id: NoOptical
+    #  species: mouse
+    #  R1: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R1_001.fastq.gz
+    #  R2: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R2_001.fastq.gz
+    #  downstream_analysis_type: 'visium'
+    #    - project_id: slideseq_v2
+    #      sample_id: slideseq_v2_e12
+    #      puck_id: Puck_190926_03
+    #      species: mouse
+    #      bam: /data/rajewsky/home/tsztank/projects/spatial/sts-downsample-comparisons/raw_bams/Puck_190926_03.reverted.bam
+    - project_id: slideseq_v2
+      sample_id: slideseq_v2_e12
+      puck_id: Puck_190926_03
       species: mouse
-      R1: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R1_001.fastq.gz
-      R2: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R2_001.fastq.gz
-      downstream_analysis_type: 'visium'
-
+      R1: /data/rajewsky/home/tsztank/projects/spatial/sts-downsample-comparisons/raw_bams/Puck_190926_03_R1.fastq.gz
+      R2: /data/rajewsky/home/tsztank/projects/spatial/sts-downsample-comparisons/raw_bams/Puck_190926_03_R2.fastq.gz
+      downstream_analysis_type: 'slideseq'
+    - project_id: slideseq_v2
+      sample_id: slideseq_v2_mouse_hippo
+      puck_id: Puck_200115_08
+      species: mouse
+      R1: /data/rajewsky/home/tsztank/projects/spatial/sts-downsample-comparisons/raw_bams/Puck_200115_08_R1.fastq.gz
+      R2: /data/rajewsky/home/tsztank/projects/spatial/sts-downsample-comparisons/raw_bams/Puck_200115_08_R2.fastq.gz
+      downstream_analysis_type: 'slideseq'
 
 # downsample and saturation analysis
 downsample: 
     projects:
+        - slideseq_v2
     samples:
         - sts_079_1
         - sts_079_3
@@ -129,6 +161,10 @@ knowledge:
             cell: "r1[8:20][::-1]"
             UMI: "r1[0:8]"
             bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        slideseq:
+            cell: "r1[0:14]"
+            UMI: "r1[15:23]"
+            bam_tags: "CR:{cell},XC:{cell},XM:{UMI},RG:{assigned}"
         drop_noUMI:
             cell: "r1[0:12][::-1]"
             UMI: "r2[0:8]"
