@@ -246,9 +246,10 @@ def create_project_df():
             # add project
             project_df = project_df.append(project_series, ignore_index=True)
 
-    project_df = df_assign_merge_samples(project_df)
-
+    # remove empty fields and add 'none' instead
     project_df = project_df.replace(np.nan, 'none')
+
+    project_df = df_assign_merge_samples(project_df)
 
     # fill downstream variables with default
     project_df.loc[project_df[project_df.downstream_analysis_type == 'none'].index, 'downstream_analysis_type'] = 'default'

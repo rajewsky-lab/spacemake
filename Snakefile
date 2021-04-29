@@ -35,7 +35,7 @@ include: 'snakemake/snakemake_helper_functions.py'
 temp_dir = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
 # create puck_data root directory from pattern
-config['puck_data']['root'] = config['puck_data']['root'].format(root_dir = config['root_dir'])
+config['puck_data']['root'] = config['microscopy_out']
 
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
@@ -344,7 +344,7 @@ rule create_sample_overview:
     output:
         sample_overview_file
     script:
-        'create_sample_overview.Rmd'
+        'snakemake/scripts/create_sample_overview.Rmd'
 
 rule create_sample_db:
     input:
