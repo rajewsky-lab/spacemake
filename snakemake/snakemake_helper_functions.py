@@ -1,6 +1,6 @@
 PROJECT_DF_COLUMNS = ["sample_id", "puck_id", "project_id", "sample_sheet", "flowcell_id",
     "species", "demux_barcode_mismatch", "demux_dir", "R1", "R2", "investigator",
-    "sequencing_date", "experiment", "puck_barcode_file", "downstream_analysis_type", "bam"]
+    "sequencing_date", "experiment", "puck_barcode_file", "downstream_analysis_type", "is_merged"]
 
 # barcode flavor parsing and query functions
 class dotdict(dict):
@@ -30,7 +30,6 @@ def parse_barcode_flavors(
     project_barcode_flavor = {}
     sample_barcode_flavor = {}
     preprocess_settings = {}
-    # print(config['barcode_flavor'])
     for flavor, v in config["barcode_flavor"].items():
         # for each flavor, also retrieve the configuration
         # first make a copy of the default values
@@ -179,10 +178,8 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
     df["R1"] = "none"
     df["R2"] = "none"
 
-    # mock bam
-    df['bam'] = 'none'
-
-    df['downstream_analysis_type'] = 'default'
+    df["downstream_analysis_type"] = 'default'
+    df["is_merged"] = False
 
     # merge additional info and sanitize column names
     df.rename(
@@ -216,7 +213,7 @@ def df_assign_merge_samples(project_df):
                 new_row = project_df[(project_df.project_id == project_id) & (project_df.sample_id == sample_id)].iloc[0]
                 new_row.sample_id = 'merged_' + new_row.sample_id
                 new_row.project_id = 'merged_' + new_row.project_id
-                new_row.type = 'merged'
+                new_row.is_merged = True
                 new_row.experiment = ','.join(samples_to_merge.experiment.to_list())
                 new_row.investigator = ','.join(samples_to_merge.investigator.to_list())
                 new_row.sequencing_date = ','.join(samples_to_merge.sequencing_date.to_list())
@@ -235,11 +232,10 @@ def create_project_df():
             [read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in projects],
             ignore_index=True), ignore_index=True)
 
-    project_df = df_assign_merge_samples(project_df)
-
     # add additional samples from config.yaml, which have already been demultiplexed.
     for project in config['additional_projects']:
         project_series = pd.Series(project)
+        project_series["is_merged"] = False
         
         project_index = project_df.loc[(project_df.project_id == project_series.project_id) & \
                 (project_df.sample_id == project_series.sample_id)].index
@@ -249,6 +245,8 @@ def create_project_df():
         else:
             # add project
             project_df = project_df.append(project_series, ignore_index=True)
+
+    project_df = df_assign_merge_samples(project_df)
 
     project_df = project_df.replace(np.nan, 'none')
 
@@ -302,16 +300,6 @@ def get_rRNA_index(wildcards):
 
     return {"rRNA_index": index}
 
-
-def get_rRNA_pattern(wildcards):
-    bam = get_metadata('bam',
-            project_id = wildcards.project,
-            sample_id = wildcards.sample)
-
-    if bam == 'none':
-        return raw_reads_mate_2
-    else:
-        return dropseq_tagged_fastq
 
 def get_downstream_analysis_variables(project_id, sample_id):
     downstream_analysis_type = get_metadata('downstream_analysis_type',
@@ -445,7 +433,6 @@ def get_qc_sheet_parameters(project_id, sample_id):
     out_dict = project_df.loc[project_df.sample_id == sample_id]\
         .iloc[0]\
         .to_dict()
-    )
 
     out_dict["input_beads"] = str(get_downstream_analysis_variables(project_id, sample_id)['expected_n_beads'])
 
@@ -490,3 +477,13 @@ def get_bam_tag_names(project_id, sample_id):
         tag_names[tag_variable] = tag_name
 
     return tag_names
+
+def get_puck_file(wildcards):
+    puck_barcode_file = get_metadata('puck_barcode_file',
+            project_id = wildcards.united_project,
+            sample_id = wildcards.united_sample)
+
+    if puck_barcode_file == 'none':
+        return []
+    else:
+        return({'barcode_file': puck_barcode_file})

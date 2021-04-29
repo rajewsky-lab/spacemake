@@ -20,14 +20,14 @@ adata.var['mt'] = adata.var_names.str.startswith('Mt-') | adata.var_names.str.st
 
 sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
 
-# save the log-normalised counts in the .raw attribute
+# save the raw counts
 adata.raw = adata
 
 # identify highly variable genes if we have any observations
 nrow, ncol = adata.shape
 
 if nrow > 1 and ncol > 1:
-    sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=5000)
+    sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000)
 
     # calculate log(cpm)
     sc.pp.normalize_total(adata, target_sum=1e4)

@@ -47,8 +47,6 @@ project_df = create_project_df()
 
 project_df = df_assign_bc_flavor(project_df)
 
-project_df['type'] = 'normal'
-
 #################
 # DIRECTORY STR #
 #################
@@ -59,9 +57,10 @@ raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
 processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
-project_df_file = config['root_dir'] + '/.config/project_df.csv'
-sample_overview_file = config['root_dir'] + '/.config/sample_overview.html'
-sample_read_metrics_db = config['root_dir'] + '/reports/sample_read_metrics_db.tsv'
+reports_root = config['root_dir'] + '/reports'
+project_df_file = reports_root + '/project_df.csv'
+sample_overview_file = reports_root + '/sample_overview.html'
+sample_read_metrics_db = reports_root + '/sample_read_metrics_db.tsv'
 
 united_illumina_root = config['root_dir'] + '/projects/{united_project}/processed_data/{united_sample}/illumina'
 united_complete_data_root = united_illumina_root + '/complete_data'
@@ -219,7 +218,6 @@ wildcard_constraints:
 #  dropseq rules and vars #
 # #########################
 dropseq_tagged = dropseq_root + '/unaligned_bc_tagged.bam'
-dropseq_tagged_fastq = dropseq_tagged.replace('.bam', '.fastq') 
 dropseq_unassigned = dropseq_root + '/unaligned_bc_unassigned.bam'
 
 # filter out XC tag
@@ -354,7 +352,7 @@ rule create_sample_db:
     output:
         sample_read_metrics_db
     script:
-        'create_sample_db.R'
+        'snakemake/scripts/create_sample_db.R'
 
 ################
 # DOWNSAMPLING #
@@ -374,7 +372,6 @@ include: 'snakemake/merge_samples.smk'
 # RULES #
 #########
 ruleorder: link_raw_reads > link_demultiplexed_reads 
-ruleorder: link_dropseq_tagged_bam > reverse_first_mate
 
 rule demultiplex_data:
     params:
@@ -451,7 +448,7 @@ rule reverse_first_mate:
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: get_bc_preprocessing_threads
+    threads: 2
     shell:
         "python {repo_dir}/snakemake/scripts/preprocess_read1.py "
         "--sample={wildcards.sample} "
@@ -477,21 +474,6 @@ rule compress_dropseq_tagged:
     input: dropseq_tagged_pipe
     output: dropseq_tagged
     shell: "sambamba view -h -l9 -f bam {input} > {output}"
-
-def get_dropseq_tagged_bam(wildcards):
-    out = [get_metadata('bam', sample_id = wildcards.sample, project_id = wildcards.project)]
-    print(out)
-    return(out)
-
-rule link_dropseq_tagged_bam:
-    input:
-        unpack(get_dropseq_tagged_bam)
-    output:
-        dropseq_tagged
-    shell:
-        """
-        ln -s {input} {output}
-        """
 
 rule run_fastqc:
     input:
@@ -626,6 +608,7 @@ rule run_automated_analysis:
         
 rule create_automated_report:
     input:
+        unpack(get_puck_file),
         star_log=united_star_log,
         parameters_file=united_qc_sheet_parameters_file,
         **automated_result_files
@@ -664,17 +647,10 @@ rule get_unmapped_reads:
     shell:
         "sambamba view -F 'unmapped' -h -f bam -t {threads} -o {output} {input}"
 
-rule dropseq_tagged_to_fastq:
-    input:
-        dropseq_tagged
-    output:
-        temp(dropseq_tagged_fastq)
-    shell:
-        "java -jar {picard_tools} SamToFastq I={input} FASTQ={output}"
 
 rule map_to_rRNA:
     input:
-        lambda wildcards: get_rRNA_pattern(wildcards)
+        raw_reads_mate_2
     output:
         ribo_depletion_log
     params:
