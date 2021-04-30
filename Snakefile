@@ -89,18 +89,16 @@ reverse_reads_mate_1 = reverse_reads_prefix + '1' + reads_suffix
 ###############
 # Fastqc vars #
 ###############
-bin_dir = config['bin_dir']
 fastqc_root = raw_data_illumina + '/fastqc'
 fastqc_pattern = fastqc_root + '/{sample}_R{mate}_fastqc.{ext}'
-fastqc_command = f'{bin_dir}/FastQC-0.11.2/fastqc'
 fastqc_ext = ['zip', 'html']
 
 ########################
 # UNIQUE PIPELINE VARS #
 ########################
 # set the tool script directories
-picard_tools = f'{bin_dir}/picard-tools-2.21.6/picard.jar'
-dropseq_tools = f'{bin_dir}/Drop-seq_tools-2.3.0'
+picard_tools = config['external_bin']['picard_tools']
+dropseq_tools = config['external_bin']['dropseq_tools']
 
 # set per sample vars
 dropseq_root = processed_data_illumina + '/complete_data'
@@ -448,7 +446,7 @@ rule reverse_first_mate:
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 2
+    threads: 4
     shell:
         "python {repo_dir}/snakemake/scripts/preprocess_read1.py "
         "--sample={wildcards.sample} "
@@ -490,7 +488,7 @@ rule run_fastqc:
         """
         mkdir -p {params.output_dir}
 
-        {fastqc_command} -t {threads} -o {params.output_dir} {input}
+        fastqc -t {threads} -o {params.output_dir} {input}
         """
 
 rule index_bam_file:

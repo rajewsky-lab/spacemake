@@ -1,9 +1,12 @@
 root_dir: '/scratch/home/tsztank/sts-sequencing'
-bin_dir: '/data/rajewsky/shared_bins'
 temp_dir: '/tmp'
+microscopy_out: '/data/rajewsky/slideseq_microscopy/qc/'
+
+external_bin:
+    dropseq_tools: '/data/rajewsky/shared_bins/Drop-seq_tools-2.4.0'
+    picard_tools: '/data/rajewsky/shared_bins/picard-tools-2.9.0/picard.jar'
 
 puck_data:
-    root: '{root_dir}/puck_data'
     barcode_file: predictions_ml.csv
 
 basecall_folders:
@@ -11,8 +14,8 @@ basecall_folders:
     - '/data/remote/basecalls'
 
 projects:
-    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210329_NR_Sts_79.csv
-      flowcell_id: 210329_NS500648_0564_AHGJLMBGXG
+    #    - sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210329_NR_Sts_79.csv
+    #      flowcell_id: 210329_NS500648_0564_AHGJLMBGXG
     # - sample_sheet: /scratch/home/tsztank/20191206_spatseq_smples3-4.csv
     #   flowcell_id: 191206_NS500648_0416_AHY3KYBGXC
     # - sample_sheet: /data/rajewsky/home/tsztank/200110_STS_017_4-7-8STS_018_1.csv

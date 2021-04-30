@@ -1,0 +1,29 @@
+name: sts-sequencing
+channels:
+    - bih-cubi
+    - conda-forge
+    - bioconda
+    - defaults
+    - dranew
+dependencies:
+    - python==3.8.3
+    - snakemake==5.18.1
+    - pandas==1.2.3
+    - scanpy==1.7.1
+    - leidenalg==0.8.1
+    - scikit-learn==0.23.1
+    - scipy==1.5.0
+    - samtools=1.10
+    - sambamba==0.6.8
+    - star==2.7.1a
+    - bwa==0.7.17
+    - bowtie2==2.4.1
+    - bcl2fastq==2.19
+    - fastqc==0.11.9
+    - pip=21.1
+    - tbb==2020.2
+    - pip:
+        - numpy==1.18.1
+        - pysam==0.16.0.1
+        - more-itertools==8.7.0
+        - biopython==1.78
