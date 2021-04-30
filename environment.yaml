@@ -27,3 +27,4 @@ dependencies:
         - pysam==0.16.0.1
         - more-itertools==8.7.0
         - biopython==1.78
+        - scikit-misc==0.1.3
