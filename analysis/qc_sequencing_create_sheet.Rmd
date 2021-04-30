@@ -86,8 +86,9 @@ rRNA_stats <- read_table2(snakemake@input$ribo_log, col_names=c('observation', '
     spread(observation, value) %>%
     mutate(mapped_to_rRNA = aligned_reads) %>%
     gather('observation', 'value') %>%
-    filter(observation == 'mapped_to_rRNA')
-
+    filter(observation == 'mapped_to_rRNA') %>%
+    mutate(value = ifelse(value == 'None', 0, value))
+ 
 read_stats <- readStarLog(snakemake@input$star_log) %>%
     rbind(rRNA_stats) %>%
     rbind(read_table2(snakemake@input$reads_type_out, col_names=c('observation', 'value'))) %>%
