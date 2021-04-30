@@ -603,6 +603,8 @@ rule run_automated_analysis:
         unpack(get_dge_type)
     output:
        **automated_result_files
+    # set 4 threads so that not too many are run together
+    threads: 4
     script:
         'analysis/automated_analysis.py'
         
