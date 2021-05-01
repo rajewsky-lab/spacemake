@@ -65,11 +65,11 @@ rule create_merged_star_log:
                 else:
                     fo.write('%s\t%s\n' % (entry[0], 'NA'))
                 idx = idx + 1
-print(merged_qc_sheet_parameters_file)
+
 rule create_merged_qc_parameters:
-    #params:
-    #    sample_params=lambda wildcards: get_qc_sheet_parameters('merged_' + wildcards.merged_project, 'merged_' + wildcards.merged_sample)
+    params:
+        sample_params=lambda wildcards: get_qc_sheet_parameters('merged_' + wildcards.merged_project, 'merged_' + wildcards.merged_sample)
     output:
         merged_qc_sheet_parameters_file
     script:
-        "analysis/qc_sequencing_create_parameters_from_sample_sheet.py"
+        "../analysis/qc_sequencing_create_parameters_from_sample_sheet.py"

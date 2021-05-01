@@ -180,15 +180,16 @@ paired_end_mapping_stats = paired_end_prefix + '{sample}_paired_end_mapping_stat
 automated_analysis_root = united_complete_data_root + '/automated_analysis/umi_cutoff_{umi_cutoff}'
 automated_report = automated_analysis_root + '/{united_sample}_{puck}_illumina_automated_report.html'
 
-automated_result_files = {
-    'res_file': '/results.h5ad',
+automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
+
+automated_analysis_processed_data_files = {
     'cluster_markers': '/top10_cluster_markers.csv',
     'obs_df': '/obs_df.csv',
     'long_expr_df': '/long_expr_df.csv'
     }
 
 # prepend automated_result_root
-automated_result_files = {key: automated_analysis_root + value for key, value in automated_result_files.items()}
+automated_analysis_processed_data_files = {key: automated_analysis_root + value for key, value in automated_analysis_processed_data_files.items()}
 
 # blast out
 blast_db_primers = repo_dir + '/sequences/primers.fa'
@@ -381,7 +382,7 @@ rule demultiplex_data:
         unpack(get_basecalls_dir)
     output:
         demux_indicator
-    threads: 16
+    threads: 8
     shell:
         """
         bcl2fastq \
@@ -600,18 +601,26 @@ rule run_automated_analysis:
     input:
         unpack(get_dge_type)
     output:
-       **automated_result_files
+       automated_analysis_result_file
     # set 4 threads so that not too many are run together
-    threads: 4
+    threads: 2
     script:
         'analysis/automated_analysis.py'
+
+rule create_automated_analysis_processed_data_files:
+    input:
+        automated_analysis_result_file
+    output:
+        **automated_analysis_processed_data_files
+    script:
+        'analysis/automated_analysis_create_processed_data_files.py'
         
 rule create_automated_report:
     input:
         unpack(get_puck_file),
         star_log=united_star_log,
         parameters_file=united_qc_sheet_parameters_file,
-        **automated_result_files
+        **automated_analysis_processed_data_files
     output:
         automated_report
     script:

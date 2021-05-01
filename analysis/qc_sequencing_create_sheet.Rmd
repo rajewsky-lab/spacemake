@@ -51,7 +51,6 @@ readStarLog <- function(log_file){
 
 ```{r save_snakemake, echo = F}
 #write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
-
 #snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
@@ -78,7 +77,8 @@ clrs = c(clrs, median_clrs)
 nucl_clrs = c('A'='#F5C900',
               'C'='#F55D59',
               'T'='#3AA861',
-              'G'='#7772F5')
+              'G'='#7772F5',
+              'N'='#999999')
 ```
 
 ```{r plot_read_statistics, echo =F}
@@ -192,7 +192,6 @@ dge_summary %>%
 #### Nucleotide distribution per beads
 
 ```{r plot_nucl_freq, echo = F, fig.height=7, fig.width=10}
-
 nucls <- dge_summary %$%
     cell_bc %>% strsplit("")
 
@@ -203,7 +202,9 @@ nucls <- dge_summary %>%
     group_by(cell_bc) %>%
     mutate(pos = paste0('pos_', 100+1:n())) %>%
     group_by(pos, nucl, quartile) %>%
-    summarise(nucl_count = n())
+    summarise(nucl_count = n()) %>%
+    ungroup() %>%
+    tidyr::complete(pos, nucl, quartile, fill=list(nucl_count=0))
 
 nucls %>%
     ggplot(aes(pos, nucl_count, fill = nucl)) +
