@@ -83,10 +83,36 @@ barcode_file <- snakemake@input$barcode_file
 fig_height=7
 fig_width=7
 
+get_column_name <- function(dat, possibilities){
+    # parse column names
+    cols <- dat %>% colnames
+
+    for(pos in possibilities){
+        if (pos %in% cols){
+            return(pos)
+        }
+    }
+}
+
 if (!is.null(barcode_file)){
     fig_width=14
 
-    coordinates <- read_csv(barcode_file, col_names=c('cell_bc', 'x_pos', 'y_pos'), skip=1)
+    # try reading as tabular
+    coordinates <- read_csv(barcode_file)
+
+    if(ncol(coordinates) < 2){
+        coordinates <- read_tsv(barcode_file)}
+
+    # find the names of the columns
+    cell_bc_col <- get_column_name(coordinates, c('barcodes', 'barcode', 'cell_bc')) 
+    x_pos_col <- get_column_name(coordinates, c('xcoord', 'x_pos')) 
+    y_pos_col <- get_column_name(coordinates, c('ycoord', 'y_pos')) 
+
+    coordinates <- coordinates %>%
+        dplyr::rename(cell_bc = cell_bc_col,
+                      x_pos = x_pos_col,
+                      y_pos = y_pos_col) %>%
+        select(cell_bc, x_pos, y_pos) 
 
     obs_df <- obs_df %>%
         left_join(coordinates, by='cell_bc')
