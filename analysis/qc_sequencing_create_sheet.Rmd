@@ -171,7 +171,7 @@ umi_cutoff_data %>%
         theme(legend.position = 'bottom')
 ```
 
-#### Distribution of metrics per bead
+#### Histogram of metrics over beads
 
 ```{r plot_n_reads_bead_hist, echo = F, fig.width=10, dpi=300}
 dge_summary %>%

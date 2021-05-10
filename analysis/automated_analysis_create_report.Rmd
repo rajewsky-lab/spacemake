@@ -21,30 +21,19 @@ knitr::opts_chunk$set(
 library(tidyverse)
 library(yaml)
 library(knitr)
-library(DESeq2)
 library(magrittr)
 library(kableExtra)
 library(cowplot)
-library(ggrepel)
 
 theme_set(theme_cowplot(12))
 
 cpalette <- list('orange' = '#D55E00', 'blue' = '#0072B2', 'green' = '#009E73', 'black' = '#000000', 'yellow' = '#F0E442', 
 				 'grey' = '#999999', 'light_orange' = "#E69F00", 'light_blue' = "#56B4E9")
 
-readStarLog <- function(log_file){
+clrs = c('umis'=cpalette$light_orange, 'genes' = cpalette$light_blue,
+         'reads'=cpalette$green, 'pcr'=cpalette$pink, 'pct_counts_mt'= 'black')
 
-		out = list()
-		lines = readLines(log_file)
-	
-		out$input_reads = (lines[6] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
-
-		out$uniq_mapped_reads = (lines[9] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
-
-		#out$avg_length = (lines[11] %>% strsplit('\t') %>% unlist)[2] %>% as.numeric
-		
-        tibble(observation=names(out), value=unlist(unname(out)))
-	}
+source(snakemake@params$r_shared_scripts)
 ```
 
 ```{r save_snakemake_object, echo = F}
@@ -52,36 +41,111 @@ readStarLog <- function(log_file){
 #snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
-#### Histogram plots of metrics
-
 ```{r read_data, echo = F}
-obs_df <- read_table2(snakemake@input$obs_df)
+parameters <- read_yaml(snakemake@input$parameters_file)
+
+parameter_stats <- parameters %>%
+    as_tibble() %>%
+    gather('metric', 'value')
+
+obs_df <- read_table2(snakemake@input$obs_df) %>%
+    mutate(pct_counts_mt = as.double(pct_counts_mt))
+var_df <- read_table2(snakemake@input$var_df)
+
+data_empty <- nrow(obs_df) == 0
 ```
 
-```{r plot_histogram_of_metrics, echo = F}
+### Overview
 
-obs_df %>%
-    select(cell_bc, n_counts, n_genes, pct_counts_mt) %>%
+```{r create_overview_table, echo = F}
+parameter_stats <- parameter_stats %>%
+    rbind(c('UMI filter', snakemake@wildcards$umi_cutoff),
+          c('# genes in data', nrow(var_df)),
+          c('# of beads in data', nrow(obs_df)),
+          c('median UMI', median(obs_df$n_counts)),
+          c('median genes', median(obs_df$n_genes)))
+
+parameter_stats %>%
+    kbl(col.names=NULL) %>%
+    kable_classic_2(full_width=F) %>%
+    pack_rows('Sample info', 1, 7) %>%
+    pack_rows('Data info', 8, 12)
+```
+
+### Histogram of metrics over beads
+
+```{r data_empty, echo = F, eval = data_empty, results='asis'}
+cat('This dataset has 0 beads passing the filters')
+```
+
+```{r plot_histogram_of_metrics, echo = F, fig.width=10, eval=!data_empty}
+pl1 <- obs_df %>%
+    select(cell_bc, n_counts, n_genes) %>%
+    dplyr::rename(umis=n_counts,
+                  genes=n_genes) %>%
     gather('obs', 'value', -cell_bc) %>%
     ggplot(aes(value, fill=obs)) +
         geom_histogram(bins=100) +
+        scale_fill_manual(values=clrs) +
+        facet_wrap(~obs, ncol=2, scales='free')
+
+if (nrow(obs_df) > 50){
+    pl1 <- pl1 +
         scale_x_log10() +
         annotation_logticks(sides='b') +
-        facet_wrap(~obs, ncol=1, scales='free')
+        labs(x='log(value)', y='count')
+} else {
+    pl1 <- pl1 +
+        labs(x ='value', y='count')
+}
+
+pl2 <- obs_df %>%
+    select(cell_bc, pct_counts_mt) %>%
+    gather('obs', 'value', -cell_bc) %>%
+    ggplot(aes(value, fill=obs)) +
+        geom_histogram(bins=100) +
+        scale_fill_manual(values=clrs) +
+        facet_wrap(~obs, ncol=2, scales='free')+
+        labs(x='value', y='count')
+
+plot_grid(pl1,
+          plot_grid(pl2, NULL, ncol=2, rel_widths=c(1.5,1), labels=""),
+          ncol=1, rel_heights=c(1,1), labels="")
 ```
 
-#### UMAP plots using different resolutions
 
-```{r plot_umi_umap, echo = F, fig.size=10, fig.width=10}
+```{r check_completeness, echo = F, fig.size=10, fig.width=10}
 obs_df <- obs_df %>%
-    gather('res', 'cluster', starts_with('leiden')) %>%
+    gather('res', 'cluster', starts_with('leiden'))
+
+data_complete = F
+
+if ('cluster' %in% obs_df){
+    data_complete = T
+}
+
+fig_height=7
+fig_width=7
+```
+
+```{r incompleteness_warning, eval=!data_complete, echo=F, results='asis'}
+cat('### WARNING: data incomplete\n\n')
+cat(paste0('This dataset has ', nrow(obs_df), ' cells passing the filter of ', snakemake@wildcards$umi_cutoff, ' and ', nrow(var_df), ' genes.\n\n'))
+cat(paste0('This dataset is too small, so it couldn\'t be properly clustered and analysed automatically'))
+```
+
+
+```{r umap_text, eval=data_complete, echo =F, results='asis'}
+cat('### UMAP plots using different resolutions\n\n')
+```
+
+
+```{r plot_umi_umap, eval=data_complete, echo=F}
+obs_df <- obs_df %>%
     mutate(cluster = factor(cluster)) %>%
     mutate(log1p_total_counts = log2(1+total_counts))
 
 barcode_file <- snakemake@input$barcode_file
-
-fig_height=7
-fig_width=7
 
 get_column_name <- function(dat, possibilities){
     # parse column names
@@ -130,7 +194,7 @@ if (!is.null(barcode_file)){
 }
 ```
 
-```{r plot_clusters_umap_puck, echo =F, fig.height=fig_height, fig.width=fig_width}
+```{r plot_clusters_umap_puck, echo =F, fig.height=fig_height, fig.width=fig_width, eval=data_complete}
 plots <- list()
 
 for (i in obs_df %$% res %>% unique){
@@ -158,7 +222,7 @@ for (i in obs_df %$% res %>% unique){
 }
 ```
 
-##### Marker tables
+### Marker tables
 
 under development...
 
@@ -176,7 +240,7 @@ top10_marker_table %>%
 expr_df <- read_table2(snakemake@input$long_expr_df)
 ```
 
-```{r plot_selected_genes, echo = F, fig.height=fig_height, fig.width=fig_width}
+```{r plot_selected_genes, echo = F, fig.height=fig_height, fig.width=fig_width, eval=data_complete}
 plot_gene <- function(gene_smbl){
     gene_expr <- expr_df %>%
         filter(gene == gene_smbl)

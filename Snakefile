@@ -184,8 +184,9 @@ automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
 
 automated_analysis_processed_data_files = {
     'cluster_markers': '/top10_cluster_markers.csv',
-    'obs_df': '/obs_df.csv',
-    'long_expr_df': '/long_expr_df.csv'
+    'obs_df': '/obs_df.tsv',
+    'var_df': '/var_df.tsv',
+    'long_expr_df': '/long_expr_df.tsv'
     }
 
 # prepend automated_result_root
@@ -246,8 +247,13 @@ include: 'snakemake/dropseq.smk'
 ################################
 # Final output file generation #
 ################################
-def get_final_output_files(pattern, projects = None, samples = None, **kwargs):
-    samples_to_run = project_df.T.to_dict().values()
+def get_final_output_files(pattern, projects = None, samples = None, skip_merged = False, **kwargs):
+    df = project_df
+
+    if skip_merged:
+        df = df[~df.is_merged]
+
+    samples_to_run = df.T.to_dict().values()
 
     if projects is not None:
         samples_to_run = [s for s in samples_to_run if s['project_id'] in projects]
@@ -322,7 +328,7 @@ include: 'snakemake/pacbio.smk'
 #############
 rule all:
     input:
-        #get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
+        get_final_output_files(fastqc_pattern, skip_merged = True, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
         get_united_output_files(automated_report),
         get_united_output_files(united_qc_sheet)
@@ -623,6 +629,8 @@ rule create_automated_report:
         **automated_analysis_processed_data_files
     output:
         automated_report
+    params:
+        r_shared_scripts= repo_dir + '/analysis/shared_functions.R'
     script:
         'analysis/automated_analysis_create_report.Rmd'
 

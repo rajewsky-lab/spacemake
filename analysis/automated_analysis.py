@@ -13,7 +13,7 @@ adata = sc.read_text(dge_path, delimiter='\t').T
 sc.pp.filter_cells(adata, min_counts=umi_cutoff)
 sc.pp.filter_cells(adata, min_genes=1)
 sc.pp.filter_cells(adata, max_genes=4000)
-sc.pp.filter_genes(adata, min_cells=10)
+sc.pp.filter_genes(adata, min_cells=3)
 
 # calculate mitochondrial gene percentage
 adata.var['mt'] = adata.var_names.str.startswith('Mt-') | adata.var_names.str.startswith('mt-')
@@ -27,9 +27,11 @@ adata.raw = adata
 nrow, ncol = adata.shape
 
 if nrow > 1 and ncol > 1:
-    print(adata)
-    sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000, span=1)
-
+    try:
+        sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000)
+    except ValueError:
+        sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000, span = 1)
+    
     # calculate log(cpm)
     sc.pp.normalize_total(adata, target_sum=1e4)
     sc.pp.log1p(adata, base=2)
@@ -47,7 +49,7 @@ if nrow > 1 and ncol > 1:
     sc.pp.neighbors(adata, n_pcs=n_pcs)
     
     # compute UMAP
-    # for a very low number of cells, scipy will throw an error here
+    # for a very low number of cells, scanpy will throw an error here
     try:
         sc.tl.umap(adata)   
     except TypeError:
