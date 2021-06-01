@@ -52,7 +52,10 @@ obs_df <- read_table2(snakemake@input$obs_df) %>%
     mutate(pct_counts_mt = as.double(pct_counts_mt))
 var_df <- read_table2(snakemake@input$var_df)
 
-data_empty <- nrow(obs_df) == 0
+n_beads = nrow(obs_df)
+data_empty <- n_beads == 0
+
+expr_df <- read_table2(snakemake@input$long_expr_df)
 ```
 
 ### Overview
@@ -120,23 +123,23 @@ obs_df <- obs_df %>%
 
 data_complete = F
 
-if ('cluster' %in% obs_df){
+if ('cluster' %in% colnames(obs_df)){
     data_complete = T
 }
 
-fig_height=7
-fig_width=7
+fig_height=5
+fig_width=5
 ```
 
 ```{r incompleteness_warning, eval=!data_complete, echo=F, results='asis'}
 cat('### WARNING: data incomplete\n\n')
-cat(paste0('This dataset has ', nrow(obs_df), ' cells passing the filter of ', snakemake@wildcards$umi_cutoff, ' and ', nrow(var_df), ' genes.\n\n'))
+cat(paste0('This dataset has ', n_beads, ' cells passing the filter of ', snakemake@wildcards$umi_cutoff, ' and ', nrow(var_df), ' genes.\n\n'))
 cat(paste0('This dataset is too small, so it couldn\'t be properly clustered and analysed automatically'))
 ```
 
 
 ```{r umap_text, eval=data_complete, echo =F, results='asis'}
-cat('### UMAP plots using different resolutions\n\n')
+cat('### UMAP plots using different resolutions {.tabset}\n\n')
 ```
 
 
@@ -145,41 +148,13 @@ obs_df <- obs_df %>%
     mutate(cluster = factor(cluster)) %>%
     mutate(log1p_total_counts = log2(1+total_counts))
 
-barcode_file <- snakemake@input$barcode_file
+obs_colnames <- colnames(obs_df)
 
-get_column_name <- function(dat, possibilities){
-    # parse column names
-    cols <- dat %>% colnames
+# barcode file attached at the python level
+barcode_file <- 'x_pos' %in% obs_colnames && 'y_pos' %in% obs_colnames
 
-    for(pos in possibilities){
-        if (pos %in% cols){
-            return(pos)
-        }
-    }
-}
-
-if (!is.null(barcode_file)){
-    fig_width=14
-
-    # try reading as tabular
-    coordinates <- read_csv(barcode_file)
-
-    if(ncol(coordinates) < 2){
-        coordinates <- read_tsv(barcode_file)}
-
-    # find the names of the columns
-    cell_bc_col <- get_column_name(coordinates, c('barcodes', 'barcode', 'cell_bc')) 
-    x_pos_col <- get_column_name(coordinates, c('xcoord', 'x_pos')) 
-    y_pos_col <- get_column_name(coordinates, c('ycoord', 'y_pos')) 
-
-    coordinates <- coordinates %>%
-        dplyr::rename(cell_bc = cell_bc_col,
-                      x_pos = x_pos_col,
-                      y_pos = y_pos_col) %>%
-        select(cell_bc, x_pos, y_pos) 
-
-    obs_df <- obs_df %>%
-        left_join(coordinates, by='cell_bc')
+if (barcode_file){
+    fig_width=fig_width * 2
 
     obs_df %>%
         filter(res == 'leiden_0.2') %>%
@@ -192,21 +167,61 @@ if (!is.null(barcode_file)){
             ggtitle('UMI distribution in 2D')
 
 }
+# gene plotting function
+plot_genes <- function(genes){
+    gene_expr <- expr_df %>%
+        filter(gene %in% genes)
+
+    gene_expr <- obs_df %>%
+        filter(res == 'leiden_0.2') %>%
+        left_join(gene_expr, by = 'cell_bc') %>%
+        # fill empty values
+        # first spread the genes, so each gene is a column
+        # then create long df and replace NA with 0
+        spread(gene, expr) %>%
+        gather('gene', 'expr', all_of(genes)) %>%
+        replace_na(list(expr = 0)) %>%
+        arrange(expr)
+
+    pl1 <- gene_expr %>%
+        ggplot(aes(umap_0, umap_1, color = expr)) +
+            geom_point(size=0.1) +
+            coord_fixed() +
+            facet_wrap(~gene, ncol = 3) +
+            scale_color_viridis_c(option = "inferno", direction=-1) +
+            labs(color='UMI')
+
+    if(barcode_file){
+        pl2 <- gene_expr %>%
+            ggplot(aes(x_pos, y_pos, color = expr)) +
+                geom_point(size=0.1) +
+                coord_fixed() +
+                facet_wrap(~gene, ncol=4) +
+                scale_color_viridis_c(option = "inferno", direction=-1) +
+                labs(color='UMI count')
+        print(plot_grid(pl1, pl2))
+    } else {
+        print(pl1)
+    }
+}
 ```
 
-```{r plot_clusters_umap_puck, echo =F, fig.height=fig_height, fig.width=fig_width, eval=data_complete}
-plots <- list()
+```{r plot_clusters_umap_puck, echo =F, fig.height=fig_height, fig.width=fig_width, eval=data_complete, results='asis'}
+top10_marker_table <- read_table2(snakemake@input$cluster_markers)
 
 for (i in obs_df %$% res %>% unique){
+    res <- strsplit(i, '_')[[1]][2]
+    cat(paste0('\n\n#### ', res, ' resolution {.tabset}\n\n'))
     pl1 <- obs_df %>%
         filter(res == i) %>%
         ggplot(aes(umap_0, umap_1, color = cluster)) +
-            geom_point(size=0.2, alpha=0.8) +
+            geom_point(size=0.1, alpha=0.8) +
             coord_fixed() +
             facet_wrap(~res, ncol = 1) +
             guides(colour = guide_legend(override.aes = list(size=3)))
 
-    if (!is.null(barcode_file)) {
+    knitr::opts_chunk$set(fig.width=10, fig.height=10)
+    if (barcode_file) {
         pl2 <- obs_df %>%
             filter(res == i) %>%
             ggplot(aes(x_pos, y_pos, color = cluster)) +
@@ -219,63 +234,63 @@ for (i in obs_df %$% res %>% unique){
     } else {
         print(pl1)
     }
+
+    cat('\n\n##### Marker table \n\n')
+
+    top_markers <- top10_marker_table %>%
+        filter(resolution == res) %>%
+        filter(pvals_adj < 0.1,
+               pts > 0.2) %>%
+        group_by(cluster) %>%
+        top_n(logfoldchanges, n=3)
+
+    top_markers %>%
+        kbl() %>%
+        kable_classic_2(full_width = F) %>%
+        cat()
+
+    for (clstr in top_markers$cluster %>% unique){
+        cat(paste0('\n\n ##### cluster ', clstr, ' markers\n\n'))
+
+        top_markers %>%
+            filter(cluster == clstr) %$%
+            gene %>%
+            plot_genes()
+    }
+
+    
 }
 ```
 
-### Marker tables
+### Markers {.tabset}
 
-under development...
+Next we show the top markers across all resolutions and clusters. For each resolution and cluster differentially expressed genes (t-test cluster vs rest) which are expressed at least in 50% of the beads for a given cluster and at most in 30% of the remaining beads, having at least log2foldchange of 1 and adjusted-pvalue less than 0.05 are selected.
 
-```{r load_top_cluster_markers, echo = F, eval=F}
-top10_marker_table <- read_table2(snakemake@input$cluster_markers)
+#### Marker table
 
-top10_marker_table %>%
-    filter(pvals_adj <0.5, pts > 0.01) %>%
-    filter(resolution == 0.2) %>%
+```{r load_top_cluster_markers, echo = F}
+top_markers <- top10_marker_table %>%
+    filter(pvals_adj <0.05, pts > 0.5, pts_rest < 0.3, logfoldchanges > 1)
+
+top_markers %>%
     kbl() %>%
     kable_classic_2(full_width = F)
-```
 
-```{r read_expr_df, echo = F}
-expr_df <- read_table2(snakemake@input$long_expr_df)
-```
+top_marker_heights <- top_markers %>%
+    group_by(resolution) %>%
+    summarise(height = n()) %>% 
+    # number of rows times 4
+    mutate(height = (floor(height/4) + 1) *2) %>%
+    mutate(height = ifelse(height < 4, 4, height)) %>%
+    mutate(resolution = paste0('res_', resolution)) %>%
+    spread(resolution, height)
 
-```{r plot_selected_genes, echo = F, fig.height=fig_height, fig.width=fig_width, eval=data_complete}
-plot_gene <- function(gene_smbl){
-    gene_expr <- expr_df %>%
-        filter(gene == gene_smbl)
+width_mult <- ifelse(barcode_file, 4, 2)
 
-    gene_expr <- obs_df %>%
-        filter(res == 'leiden_0.2') %>%
-        left_join(gene_expr, by = 'cell_bc') %>%
-        replace_na(list(expr = 0, gene=gene_smbl)) %>%
-        arrange(expr)
-
-    pl1 <- gene_expr %>%
-        ggplot(aes(umap_0, umap_1, color = expr)) +
-            geom_point(size=0.1) +
-            coord_fixed() +
-            facet_wrap(~gene) +
-            scale_color_viridis_c(option = "inferno", direction=-1) +
-            labs(color='UMI')
-
-    if(!is.null(barcode_file)){
-        pl2 <- gene_expr %>%
-            ggplot(aes(x_pos, y_pos, color = expr)) +
-                geom_point(size=0.1) +
-                coord_fixed() +
-                facet_wrap(~gene) +
-                scale_color_viridis_c(option = "inferno", direction=-1) +
-                labs(color='UMI count')
-        print(plot_grid(pl1, pl2))
-    } else {
-        print(pl1)
-    }
-}
-
-plot_gene('Slc17a7')
-
-plot_gene('Map2')
-
-plot_gene('Olig1')
+top_marker_widths <- top_markers %>%
+    group_by(resolution) %>%
+    summarise(width = n()) %>%
+    mutate(width = ifelse(width>4, 4*width_mult, width*width_mult)) %>%
+    mutate(resolution = paste0('res_', resolution)) %>%
+    spread(resolution, width)
 ```

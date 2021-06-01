@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
+print(snakemake.input)
+
 dge_path = snakemake.input['dge']
 
 # umi cutoff 
@@ -26,11 +28,12 @@ adata.raw = adata
 # identify highly variable genes if we have any observations
 nrow, ncol = adata.shape
 
-if nrow > 1 and ncol > 1:
+# require at least 1000 genes expressed in the sample
+if nrow > 1 and ncol >= 1000:
     try:
         sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000)
     except ValueError:
-        sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000, span = 1)
+        sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=1000, span = 1)
     
     # calculate log(cpm)
     sc.pp.normalize_total(adata, target_sum=1e4)
@@ -66,6 +69,21 @@ if nrow > 1 and ncol > 1:
         
         # finding marker genes
         sc.tl.rank_genes_groups(adata, res_key, method='t-test', key_added = 'rank_genes_groups_' + res_key, pts=True)
-        
+
+#######################
+# ATTACH BARCODE FILE #
+#######################
+if 'barcode_file' in snakemake.input:
+    bc = pd.read_csv(snakemake.input['barcode_file'], sep='[,|\t]', engine='python')
+
+    # rename columns
+    bc = bc.rename(columns={'xcoord':'x_pos', 'ycoord':'y_pos','barcodes':'cell_bc', 'barcode':'cell_bc'})\
+        .set_index('cell_bc')\
+        .loc[:, ['x_pos', 'y_pos']]
+
+    bc = bc.loc[~bc.index.duplicated(keep='first')]
+
+    adata.obs = adata.obs.merge(bc, left_index=True, right_index=True, how='left')
+    adata.obsm['spatial'] = adata.obs[['x_pos', 'y_pos']].to_numpy()
 
 adata.write(snakemake.output[0])

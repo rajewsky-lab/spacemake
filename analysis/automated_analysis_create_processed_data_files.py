@@ -12,13 +12,14 @@ def create_long_df(expr_matrix, id_vars = ['cell_bc']):
 # LOAD ADATA #
 ##############
 
-adata = sc.read(snakemake.input[0])
+#adata = sc.read(snakemake.input[0])
+adata = sc.read('/data/rajewsky/projects/slide_seq/projects/sts_074/processed_data/sts_074_3/illumina/complete_data/automated_analysis/umi_cutoff_100/results.h5ad')
 
 uns_keys = ['hvg', 'leiden', 'log1p', 'neighbors', 'pca', 'umap']
 
 # all the keys have to be in adata.uns
 adata_complete = any([key in adata.uns.keys() for key in uns_keys])
-
+tmp = None
 #################
 # TOP10 markers #
 #################
@@ -26,9 +27,9 @@ if not adata_complete:
     pd.DataFrame().to_csv(snakemake.output['cluster_markers'])
 else:
     resolution = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2]
-
+    
     top_10_marker_dfs = []
-
+    
     for res in resolution:
         res_key = 'leiden_' + str(res)
         rank_key = 'rank_genes_grops_' + res_key
@@ -37,7 +38,7 @@ else:
             sc.tl.leiden(adata, resolution = res, key_added = res_key)
             sc.tl.rank_genes_groups(adata, res_key, method='t-test',
                     key_added = rank_key, pts=True)
-
+        
         df = pd.DataFrame(adata.uns[rank_key]['names'])\
                 .head(10).melt(var_name = 'cluster', value_name = 'gene')
         
@@ -59,10 +60,10 @@ else:
             df[key] = df2.loc[df.index].value
              
         df['resolution'] = res
-        df.reset_index(level=0, inplace=True)
+        df.reset_index(inplace=True)
          
         top_10_marker_dfs.append(df)
-
+        
     pd.concat(top_10_marker_dfs).to_csv(snakemake.output['cluster_markers'], index=False, sep = '\t')
 
 ###############
@@ -86,10 +87,11 @@ adata.var.index.set_names('gene_name', inplace=True)
 
 adata.var.to_csv(snakemake.output['var_df'], sep = '\t')
 
-###################
-# RAW EXPR MATRIX #
-###################
-expr_matrix = pd.DataFrame(adata.raw.X)
+###############
+# EXPR MATRIX #
+###############
+# save log transformed and normalised expression
+expr_matrix = pd.DataFrame(adata.X)
 expr_matrix.columns = adata.raw.var.index
 expr_matrix['cell_bc'] = adata.obs.index
 

@@ -605,6 +605,7 @@ rule create_qc_sheet:
 
 rule run_automated_analysis:
     input:
+        unpack(get_puck_file),
         unpack(get_dge_type)
     output:
        automated_analysis_result_file
@@ -623,7 +624,6 @@ rule create_automated_analysis_processed_data_files:
         
 rule create_automated_report:
     input:
-        unpack(get_puck_file),
         star_log=united_star_log,
         parameters_file=united_qc_sheet_parameters_file,
         **automated_analysis_processed_data_files
