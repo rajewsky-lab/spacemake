@@ -630,6 +630,8 @@ rule create_automated_report:
     output:
         automated_report
     params:
+        downstream_stats = lambda wildcards: get_downstream_analysis_variables(wildcards.united_project,
+            wildcards.united_sample),
         r_shared_scripts= repo_dir + '/analysis/shared_functions.R'
     script:
         'analysis/automated_analysis_create_report.Rmd'

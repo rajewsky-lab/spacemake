@@ -1,9 +1,9 @@
 ---
 output:
-    pdf_document:
+    html_document:
         toc: true
         toc_depth: 6
-version: 0.1.1
+version: 0.2
 author: Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos
 email: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc.berlin.de
 license: GPL
@@ -24,6 +24,8 @@ library(tidyverse)
 library(yaml)
 library(cowplot)
 library(knitr)
+library(grid)
+library(gtable)
 
 theme_set(theme_cowplot(12))
 ```
@@ -41,6 +43,63 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
+
+shift_legend <- function(p){
+
+  # check if p is a valid object
+  if(!"gtable" %in% class(p)){
+    if("ggplot" %in% class(p)){
+      gp <- ggplotGrob(p) # convert to grob
+    } else {
+      message("This is neither a ggplot object nor a grob generated from ggplotGrob. Returning original plot.")
+      return(p)
+    }
+  } else {
+    gp <- p
+  }
+
+  # check for unfilled facet panels
+  facet.panels <- grep("^panel", gp[["layout"]][["name"]])
+  empty.facet.panels <- sapply(facet.panels, function(i) "zeroGrob" %in% class(gp[["grobs"]][[i]]))
+  empty.facet.panels <- facet.panels[empty.facet.panels]
+  if(length(empty.facet.panels) == 0){
+    message("There are no unfilled facet panels to shift legend into. Returning original plot.")
+    return(p)
+  }
+
+  # establish extent of unfilled facet panels (including any axis cells in between)
+  empty.facet.panels <- gp[["layout"]][empty.facet.panels, ]
+  empty.facet.panels <- list(min(empty.facet.panels[["t"]]), min(empty.facet.panels[["l"]]),
+                             max(empty.facet.panels[["b"]]), max(empty.facet.panels[["r"]]))
+  names(empty.facet.panels) <- c("t", "l", "b", "r")
+
+  # extract legend & copy over to location of unfilled facet panels
+  guide.grob <- which(gp[["layout"]][["name"]] == "guide-box")
+  if(length(guide.grob) == 0){
+    message("There is no legend present. Returning original plot.")
+    return(p)
+  }
+  gp <- gtable_add_grob(x = gp,
+                        grobs = gp[["grobs"]][[guide.grob]],
+                        t = empty.facet.panels[["t"]],
+                        l = empty.facet.panels[["l"]],
+                        b = empty.facet.panels[["b"]],
+                        r = empty.facet.panels[["r"]],
+                        name = "new-guide-box")
+
+  # squash the original guide box's row / column (whichever applicable)
+  # & empty its cell
+  guide.grob <- gp[["layout"]][guide.grob, ]
+  if(guide.grob[["l"]] == guide.grob[["r"]]){
+    gp <- gtable_squash_cols(gp, cols = guide.grob[["l"]])
+  }
+  if(guide.grob[["t"]] == guide.grob[["b"]]){
+    gp <- gtable_squash_rows(gp, rows = guide.grob[["t"]])
+  }
+  gp <- gtable_remove_grobs(gp, "guide-box")
+
+  return(gp)
+}
 ```
 
 
@@ -107,32 +166,47 @@ dge_data <- tibble(percentage = names(downsampled_summaries),
                    genes = NUM_GENES,
                    reads = NUM_GENIC_READS)
 ```
-
-\newpage 
-
 #### Plot distribution of observations
 
-```{r plot_distributions_of_observations, echo =F}
-clrs = c('umis' = '#E69F00', 'pcr' = '#56B4E9', 'reads' = '#009E73')
+```{r plot_distributions_of_observations, echo =F, fig.width=10}
+cPalette = list('grey'= "#999999", 'light_orange'="#E69F00",
+         'light_blue'="#56B4E9", 'green' = "#009E73",
+         'yellow' = "#F0E442", 'blue'= "#0072B2", 'orange'="#D55E00",
+         'pink'="#CC79A7")
 
-plot_observations <- function(metric, val_le){
-    dge_data %>%
+clrs = c('umis'=cPalette$light_orange, 'pcr' = cPalette$light_blue, 'reads'=cPalette$green,
+         'genes'=cPalette$pink, 'n_beads'= 'black')
+
+median_clrs = clrs
+names(median_clrs) = paste0('median_', names(clrs))
+clrs = c(clrs, median_clrs)
+
+plot_observations <- function(metric, log_scale = T){
+    pl <- dge_data %>%
         select(CELL_BARCODE, percentage, pcr, umis, reads) %>%
         gather('obs', 'val', umis, pcr, reads) %>%
-        filter(obs == metric, val < val_le) %>%
+        filter(obs == metric) %>%
         mutate(percentage = as.integer(percentage)) %>%
+        group_by(percentage, obs) %>%
+        filter(between(val, quantile(val, 0.05, na.rm=T), quantile(val, 0.95, na.rm=T))) %>%
         ggplot(aes(val, fill = obs)) +
             geom_density() +
             facet_grid(percentage~obs, scales = 'free_y') +
-            scale_fill_manual(values = clrs)
+            scale_fill_manual(values = clrs) +
+            labs(x='') +
+            theme(legend.position='none')
+    if (log_scale){
+        pl <- pl +
+            scale_x_log10()+
+            annotation_logticks(sides='b')
+    }
+    return(pl)
 }
 
-plot_observations('umis', 500)
-plot_observations('reads', 500)
-plot_observations('pcr', 2.5)
+plot_observations('umis')
+plot_observations('reads')
+plot_observations('pcr', log_scale=F)
 ```
-
-\newpage
 
 ##### we bin the data into percentalise by reads per bead
 
@@ -150,15 +224,15 @@ decile_dat <- dge_data %>%
               median_genes = median(genes),
               median_pcr = median(pcr),
               median_umis = median(umis),
-              num_beads = n()) %>%
-    gather('observation', 'value', median_reads:num_beads) %>%
+              n_beads = n()) %>%
+    gather('observation', 'value', median_reads:n_beads) %>%
     mutate(decile = factor(decile), 
            percentage = as.integer(percentage),
            observation = factor(observation, levels = c(
                       'median_reads', 
                       'median_umis', 
                       'median_genes',
-                      'median_pcr', 'num_beads')))
+                      'median_pcr', 'n_beads')))
 
 decile_dat %>%
     ggplot(aes(percentage, value, color= decile, fill = decile)) +
@@ -169,8 +243,6 @@ decile_dat %>%
         labs(y='', x='downsampling percentage')
 ```
 
-\newpage
-
 ```{r plot_observations, echo = F}
 plot_data <- function(umi_cutoff=1){
     dge_data %>%
@@ -180,51 +252,62 @@ plot_data <- function(umi_cutoff=1){
                   median_umis = median(umis),
                   median_genes = median(genes),
                   median_pcr = median(pcr),
-                  num_beads = n()) %>%
-    gather('observation', 'value', median_reads:num_beads) %>% 
+                  n_beads = n()) %>%
+    gather('observation', 'value', median_reads:n_beads) %>% 
     as_tibble() %>%
     mutate(percentage = as.integer(percentage),
            observation = factor(observation, levels = c(
                       'median_reads', 
                       'median_umis', 
                       'median_genes',
-                      'median_pcr', 'num_beads'))) %>%
-    ggplot(aes(percentage, value)) +
-        geom_smooth(formula = y~log(x), color = '#56B4E9', size = 0.6) +
-        geom_point(size=2, fill = '#56B4E9', color = 'black', pch=21) + 
+                      'median_pcr', 'n_beads'))) %>%
+    ggplot(aes(percentage, value, color = observation, fill=observation)) +
+        scale_color_manual(values=clrs) +
+        scale_fill_manual(values=clrs) +
+        geom_smooth(formula = y~log(x), size = 0.6) +
+        geom_point(size=2, color = 'black', pch=21) + 
         scale_x_continuous(breaks=seq(0, 100, 10)) +
-        facet_wrap(~observation, scales = 'free_y', ncol=2) +
-        labs(y='', x='downsampling percentage')
+        facet_wrap(~observation, scales = 'free', ncol=3) +
+        labs(y='', x='downsampling percentage', color='', fill='') +
+        theme(strip.background=element_blank(), strip.text.x=element_blank()) +
+        guides(colour = guide_legend(override.aes = list(size=5))) +
+        ggtitle('Median values of downsampled data')
 }
 ```
 \newpage
 
 ##### With UMI cutoff 1
 
-```{r plot_umi_1, echo = F, fig.height = 7, fig.width = 7, fig.align='center'}
-plot_data(1) %>% print
+```{r plot_umi_1, echo = F, fig.height = 5, fig.width = 10}
+grid.draw(shift_legend(plot_data(1)))
 ```
 
 \newpage
 
 ##### With UMI cutoff 10
 
-```{r plot_umi_10, echo = F, fig.height = 7, fig.width = 7, fig.align='center'}
-plot_data(10) %>% print
+```{r plot_umi_10, echo = F, fig.height = 5, fig.width = 10, fig.align='center'}
+grid.draw(shift_legend(plot_data(10)))
 ```
 
 \newpage
 
 ##### With UMI cutoff 50
 
-```{r plot_umi_50, echo = F, fig.height = 7, fig.width = 7, fig.align='center'}
-plot_data(50) %>% print
+```{r plot_umi_50, echo = F, fig.height = 5, fig.width = 10, fig.align='center'}
+grid.draw(shift_legend(plot_data(50)))
 ```
 
 \newpage
 
 ##### With UMI cutoff 100
 
-```{r plot_umi_100, echo = F, fig.height = 7, fig.width = 7, fig.align='center'}
-plot_data(100) %>% print
+```{r plot_umi_100, echo = F, fig.height = 5, fig.width = 10, fig.align='center'}
+grid.draw(shift_legend(plot_data(100)))
+```
+
+##### With UMI cutoff 500
+
+```{r plot_umi_500, echo = F, fig.height = 5, fig.width = 10, fig.align='center'}
+grid.draw(shift_legend(plot_data(500)))
 ```

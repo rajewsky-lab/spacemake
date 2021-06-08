@@ -2,8 +2,6 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
-print(snakemake.input)
-
 dge_path = snakemake.input['dge']
 
 # umi cutoff 
@@ -73,7 +71,7 @@ if nrow > 1 and ncol >= 1000:
 #######################
 # ATTACH BARCODE FILE #
 #######################
-if 'barcode_file' in snakemake.input:
+if 'barcode_file' in snakemake.input.keys():
     bc = pd.read_csv(snakemake.input['barcode_file'], sep='[,|\t]', engine='python')
 
     # rename columns
