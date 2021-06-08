@@ -23,7 +23,7 @@ downsample_dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron'
 
 downsample_qc_sheet = downsampled_sample_root  + '/qc_sheet_{united_sample}_{puck}_downsampled_{ratio}.html'
 
-downsample_saturation_analysis = downsample_root + '/{united_sample}_saturation_analysis.pdf'
+downsample_saturation_analysis = downsample_root + '/{united_sample}_saturation_analysis.html'
 
 downsample_saturation_script = repo_dir + '/saturation_analysis.Rmd'
 
@@ -135,4 +135,4 @@ rule create_saturation_analysis:
     output:
         downsample_saturation_analysis
     script:
-        "saturation_analysis.Rmd"
+        "../analysis/saturation_analysis.Rmd"

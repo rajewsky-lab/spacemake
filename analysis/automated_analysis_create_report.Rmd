@@ -2,6 +2,7 @@
 output:
   html_document:
     toc: true
+    self_contained: yes
 version: 0.1.1
 author: Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos
 email: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc.berlin.de
@@ -156,17 +157,18 @@ barcode_file <- 'x_pos' %in% obs_colnames && 'y_pos' %in% obs_colnames
 if (barcode_file){
     fig_width=fig_width * 2
 
-    obs_df %>%
-        filter(res == 'leiden_0.2') %>%
-        mutate(log1p_total_counts = log2(1+total_counts)) %>%
-        arrange(log1p_total_counts) %>%
-        ggplot(aes(x_pos, y_pos, color = log1p_total_counts)) +
-            geom_point(size = 0.1)+
-            coord_fixed()+
-            scale_color_viridis_c(option = "magma") +
-            ggtitle('UMI distribution in 2D')
+        obs_df %>%
+            filter(res == 'leiden_0.2') %>%
+            arrange(log1p_total_counts) %>%
+            ggplot(aes(x_pos, y_pos, color = log1p_total_counts)) +
+                geom_point(size = snakemake@params$downstream_stats$plot_bead_size)+
+                coord_fixed()+
+                scale_color_viridis_c(option =  "magma") +
+                ggtitle('UMI distribution in 2D') +
+                labs(color='log2(1+UMI)') + 
+                theme(panel.background = element_rect(fill = 'gray90'))
+    }
 
-}
 # gene plotting function
 plot_genes <- function(genes){
     gene_expr <- expr_df %>%
@@ -184,56 +186,88 @@ plot_genes <- function(genes){
         arrange(expr)
 
     pl1 <- gene_expr %>%
-        ggplot(aes(umap_0, umap_1, color = expr)) +
+        dplyr::select(gene, umap_0, umap_1, expr) %>%
+        rename(x_pos = umap_0, y_pos = umap_1) %>%
+        mutate(type = 'umap coordinates') %>%
+        ggplot(aes(x_pos, y_pos, color = expr)) +
             geom_point(size=0.1) +
             coord_fixed() +
-            facet_wrap(~gene, ncol = 3) +
+            facet_grid(type~gene) +
             scale_color_viridis_c(option = "inferno", direction=-1) +
-            labs(color='UMI')
+            labs(color='UMI count')
 
     if(barcode_file){
         pl2 <- gene_expr %>%
+            dplyr::select(gene, x_pos, y_pos, expr) %>%
+            mutate(type = 'physical coordinates') %>%
             ggplot(aes(x_pos, y_pos, color = expr)) +
                 geom_point(size=0.1) +
                 coord_fixed() +
-                facet_wrap(~gene, ncol=4) +
+                facet_grid(type~gene) +
                 scale_color_viridis_c(option = "inferno", direction=-1) +
                 labs(color='UMI count')
-        print(plot_grid(pl1, pl2))
-    } else {
+
+        print(plot_grid(pl1, pl2, ncol=1))
+    } else{
         print(pl1)
     }
 }
 ```
 
 ```{r plot_clusters_umap_puck, echo =F, fig.height=fig_height, fig.width=fig_width, eval=data_complete, results='asis'}
+library(ggsci)
+
+cluster_clrs <- c(# tron from ggsci
+                  "#FF410D",
+                  "#6EE2FF",
+                  "#F7C530",
+                  "#95CC5E",
+                  "#D0DFE6",
+                  "#F79D1E",
+                  "#748AA6",
+                  '#0DFFB7',
+                  '#FFC9AD',
+                  '#C4BC12',
+                  '#935CFF',
+                  '#FFFFFF',
+                  '#E6DBCF',
+                  '#99846B',
+                  '#F711F7',
+                  '#7AF736')
+
 top10_marker_table <- read_table2(snakemake@input$cluster_markers)
 
 for (i in obs_df %$% res %>% unique){
-    res <- strsplit(i, '_')[[1]][2]
+    res <- as.double(strsplit(i, '_')[[1]][2])
     cat(paste0('\n\n#### ', res, ' resolution {.tabset}\n\n'))
-    pl1 <- obs_df %>%
+    to_plot <- obs_df %>%
         filter(res == i) %>%
-        ggplot(aes(umap_0, umap_1, color = cluster)) +
-            geom_point(size=0.1, alpha=0.8) +
-            coord_fixed() +
-            facet_wrap(~res, ncol = 1) +
-            guides(colour = guide_legend(override.aes = list(size=3)))
+        dplyr::select(cell_bc, umap_0, umap_1, cluster) %>%
+        rename(x_pos = umap_0, y_pos = umap_1) %>%
+        mutate(type = 'umap coordinates')
 
-    knitr::opts_chunk$set(fig.width=10, fig.height=10)
+    #knitr::opts_chunk$set(fig.width=10, fig.height=10)
     if (barcode_file) {
-        pl2 <- obs_df %>%
+        to_plot <- obs_df %>%
             filter(res == i) %>%
-            ggplot(aes(x_pos, y_pos, color = cluster)) +
-                geom_point(size=0.1, alpha=0.8) +
-                coord_fixed() +
-                facet_wrap(~res, ncol = 1) +
-                guides(colour = guide_legend(override.aes = list(size=3)))
-
-        print(plot_grid(pl1, pl2))
-    } else {
-        print(pl1)
+            dplyr::select(cell_bc, x_pos, y_pos, cluster) %>%
+            mutate(type = 'physical coordinates') %>%
+            bind_rows(to_plot)
     }
+    
+    pl <- to_plot %>%
+        mutate(type = factor(type, levels = c('umap coordinates', 'physical coordinates'))) %>%
+        ggplot(aes(x_pos, y_pos, color = cluster)) +
+            geom_point(size=snakemake@params$downstream_stats$plot_bead_size) +
+            facet_wrap(~type, ncol = 2, scales='free') +
+            guides(colour = guide_legend(override.aes = list(size=3)))+
+            scale_color_manual(values=cluster_clrs) +
+            theme(panel.background = element_rect(fill = '#2D2D2D'),
+                  strip.background =element_rect(fill='#2D2D2D', colour='#2D2D2D'),
+                  strip.text = element_text(color = 'white'),
+                  aspect.ratio=1, legend.key = element_rect(fill = '#2D2D2D'))
+    print(pl)
+                    
 
     cat('\n\n##### Marker table \n\n')
 
@@ -249,8 +283,10 @@ for (i in obs_df %$% res %>% unique){
         kable_classic_2(full_width = F) %>%
         cat()
 
+    cat('\n\n')
+
     for (clstr in top_markers$cluster %>% unique){
-        cat(paste0('\n\n ##### cluster ', clstr, ' markers\n\n'))
+        cat(paste0('\n\n##### cluster ', clstr, ' markers\n\n'))
 
         top_markers %>%
             filter(cluster == clstr) %$%
