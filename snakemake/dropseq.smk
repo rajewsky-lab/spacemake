@@ -6,32 +6,6 @@ __author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
 __licence__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
-########################
-# COMMON PIPELINE VARS #
-########################
-
-dropseq_tagged = dropseq_root + '/unaligned_bc_tagged.bam'
-dropseq_unassigned = dropseq_root + '/unaligned_bc_unassigned.bam'
-
-# filter out XC tag
-dropseq_tagged_filtered = dropseq_root + '/unaligned_tagged_filtered.bam'
-
-# trim smart adapter from the reads
-dropseq_tagged_trimmed = dropseq_root + '/unaligned_tagged_trimmed.bam'
-
-# trim polyA overheang if exists
-dropseq_tagged_trimmed_polyA = dropseq_root + '/unaligned_tagged_trimmed_polyA.bam'
-
-# mapped reads
-dropseq_mapped_reads = dropseq_root + '/star_Aligned.sortedByCoord.out.bam'
-star_log_file = dropseq_root + '/star_Log.final.out'
-
-# final dropseq bfinal dropseq bam
-dropseq_final_bam = dropseq_root + '/final.bam'
-
-# index bam file
-dropseq_final_bam_ix = dropseq_final_bam + '.bai'
-
 ###################################################
 # Snakefile containing the dropseq pipeline rules #
 ###################################################
@@ -76,7 +50,7 @@ rule map_reads:
         unpack(get_species_info),
         reads=dropseq_tagged_trimmed_polyA
     output:
-        reads=temp(dropseq_mapped_reads),
+        temp(dropseq_mapped_reads_unsorted_headerless)
     log: star_log_file
     threads: 8
     params:
@@ -91,19 +65,36 @@ rule map_reads:
             --readFilesType SAM SE \
             --readFilesCommand samtools view \
             --outSAMtype BAM Unsorted \
+            --outSAMunmapped Within \
             --outStd BAM_Unsorted \
-            --outFileNamePrefix {params.star_prefix} \
-            | python {repo_dir}/scripts/fix_bam_header.py {input.reads} \
-            | sambamba sort -m 4G -o /dev/stdout -t 4 /dev/stdin \
-            > {output.reads}
+            --outFileNamePrefix {params.star_prefix} > {output}
 
         rm -rf {params.tmp_dir}
         """
 
+rule fix_star_bam_header:
+    input:
+        mapped_reads=dropseq_mapped_reads_unsorted_headerless,
+        unmapped_tagged_reads=dropseq_tagged_trimmed_polyA
+    output: pipe(dropseq_mapped_reads_unsorted)
+    shell:
+        """
+        python {repo_dir}/snakemake/scripts/fix_bam_header.py \
+            --in-bam-star {input.mapped_reads} \
+            --in-bam-tagged {input.unmapped_tagged_reads} \
+            --out-bam {output}
+        """
+
+rule sort_dropseq_mapped_reads:
+    input: dropseq_mapped_reads_unsorted
+    output: pipe(dropseq_mapped_reads)
+    threads: 4
+    shell:  'sambamba sort -m 4G -o {output} -t {threads} {input}' 
+
 rule tag_read_with_gene:
     input:
         unpack(get_species_info), 
-        reads=rules.map_reads.output
+        reads=dropseq_mapped_reads
     output:
         dropseq_final_bam
     shell:

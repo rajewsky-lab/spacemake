@@ -1,0 +1,7 @@
+qc_sequencing_create_sheet_cache
+qc_sequencing_create_sheet_files
+automated_analysis_create_report_files
+automated_analysis_create_report_cache
+*.html
+.ipynb_checkpoints
+*.ipynb

@@ -22,7 +22,7 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; umask g+w;
 #############
 # FUNCTIONS #
 #############
-include: 'snakemake_helper_functions.py'
+include: 'snakemake/snakemake_helper_functions.py'
 
 ####
 # this file should contain all sample information, sample name etc.
@@ -34,60 +34,18 @@ include: 'snakemake_helper_functions.py'
 ###############
 temp_dir = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
+# create puck_data root directory from pattern
+config['puck_data']['root'] = config['microscopy_out']
 
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
-microscopy_root = config['microscopy_root']
-microscopy_raw = microscopy_root + '/raw'
 
-illumina_projects = config.get('illumina_projects', [])
-
-if illumina_projects is not None:
-    # get the samples
-    project_df = pd.concat([read_sample_sheet(ip['sample_sheet'], ip['flowcell_id']) for ip in illumina_projects], ignore_index=True)
-
-    # add additional samples from config.yaml, which have already been demultiplexed. add none instead of NaN
-    project_df = project_df.append(config['additional_illumina_projects'], ignore_index=True).replace(np.nan, 'none', regex=True)
-
-else:
-    project_df = pd.DataFrame(config['additional_illumina_projects']).replace(np.nan, 'none', regex=True)
+projects = config.get('projects', None)
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
+project_df = create_project_df()
+
 project_df = df_assign_bc_flavor(project_df)
-
-# print(project_df)
-# print(project_df.columns)
-# print(project_df['barcode_flavor'])
-# print(get_metadata('R1', sample_id = 'sts_030_4'))
-# print(get_metadata('R1', sample_id = 'sts_067_1'))
-
-samples_list = project_df.T.to_dict().values()
-
-# put all projects into projects_puck_info
-projects_puck_info = project_df.merge(get_sample_info(microscopy_raw), how='left', on ='puck_id').fillna('none')
-
-projects_puck_info.loc[~projects_puck_info.puck_id.str.startswith('PID_'), 'puck_id']= 'no_puck'
-
-projects_puck_info['type'] = 'normal'
-
-# added samples to merged to the projects_puck_info
-# this will be saved as a metadata file in .config/ directory
-if 'samples_to_merge' in config:
-    for project_id in config['samples_to_merge'].keys():
-        for sample_id in config['samples_to_merge'][project_id].keys():
-            samples_to_merge = config['samples_to_merge'][project_id][sample_id]
-
-            samples_to_merge = projects_puck_info.loc[projects_puck_info.sample_id.isin(samples_to_merge)]
-
-            new_row = projects_puck_info[(projects_puck_info.project_id == project_id) & (projects_puck_info.sample_id == sample_id)].iloc[0]
-            new_row.sample_id = 'merged_' + new_row.sample_id
-            new_row.project_id = 'merged_' + new_row.project_id
-            new_row.type = 'merged'
-            new_row.experiment = ','.join(samples_to_merge.experiment.to_list())
-            new_row.investigator = ','.join(samples_to_merge.investigator.to_list())
-            new_row.sequencing_date = ','.join(samples_to_merge.sequencing_date.to_list())
-
-            projects_puck_info = projects_puck_info.append(new_row, ignore_index=True)
 
 #################
 # DIRECTORY STR #
@@ -99,9 +57,10 @@ raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
 processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
-projects_puck_info_file = config['root_dir'] + '/.config/projects_puck_info.csv'
-sample_overview_file = config['root_dir'] + '/.config/sample_overview.html'
-sample_read_metrics_db = config['root_dir'] + '/reports/sample_read_metrics_db.tsv'
+reports_root = config['root_dir'] + '/reports'
+project_df_file = reports_root + '/project_df.csv'
+sample_overview_file = reports_root + '/sample_overview.html'
+sample_read_metrics_db = reports_root + '/sample_read_metrics_db.tsv'
 
 united_illumina_root = config['root_dir'] + '/projects/{united_project}/processed_data/{united_sample}/illumina'
 united_complete_data_root = united_illumina_root + '/complete_data'
@@ -125,25 +84,21 @@ raw_reads_mate_1 = raw_reads_prefix + '1' + reads_suffix
 raw_reads_mate_2 = raw_reads_prefix + '2' + reads_suffix
 
 reverse_reads_prefix = raw_data_illumina_reads_reversed + '/{sample}_reversed_R'
-reverse_reads_pattern = reverse_reads_prefix + '{mate}' + reads_suffix
 reverse_reads_mate_1 = reverse_reads_prefix + '1' + reads_suffix
-reverse_reads_mate_2 = reverse_reads_prefix + '2' + reads_suffix
 
 ###############
 # Fastqc vars #
 ###############
-bin_dir = config['bin_dir']
 fastqc_root = raw_data_illumina + '/fastqc'
 fastqc_pattern = fastqc_root + '/{sample}_R{mate}_fastqc.{ext}'
-fastqc_command = f'{bin_dir}/FastQC-0.11.2/fastqc'
 fastqc_ext = ['zip', 'html']
 
 ########################
 # UNIQUE PIPELINE VARS #
 ########################
 # set the tool script directories
-picard_tools = f'{bin_dir}/picard-tools-2.21.6/picard.jar'
-dropseq_tools = f'{bin_dir}/Drop-seq_tools-2.3.0'
+picard_tools = config['external_bin']['picard_tools']
+dropseq_tools = config['external_bin']['dropseq_tools']
 
 # set per sample vars
 dropseq_root = processed_data_illumina + '/complete_data'
@@ -178,16 +133,13 @@ united_split_reads_read_type = united_split_reads_root + 'read_type_num.txt'
 # umi cutoffs. used by qc-s and automated reports
 umi_cutoffs = [10, 50, 100]
 
-#general qc sheet directory pattern
-qc_sheet_dir = '/qc_sheet/umi_cutoff_{umi_cutoff}'
-
 # parameters file for not merged samples
-qc_sheet_parameters_file = data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
+qc_sheet_parameters_file = data_root + '/qc_sheet_parameters.yaml'
 
-united_qc_sheet = united_complete_data_root + qc_sheet_dir + '/qc_sheet_{united_sample}_{puck}.pdf'
+united_qc_sheet = united_complete_data_root +'/qc_sheet_{united_sample}_{puck}.html'
 united_star_log = united_complete_data_root + '/star_Log.final.out'
 united_reads_type_out = united_split_reads_read_type
-united_qc_sheet_parameters_file = united_complete_data_root + qc_sheet_dir + '/qc_sheet_parameters.yaml'
+united_qc_sheet_parameters_file = united_complete_data_root + '/qc_sheet_parameters.yaml'
 united_barcode_readcounts = united_complete_data_root + '/out_readcounts.txt.gz'
 united_strand_info = united_split_reads_strand_type
 
@@ -226,16 +178,19 @@ paired_end_mapping_stats = paired_end_prefix + '{sample}_paired_end_mapping_stat
 
 # automated analysis
 automated_analysis_root = united_complete_data_root + '/automated_analysis/umi_cutoff_{umi_cutoff}'
-automated_figures_root = automated_analysis_root + '/figures'
-figure_suffix = '{united_sample}_{puck}.png'
-automated_figures_suffixes = ['violin_filtered', 'pca_first_components',
-    'umap_clusters','umap_top1_markers', 'umap_top2_markers']
+automated_report = automated_analysis_root + '/{united_sample}_{puck}_illumina_automated_report.html'
 
-automated_figures = [automated_figures_root + '/' + f + '_' + figure_suffix for f in automated_figures_suffixes]
-automated_report = automated_analysis_root + '/{united_sample}_{puck}_illumina_automated_report.pdf'
-automated_results_metadata = automated_analysis_root + '/{united_sample}_{puck}_illumina_automated_report_metadata.csv'
+automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
 
-automated_results_file = automated_analysis_root + '/results.h5ad'
+automated_analysis_processed_data_files = {
+    'cluster_markers': '/top10_cluster_markers.csv',
+    'obs_df': '/obs_df.tsv',
+    'var_df': '/var_df.tsv',
+    'long_expr_df': '/long_expr_df.tsv'
+    }
+
+# prepend automated_result_root
+automated_analysis_processed_data_files = {key: automated_analysis_root + value for key, value in automated_analysis_processed_data_files.items()}
 
 # blast out
 blast_db_primers = repo_dir + '/sequences/primers.fa'
@@ -249,6 +204,7 @@ downsample_root = united_illumina_root + '/downsampled_data'
 # in silico repo depletion
 ribo_depletion_log = data_root + '/ribo_depletion_log.txt'
 united_ribo_depletion_log = united_complete_data_root + '/ribo_depletion_log.txt'
+united_parsed_ribo_depletion_log = united_complete_data_root + '/parsed_ribo_depletion_log.txt'
 
 # global wildcard constraints
 wildcard_constraints:
@@ -258,16 +214,46 @@ wildcard_constraints:
     dge_type = '|'.join(dge_types),
     pacbio_ext = 'fq|fastq'
 
-# #######################
-# include dropseq rules #
-# #######################
-include: 'dropseq.smk'
+# #########################
+#  dropseq rules and vars #
+# #########################
+dropseq_tagged = dropseq_root + '/unaligned_bc_tagged.bam'
+dropseq_unassigned = dropseq_root + '/unaligned_bc_unassigned.bam'
+
+# filter out XC tag
+dropseq_tagged_filtered = dropseq_root + '/unaligned_tagged_filtered.bam'
+
+# trim smart adapter from the reads
+dropseq_tagged_trimmed = dropseq_root + '/unaligned_tagged_trimmed.bam'
+
+# trim polyA overheang if exists
+dropseq_tagged_trimmed_polyA = dropseq_root + '/unaligned_tagged_trimmed_polyA.bam'
+
+# mapped reads
+dropseq_mapped_reads_unsorted_headerless = dropseq_root + '/star_Aligned.unsorted.headerless.out.bam'
+dropseq_mapped_reads_unsorted = dropseq_root + '/star_Aligned.unsorted.out.bam'
+dropseq_mapped_reads = dropseq_root + '/star_Aligned.sorted.out.bam'
+star_log_file = dropseq_root + '/star_Log.final.out'
+
+# final dropseq bfinal dropseq bam
+dropseq_final_bam = dropseq_root + '/final.bam'
+
+# index bam file
+dropseq_final_bam_ix = dropseq_final_bam + '.bai'
+
+# include dropseq
+include: 'snakemake/dropseq.smk'
 
 ################################
 # Final output file generation #
 ################################
-def get_final_output_files(pattern, projects = None, samples = None, **kwargs):
-    samples_to_run = samples_list
+def get_final_output_files(pattern, projects = None, samples = None, skip_merged = False, **kwargs):
+    df = project_df
+
+    if skip_merged:
+        df = df[~df.is_merged]
+
+    samples_to_run = df.T.to_dict().values()
 
     if projects is not None:
         samples_to_run = [s for s in samples_to_run if s['project_id'] in projects]
@@ -287,14 +273,19 @@ def get_final_output_files(pattern, projects = None, samples = None, **kwargs):
 def get_united_output_files(pattern, projects = None, samples = None,
                             skip_projects = None, skip_samples = None, **kwargs):
     out_files = []
-    df = projects_puck_info
+    df = project_df
 
     if projects is None and samples is None:
-        projects = df.project_id.to_list()
-        samples = df.sample_id.to_list()
-        #df = df[df.sample_id.isin(samples)]
+        # nothing is set, assume we need to use all samples
+        pass
+    elif samples is None and projects is not None:
+        df = df[df.project_id.isin(projects)]
+    elif samples is not None and projects is None:
+        df = df[df.sample_id.isin(samples)]
+    else:
+        # both are set
+        df = df[df.sample_id.isin(samples) | df.project_id.isin(projects)]
 
-    df = df[df.sample_id.isin(samples) | df.project_id.isin(projects)]
 
     if skip_samples is not None:
         df = df[~df.sample_id.isin(skip_samples)]
@@ -303,15 +294,19 @@ def get_united_output_files(pattern, projects = None, samples = None,
         df = df[~df.project_id.isin(skip_projects)]
 
     for index, row in df.iterrows():
+        umi_cutoff = get_downstream_analysis_variables(project_id = row['project_id'],
+            sample_id = row['sample_id'])['umi_cutoff']
+
         out_files = out_files + expand(pattern,
             united_project = row['project_id'],
             united_sample = row['sample_id'],
             puck=row['puck_id'], 
+            umi_cutoff = umi_cutoff,
             **kwargs)
 
     return out_files
 
-human_mouse_samples = projects_puck_info[projects_puck_info.species.isin(['human', 'mouse'])].sample_id.to_list()
+human_mouse_samples = project_df[project_df.species.isin(['human', 'mouse'])].sample_id.to_list()
 
 ##################
 # include pacbio #
@@ -326,56 +321,48 @@ pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf
 pacbio_overview_csv = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.csv'
 pacbio_bead_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_bead_overview.pdf'
 
-include: 'pacbio.smk' 
+include: 'snakemake/pacbio.smk' 
 
 #############
 # Main rule #
 #############
 rule all:
     input:
-        get_final_output_files(fastqc_pattern, ext = fastqc_ext, mate = [1,2]),
-        # get_final_output_files(dropseq_tagged),
-        #get_final_output_files(paired_end_flagstat, samples = ['sts_022', 'sts_030_4', 'sts_025_4', 'sts_032_1_rescued'])
-        #get_final_output_files(kmer_stats_file, samples = ['sts_038_1', 'sts_030_4'], kmer_len = [4, 5, 6])
-        #get_united_output_files(dge_all_summary),
+        get_final_output_files(fastqc_pattern, skip_merged = True, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
-        get_united_output_files(automated_report, umi_cutoff = umi_cutoffs),
-        get_united_output_files(united_qc_sheet, umi_cutoff = umi_cutoffs)
-        # get all split bam files
-        #get_united_output_files(united_unmapped_bam),
-        #get_united_output_files(united_split_reads_bam_pattern, file_name = united_split_reads_sam_names)
-
+        get_united_output_files(automated_report),
+        get_united_output_files(united_qc_sheet)
 
 ########################
 # CREATE METADATA FILE #
 ########################
-rule create_projects_puck_info_file:
+rule create_project_df_file:
     output:
-        projects_puck_info_file
+        project_df_file
     run:
-        projects_puck_info.to_csv(output[0], index=False)
+        project_df.to_csv(output[0], index=False)
         os.system('chmod 664 %s' % (output[0]))
 
 rule create_sample_overview:
     input:
-        projects_puck_info_file
+        project_df_file
     output:
         sample_overview_file
     script:
-        'create_sample_overview.Rmd'
+        'snakemake/scripts/create_sample_overview.Rmd'
 
 rule create_sample_db:
     input:
-        projects_puck_info_file
+        project_df_file
     output:
         sample_read_metrics_db
     script:
-        'create_sample_db.R'
+        'snakemake/scripts/create_sample_db.R'
 
 ################
 # DOWNSAMPLING #
 ################
-include: 'downsample.smk'
+include: 'snakemake/downsample.smk'
 
 rule downsample:
     input:
@@ -384,7 +371,7 @@ rule downsample:
 #################
 # MERGE SAMPLES #
 #################
-include: 'merge_samples.smk'
+include: 'snakemake/merge_samples.smk'
 
 #########
 # RULES #
@@ -401,7 +388,7 @@ rule demultiplex_data:
         unpack(get_basecalls_dir)
     output:
         demux_indicator
-    threads: 16
+    threads: 8
     shell:
         """
         bcl2fastq \
@@ -451,6 +438,8 @@ rule zcat_pipe:
     output: pipe("{name}.fastq")
     shell: "zcat {input} >> {output}"
 
+dropseq_tagged_pipe = dropseq_tagged.replace('.bam', '.uncompressed.bam')
+
 rule reverse_first_mate:
     input:
         # these implicitly depend on the raw reads via zcat_pipes
@@ -459,14 +448,14 @@ rule reverse_first_mate:
     params:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
-        bam = dropseq_tagged,
+        assigned = pipe(dropseq_tagged_pipe),
         unassigned = dropseq_unassigned,
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: get_bc_preprocessing_threads
+    threads: 4
     shell:
-        "python {repo_dir}/scripts/preprocess_read1.py "
+        "python {repo_dir}/snakemake/scripts/preprocess_read1.py "
         "--sample={wildcards.sample} "
         "--read1={input.R1_unpacked} "
         "--read2={input.R2_unpacked} "
@@ -482,23 +471,14 @@ rule reverse_first_mate:
         "--cell-raw='{params.bc.cell_raw}' "
         "--out-format=bam "
         "--out-unassigned={output.unassigned} "
+        "--out-assigned={output.assigned} "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
-        "| samtools view -bh /dev/stdin > {output.bam} "
 
-rule reverse_second_mate:
-    input:
-        raw_reads_mate_2
-    output:
-        reverse_reads_mate_2
-    params:
-        reads_folder = raw_data_illumina_reads_reversed
-    shell:
-        """
-        mkdir -p {params.reads_folder}
-
-        ln -sr {input} {output}
-        """
+rule compress_dropseq_tagged:
+    input: dropseq_tagged_pipe
+    output: dropseq_tagged
+    shell: "sambamba view -h -l9 -f bam {input} > {output}"
 
 rule run_fastqc:
     input:
@@ -515,7 +495,7 @@ rule run_fastqc:
         """
         mkdir -p {params.output_dir}
 
-        {fastqc_command} -t {threads} -o {params.output_dir} {input}
+        fastqc -t {threads} -o {params.output_dir} {input}
         """
 
 rule index_bam_file:
@@ -532,12 +512,16 @@ rule get_barcode_readcounts:
         united_final_bam
     output:
         united_barcode_readcounts
+    params:
+        cell_barcode_tag = lambda wildcards: get_bam_tag_names(
+            project_id = wildcards.united_project,
+            sample_id = wildcards.united_sample)['{cell}'],
     shell:
         """
         {dropseq_tools}/BamTagHistogram \
         I= {input} \
         O= {output}\
-        TAG=CB
+        TAG={params.cell_barcode_tag}
         """
 
 rule create_top_barcodes:
@@ -545,8 +529,10 @@ rule create_top_barcodes:
         united_barcode_readcounts
     output:
         united_top_barcodes
+    params:
+        n_beads=lambda wildcards: get_downstream_analysis_variables(sample_id = wildcards.united_sample, project_id = wildcards.united_project)['expected_n_beads'],
     shell:
-        "set +o pipefail; zcat {input} | cut -f2 | head -100000 > {output}"
+        "set +o pipefail; zcat {input} | cut -f2 | head -{params.n_beads} > {output}"
 
 rule clean_top_barcodes:
     input:
@@ -554,7 +540,7 @@ rule clean_top_barcodes:
     output:
         united_top_barcodes_clean
     script:
-        'scripts/clean_top_barcodes.py'
+        'snakemake/scripts/clean_top_barcodes.py'
 
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
@@ -567,7 +553,13 @@ rule create_dge:
         dge_summary=dge_out_summary
     params:
         dge_root = dge_root,
-        dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards)     
+        dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
+        cell_barcode_tag = lambda wildcards: get_bam_tag_names(
+            project_id = wildcards.united_project,
+            sample_id = wildcards.united_sample)['{cell}'],
+        umi_tag = lambda wildcards: get_bam_tag_names(
+            project_id = wildcards.united_project,
+            sample_id = wildcards.united_sample)['{UMI}']
     shell:
         """
         mkdir -p {params.dge_root}
@@ -578,57 +570,69 @@ rule create_dge:
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
-        CELL_BARCODE_TAG=CB \
-        MOLECULAR_BARCODE_TAG=MI \
+        CELL_BARCODE_TAG={params.cell_barcode_tag} \
+        MOLECULAR_BARCODE_TAG={params.umi_tag} \
         TMP_DIR={temp_dir} \
         {params.dge_extra_params}
         """
 
 rule create_qc_parameters:
     params:
-        sample_params=lambda wildcards: get_qc_sheet_parameters(wildcards.sample, wildcards.umi_cutoff)
+        sample_params=lambda wildcards: get_qc_sheet_parameters(wildcards.project, wildcards.sample)
     output:
         qc_sheet_parameters_file
     script:
-        "qc_sequencing_create_parameters_from_sample_sheet.py"
+        "analysis/qc_sequencing_create_parameters_from_sample_sheet.py"
+
+rule parse_ribo_log:
+    input: united_ribo_depletion_log
+    output: united_parsed_ribo_depletion_log
+    script: 'snakemake/scripts/parse_ribo_log.py'
 
 rule create_qc_sheet:
     input:
+        unpack(get_dge_type),
         star_log = united_star_log,
         reads_type_out=united_reads_type_out,
         parameters_file=united_qc_sheet_parameters_file,
         read_counts = united_barcode_readcounts,
-        dge_all_summary = dge_all_cleaned_summary,
         strand_info = united_strand_info,
-        ribo_log=united_ribo_depletion_log
+        ribo_log=united_parsed_ribo_depletion_log
     output:
         united_qc_sheet
     script:
-        "qc_sequencing_create_sheet.py"
+        "analysis/qc_sequencing_create_sheet.Rmd"
 
 rule run_automated_analysis:
     input:
-        dge_all_cleaned
+        unpack(get_puck_file),
+        unpack(get_dge_type)
     output:
-        res_file=automated_results_file
-    params:
-        fig_root=automated_figures_root
+       automated_analysis_result_file
+    # set 4 threads so that not too many are run together
+    threads: 2
     script:
-        'automated_analysis.py'
+        'analysis/automated_analysis.py'
+
+rule create_automated_analysis_processed_data_files:
+    input:
+        automated_analysis_result_file
+    output:
+        **automated_analysis_processed_data_files
+    script:
+        'analysis/automated_analysis_create_processed_data_files.py'
         
 rule create_automated_report:
     input:
         star_log=united_star_log,
-        res_file=automated_results_file,
-        parameters_file=united_qc_sheet_parameters_file
+        parameters_file=united_qc_sheet_parameters_file,
+        **automated_analysis_processed_data_files
     output:
-        figures=automated_figures,
-        report=automated_report,
-        results_metadata=automated_results_metadata
+        automated_report
     params:
-        fig_root=automated_figures_root
+        r_shared_scripts= repo_dir + '/analysis/shared_functions.R'
     script:
-        'automated_analysis_create_report.py'
+        'analysis/automated_analysis_create_report.Rmd'
 
 rule split_final_bam:
     input:
@@ -640,7 +644,7 @@ rule split_final_bam:
     params:
         prefix=united_split_reads_root
     shell:
-        "sambamba view -F 'mapping_quality==255' -h {input} | python {repo_dir}/scripts/split_reads_by_strand_info.py --prefix {params.prefix} /dev/stdin"
+        "sambamba view -F 'mapping_quality==255' -h {input} | python {repo_dir}/snakemake/scripts/split_reads_by_strand_info.py --prefix {params.prefix} /dev/stdin"
 
 rule split_reads_sam_to_bam:
     input:
@@ -660,71 +664,6 @@ rule get_unmapped_reads:
     shell:
         "sambamba view -F 'unmapped' -h -f bam -t {threads} -o {output} {input}"
 
-rule create_dge_barcode_fasta:
-    input:
-        dge_all_summary
-    output:
-        dge_all_summary_fasta
-    shell:
-        """tail -n +8 {input} | awk 'NF==4 && !/^TAG=XC*/{{print ">{wildcards.united_sample}_"$1"_"$2"_"$3"_"$4"\\n"$1}}' > {output}"""
-
-rule create_blast_db:
-    input:
-        blast_db_primers
-    output:
-        blast_db_primers_files
-    shell:
-        "makeblastdb -in {input} -parse_seqids -dbtype nucl"
-
-rule blast_dge_barcodes:
-    input:
-        blast_db_primers_files,
-        db=blast_db_primers,
-        barcodes= dge_all_summary_fasta
-    output:
-        united_barcode_blast_out
-    threads: 2
-    shell:
-        """
-        blastn -query {input.barcodes} -evalue 10 -task blastn-short -num_threads {threads} -outfmt "6 {blast_header_out}" -db {input.db} -out {output}"""
-
-rule map_paired_end_bt2:
-    input:
-        R1 = reverse_reads_mate_1,
-        R2 = reverse_reads_mate_2
-    output:
-        sam=pipe(paired_end_sam),
-        logfile=paired_end_log
-    threads: 8
-    params:
-        index= lambda wildcards: get_bt2_index(wildcards)
-    shell:
-        """
-        bowtie2 -x {params.index} \
-            -p {threads} \
-            -1 {input.R1} \
-            -2 {input.R2} \
-            --end-to-end --sensitive \
-            -S {output.sam} 2>{output.logfile}
-        """
-
-rule paired_reads_sam_to_bam:
-    input:
-        paired_end_sam
-    output:
-        paired_end_bam
-    threads: 8
-    shell:
-        "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
-
-rule paired_reads_flagstat:
-    input:
-        paired_end_bam
-    threads: 4
-    output:
-        paired_end_flagstat
-    shell:
-        "sambamba flagstat -t {threads} {input} > {output}"
 
 rule map_to_rRNA:
     input:
@@ -739,15 +678,6 @@ rule map_to_rRNA:
         else:
             shell("echo 'no_rRNA_index' > {output}")
 
-rule tag_reads_with_primer_overlap:
-    input:
-        united_final_bam
-    output:
-        tagged_bam = united_primer_tagged_final_bam,
-        summary = united_primer_tagged_summary
-    script:
-        'scripts/r1_kmer_analysis.py'
-
 rule calculate_kmer_counts:
     input:
         raw_reads_mate_1
@@ -756,5 +686,4 @@ rule calculate_kmer_counts:
     params:
         kmer_len = lambda wildcards: wildcards.kmer_len
     script:
-        'scripts/kmer_stats_from_fastq.py'
-
+        'snakemake/scripts/kmer_stats_from_fastq.py'

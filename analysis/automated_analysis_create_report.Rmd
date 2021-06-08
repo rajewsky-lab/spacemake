@@ -1,0 +1,296 @@
+---
+output:
+  html_document:
+    toc: true
+version: 0.1.1
+author: Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos
+email: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc.berlin.de
+license: GPL
+---
+
+```{r knitr_options, include=FALSE, cache=FALSE}
+knitr::opts_chunk$set(
+  autodep = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = NA
+)
+```
+
+```{r libraries, include = F, cache=F}
+library(tidyverse)
+library(yaml)
+library(knitr)
+library(magrittr)
+library(kableExtra)
+library(cowplot)
+
+theme_set(theme_cowplot(12))
+
+cpalette <- list('orange' = '#D55E00', 'blue' = '#0072B2', 'green' = '#009E73', 'black' = '#000000', 'yellow' = '#F0E442', 
+				 'grey' = '#999999', 'light_orange' = "#E69F00", 'light_blue' = "#56B4E9")
+
+clrs = c('umis'=cpalette$light_orange, 'genes' = cpalette$light_blue,
+         'reads'=cpalette$green, 'pcr'=cpalette$pink, 'pct_counts_mt'= 'black')
+
+source(snakemake@params$r_shared_scripts)
+```
+
+```{r save_snakemake_object, echo = F}
+#write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
+#snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
+```
+
+```{r read_data, echo = F}
+parameters <- read_yaml(snakemake@input$parameters_file)
+
+parameter_stats <- parameters %>%
+    as_tibble() %>%
+    gather('metric', 'value')
+
+obs_df <- read_table2(snakemake@input$obs_df) %>%
+    mutate(pct_counts_mt = as.double(pct_counts_mt))
+var_df <- read_table2(snakemake@input$var_df)
+
+n_beads = nrow(obs_df)
+data_empty <- n_beads == 0
+
+expr_df <- read_table2(snakemake@input$long_expr_df)
+```
+
+### Overview
+
+```{r create_overview_table, echo = F}
+parameter_stats <- parameter_stats %>%
+    rbind(c('UMI filter', snakemake@wildcards$umi_cutoff),
+          c('# genes in data', nrow(var_df)),
+          c('# of beads in data', nrow(obs_df)),
+          c('median UMI', median(obs_df$n_counts)),
+          c('median genes', median(obs_df$n_genes)))
+
+parameter_stats %>%
+    kbl(col.names=NULL) %>%
+    kable_classic_2(full_width=F) %>%
+    pack_rows('Sample info', 1, 7) %>%
+    pack_rows('Data info', 8, 12)
+```
+
+### Histogram of metrics over beads
+
+```{r data_empty, echo = F, eval = data_empty, results='asis'}
+cat('This dataset has 0 beads passing the filters')
+```
+
+```{r plot_histogram_of_metrics, echo = F, fig.width=10, eval=!data_empty}
+pl1 <- obs_df %>%
+    select(cell_bc, n_counts, n_genes) %>%
+    dplyr::rename(umis=n_counts,
+                  genes=n_genes) %>%
+    gather('obs', 'value', -cell_bc) %>%
+    ggplot(aes(value, fill=obs)) +
+        geom_histogram(bins=100) +
+        scale_fill_manual(values=clrs) +
+        facet_wrap(~obs, ncol=2, scales='free')
+
+if (nrow(obs_df) > 50){
+    pl1 <- pl1 +
+        scale_x_log10() +
+        annotation_logticks(sides='b') +
+        labs(x='log(value)', y='count')
+} else {
+    pl1 <- pl1 +
+        labs(x ='value', y='count')
+}
+
+pl2 <- obs_df %>%
+    select(cell_bc, pct_counts_mt) %>%
+    gather('obs', 'value', -cell_bc) %>%
+    ggplot(aes(value, fill=obs)) +
+        geom_histogram(bins=100) +
+        scale_fill_manual(values=clrs) +
+        facet_wrap(~obs, ncol=2, scales='free')+
+        labs(x='value', y='count')
+
+plot_grid(pl1,
+          plot_grid(pl2, NULL, ncol=2, rel_widths=c(1.5,1), labels=""),
+          ncol=1, rel_heights=c(1,1), labels="")
+```
+
+
+```{r check_completeness, echo = F, fig.size=10, fig.width=10}
+obs_df <- obs_df %>%
+    gather('res', 'cluster', starts_with('leiden'))
+
+data_complete = F
+
+if ('cluster' %in% colnames(obs_df)){
+    data_complete = T
+}
+
+fig_height=5
+fig_width=5
+```
+
+```{r incompleteness_warning, eval=!data_complete, echo=F, results='asis'}
+cat('### WARNING: data incomplete\n\n')
+cat(paste0('This dataset has ', n_beads, ' cells passing the filter of ', snakemake@wildcards$umi_cutoff, ' and ', nrow(var_df), ' genes.\n\n'))
+cat(paste0('This dataset is too small, so it couldn\'t be properly clustered and analysed automatically'))
+```
+
+
+```{r umap_text, eval=data_complete, echo =F, results='asis'}
+cat('### UMAP plots using different resolutions {.tabset}\n\n')
+```
+
+
+```{r plot_umi_umap, eval=data_complete, echo=F}
+obs_df <- obs_df %>%
+    mutate(cluster = factor(cluster)) %>%
+    mutate(log1p_total_counts = log2(1+total_counts))
+
+obs_colnames <- colnames(obs_df)
+
+# barcode file attached at the python level
+barcode_file <- 'x_pos' %in% obs_colnames && 'y_pos' %in% obs_colnames
+
+if (barcode_file){
+    fig_width=fig_width * 2
+
+    obs_df %>%
+        filter(res == 'leiden_0.2') %>%
+        mutate(log1p_total_counts = log2(1+total_counts)) %>%
+        arrange(log1p_total_counts) %>%
+        ggplot(aes(x_pos, y_pos, color = log1p_total_counts)) +
+            geom_point(size = 0.1)+
+            coord_fixed()+
+            scale_color_viridis_c(option = "magma") +
+            ggtitle('UMI distribution in 2D')
+
+}
+# gene plotting function
+plot_genes <- function(genes){
+    gene_expr <- expr_df %>%
+        filter(gene %in% genes)
+
+    gene_expr <- obs_df %>%
+        filter(res == 'leiden_0.2') %>%
+        left_join(gene_expr, by = 'cell_bc') %>%
+        # fill empty values
+        # first spread the genes, so each gene is a column
+        # then create long df and replace NA with 0
+        spread(gene, expr) %>%
+        gather('gene', 'expr', all_of(genes)) %>%
+        replace_na(list(expr = 0)) %>%
+        arrange(expr)
+
+    pl1 <- gene_expr %>%
+        ggplot(aes(umap_0, umap_1, color = expr)) +
+            geom_point(size=0.1) +
+            coord_fixed() +
+            facet_wrap(~gene, ncol = 3) +
+            scale_color_viridis_c(option = "inferno", direction=-1) +
+            labs(color='UMI')
+
+    if(barcode_file){
+        pl2 <- gene_expr %>%
+            ggplot(aes(x_pos, y_pos, color = expr)) +
+                geom_point(size=0.1) +
+                coord_fixed() +
+                facet_wrap(~gene, ncol=4) +
+                scale_color_viridis_c(option = "inferno", direction=-1) +
+                labs(color='UMI count')
+        print(plot_grid(pl1, pl2))
+    } else {
+        print(pl1)
+    }
+}
+```
+
+```{r plot_clusters_umap_puck, echo =F, fig.height=fig_height, fig.width=fig_width, eval=data_complete, results='asis'}
+top10_marker_table <- read_table2(snakemake@input$cluster_markers)
+
+for (i in obs_df %$% res %>% unique){
+    res <- strsplit(i, '_')[[1]][2]
+    cat(paste0('\n\n#### ', res, ' resolution {.tabset}\n\n'))
+    pl1 <- obs_df %>%
+        filter(res == i) %>%
+        ggplot(aes(umap_0, umap_1, color = cluster)) +
+            geom_point(size=0.1, alpha=0.8) +
+            coord_fixed() +
+            facet_wrap(~res, ncol = 1) +
+            guides(colour = guide_legend(override.aes = list(size=3)))
+
+    knitr::opts_chunk$set(fig.width=10, fig.height=10)
+    if (barcode_file) {
+        pl2 <- obs_df %>%
+            filter(res == i) %>%
+            ggplot(aes(x_pos, y_pos, color = cluster)) +
+                geom_point(size=0.1, alpha=0.8) +
+                coord_fixed() +
+                facet_wrap(~res, ncol = 1) +
+                guides(colour = guide_legend(override.aes = list(size=3)))
+
+        print(plot_grid(pl1, pl2))
+    } else {
+        print(pl1)
+    }
+
+    cat('\n\n##### Marker table \n\n')
+
+    top_markers <- top10_marker_table %>%
+        filter(resolution == res) %>%
+        filter(pvals_adj < 0.1,
+               pts > 0.2) %>%
+        group_by(cluster) %>%
+        top_n(logfoldchanges, n=3)
+
+    top_markers %>%
+        kbl() %>%
+        kable_classic_2(full_width = F) %>%
+        cat()
+
+    for (clstr in top_markers$cluster %>% unique){
+        cat(paste0('\n\n ##### cluster ', clstr, ' markers\n\n'))
+
+        top_markers %>%
+            filter(cluster == clstr) %$%
+            gene %>%
+            plot_genes()
+    }
+
+    
+}
+```
+
+### Markers {.tabset}
+
+Next we show the top markers across all resolutions and clusters. For each resolution and cluster differentially expressed genes (t-test cluster vs rest) which are expressed at least in 50% of the beads for a given cluster and at most in 30% of the remaining beads, having at least log2foldchange of 1 and adjusted-pvalue less than 0.05 are selected.
+
+#### Marker table
+
+```{r load_top_cluster_markers, echo = F}
+top_markers <- top10_marker_table %>%
+    filter(pvals_adj <0.05, pts > 0.5, pts_rest < 0.3, logfoldchanges > 1)
+
+top_markers %>%
+    kbl() %>%
+    kable_classic_2(full_width = F)
+
+top_marker_heights <- top_markers %>%
+    group_by(resolution) %>%
+    summarise(height = n()) %>% 
+    # number of rows times 4
+    mutate(height = (floor(height/4) + 1) *2) %>%
+    mutate(height = ifelse(height < 4, 4, height)) %>%
+    mutate(resolution = paste0('res_', resolution)) %>%
+    spread(resolution, height)
+
+width_mult <- ifelse(barcode_file, 4, 2)
+
+top_marker_widths <- top_markers %>%
+    group_by(resolution) %>%
+    summarise(width = n()) %>%
+    mutate(width = ifelse(width>4, 4*width_mult, width*width_mult)) %>%
+    mutate(resolution = paste0('res_', resolution)) %>%
+    spread(resolution, width)
+```
