@@ -14,15 +14,6 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 ###########
 import os
 import yaml
-import sys
-import subprocess
-
-#############
-# functions #
-#############
-
-def create_qc_sequencing_parameters(sample_sheet):
-    return
 
 ########
 # main #
@@ -40,6 +31,5 @@ if __name__ == '__main__':
         fo.write('project_id: ' + params['project_id'] + '\n')
         fo.write('experiment: ' + params['experiment'] + '\n')
         fo.write('sequencing_date: ' + params['sequencing_date']  + '\n')
-        fo.write('input_beads: '+ params['input_beads'] + '\n')
-        fo.write('umi_cutoff: ' + params['umi_cutoff'] + '\n')
+        fo.write('expected_n_beads: '+ params['input_beads'] + '\n')
         fo.write('investigator: ' + params['investigator'] + '\n')

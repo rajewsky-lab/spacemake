@@ -1,1 +1,0 @@
-zcat /data/rajewsky/projects/slide_seq/demultiplex_data/200617_sts_032_sts_K_003_3_4_sample_sheet/sts_032/sts_032_1/PID_B0007_1_S1_R1_001.fastq.gz | sed -n '1~4p' | awk -F: '{print $NF}' | sort | uniq -c > out/undetermined_barcode_counts.txt

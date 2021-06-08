@@ -1,4 +1,5 @@
 *.rds
+*.html
 *.pdf
 .snakemake
 
