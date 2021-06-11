@@ -65,9 +65,11 @@ rule map_reads:
             --readFilesType SAM SE \
             --readFilesCommand samtools view \
             --outSAMtype BAM Unsorted \
-            --outSAMunmapped Within \
             --outStd BAM_Unsorted \
-            --outFileNamePrefix {params.star_prefix} > {output}
+            --outFilterMatchNmin 15 \
+            --outFilterScoreMin 15 \
+            --outSAMunmapped Within \
+            --outFileNamePrefix {params.star_prefix} > {output} 
 
         rm -rf {params.tmp_dir}
         """
