@@ -225,8 +225,9 @@ p <- umi_cutoff_data %>%
         geom_line() +
         scale_color_manual(values=clrs) +
         facet_wrap(~obs, ncol=3, scales='free') +
-        ggtitle('Summarised metrics based on UMI-cutoff') + 
-        theme(strip.background=element_blank(), strip.text.x=element_blank()) +
+        ggtitle('Summarised metrics based on minimum UMI cutoff') + 
+        theme(strip.background=element_blank(), strip.text.x=element_blank(),
+              text = element_text(size=18, face = 'plain')) +
         labs(color='') +
         guides(colour = guide_legend(override.aes = list(size=5)))
 
@@ -244,8 +245,9 @@ dge_summary %>%
         annotation_logticks(sides='b') +
         scale_fill_manual(values=clrs) +
         facet_wrap(~obs, ncol=2, scales='free') +
-        ggtitle('Distribution of metrics over beads') +
-        theme(legend.position = 'bottom')
+        ggtitle('Histogram of metrics',
+                subtitle=paste0('Over all beads (n=',nrow(dge_summary), ')')) +
+        theme(legend.position = 'bottom', text = element_text(size=18, face='plain'))
 ```
 
 #### Nucleotide distribution per beads
