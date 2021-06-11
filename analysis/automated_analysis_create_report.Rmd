@@ -66,7 +66,7 @@ parameter_stats <- parameter_stats %>%
     rbind(c('UMI filter', snakemake@wildcards$umi_cutoff),
           c('# genes in data', nrow(var_df)),
           c('# of beads in data', nrow(obs_df)),
-          c('median UMI', median(obs_df$n_counts)),
+          c('median UMI', median(obs_df$total_counts)),
           c('median genes', median(obs_df$n_genes)))
 
 parameter_stats %>%
@@ -84,8 +84,8 @@ cat('This dataset has 0 beads passing the filters')
 
 ```{r plot_histogram_of_metrics, echo = F, fig.width=10, eval=!data_empty}
 pl1 <- obs_df %>%
-    select(cell_bc, n_counts, n_genes) %>%
-    dplyr::rename(umis=n_counts,
+    select(cell_bc, total_counts, n_genes) %>%
+    dplyr::rename(umis=total_counts,
                   genes=n_genes) %>%
     gather('obs', 'value', -cell_bc) %>%
     ggplot(aes(value, fill=obs)) +
@@ -167,6 +167,19 @@ if (barcode_file){
                 ggtitle('UMI distribution in 2D') +
                 labs(color='log2(1+UMI)') + 
                 theme(panel.background = element_rect(fill = 'gray90'))
+
+        obs_df %>%
+            filter(res == 'leiden_0.2') %>%
+            arrange(total_counts) %>%
+            mutate(total_counts = ifelse(total_counts > 6000, 6000, total_counts)) %>%
+            ggplot(aes(x_pos, y_pos, color = total_counts)) +
+                geom_point(size = snakemake@params$downstream_stats$plot_bead_size)+
+                coord_fixed()+
+                scale_color_viridis_c(option =  "magma", limits = c(0, 6000),  breaks = seq(1000, 5000, 500)) +
+                guides(color = guide_colorbar(barheight = 15)) + 
+                ggtitle('UMI distribution in 2D') +
+                labs(color='UMI') + 
+                theme(panel.background = element_rect(fill = 'gray90'))
     }
 
 # gene plotting function
@@ -217,7 +230,12 @@ plot_genes <- function(genes){
 ```{r plot_clusters_umap_puck, echo =F, fig.height=fig_height, fig.width=fig_width, eval=data_complete, results='asis'}
 library(ggsci)
 
-cluster_clrs <- c(# tron from ggsci
+cluster_clrs <- c('#ff8011',
+                  '#2179b5',
+                  '#9466be',
+                  '#2b9f2b',
+                  '#8c554a',
+                  '#e479c3',
                   "#FF410D",
                   "#6EE2FF",
                   "#F7C530",
@@ -258,14 +276,11 @@ for (i in obs_df %$% res %>% unique){
     pl <- to_plot %>%
         mutate(type = factor(type, levels = c('umap coordinates', 'physical coordinates'))) %>%
         ggplot(aes(x_pos, y_pos, color = cluster)) +
-            geom_point(size=snakemake@params$downstream_stats$plot_bead_size) +
+            geom_point(size=snakemake@params$downstream_stats$plot_bead_size, alpha=0.9) +
             facet_wrap(~type, ncol = 2, scales='free') +
             guides(colour = guide_legend(override.aes = list(size=3)))+
             scale_color_manual(values=cluster_clrs) +
-            theme(panel.background = element_rect(fill = '#2D2D2D'),
-                  strip.background =element_rect(fill='#2D2D2D', colour='#2D2D2D'),
-                  strip.text = element_text(color = 'white'),
-                  aspect.ratio=1, legend.key = element_rect(fill = '#2D2D2D'))
+            theme(aspect.ratio=1, panel.background = element_rect(fill = 'gray90'))
     print(pl)
                     
 

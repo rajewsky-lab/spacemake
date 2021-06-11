@@ -230,9 +230,8 @@ dropseq_tagged_trimmed = dropseq_root + '/unaligned_tagged_trimmed.bam'
 dropseq_tagged_trimmed_polyA = dropseq_root + '/unaligned_tagged_trimmed_polyA.bam'
 
 # mapped reads
-dropseq_mapped_reads_unsorted_headerless = dropseq_root + '/star_Aligned.unsorted.headerless.out.bam'
-dropseq_mapped_reads_unsorted = dropseq_root + '/star_Aligned.unsorted.out.bam'
-dropseq_mapped_reads = dropseq_root + '/star_Aligned.sorted.out.bam'
+dropseq_mapped_reads_sorted_headerless = dropseq_root + '/star_Aligned.sorted.headerless.out.bam'
+dropseq_mapped_reads_sorted = dropseq_root + '/star_Aligned.sorted.out.bam'
 star_log_file = dropseq_root + '/star_Log.final.out'
 
 # final dropseq bfinal dropseq bam
@@ -328,7 +327,7 @@ include: 'snakemake/pacbio.smk'
 #############
 rule all:
     input:
-        get_final_output_files(fastqc_pattern, skip_merged = True, ext = fastqc_ext, mate = [1,2]),
+        #get_final_output_files(fastqc_pattern, skip_merged = True, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
         get_united_output_files(automated_report),
         get_united_output_files(united_qc_sheet)
@@ -435,7 +434,7 @@ rule link_raw_reads:
 
 rule zcat_pipe:
     input: "{name}.fastq.gz"
-    output: pipe("{name}.fastq")
+    output: temp("{name}.fastq")
     shell: "zcat {input} >> {output}"
 
 dropseq_tagged_pipe = dropseq_tagged.replace('.bam', '.uncompressed.bam')
@@ -448,7 +447,7 @@ rule reverse_first_mate:
     params:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
-        assigned = pipe(dropseq_tagged_pipe),
+        assigned = pipe(dropseq_tagged),
         unassigned = dropseq_unassigned,
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
@@ -475,11 +474,6 @@ rule reverse_first_mate:
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
 
-rule compress_dropseq_tagged:
-    input: dropseq_tagged_pipe
-    output: dropseq_tagged
-    shell: "sambamba view -h -l9 -f bam {input} > {output}"
-
 rule run_fastqc:
     input:
         # we need to use raw reads here, as later during "reversing" we do the umi
@@ -498,13 +492,13 @@ rule run_fastqc:
         fastqc -t {threads} -o {params.output_dir} {input}
         """
 
-rule index_bam_file:
-    input:
-        dropseq_final_bam
-    output:
-        dropseq_final_bam_ix 
-    shell:
-       "sambamba index {input}"
+#rule index_bam_file:
+#    input:
+#        dropseq_final_bam
+#    output:
+#        dropseq_final_bam_ix 
+#    shell:
+#       "sambamba index {input}"
 
 rule get_barcode_readcounts:
     # this rule takes the final.bam file (output of the dropseq pipeline) and creates a barcode read count file

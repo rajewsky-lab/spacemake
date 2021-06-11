@@ -46,7 +46,7 @@ downstream_analysis_variables:
         plot_bead_border: False
     visium:
         expected_n_beads: 10000
-        umi_cutoff: [200, 500]
+        umi_cutoff: [500]
         clean_dge: False
         plot_bead_size: 1
         plot_bead_border: True

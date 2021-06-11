@@ -50,7 +50,7 @@ rule map_reads:
         unpack(get_species_info),
         reads=dropseq_tagged_trimmed_polyA
     output:
-        temp(dropseq_mapped_reads_unsorted_headerless)
+        temp(dropseq_mapped_reads_sorted_headerless)
     log: star_log_file
     threads: 8
     params:
@@ -64,9 +64,9 @@ rule map_reads:
             --readFilesIn {input.reads} \
             --readFilesType SAM SE \
             --readFilesCommand samtools view \
-            --outSAMtype BAM Unsorted \
+            --outSAMtype BAM SortedByCoordinate \
             --outSAMunmapped Within \
-            --outStd BAM_Unsorted \
+            --outStd BAM_SortedByCoordinate \
             --outFileNamePrefix {params.star_prefix} > {output}
 
         rm -rf {params.tmp_dir}
@@ -74,9 +74,9 @@ rule map_reads:
 
 rule fix_star_bam_header:
     input:
-        mapped_reads=dropseq_mapped_reads_unsorted_headerless,
+        mapped_reads=dropseq_mapped_reads_sorted_headerless,
         unmapped_tagged_reads=dropseq_tagged_trimmed_polyA
-    output: pipe(dropseq_mapped_reads_unsorted)
+    output: pipe(dropseq_mapped_reads_sorted)
     shell:
         """
         python {repo_dir}/snakemake/scripts/fix_bam_header.py \
@@ -85,16 +85,16 @@ rule fix_star_bam_header:
             --out-bam {output}
         """
 
-rule sort_dropseq_mapped_reads:
-    input: dropseq_mapped_reads_unsorted
-    output: pipe(dropseq_mapped_reads)
-    threads: 4
-    shell:  'sambamba sort -m 4G -o {output} -t {threads} {input}' 
+#rule sort_dropseq_mapped_reads:
+#    input: dropseq_mapped_reads_unsorted
+#    output: pipe(dropseq_mapped_reads)
+#    threads: 4
+#    shell:  'sambamba sort -m 16G -o {output} -t {threads} {input}' 
 
 rule tag_read_with_gene:
     input:
         unpack(get_species_info), 
-        reads=dropseq_mapped_reads
+        reads=dropseq_mapped_reads_sorted
     output:
         dropseq_final_bam
     shell:
