@@ -25,6 +25,8 @@ library(knitr)
 library(magrittr)
 library(kableExtra)
 library(cowplot)
+library(grid)
+library(gtable)
 
 theme_set(theme_cowplot(12))
 
@@ -44,6 +46,62 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
+shift_legend <- function(p){
+
+  # check if p is a valid object
+  if(!"gtable" %in% class(p)){
+    if("ggplot" %in% class(p)){
+      gp <- ggplotGrob(p) # convert to grob
+    } else {
+      message("This is neither a ggplot object nor a grob generated from ggplotGrob. Returning original plot.")
+      return(p)
+    }
+  } else {
+    gp <- p
+  }
+
+  # check for unfilled facet panels
+  facet.panels <- grep("^panel", gp[["layout"]][["name"]])
+  empty.facet.panels <- sapply(facet.panels, function(i) "zeroGrob" %in% class(gp[["grobs"]][[i]]))
+  empty.facet.panels <- facet.panels[empty.facet.panels]
+  if(length(empty.facet.panels) == 0){
+    message("There are no unfilled facet panels to shift legend into. Returning original plot.")
+    return(p)
+  }
+
+  # establish extent of unfilled facet panels (including any axis cells in between)
+  empty.facet.panels <- gp[["layout"]][empty.facet.panels, ]
+  empty.facet.panels <- list(min(empty.facet.panels[["t"]]), min(empty.facet.panels[["l"]]),
+                             max(empty.facet.panels[["b"]]), max(empty.facet.panels[["r"]]))
+  names(empty.facet.panels) <- c("t", "l", "b", "r")
+
+  # extract legend & copy over to location of unfilled facet panels
+  guide.grob <- which(gp[["layout"]][["name"]] == "guide-box")
+  if(length(guide.grob) == 0){
+    message("There is no legend present. Returning original plot.")
+    return(p)
+  }
+  gp <- gtable_add_grob(x = gp,
+                        grobs = gp[["grobs"]][[guide.grob]],
+                        t = empty.facet.panels[["t"]],
+                        l = empty.facet.panels[["l"]],
+                        b = empty.facet.panels[["b"]],
+                        r = empty.facet.panels[["r"]],
+                        name = "new-guide-box")
+
+  # squash the original guide box's row / column (whichever applicable)
+  # & empty its cell
+  guide.grob <- gp[["layout"]][guide.grob, ]
+  if(guide.grob[["l"]] == guide.grob[["r"]]){
+    gp <- gtable_squash_cols(gp, cols = guide.grob[["l"]])
+  }
+  if(guide.grob[["t"]] == guide.grob[["b"]]){
+    gp <- gtable_squash_rows(gp, rows = guide.grob[["t"]])
+  }
+  gp <- gtable_remove_grobs(gp, "guide-box")
+
+  return(gp)
+}
 ```
 
 ```{r save_snakemake, echo = F}
@@ -65,8 +123,8 @@ cPalette = list('grey'= "#999999", 'light_orange'="#E69F00",
          'yellow' = "#F0E442", 'blue'= "#0072B2", 'orange'="#D55E00",
          'pink'="#CC79A7")
 
-clrs = c('umis'=cPalette$light_orange, 'genes' = cPalette$light_blue, 'reads'=cPalette$green,
-         'pcr'=cPalette$pink, 'n_beads'= 'black')
+clrs = c('umis'=cPalette$light_orange, 'pcr' = cPalette$light_blue, 'reads'=cPalette$green,
+         'genes'=cPalette$pink, 'n_beads'= 'black')
 
 median_clrs = clrs
 names(median_clrs) = paste0('median_', names(clrs))
@@ -161,14 +219,19 @@ umi_cutoff_data <- tibble(umi_cutoffs = umi_cutoffs) %>%
     mutate(dat = map(umi_cutoffs, ~ summarise_dge_summary(.))) %>%
     unnest(dat)
 
-umi_cutoff_data %>%
+p <- umi_cutoff_data %>%
     gather('obs', 'value', -umi_cutoffs) %>%
     ggplot(aes(umi_cutoffs, value, color=obs)) +
         geom_line() +
         scale_color_manual(values=clrs) +
         facet_wrap(~obs, ncol=3, scales='free') +
-        ggtitle('Summarised metrics based on UMI-cutoff') + 
-        theme(legend.position = 'bottom')
+        ggtitle('Summarised metrics based on minimum UMI cutoff') + 
+        theme(strip.background=element_blank(), strip.text.x=element_blank(),
+              text = element_text(size=18, face = 'plain')) +
+        labs(color='') +
+        guides(colour = guide_legend(override.aes = list(size=5)))
+
+grid.draw(shift_legend(p))
 ```
 
 #### Histogram of metrics over beads
@@ -182,8 +245,9 @@ dge_summary %>%
         annotation_logticks(sides='b') +
         scale_fill_manual(values=clrs) +
         facet_wrap(~obs, ncol=2, scales='free') +
-        ggtitle('Distribution of metrics over beads') +
-        theme(legend.position = 'bottom')
+        ggtitle('Histogram of metrics',
+                subtitle=paste0('Over all beads (n=',nrow(dge_summary), ')')) +
+        theme(legend.position = 'bottom', text = element_text(size=18, face='plain'))
 ```
 
 #### Nucleotide distribution per beads
@@ -222,6 +286,14 @@ calc_shannon_entropy <- function(barcode){
     (-1*sum(counts/len * log2(counts/len)))
 }
 
+calc_string_compression <- function(barcode){
+    barcode_vector <- strsplit(barcode, '')[[1]]
+    res <- rle(barcode_vector)
+    compressed_barcode <- paste(res$values, res$lengths, collapse='', sep='')
+
+    return(nchar(compressed_barcode))
+}
+
 theoretical <- c()
     
 for(i in seq(1, dge_summary %>% nrow, 1)){
@@ -230,18 +302,30 @@ for(i in seq(1, dge_summary %>% nrow, 1)){
 
 dge_summary <- dge_summary %>%
     add_column(theoretical_entropy = map(theoretical, ~ calc_shannon_entropy(.))) %>%
-    mutate(entropy = map(cell_bc, ~ calc_shannon_entropy(.))) %>%
-    unnest(entropy) %>%
-    unnest(theoretical_entropy)
-
+    mutate(exact_entropy = map(cell_bc, ~ calc_shannon_entropy(.))) %>%
+    unnest(exact_entropy) %>%
+    unnest(theoretical_entropy) %>%
+    add_column(theoretical_string_compression = map(theoretical, ~ calc_string_compression(.))) %>%
+    mutate(exact_string_compression = map(cell_bc, ~calc_string_compression(.))) %>%
+    unnest(exact_string_compression) %>%
+    unnest(theoretical_string_compression)
 ```
 
 ```{r plot_shannon, echo = F}
 dge_summary %>%
-    gather('obs', 'val', entropy, theoretical_entropy) %>%
-    ggplot(aes(val, fill = obs)) +
-        geom_histogram(bins=20, color='black', position='dodge') +
+    dplyr::select(-reads, -umis, -genes, -pcr, -quartile) %>%
+    gather('observation', 'value', -cell_bc) %>%
+    # replace first _ with |, so we can separate later
+    mutate(observation = str_replace(observation, '_', ' '),
+           observation = str_replace(observation, '\\s', '|'),
+           observation = str_replace(observation, ' ', '_')) %>%
+    separate(observation, into = c('type', 'observation'), sep = '\\|') %>%
+    ggplot(aes(value, fill = type)) +
+        geom_histogram(bins=30, color='black', position='dodge') +
         scale_fill_manual(values=c(cpalette$grey, cpalette$orange)) +
-        ggtitle('Shannon entropy distribution of beads')
+        ggtitle('Shannon entropy and string compression',
+                subtitle='histograms over all beads') +
+        facet_wrap(~observation, ncol = 1, scales='free') +
+        labs(fill='')
 ```
 

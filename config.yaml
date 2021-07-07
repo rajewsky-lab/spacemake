@@ -42,18 +42,24 @@ downstream_analysis_variables:
         expected_n_beads: 100000
         umi_cutoff: [100, 300]
         clean_dge: True
+        plot_bead_size: 0.1
+        plot_bead_border: False
     visium:
         expected_n_beads: 10000
         umi_cutoff: [500]
         clean_dge: False
+        plot_bead_size: 1
+        plot_bead_border: True
     less_beads:
         expected_n_beads: 60000
         umi_cutoff: [10, 20, 50, 100]
         clean_dge: True
     slideseq:
         expected_n_beads: 100000
-        umi_cutoff: [50, 100, 300]
+        umi_cutoff: [100, 300]
         clean_dge: False
+        plot_bead_size: 0.1
+        plot_bead_border: False
 
 additional_projects:
     - project_id: slideseq_v2
@@ -71,22 +77,22 @@ additional_projects:
       R2: /data/rajewsky/home/tsztank/projects/spatial/slideseqv2/raw_data/Puck_200115_08_R2.fastq.gz
       puck_barcode_file: /data/rajewsky/home/tsztank/projects/spatial/slideseqv2/Puck_200115_08_bead_locations.csv
       downstream_analysis_type: 'slideseq'
-      #    - project_id: cdr1as_ko_visium
-      #      sample_id: cdr1as_ko_visium_wt_1
-      #      puck_id: NoOptical
-      #      species: mouse
-      #      R1: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R1_001.fastq.gz
-      #      R2: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R2_001.fastq.gz
-      #      downstream_analysis_type: 'visium'
+    - project_id: cdr1as_ko_visium
+      sample_id: cdr1as_ko_visium_wt_1
+      puck_id: NoOptical
+      species: mouse
+      R1: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R1_001.fastq.gz
+      R2: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R2_001.fastq.gz
+      downstream_analysis_type: 'visium'
+      puck_barcode_file: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-sequencing/visium_barcode_positions.csv
 
 # downsample and saturation analysis
 downsample: 
     projects:
+        - cdr1as_ko_visium
         - slideseq_v2
     samples:
-        - sts_079_1
-        - sts_079_3
-        - sts_079_5
+        - cdr1as_ko_visium_wt_1
 
 # in the output each will have an merged_ prepended to their root directory
 # samples_to_merge:`

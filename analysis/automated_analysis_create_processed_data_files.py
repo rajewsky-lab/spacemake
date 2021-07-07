@@ -12,8 +12,8 @@ def create_long_df(expr_matrix, id_vars = ['cell_bc']):
 # LOAD ADATA #
 ##############
 
-#adata = sc.read(snakemake.input[0])
-adata = sc.read('/data/rajewsky/projects/slide_seq/projects/sts_074/processed_data/sts_074_3/illumina/complete_data/automated_analysis/umi_cutoff_100/results.h5ad')
+adata = sc.read(snakemake.input[0])
+#adata = sc.read('/data/rajewsky/projects/slide_seq/projects/sts_074/processed_data/sts_074_3/illumina/complete_data/automated_analysis/umi_cutoff_100/results.h5ad')
 
 uns_keys = ['hvg', 'leiden', 'log1p', 'neighbors', 'pca', 'umap']
 
@@ -26,7 +26,7 @@ tmp = None
 if not adata_complete:
     pd.DataFrame().to_csv(snakemake.output['cluster_markers'])
 else:
-    resolution = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2]
+    resolution = [0.2, 0.4, 0.6, 0.8,0.9,  1.0,1.1, 1.2]
     
     top_10_marker_dfs = []
     
