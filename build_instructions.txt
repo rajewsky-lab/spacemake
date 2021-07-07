@@ -1,0 +1,19 @@
+# How this package was built for PyPI
+
+- installing 'build' and 'twine' via pip
+
+    `python3 -m pip install --upgrade build`
+    `python3 -m pip install --upgrade twine`
+
+- getting an API token from PyPI and placing in ~/.pypirc
+
+- in top-level (where pyptoject.toml resides) `python -m build`
+ 
+  This creates package files in the dists/ subdirectory
+
+- upload
+ testpypi: `python3 -m twine upload --repository testpypi dist/* `
+ live pypi: `python3 -m twine upload --repository pypi dist/* `
+
+ 
+
