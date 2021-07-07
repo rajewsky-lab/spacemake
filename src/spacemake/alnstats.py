@@ -35,7 +35,7 @@ def gf_prio(gf, hierarchy=["CODING", "UTR", "INTRONIC", "INTERGENIC"]):
     return gf
 
 
-def cmdline():
+def parse_args():
     parser = argparse.ArgumentParser("alnstats")
     parser.add_argument("fname", help="a gene-annotated BAM file")
     parser.add_argument(
@@ -232,8 +232,8 @@ def make_plots(res):
     return fig
 
 
-if __name__ == "__main__":
-    args = cmdline()
+def cmdline():
+    args = parse_args()
     path = args.fname.split("/")
 
     if len(path) >= 4 and path[-4].startswith("sts"):
@@ -280,3 +280,7 @@ if __name__ == "__main__":
         np.array(list(res.sc_seq["3'"].values())).sum(),
         title="most frequent 3' soft-clipped sequences",
     )
+
+
+if __name__ == "__main__":
+    cmdline()
