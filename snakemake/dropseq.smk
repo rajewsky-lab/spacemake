@@ -79,7 +79,7 @@ rule fix_star_bam_header:
     output: pipe(dropseq_mapped_reads_sorted)
     shell:
         """
-        python {repo_dir}/snakemake/scripts/fix_bam_header.py \
+        fix_bam_header.py \
             --in-bam-star {input.mapped_reads} \
             --in-bam-tagged {input.unmapped_tagged_reads} \
             --out-bam {output}
