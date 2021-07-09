@@ -33,6 +33,7 @@ def parse_barcode_flavors(
         bc2_ref="",
         cell_raw="None",
         score_threshold=0.0,
+        min_opseq_score=22,
         bam_tags="CR:{cell},MI:{UMI}",
     ),
 ):
@@ -67,26 +68,27 @@ def get_bc_preprocess_settings(wildcards):
     return settings
 
 
-def get_bc_preprocessing_threads(wildcards):
-    # 2 extra cores are needed for the zcat_pipes
-    if hasattr(workflow, "cores"):
-        # from at least Snakemake version 5.13 on
-        t = workflow.cores - 2
-    else:
-        t = 8  # a safe default value?
-        import logging
+# def get_bc_preprocessing_threads(wildcards):
+#     # 2 extra cores are needed for the zcat_pipes
+#     if hasattr(workflow, "cores"):
+#         # from at least Snakemake version 5.13 on
+#         t = workflow.cores
+#     else:
+#         t = 8  # a safe default value?
+#         import logging
 
-        logging.warning(
-            "can not determine number of cores in this "
-            f"Snakemake version. Defaulting to {t} for "
-            "barcode preprocessing"
-        )
-    return t
+#         logging.warning(
+#             "can not determine number of cores in this "
+#             f"Snakemake version. Defaulting to {t} for "
+#             "barcode preprocessing"
+#         )
+#     return t
 
 
 # all barcode flavor info from config.yaml
 # is kept here for convenient lookup
 bc_flavor_data = parse_barcode_flavors(config)
+
 
 def hamming_distance(string1, string2):
     return sum(c1 != c2 for c1, c2 in zip(string1, string2))
@@ -107,14 +109,15 @@ def compute_max_barcode_mismatch(indices):
                 max_mismatch = min(max_mismatch, math.ceil(hd / 2) - 1)
     return max_mismatch
 
+
 def get_barcode_file(path):
     if path is None:
-        return 'none'
+        return "none"
 
     if os.path.isfile(path):
         return path
 
-    return 'none'
+    return "none"
 
 
 def find_barcode_file(puck_id):
@@ -125,14 +128,12 @@ def find_barcode_file(puck_id):
             if name in dirs:
                 return os.path.join(root, name)
 
-    puck_dir = find_dir(puck_id, config['puck_data']['root'])
-    # set the default value
-    path = project_df_default_values['puck_barcode_file']
-
+    puck_dir = find_dir(puck_id, config["puck_data"]["root"])
+    path = None
 
     if puck_dir is not None:
         # puck dir exists, look for barcode file pattern
-        path = os.path.join(puck_dir, config['puck_data']['barcode_file'])
+        path = os.path.join(puck_dir, config["puck_data"]["barcode_file"])
 
     return get_barcode_file(path)
     
@@ -186,20 +187,27 @@ def read_sample_sheet(sample_sheet_path, basecalls_dir):
 def df_assign_merge_samples(project_df):
     # added samples to merged to the project_df
     # this will be saved as a metadata file in .config/ directory
-    if 'samples_to_merge' in config:
-        for project_id in config['samples_to_merge'].keys():
-            for sample_id in config['samples_to_merge'][project_id].keys():
-                samples_to_merge = config['samples_to_merge'][project_id][sample_id]
+    if "samples_to_merge" in config:
+        for project_id in config["samples_to_merge"].keys():
+            for sample_id in config["samples_to_merge"][project_id].keys():
+                samples_to_merge = config["samples_to_merge"][project_id][sample_id]
 
-                samples_to_merge = project_df.loc[project_df.sample_id.isin(samples_to_merge)]
+                samples_to_merge = project_df.loc[
+                    project_df.sample_id.isin(samples_to_merge)
+                ]
 
-                new_row = project_df[(project_df.project_id == project_id) & (project_df.sample_id == sample_id)].iloc[0]
-                new_row.sample_id = 'merged_' + new_row.sample_id
-                new_row.project_id = 'merged_' + new_row.project_id
+                new_row = project_df[
+                    (project_df.project_id == project_id)
+                    & (project_df.sample_id == sample_id)
+                ].iloc[0]
+                new_row.sample_id = "merged_" + new_row.sample_id
+                new_row.project_id = "merged_" + new_row.project_id
                 new_row.is_merged = True
-                new_row.experiment = ','.join(samples_to_merge.experiment.to_list())
-                new_row.investigator = ','.join(samples_to_merge.investigator.to_list())
-                new_row.sequencing_date = ','.join(samples_to_merge.sequencing_date.to_list())
+                new_row.experiment = ",".join(samples_to_merge.experiment.to_list())
+                new_row.investigator = ",".join(samples_to_merge.investigator.to_list())
+                new_row.sequencing_date = ",".join(
+                    samples_to_merge.sequencing_date.to_list()
+                )
 
                 project_df = project_df.append(new_row, ignore_index=True)
 
@@ -434,12 +442,11 @@ def get_merged_ribo_depletion_log_inputs(wildcards):
 
     return ribo_depletion_logs
 
+
 def get_qc_sheet_parameters(project_id, sample_id):
     # returns a single row for a given sample_id
     # this will be the input of the parameters for the qc sheet parameter generation
-    out_dict = project_df.loc[project_df.sample_id == sample_id]\
-        .iloc[0]\
-        .to_dict()
+    out_dict = project_df.loc[project_df.sample_id == sample_id].iloc[0].to_dict()
 
     out_dict["input_beads"] = str(get_run_mode_variables(project_id, sample_id)['expected_n_beads'])
 
@@ -468,29 +475,31 @@ def get_dge_type(wildcards):
     if config['run_mode_variables'][run_mode]['clean_dge']:
         return {'dge_all_summary': dge_all_cleaned_summary, 'dge': dge_all_cleaned}
     else:
-        return {'dge_all_summary': dge_all_summary, 'dge': dge_all}
+        return {"dge_all_summary": dge_all_summary, "dge": dge_all}
+
 
 def get_bam_tag_names(project_id, sample_id):
     barcode_flavor = get_run_mode_variables(project_id = project_id,
             sample_id = sample_id)['barcode_flavor']
 
-    bam_tags = config['knowledge']['barcode_flavor'][barcode_flavor]['bam_tags'] 
+    bam_tags = config["knowledge"]["barcode_flavor"][barcode_flavor]["bam_tags"]
 
     tag_names = {}
 
-    for tag in bam_tags.split(','):
-        tag_name, tag_variable = tag.split(':')
+    for tag in bam_tags.split(","):
+        tag_name, tag_variable = tag.split(":")
 
         tag_names[tag_variable] = tag_name
 
     return tag_names
+
 
 def get_puck_file(wildcards):
     puck_barcode_file = get_metadata('puck_barcode_file',
             project_id = wildcards.project,
             sample_id = wildcards.sample)
 
-    if puck_barcode_file == 'none':
+    if puck_barcode_file == "none":
         return []
     else:
-        return({'barcode_file': puck_barcode_file})
+        return {"barcode_file": puck_barcode_file}

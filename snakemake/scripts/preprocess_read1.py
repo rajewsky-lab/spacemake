@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 __version__ = "0.9"
-__author__ = [
-    "Marvin Jens",
-]
+__author__ = ["Marvin Jens"]
 __license__ = "GPL"
-__email__ = [
-    "marvin.jens@mdc-berlin.de",
-]
+__email__ = ["marvin.jens@mdc-berlin.de"]
 
 import argparse
 import logging
@@ -18,7 +14,6 @@ import numpy as np
 import pysam
 import multiprocessing as mp
 from collections import defaultdict
-from more_itertools import grouper
 from Bio import pairwise2
 from Bio import SeqIO
 
@@ -34,7 +29,15 @@ NO_CALL = "NNNNNNNN"
 
 
 def read_fq(fname):
-    for name, seq, _, qual in grouper(open(fname), 4):
+    import gzip
+    from more_itertools import grouper
+
+    if fname.endswith(".gz"):
+        src = gzip.open(fname, mode="rt")
+    else:
+        src = open(fname)
+
+    for name, seq, _, qual in grouper(src, 4):
         yield name.rstrip()[1:], seq.rstrip(), qual.rstrip()
 
 
@@ -70,38 +73,50 @@ class BarcodeMatcher:
         self.length_specific = length_specific
         self.names, self.seqs = self.load_targets(fname)
         self.slen = np.array([len(s) for s in self.seqs])
-        self.lmin = self.slen.min()
-        self.lmax = self.slen.max()
-        self.place = place
-        self.costs = {}
-        self.slen_masks = {}
-        for l in range(self.lmin, self.lmax + 1):
-            self.slen_masks[l] = (self.slen == l).nonzero()[0]
-            cost = np.ones(l)
-            if place == "left":
-                cost[-8:] = 2
-                cost[-4:] = 3  # the diagnostic 4-mer
+        if len(self.names) == 0:
+            self.logger.warning(f"no references loaded! Disabling matching for {fname}")
+            self.align = self.align_na
+        else:
+            self.lmin = self.slen.min()
+            self.lmax = self.slen.max()
+            self.place = place
+            self.costs = {}
+            self.slen_masks = {}
+            for l in range(self.lmin, self.lmax + 1):
+                self.slen_masks[l] = (self.slen == l).nonzero()[0]
+                cost = np.ones(l)
+                if place == "left":
+                    cost[-8:] = 2
+                    cost[-4:] = 3  # the diagnostic 4-mer
 
-            if place == "right":
-                cost[0] = 0  # the error-prone first base
-                cost[1:8] = 2
-                cost[4:8] = 3  # the diagnostic 4-mer
+                if place == "right":
+                    cost[0] = 0  # the error-prone first base
+                    cost[1:8] = 2
+                    cost[4:8] = 3  # the diagnostic 4-mer
 
-            self.costs[l] = cost
+                self.costs[l] = cost
 
-        self.logger.debug(
-            f"initialized from {len(self.names)} sequences from lmin={self.lmin} to lmax={self.lmax}"
-        )
+            self.logger.debug(
+                f"initialized from {len(self.names)} sequences from lmin={self.lmin} to lmax={self.lmax}"
+            )
 
     def load_targets(self, fname):
         self.logger.debug(f"loading target sequences from '{fname}'")
         names = []
         seqs = []
-        for rec in SeqIO.parse(fname, "fasta"):
-            names.append(rec.id.split()[0])
-            seqs.append(str(rec.seq).upper())
+        if fname:
+            for rec in SeqIO.parse(fname, "fasta"):
+                names.append(rec.id.split()[0])
+                seqs.append(str(rec.seq).upper())
 
         return np.array(names), np.array(seqs)
+
+    def align_na(self, query, debug=False):
+        return (
+            [NO_CALL],
+            [NO_CALL],
+            [-1],
+        )
 
     def align(self, query, debug=False):
         results = []
@@ -109,15 +124,9 @@ class BarcodeMatcher:
         # select set of barcode sequences to align with
         if len(query) < self.lmin:
             return (
-                [
-                    NO_CALL,
-                ],
-                [
-                    NO_CALL,
-                ],
-                [
-                    -1,
-                ],
+                [NO_CALL],
+                [NO_CALL],
+                [-1],
             )
 
         if self.length_specific:
@@ -233,13 +242,16 @@ def report_stats(N, prefix=""):
         logging.info(f"{prefix}{k}\t{v}\t{100.0 * v/N['total']:.2f}")
 
 
-def match_BC1(bc1_matcher, seq, qstart, tstart, N):
+def match_BC1(bc1_matcher, seq, qstart, tstart, N, debug=False):
     if tstart == 0:  # the start of opseq primer is intact
-        bc1 = seq[:qstart]
-        BC1, ref1, score1 = bc1_matcher.align(bc1)
+        bc1 = seq[qstart - 8 : qstart]
+        BC1, ref1, score1 = bc1_matcher.align(bc1, debug=debug)
     else:
         # we have a possible deletion, or mutation. Check both options
-        bc1_choices = [seq[:qstart], seq[: qstart - tstart]]  # deletion  # mutation
+        bc1_choices = [
+            seq[qstart - 8 : qstart],
+            seq[qstart - tstart - 8 : qstart - tstart],
+        ]  # deletion  # mutation
         (BC1, ref1, score1), bc1 = bc1_matcher.align_choices(bc1_choices)
 
     N[f"BC1_score_{score1}"] += 1
@@ -281,7 +293,15 @@ def match_BC2(bc2_matcher, seq, qend, tend, N):
     return bc2, BC2, ref2, score2
 
 
-def opseq_local_align(seq, opseq="GAATCACGATACGTACACCAGT", min_opseq_score=22):
+def opseq_local_align(
+    seq,
+    opseq="GAATCACGATACGTACACCAGT",
+    min_opseq_score=22,
+    min_start=8,
+    max_end=22 + 12,
+    allow_start_gap=False,
+    allow_end_gap=False,
+):
     results = pairwise2.align.localmd(
         opseq, seq, 2, -1.5, -3, -1, -3, -1, one_alignment_only=True, score_only=False
     )
@@ -294,20 +314,28 @@ def opseq_local_align(seq, opseq="GAATCACGATACGTACACCAGT", min_opseq_score=22):
         qstart = res.start
         qend = res.end
         L = len(res.seqB)
-        # print(f"flags {qstart < 8} {qend > (len(res.seqB) - 8)} {res.score < min_opseq_score}")
-        if (qstart < 8) or (qend > (L - 8)) or (res.score < min_opseq_score):
+        # print(res)
+        # print(
+        #     f"flags {qstart < min_start} {qend > max_end} {res.score < min_opseq_score}"
+        # )
+        if (
+            (min_start and (qstart < min_start))
+            or (max_end and (qend > max_end))
+            or (res.score < min_opseq_score)
+        ):
             res = None
         else:
             # check for start/end gaps
             # backtrack from qstart in seqA until we hit '-'
-            while res.seqA[qstart - tstart - 1] != "-":
-                if qstart - tstart - 1 <= 0:
-                    tstart = -1
-                    res = None
-                    break
-                tstart += 1
+            if not allow_start_gap:
+                while res.seqA[qstart - tstart - 1] != "-":
+                    if qstart - tstart - 1 <= 0:
+                        tstart = -1
+                        res = None
+                        break
+                    tstart += 1
 
-            if res is not None:
+            if res is not None and not allow_end_gap:
                 # and scan forward from qend until we hit '-'
                 while res.seqA[qend + tend] != "-":
                     if qend + tend >= len(res.seqA) - 8:
@@ -315,7 +343,7 @@ def opseq_local_align(seq, opseq="GAATCACGATACGTACACCAGT", min_opseq_score=22):
                         res = None
                         break
                     tend += 1
-
+    # print("end results", res, tstart, tend)
     return res, tstart, tend
 
 
@@ -426,6 +454,7 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag):
             while heap and (heap[0][0] == n_chunk_needed):
                 n_chunk, results = heapq.heappop(heap)  # retrieves heap[0]
                 for assigned, record in results:
+                    # print("record in process_ordered_results", record)
                     out.write(assigned, record)
                     n_rec += 1
 
@@ -534,9 +563,13 @@ def process_combinatorial(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
 
                 # align opseq sequence to seq of read1
                 aln = opseq_local_align(
-                    r1.rstrip(), opseq=args.opseq, min_opseq_score=args.min_opseq_score
+                    r1.rstrip(),
+                    opseq=args.opseq,
+                    min_opseq_score=args.min_opseq_score,
+                    allow_end_gap=True,  # TODO more permanent fix for this quick'n'dirty hack to get short illumina read to work
                 )
                 res, tstart, tend = aln
+                # print("OPSEQ", res, tstart, tend)
                 if res is None:
                     N["opseq_broken"] += 1
                     assigned = False
@@ -545,9 +578,11 @@ def process_combinatorial(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
                     bc1, BC1, ref1, score1 = match_BC1(
                         bc1_matcher, res.seqB, res.start, tstart, N
                     )
-                    bc2, BC2, ref2, score2 = match_BC2(
-                        bc2_matcher, res.seqB, res.end, tend, N
-                    )
+                    # bc2, BC2, ref2, score2 = match_BC2(
+                    #     bc2_matcher, res.seqB, res.end, tend, N
+                    # )
+                    bc2, BC2, ref2, score2 = "na", "NA", "na", -1
+
                     # slo = sQSeq.lower()
                     # sout = slo[:qstart] + sQSeq[qstart:qend] + slo[qend:]
                     # print(sout, qstart, qend, tstart, tend, bc1, bc2)
@@ -561,7 +596,7 @@ def process_combinatorial(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
                     out_d["BC1"] = BC1
                     out_d["BC2"] = BC2
 
-                    if BC1 != NO_CALL and BC2 != NO_CALL:
+                    if BC1 != NO_CALL:  # and BC2 != NO_CALL:
                         N["called"] += 1
                         assigned = True
                     else:
@@ -1011,9 +1046,7 @@ class ExceptionLogging:
                 traceback.format_exception(exc_type, exc_value, exc_traceback)
             ).split("\n")
             self.exception = lines
-            self.logger.error(
-                f"an unhandled exception occurred type={exc_type} value={exc_value}"
-            )
+            self.logger.error(f"an unhandled exception occurred")
             for l in lines:
                 self.logger.error(l)
 
@@ -1168,14 +1201,14 @@ if __name__ == "__main__":
         if args.out_format == "bam" and not args.read2:
             raise ValueError("bam output format requires --read2 parameter")
 
-        if ("bc" in args.cell or "bc" in args.cell_raw) and not (
-            args.bc1_ref and args.bc2_ref
+        if ("bc1" in args.cell and not args.bc1_ref) or (
+            "bc2" in args.cell and not args.bc2_ref
         ):
             raise ValueError(
                 "bc1/2 are referenced in --cell or --cell-raw, but no reference barcodes are specified via --bc{{1,2}}-ref"
             )
 
-        if args.bc1_ref and args.bc2_ref:
+        if args.bc1_ref or args.bc2_ref:
             main_combinatorial(args)
         else:
             main_dropseq(args)

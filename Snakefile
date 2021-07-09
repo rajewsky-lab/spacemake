@@ -428,8 +428,8 @@ tagged_pipe = tagged_bam.replace('.bam', '.uncompressed.bam')
 rule reverse_first_mate:
     input:
         # these implicitly depend on the raw reads via zcat_pipes
-        R1_unpacked = raw_reads_mate_1.replace('fastq.gz', 'fastq'),
-        R2_unpacked = raw_reads_mate_2.replace('fastq.gz', 'fastq')
+        R1 = raw_reads_mate_1,
+        R2 = raw_reads_mate_2
     params:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
@@ -438,12 +438,12 @@ rule reverse_first_mate:
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 6
+    threads: 16
     shell:
         "python {repo_dir}/snakemake/scripts/preprocess_read1.py "
         "--sample={wildcards.sample} "
-        "--read1={input.R1_unpacked} "
-        "--read2={input.R2_unpacked} "
+        "--read1={input.R1} "
+        "--read2={input.R2} "
         "--parallel={threads} "
         "--save-stats={output.bc_stats} "
         "--log-file={log} "
@@ -456,9 +456,11 @@ rule reverse_first_mate:
         "--cell-raw='{params.bc.cell_raw}' "
         "--out-format=bam "
         "--out-unassigned={output.unassigned} "
-        "--out-assigned={output.assigned} "
+        "--out-assigned=/dev/stdout "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
+        "--min-opseq-score={params.bc.min_opseq_score} "
+        "| samtools view -bh /dev/stdin > {output.assigned} "
 
 rule run_fastqc:
     input:
