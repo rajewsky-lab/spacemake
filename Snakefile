@@ -141,7 +141,6 @@ dge_root = complete_data_root + '/dge'
 dge_out_prefix = dge_root + '/dge{dge_type}{dge_cleaned}'
 dge_out_suffix = '{polyA_trimmed}{mm_filtered}'
 dge_out = dge_out_prefix + dge_out_suffix + '.txt.gz'
-print(dge_out)
 dge_out_summary = dge_out_prefix + dge_out_suffix + '_summary.txt'
 dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
 
@@ -152,7 +151,6 @@ dge_all_cleaned_summary = complete_data_root +  '/dge/dge_all_cleaned' +dge_out_
 
 # dge and summary
 dge_all = complete_data_root +  '/dge/dge_all' + dge_out_suffix + '.txt.gz'
-dge_all_summary_fasta= complete_data_root +  '/dge/dge_all' +dge_out_suffix + '_summary.fa'
 
 # kmer stats per position
 kmer_stats_file = complete_data_root + '/kmer_stats/{kmer_len}mer_counts.csv'
@@ -226,7 +224,7 @@ star_log_file = complete_data_root + '/star{polyA_trimmed}_Log.final.out'
 
 # final dropseq bfinal dropseq bam
 final_bam = complete_data_root + '/final{polyA_trimmed}.bam'
-final_bam_mm_filtered = complete_data_root + '/final{polyA_trimmed}.mm_filtered.bam'
+final_bam_mm_filtered = complete_data_root + '/final{dge_type}{dge_cleaned}{polyA_trimmed}.mm_filtered.bam'
 final_bam_pattern = complete_data_root + '/final{polyA_trimmed}{mm_filtered}.bam'
 
 # include dropseq
@@ -315,6 +313,8 @@ rule all:
         get_output_files(dge_out, dge_type = '_exon', dge_cleaned=['', '_cleaned'],
             polyA_trimmed = ['', '.polyA_trimmed'], mm_filtered = ['', '.mm_filtered'])
 
+print(get_output_files(dge_out, dge_type = '_exon', dge_cleaned=[''],
+            polyA_trimmed = ['.polyA_trimmed'], mm_filtered = ['', '.mm_filtered']))
 ########################
 # CREATE METADATA FILE #
 ########################
@@ -521,7 +521,7 @@ rule create_dge:
     # topBarcodesClean.txt file or just the regular topBarcodes.txt
     input:
         unpack(get_top_barcodes),
-        reads=final_bam
+        unpack(get_mapped_final_bam)
     output:
         dge=dge_out,
         dge_summary=dge_out_summary

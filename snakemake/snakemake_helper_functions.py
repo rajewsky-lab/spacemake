@@ -291,6 +291,12 @@ def get_star_input_bam(wildcards):
     else:
         return {'reads': tagged_bam}
 
+def get_mapped_final_bam(wildcards):
+    if wildcards.mm_filtered == '.mm_filtered':
+        return {'reads': final_bam_mm_filtered}
+    else:
+        return {'reads': final_bam}
+
 
 def get_species_info(wildcards):
     # This function will return 3 things required by STAR:
