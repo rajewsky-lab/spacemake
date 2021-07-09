@@ -168,7 +168,7 @@ dge_data <- tibble(percentage = names(downsampled_summaries),
 ```
 #### Plot distribution of observations
 
-```{r plot_distributions_of_observations, echo =F, fig.width=10}
+```{r plot_distributions_of_observations, echo =F, fig.width=9}
 cPalette = list('grey'= "#999999", 'light_orange'="#E69F00",
          'light_blue'="#56B4E9", 'green' = "#009E73",
          'yellow' = "#F0E442", 'blue'= "#0072B2", 'orange'="#D55E00",
@@ -187,6 +187,7 @@ plot_observations <- function(metric, log_scale = T){
         gather('obs', 'val', umis, pcr, reads) %>%
         filter(obs == metric) %>%
         mutate(percentage = as.integer(percentage)) %>%
+        filter(percentage %in% c(20, 40, 60, 80, 100)) %>%
         group_by(percentage, obs) %>%
         filter(between(val, quantile(val, 0.05, na.rm=T), quantile(val, 0.95, na.rm=T))) %>%
         ggplot(aes(val, fill = obs)) +

@@ -161,7 +161,7 @@ if (barcode_file){
             filter(res == 'leiden_0.2') %>%
             arrange(log1p_total_counts) %>%
             ggplot(aes(x_pos, y_pos, color = log1p_total_counts)) +
-                geom_point(size = snakemake@params$downstream_stats$plot_bead_size)+
+                geom_point(size = snakemake@params$downstream_variables$plot_bead_size)+
                 coord_fixed()+
                 scale_color_viridis_c(option =  "magma") +
                 ggtitle('UMI distribution in 2D') +
@@ -173,7 +173,7 @@ if (barcode_file){
             arrange(total_counts) %>%
             mutate(total_counts = ifelse(total_counts > 6000, 6000, total_counts)) %>%
             ggplot(aes(x_pos, y_pos, color = total_counts)) +
-                geom_point(size = snakemake@params$downstream_stats$plot_bead_size)+
+                geom_point(size = snakemake@params$downstream_variables$plot_bead_size)+
                 coord_fixed()+
                 scale_color_viridis_c(option =  "magma", limits = c(0, 6000),  breaks = seq(1000, 5000, 500)) +
                 guides(color = guide_colorbar(barheight = 15)) + 
@@ -276,7 +276,7 @@ for (i in obs_df %$% res %>% unique){
     pl <- to_plot %>%
         mutate(type = factor(type, levels = c('umap coordinates', 'physical coordinates'))) %>%
         ggplot(aes(x_pos, y_pos, color = cluster)) +
-            geom_point(size=snakemake@params$downstream_stats$plot_bead_size, alpha=0.9) +
+            geom_point(size=snakemake@params$downstream_variables$plot_bead_size, alpha=0.9) +
             facet_wrap(~type, ncol = 2, scales='free') +
             guides(colour = guide_legend(override.aes = list(size=3)))+
             scale_color_manual(values=cluster_clrs) +

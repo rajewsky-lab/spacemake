@@ -52,10 +52,11 @@ metadata <- read_csv(snakemake@input[[1]])
 ```
 
 ```{r collect_data, echo = F}
+root_dir <- snakemake@config$root_dir
 read_metrics <- metadata %>%
     select(project_id, sample_id, puck_id, species, sequencing_date) %>%
-    mutate(star_log = paste0('/data/rajewsky/projects/slide_seq/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/star_Log.final.out'),
-           read_types =paste0('/data/rajewsky/projects/slide_seq/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/uniquely_mapped_reads_type.txt')) %>%
+    mutate(star_log = paste0(root_dir, '/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/star_Log.final.out'),
+           read_types =paste0(root_dir,'/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/split_reads/read_type_num.txt')) %>%
     mutate(star_log = map(star_log,
                           ~ readStarLog(.))) %>%
     unnest(star_log) %>%
@@ -91,7 +92,7 @@ to_table <- read_metrics %>%
 ```{r load_strand_info, echo = F}
 strand_info <- metadata %>%
     select(project_id, sample_id, puck_id, species, sequencing_date) %>%
-    mutate(filename = paste0('/data/rajewsky/projects/slide_seq/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/strand_info.txt'),
+    mutate(filename = paste0(root_dir, '/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/split_reads/strand_type_num.txt'),
            content = map(filename, ~read_table2(., col_names = c('obs', 'num')))) %>%
     unnest(content) %>%
     select(-filename, project_id) %>%
@@ -132,7 +133,10 @@ read_dge_summary <- function(filename){
 
 barcode_metadata <- metadata %>%
     select(project_id, sample_id, puck_id, species, sequencing_date) %>%
-    mutate(filename = paste0('/data/rajewsky/projects/slide_seq/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/dge/dge_all_summary.txt'),
+    mutate(filename = paste0(root_dir, '/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/dge/')) %>%
+    mutate(filename = ifelse(file.exists(paste0(filename, 'dge_all_summary.txt')),
+                             paste0(filename, 'dge_all_summary.txt'),
+                             paste0(filename, 'dge_all_cleaned_summary.txt')),
            content = map(filename, ~read_dge_summary(.))) %>%
     select(-filename, -project_id) %>%
     unnest(content)

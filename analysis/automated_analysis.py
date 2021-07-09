@@ -38,6 +38,8 @@ def compute_islands(adata, min_umi):
         islands: A list of lists of spots forming contiguity islands
     '''
     # this is hard coded for now for visium, to have 6 neighbors per spot
+    # TODO: define an iterative approach where he key is to have around 6 
+    # neighbors per spot on average
     neighbors = compute_neighbors(adata, min_dist = 0, max_dist=3)
     spots_cluster = np.where(np.array(adata.obs['total_counts']) < min_umi)[0]
 
@@ -136,7 +138,7 @@ sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False,
 
 # DETECT TISSUE #
 # if there is no barcode file, filter adata based on UMI, otherwise detect tissue with UMI cutoff
-if has_barcode_file:
+if has_barcode_file and snakemake.params['downstream_variables']['detect_tissue']:
     tissue_indices = detect_tissue(adata, umi_cutoff)
     print(tissue_indices)
     print('tissue indices len: ', len(tissue_indices))
@@ -182,7 +184,7 @@ if nrow > 1 and ncol >= 1000:
     
     # find out the clusters
     # restrict to max 20 clusters
-    resolution = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2]
+    resolution = [0.2, 0.4, 0.6, 0.8]
     
     for res in resolution:
         res_key = 'leiden_' + str(res)

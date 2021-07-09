@@ -73,6 +73,9 @@ if __name__ == '__main__':
                 aln_to_keep = select_alignment(multi_mappers)
 
                 if aln_to_keep is not None:
+                    # set aln secondary flag to 0, so that it is flagged as primary
+                    # secondary flag is at 0x100, so 8th bit (starting from 0)
+                    aln_to_keep.flag = aln_to_keep.flag & ~(1<<8)
                     bam_out.write(aln_to_keep)
                     
                 # reset multimapper list
