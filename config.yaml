@@ -15,7 +15,7 @@ projects:
 
 run_mode_variables:
     default:
-        expected_n_beads: 100000
+        n_beads: 100000
         umi_cutoff: [100, 300]
         clean_dge: True
         plot_bead_size: 0.1
@@ -23,9 +23,8 @@ run_mode_variables:
         polyA_adapter_trimming: True
         count_intronic_reads: True
         count_mm_reads: True
-        barcode_flavor: 'drop_noUMI'
     visium:
-        expected_n_beads: 10000
+        n_beads: 10000
         umi_cutoff: [10000]
         clean_dge: False
         plot_bead_size: 1
@@ -33,7 +32,16 @@ run_mode_variables:
         polyA_adapter_trimming: False
         count_intronic_reads: False
         count_mm_reads: True
-        barcode_flavor: 'visium'
+    visium_spaceranger:
+        parent_run_mode: 'visium'
+        polyA_adapter_trimming: False
+        count_intronic_reads: False
+        count_mm_reads: True
+    visium_exon_trimmed:
+        parent_run_mode: 'visium'
+        polyA_adapter_trimming: 'True'
+        count_intronic_reads: False
+        count_mm_reads: False
     slideseq:
         expected_n_beads: 100000
         umi_cutoff: [50]
@@ -73,13 +81,23 @@ additional_projects:
     #      R2: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/V1_Adult_Mouse_Brain_fastqs/visium_public_lane_joined_R2.fastq.gz
     #      run_mode: 'visium'
     #      puck_barcode_file: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-sequencing/visium_barcode_positions.csv
+    #    - project_id: visium
+    #      sample_id: test_2
+    #      puck_id: visium_test_1
+    #      species: mouse
+    #      R1: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/V1_Adult_Mouse_Brain_fastqs/visium_public_lane_joined_1m_R1.fastq.gz
+    #      R2: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/V1_Adult_Mouse_Brain_fastqs/visium_public_lane_joined_1m_R2.fastq.gz
+    #      run_mode: ['visium']
+    #      barcode_flavor: 'visium'
+    #      puck_barcode_file: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-sequencing/visium_barcode_positions.csv
     - project_id: visium
       sample_id: test_1
       puck_id: visium_test_1
       species: mouse
       R1: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/V1_Adult_Mouse_Brain_fastqs/visium_public_lane_joined_1m_R1.fastq.gz
       R2: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/V1_Adult_Mouse_Brain_fastqs/visium_public_lane_joined_1m_R2.fastq.gz
-      run_mode: 'visium'
+      run_mode: ['visium_spaceranger', 'visium_exon_trimmed']
+      barcode_flavor: 'visium'
       puck_barcode_file: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-sequencing/visium_barcode_positions.csv
 
 # downsample and saturation analysis

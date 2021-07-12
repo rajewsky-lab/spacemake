@@ -106,7 +106,7 @@ shift_legend <- function(p){
 
 ```{r save_snakemake, echo = F}
 #write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
-#snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
+snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
 ### Overview

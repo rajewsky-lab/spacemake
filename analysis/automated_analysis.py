@@ -124,12 +124,10 @@ if has_barcode_file:
     adata.obs = new_obs
     adata.obsm['spatial'] = adata.obs[['x_pos', 'y_pos']].to_numpy()
 
-print(adata)
 
 # filter out cells based on umi, and genes based on number of cells
 sc.pp.filter_cells(adata, min_genes=1)
 sc.pp.filter_genes(adata, min_cells=3)
-print(adata)
 
 # calculate mitochondrial gene percentage
 adata.var['mt'] = adata.var_names.str.startswith('Mt-') | adata.var_names.str.startswith('mt-')
@@ -140,8 +138,6 @@ sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False,
 # if there is no barcode file, filter adata based on UMI, otherwise detect tissue with UMI cutoff
 if has_barcode_file and snakemake.params['downstream_variables']['detect_tissue']:
     tissue_indices = detect_tissue(adata, umi_cutoff)
-    print(tissue_indices)
-    print('tissue indices len: ', len(tissue_indices))
     adata = adata[tissue_indices, :]
 else:
     adata = adata[adata.obs.total_counts > umi_cutoff, :]

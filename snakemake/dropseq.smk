@@ -55,7 +55,7 @@ rule map_reads:
     threads: 24
     params:
         tmp_dir = tmp_dir,
-        star_prefix = lambda wildcards: complete_data_root + '/star' + wildcards.polyA_trimmed + '_'
+        star_prefix = star_prefix
     shell:
         """
         STAR \
@@ -107,7 +107,7 @@ rule filter_mm_reads:
     input:
         final_bam
     output:
-        pipe(final_bam_mm_filtered)
+        pipe(final_bam_mm_included)
     shell:
         """
         python {repo_dir}/snakemake/scripts/filter_mm_reads.py \

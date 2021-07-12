@@ -15,6 +15,7 @@ project_df_default_values = {
     "experiment": "unknown",
     "puck_barcode_file": "none",
     "run_mode": "default",
+    "barcode_flavor": "default",
     "is_merged":False}
 
 # barcode flavor parsing and query functions
@@ -62,7 +63,8 @@ def get_bc_preprocess_settings(wildcards):
     This function will return a dictionary of information
     on the read1 preprocessing, according to barcode_flavor
     """
-    flavor = get_run_mode_variables(wildcards.project, wildcards.sample)['barcode_flavor']
+    flavor = get_metadata('barcode_flavor', project_id = wildcards.project,
+            sample_id = wildcards.sample)
     settings = bc_flavor_data.preprocess_settings[flavor]
 
     return settings
@@ -283,17 +285,14 @@ def get_demux_indicator(wildcards):
 
 
 def get_star_input_bam(wildcards):
-    run_mode_variables = get_run_mode_variables(project_id = wildcards.project,
-            sample_id = wildcards.sample)
-
     if wildcards.polyA_trimmed == '.polyA_trimmed':
         return {'reads': tagged_polyA_trimmed_bam}
     else:
         return {'reads': tagged_bam}
 
 def get_mapped_final_bam(wildcards):
-    if wildcards.mm_filtered == '.mm_filtered':
-        return {'reads': final_bam_mm_filtered}
+    if wildcards.mm_included == '.mm_included':
+        return {'reads': final_bam_mm_included}
     else:
         return {'reads': final_bam}
 
@@ -328,56 +327,56 @@ def get_rRNA_index(wildcards):
     return {"rRNA_index": index}
 
 
-def get_run_mode_variables(project_id, sample_id):
+
+def get_run_mode_variables(run_mode):
     # return the run mode variables
     # first set the default, for each
     # then update each if there is no default
-    run_mode = get_metadata('run_mode',
-            project_id = project_id,
-            sample_id = sample_id)
-
     # load the default
     run_mode_variables = config['run_mode_variables']['default']
 
-    return config['run_mode_variables'][run_mode]
+    # first update the default with parent
+    if 'parent_run_mode' in config['run_mode_variables'][run_mode].keys():
+        parent_run_mode = config['run_mode_variables'][run_mode]['parent_run_mode']
+        run_mode_variables.update(config['run_mode_variables'][parent_run_mode])
+
+    run_mode_variables.update(config['run_mode_variables'][run_mode])
+
+    return run_mode_variables
+
+def get_run_modes_from_sample(project_id, sample_id):
+    run_mode_names = get_metadata('run_mode', project_id=project_id, sample_id=sample_id)
+    
+    run_modes = {}
+
+    for run_mode in run_mode_names:
+        run_modes[run_mode] = get_run_mode_variables(run_mode)
+
+    return run_modes
 
 def get_dge_extra_params(wildcards):
     dge_type = wildcards.dge_type
 
-    if dge_type == "_exon":
-        return ""
-    elif dge_type == "_intron":
-        return "LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
-    elif dge_type == "_all":
-        return "LOCUS_FUNCTION_LIST=INTRONIC"
-    if dge_type == "Reads_exon":
-        return "OUTPUT_READS_INSTEAD=true"
-    elif dge_type == "Reads_intron":
-        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
-    elif dge_type == "Reads_all":
-        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=INTRONIC"
+    extra_params = ""
 
-###############################
-# Joining optical to illumina #
-###############################
+    if dge_type == ".exon":
+        extra_params = ""
+    elif dge_type == ".intron":
+        extra_params = "LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
+    elif dge_type == ".all":
+        extra_params = "LOCUS_FUNCTION_LIST=INTRONIC"
+    if dge_type == ".Reads_exon":
+        extra_params = "OUTPUT_READS_INSTEAD=true"
+    elif dge_type == ".Reads_intron":
+        extra_params = "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=null"+\
+                "LOCUS_FUNCTION_LIST=INTRONIC"
+    elif dge_type == ".Reads_all":
+        extra_params = "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=INTRONIC"
 
+    if wildcards.mm_included == '.mm_included':
+        extra_params = extra_params + " READ_MQ=0"
 
-def get_sample_info(raw_folder):
-    batches = os.listdir(raw_folder)
-
-    df = pd.DataFrame(columns=["batch_id", "puck_id"])
-
-    for batch in batches:
-        batch_dir = microscopy_raw + "/" + batch
-
-        puck_ids = os.listdir(batch_dir)
-
-        df = df.append(
-            pd.DataFrame({"batch_id": batch, "puck_id": puck_ids}), ignore_index=True
-        )
-
-    return df
-
+    return extra_params
 
 ###################
 # Merging samples #
@@ -473,20 +472,99 @@ def get_top_barcodes(wildcards):
     else:
         return {'top_barcodes': top_barcodes_clean}
 
+def get_dge_from_run_mode(project_id, sample_id, run_mode):
+    run_mode_variables = get_run_mode_variables(run_mode)
+    
+    dge_type = '.exon'
+    dge_cleaned = ''
+    polyA_trimmed = ''
+    mm_included = ''
+
+    if run_mode_variables['polyA_adapter_trimming']:
+        polyA_trimmed = '.polyA_trimmed'
+
+    if run_mode_variables['count_intronic_reads']:
+        dge_type = '.all'
+
+    if run_mode_variables['count_mm_reads']:
+        mm_included = '.mm_included'
+
+    if run_mode_variables['clean_dge']:
+        dge_cleaned = '.cleaned'
+
+
+    dge_out_file = expand(dge_out,
+            project = project_id,
+            sample = sample_id,
+            dge_type = dge_type,
+            dge_cleaned = dge_cleaned,
+            polyA_trimmed = polyA_trimmed,
+            mm_included = mm_included,
+            n_beads = run_mode_variables['n_beads'])[0]
+
+    dge_out_summary_file = expand(dge_out_summary,
+            project = project_id,
+            sample = sample_id,
+            dge_type = dge_type,
+            dge_cleaned = dge_cleaned,
+            polyA_trimmed = polyA_trimmed,
+            mm_included = mm_included,
+            n_beads = run_mode_variables['n_beads'])[0]
+
+    return {'dge_summary': dge_out_summary_file,
+            'dge': dge_out_file}
+
 def get_dge_type(wildcards):
-    run_mode = get_metadata('run_mode',
-            project_id = wildcards.project,
-            sample_id = wildcards.sample)
+    # expects wildcards to have either a run_mode set, in which case
+    # returns one dge+summary pair
+    # or project_id and sample_id set and then return all dges
+    # associated to this sample (to the run modes of it)
+    wildcards_keys = wildcards.keys()
+    if 'run_mode' in wildcards_keys:
+        return get_dge_from_run_mode(wildcards.project, wildcards.sample,
+                wildcards.run_mode)
+    elif 'project' in wildcards_keys and 'sample' in wildcards_keys:
+        run_modes = get_run_modes_from_sample(wildcards.project, wildcards.sample).keys()
 
-    if config['run_mode_variables'][run_mode]['clean_dge']:
-        return {'dge_all_summary': dge_all_cleaned_summary, 'dge': dge_all_cleaned}
-    else:
-        return {"dge_all_summary": dge_all_summary, "dge": dge_all}
+        dges = {}
 
+        for run_mode in run_modes:
+            run_mode_dge = get_dge_from_run_mode(wildcards.project,
+                    wildcards.sample, run_mode)
+
+            dges[f'{run_mode}.dge'] = run_mode_dge['dge']
+            dges[f'{run_mode}.dge_summary'] = run_mode_dge['dge_summary']
+
+        return dges
+
+def get_qc_sheet_input_files(wildcards):
+    # returns star_log, reads_type_out, strand_info
+    # first checks the run modes, and returns either polyA_trimmed, untrimmed
+    # or both
+    run_modes = get_run_modes_from_sample(wildcards.project, wildcards.sample)
+
+    is_polyA_trimmed = set([x['polyA_adapter_trimming'] for x in run_modes.values()])
+
+    # if sample has both polyA trimmed and untrimmed mapped bam files
+    if len(is_polyA_trimmed) == 2:
+        polyA_trimmed_wildcard = ['', '.polyA_trimmed']
+    elif 'True' in is_polyA_trimmed:
+        polyA_trimmed_wildcard = ['.polyA_trimmed']
+    elif 'False' in is_polyA_trimmed:
+        polyA_trimmed_wildcard = ['']
+
+    extra_args = {'sample': wildcards.sample,
+                  'project': wildcards.project,
+                  'polyA_trimmed': polyA_trimmed_wildcard}
+
+    return {
+        'star_log': expand(star_log_file, **extra_args),
+        'reads_type_out': expand(reads_type_out, **extra_args),
+        'strand_info': expand(strand_info, **extra_args)}
 
 def get_bam_tag_names(project_id, sample_id):
-    barcode_flavor = get_run_mode_variables(project_id = project_id,
-            sample_id = sample_id)['barcode_flavor']
+    barcode_flavor = get_metadata('barcode_flavor', project_id = project_id,
+            sample_id = sample_id)
 
     bam_tags = config["knowledge"]["barcode_flavor"][barcode_flavor]["bam_tags"]
 
