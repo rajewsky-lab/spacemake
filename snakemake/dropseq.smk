@@ -45,14 +45,15 @@ rule remove_polyA:
             OUTPUT={output} \
         """
 
-rule map_reads:
+rule map_reads_final_bam:
     input:
         unpack(get_species_info),
-        unpack(get_star_input_bam)
+        unpack(get_star_input_bam),
+        unmapped_tagged_reads=tagged_bam
     output:
-        temp(mapped_reads_sorted_headerless)
+        final_bam
     log: star_log_file
-    threads: 24
+    threads: 8
     params:
         tmp_dir = tmp_dir,
         star_prefix = star_prefix
@@ -71,37 +72,45 @@ rule map_reads:
             --outSAMunmapped Within \
             --outStd BAM_Unsorted \
             --outSAMtype BAM Unsorted \
-            --runThreadN {threads} > {output}
+            --runThreadN {threads} | \
+            python {repo_dir}/snakemake/scripts/fix_bam_header.py \
+                --in-bam-star /dev/stdin \
+                --in-bam-tagged {input.unmapped_tagged_reads} \
+                --out-bam /dev/stdout | \
+            {dropseq_tools}/TagReadWithGeneFunction \
+                I=/dev/stdin \
+                O={output} \
+                ANNOTATIONS_FILE={input.annotation}
 
         rm -rf {params.tmp_dir}
         """
 
-rule fix_star_bam_header:
-    input:
-        mapped_reads=mapped_reads_sorted_headerless,
-        unmapped_tagged_reads=tagged_bam
-    output: pipe(mapped_reads_sorted)
-    shell:
-        """
-        python {repo_dir}/snakemake/scripts/fix_bam_header.py \
-            --in-bam-star {input.mapped_reads} \
-            --in-bam-tagged {input.unmapped_tagged_reads} \
-            --out-bam {output}
-        """
+#rule fix_star_bam_header:
+#    input:
+#        mapped_reads=mapped_reads_sorted_headerless,
+#        unmapped_tagged_reads=tagged_bam
+#    output: pipe(mapped_reads_sorted)
+#    shell:
+#        """
+#        python {repo_dir}/snakemake/scripts/fix_bam_header.py \
+#            --in-bam-star {input.mapped_reads} \
+#            --in-bam-tagged {input.unmapped_tagged_reads} \
+#            --out-bam {output}
+#        """
 
-rule tag_read_with_gene:
-    input:
-        unpack(get_species_info), 
-        reads=mapped_reads_sorted
-    output:
-        final_bam
-    shell:
-        """
-        {dropseq_tools}/TagReadWithGeneFunction \
-            I={input.reads} \
-            O={output} \
-            ANNOTATIONS_FILE={input.annotation}
-        """
+#rule tag_read_with_gene:
+#    input:
+#        unpack(get_species_info), 
+#        reads=mapped_reads_qname_sorted
+#    output:
+#        final_bam
+#    shell:
+#        """
+#        {dropseq_tools}/TagReadWithGeneFunction \
+#            I={input.reads} \
+#            O={output} \
+#            ANNOTATIONS_FILE={input.annotation}
+#        """
 
 rule filter_mm_reads:
     input:

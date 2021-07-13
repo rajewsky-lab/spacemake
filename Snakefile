@@ -214,8 +214,8 @@ tagged_polyA_trimmed_bam = complete_data_root + '/unaligned_bc_tagged.polyA_trim
 tagged_bam_pattern = complete_data_root + '/unaligned_bc_tagged{polyA_trimmed}.bam'
 
 # mapped reads
-mapped_reads_sorted_headerless = complete_data_root + '/star{polyA_trimmed}.Aligned.headerless.out.bam'
-mapped_reads_sorted = complete_data_root + '/star{polyA_trimmed}.Aligned.out.bam'
+#mapped_reads_sorted_headerless = complete_data_root + '/star{polyA_trimmed}.Aligned.headerless.out.bam'
+mapped_reads_qname_sorted = complete_data_root + '/star{polyA_trimmed}.Aligned.out.bam'
 star_log_file = complete_data_root + '/star{polyA_trimmed}.Log.final.out'
 star_prefix  = complete_data_root + '/star{polyA_trimmed}.'
 
