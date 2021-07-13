@@ -112,8 +112,6 @@ snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
 ### Overview
 
 ```{r read_qc_parameters_yaml, echo = F}
-parameters <- read_yaml(snakemake@input$parameters_file)
-
 parameter_stats <- parameters %>%
     as_tibble() %>%
     gather('metric', 'value')
@@ -123,11 +121,11 @@ cPalette = list('grey'= "#999999", 'light_orange'="#E69F00",
          'yellow' = "#F0E442", 'blue'= "#0072B2", 'orange'="#D55E00",
          'pink'="#CC79A7")
 
-clrs = c('umis'=cPalette$light_orange, 'pcr' = cPalette$light_blue, 'reads'=cPalette$green,
-         'genes'=cPalette$pink, 'n_beads'= 'black')
+clrs = c('umis'=cPalette$light_orange, 'genes' = cPalette$light_blue, 'reads'=cPalette$green,
+         'pcr'=cPalette$pink)
 
-median_clrs = clrs
-names(median_clrs) = paste0('median_', names(clrs))
+summarised_clrs = c(clrs, 'black')
+names(summarised_clrs) = c(paste0('median_', names(clrs)), 'log10_n_beads')
 
 nucl_clrs = c('A'='#F5C900',
               'C'='#F55D59',
@@ -220,10 +218,11 @@ umi_cutoff_data <- tibble(umi_cutoffs = umi_cutoffs) %>%
     unnest(dat)
 
 p <- umi_cutoff_data %>%
-    gather('obs', 'value', -umi_cutoffs) %>%
+    mutate(log10_n_beads = log10(n_beads)) %>%
+    gather('obs', 'value', -umi_cutoffs, -n_beads) %>%
     ggplot(aes(umi_cutoffs, value, color=obs)) +
         geom_line() +
-        scale_color_manual(values=median_clrs) +
+        scale_color_manual(values=summarised_clrs) +
         facet_wrap(~obs, ncol=3, scales='free') +
         ggtitle('Summarised metrics based on minimum UMI cutoff') + 
         theme(strip.background=element_blank(), strip.text.x=element_blank(),

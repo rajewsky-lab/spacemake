@@ -55,8 +55,6 @@ var_df <- read_table2(snakemake@input$var_df)
 
 n_beads = nrow(obs_df)
 data_empty <- n_beads == 0
-
-expr_df <- read_table2(snakemake@input$long_expr_df)
 ```
 
 ### Overview
@@ -158,7 +156,7 @@ if (barcode_file){
     fig_width=fig_width * 2
 
         obs_df %>%
-            filter(res == 'leiden_0.2') %>%
+            filter(res == 'leiden_1') %>%
             arrange(log1p_total_counts) %>%
             ggplot(aes(x_pos, y_pos, color = log1p_total_counts)) +
                 geom_point(size = snakemake@params$downstream_variables$plot_bead_size)+
@@ -169,7 +167,7 @@ if (barcode_file){
                 theme(panel.background = element_rect(fill = 'gray90'))
 
         obs_df %>%
-            filter(res == 'leiden_0.2') %>%
+            filter(res == 'leiden_1') %>%
             arrange(total_counts) %>%
             mutate(total_counts = ifelse(total_counts > 6000, 6000, total_counts)) %>%
             ggplot(aes(x_pos, y_pos, color = total_counts)) +
@@ -264,7 +262,6 @@ for (i in obs_df %$% res %>% unique){
         rename(x_pos = umap_0, y_pos = umap_1) %>%
         mutate(type = 'umap coordinates')
 
-    #knitr::opts_chunk$set(fig.width=10, fig.height=10)
     if (barcode_file) {
         to_plot <- obs_df %>%
             filter(res == i) %>%
@@ -282,66 +279,5 @@ for (i in obs_df %$% res %>% unique){
             scale_color_manual(values=cluster_clrs) +
             theme(aspect.ratio=1, panel.background = element_rect(fill = 'gray90'))
     print(pl)
-                    
-
-    cat('\n\n##### Marker table \n\n')
-
-    top_markers <- top10_marker_table %>%
-        filter(resolution == res) %>%
-        filter(pvals_adj < 0.1,
-               pts > 0.2) %>%
-        group_by(cluster) %>%
-        top_n(logfoldchanges, n=3)
-
-    top_markers %>%
-        kbl() %>%
-        kable_classic_2(full_width = F) %>%
-        cat()
-
-    cat('\n\n')
-
-    for (clstr in top_markers$cluster %>% unique){
-        cat(paste0('\n\n##### cluster ', clstr, ' markers\n\n'))
-
-        top_markers %>%
-            filter(cluster == clstr) %$%
-            gene %>%
-            plot_genes()
-    }
-
-    
 }
-```
-
-### Markers {.tabset}
-
-Next we show the top markers across all resolutions and clusters. For each resolution and cluster differentially expressed genes (t-test cluster vs rest) which are expressed at least in 50% of the beads for a given cluster and at most in 30% of the remaining beads, having at least log2foldchange of 1 and adjusted-pvalue less than 0.05 are selected.
-
-#### Marker table
-
-```{r load_top_cluster_markers, echo = F}
-top_markers <- top10_marker_table %>%
-    filter(pvals_adj <0.05, pts > 0.5, pts_rest < 0.3, logfoldchanges > 1)
-
-top_markers %>%
-    kbl() %>%
-    kable_classic_2(full_width = F)
-
-top_marker_heights <- top_markers %>%
-    group_by(resolution) %>%
-    summarise(height = n()) %>% 
-    # number of rows times 4
-    mutate(height = (floor(height/4) + 1) *2) %>%
-    mutate(height = ifelse(height < 4, 4, height)) %>%
-    mutate(resolution = paste0('res_', resolution)) %>%
-    spread(resolution, height)
-
-width_mult <- ifelse(barcode_file, 4, 2)
-
-top_marker_widths <- top_markers %>%
-    group_by(resolution) %>%
-    summarise(width = n()) %>%
-    mutate(width = ifelse(width>4, 4*width_mult, width*width_mult)) %>%
-    mutate(resolution = paste0('res_', resolution)) %>%
-    spread(resolution, width)
 ```
