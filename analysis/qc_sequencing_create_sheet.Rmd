@@ -66,7 +66,7 @@ cPalette = list('grey'= "#999999", 'light_orange'="#E69F00",
          'pink'="#CC79A7")
 
 clrs = c('umis'=cPalette$light_orange, 'genes' = cPalette$light_blue, 'reads'=cPalette$green,
-         'pcr'=cPalette$pink, 'n_beads'= 'black')
+         'pcr'=cPalette$pink, 'n_beads'= 'black', 'log10_n_beads' ='black')
 
 median_clrs = clrs
 names(median_clrs) = paste0('median_', names(clrs))
@@ -162,7 +162,8 @@ umi_cutoff_data <- tibble(umi_cutoffs = umi_cutoffs) %>%
     unnest(dat)
 
 umi_cutoff_data %>%
-    gather('obs', 'value', -umi_cutoffs) %>%
+    mutate(log10_n_beads = log10(n_beads)) %>%
+    gather('obs', 'value', -umi_cutoffs, -n_beads) %>%
     ggplot(aes(umi_cutoffs, value, color=obs)) +
         geom_line() +
         scale_color_manual(values=clrs) +

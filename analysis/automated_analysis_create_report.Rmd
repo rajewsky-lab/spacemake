@@ -54,8 +54,6 @@ var_df <- read_table2(snakemake@input$var_df)
 
 n_beads = nrow(obs_df)
 data_empty <- n_beads == 0
-
-expr_df <- read_table2(snakemake@input$long_expr_df)
 ```
 
 ### Overview
@@ -157,7 +155,7 @@ if (barcode_file){
     fig_width=fig_width * 2
 
     obs_df %>%
-        filter(res == 'leiden_0.2') %>%
+        filter(res == 'leiden_1') %>%
         mutate(log1p_total_counts = log2(1+total_counts)) %>%
         arrange(log1p_total_counts) %>%
         ggplot(aes(x_pos, y_pos, color = log1p_total_counts)) +
@@ -207,8 +205,6 @@ plot_genes <- function(genes){
 ```
 
 ```{r plot_clusters_umap_puck, echo =F, fig.height=fig_height, fig.width=fig_width, eval=data_complete, results='asis'}
-top10_marker_table <- read_table2(snakemake@input$cluster_markers)
-
 for (i in obs_df %$% res %>% unique){
     res <- strsplit(i, '_')[[1]][2]
     cat(paste0('\n\n#### ', res, ' resolution {.tabset}\n\n'))
@@ -220,7 +216,6 @@ for (i in obs_df %$% res %>% unique){
             facet_wrap(~res, ncol = 1) +
             guides(colour = guide_legend(override.aes = list(size=3)))
 
-    knitr::opts_chunk$set(fig.width=10, fig.height=10)
     if (barcode_file) {
         pl2 <- obs_df %>%
             filter(res == i) %>%
@@ -234,63 +229,5 @@ for (i in obs_df %$% res %>% unique){
     } else {
         print(pl1)
     }
-
-    cat('\n\n##### Marker table \n\n')
-
-    top_markers <- top10_marker_table %>%
-        filter(resolution == res) %>%
-        filter(pvals_adj < 0.1,
-               pts > 0.2) %>%
-        group_by(cluster) %>%
-        top_n(logfoldchanges, n=3)
-
-    top_markers %>%
-        kbl() %>%
-        kable_classic_2(full_width = F) %>%
-        cat()
-
-    for (clstr in top_markers$cluster %>% unique){
-        cat(paste0('\n\n ##### cluster ', clstr, ' markers\n\n'))
-
-        top_markers %>%
-            filter(cluster == clstr) %$%
-            gene %>%
-            plot_genes()
-    }
-
-    
 }
-```
-
-### Markers {.tabset}
-
-Next we show the top markers across all resolutions and clusters. For each resolution and cluster differentially expressed genes (t-test cluster vs rest) which are expressed at least in 50% of the beads for a given cluster and at most in 30% of the remaining beads, having at least log2foldchange of 1 and adjusted-pvalue less than 0.05 are selected.
-
-#### Marker table
-
-```{r load_top_cluster_markers, echo = F}
-top_markers <- top10_marker_table %>%
-    filter(pvals_adj <0.05, pts > 0.5, pts_rest < 0.3, logfoldchanges > 1)
-
-top_markers %>%
-    kbl() %>%
-    kable_classic_2(full_width = F)
-
-top_marker_heights <- top_markers %>%
-    group_by(resolution) %>%
-    summarise(height = n()) %>% 
-    # number of rows times 4
-    mutate(height = (floor(height/4) + 1) *2) %>%
-    mutate(height = ifelse(height < 4, 4, height)) %>%
-    mutate(resolution = paste0('res_', resolution)) %>%
-    spread(resolution, height)
-
-width_mult <- ifelse(barcode_file, 4, 2)
-
-top_marker_widths <- top_markers %>%
-    group_by(resolution) %>%
-    summarise(width = n()) %>%
-    mutate(width = ifelse(width>4, 4*width_mult, width*width_mult)) %>%
-    mutate(resolution = paste0('res_', resolution)) %>%
-    spread(resolution, width)
 ```

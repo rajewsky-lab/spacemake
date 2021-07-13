@@ -185,18 +185,11 @@ automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
 automated_analysis_processed_data_files = {
     'cluster_markers': '/top10_cluster_markers.csv',
     'obs_df': '/obs_df.tsv',
-    'var_df': '/var_df.tsv',
-    'long_expr_df': '/long_expr_df.tsv'
+    'var_df': '/var_df.tsv'
     }
 
 # prepend automated_result_root
 automated_analysis_processed_data_files = {key: automated_analysis_root + value for key, value in automated_analysis_processed_data_files.items()}
-
-# blast out
-blast_db_primers = repo_dir + '/sequences/primers.fa'
-blast_db_primers_files = [blast_db_primers + '.' + x for x in ['nhr', 'nin', 'nog', 'nsd', 'nsi', 'nsq']]
-blast_header_out = "qseqid sseqid pident length mismatch gapopen qstart qend sstart send sstrand evalue bitscore"
-united_barcode_blast_out = united_complete_data_root + '/cell_barcode_primer_blast_out.txt'
 
 # downsample vars
 downsample_root = united_illumina_root + '/downsampled_data'
