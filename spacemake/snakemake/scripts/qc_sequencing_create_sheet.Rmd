@@ -328,7 +328,7 @@ grid.draw(shift_legend(p))
 
 #### Histogram of metrics over beads
 
-```{r plot_n_reads_bead_hist, echo = F, fig.width=12, fig.height=5*run_mode_n, dpi=300}
+```{r plot_n_reads_bead_hist, echo = F, fig.width=10, fig.height=4*run_mode_n, dpi=300}
 to_plot <- dge_summary %>%
     gather('obs', 'val', -cell_bc, -quartile, -run_mode)
 
@@ -374,33 +374,34 @@ plot_grid(pl_metrics, plt_legend, ncol=1, rel_heights = c(1, .1))
 
 #### Nucleotide distribution per beads
 
-```{r plot_nucl_freq, echo = F, fig.height=7, fig.width=10, eval=F}
+```{r plot_nucl_freq, echo = F, fig.height=3*run_mode_n, fig.width=12}
 nucls <- dge_summary %$%
     cell_bc %>% strsplit("")
 
 nucls <- dge_summary %>%
-    select(cell_bc, quartile) %>%
+    select(cell_bc, quartile, run_mode) %>%
     bind_cols(tibble(nucl=nucls)) %>%
     unnest(nucl) %>%
-    group_by(cell_bc) %>%
+    # group by run_mode and cell_bc, so each nt is on the correct pos
+    group_by(run_mode, cell_bc) %>%
     mutate(pos = paste0('pos_', 100+1:n())) %>%
-    group_by(pos, nucl, quartile) %>%
+    group_by(run_mode, pos, nucl, quartile) %>%
     summarise(nucl_count = n()) %>%
     ungroup() %>%
-    tidyr::complete(pos, nucl, quartile, fill=list(nucl_count=0))
+    tidyr::complete(run_mode, pos, nucl, quartile, fill=list(nucl_count=0))
 
 nucls %>%
     ggplot(aes(pos, nucl_count, fill = nucl)) +
         geom_bar(stat='identity', position='dodge') +
         scale_fill_manual(values=nucl_clrs) +
         scale_x_discrete(labels=seq(1, cell_bc_len, 1)) +
-        facet_wrap(~quartile, ncol=2) +
+        facet_grid(run_mode~quartile) +
         ggtitle('Nucleotide distributions per nucleotide position and bead quartile')
 ```
 
 #### Shannon entropy and string compression
 
-```{r calc_shannon, echo = F, eval=F}
+```{r calc_shannon, echo = F}
 calc_shannon_entropy <- function(barcode){
     counts <- strsplit(barcode, '')[[1]] %>% table
     len <- nchar(barcode) 
@@ -433,10 +434,10 @@ dge_summary <- dge_summary %>%
     unnest(theoretical_string_compression)
 ```
 
-```{r plot_shannon, echo = F, eval=F}
+```{r plot_shannon, echo = F, fig.height=3*run_mode_n, fig.width=12}
 dge_summary %>%
     dplyr::select(-reads, -umis, -genes, -pcr, -quartile) %>%
-    gather('observation', 'value', -cell_bc) %>%
+    gather('observation', 'value', -cell_bc, -run_mode) %>%
     # replace first _ with |, so we can separate later
     mutate(observation = str_replace(observation, '_', ' '),
            observation = str_replace(observation, '\\s', '|'),
@@ -445,9 +446,8 @@ dge_summary %>%
     ggplot(aes(value, fill = type)) +
         geom_histogram(bins=30, color='black', position='dodge') +
         scale_fill_manual(values=c(cpalette$grey, cpalette$orange)) +
-        ggtitle('Shannon entropy and string compression',
-                subtitle='histograms over all beads') +
-        facet_wrap(~observation, ncol = 1, scales='free') +
-        labs(fill='')
+        facet_grid(run_mode~observation, scales='free_x') +
+        labs(fill='') +
+        theme(legend.position = 'bottom', text = element_text(size=18, face='plain'))
 ```
 
