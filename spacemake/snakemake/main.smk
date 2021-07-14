@@ -40,12 +40,9 @@ config['puck_data']['root'] = config['microscopy_out']
 # set root dir where the processed_data goes
 project_dir = config['root_dir'] + '/projects/{project}'
 
-projects = config.get('projects', None)
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
-project_df = create_project_df()
-
-project_df = df_assign_bc_flavor(project_df)
+project_df = create_project_df(config)
 
 #################
 # DIRECTORY STR #
@@ -62,8 +59,8 @@ project_df_file = reports_root + '/project_df.csv'
 sample_overview_file = reports_root + '/sample_overview.html'
 sample_read_metrics_db = reports_root + '/sample_read_metrics_db.tsv'
 
-united_illumina_root = config['root_dir'] + '/projects/{united_project}/processed_data/{united_sample}/illumina'
-united_complete_data_root = united_illumina_root + '/complete_data'
+illumina_root = config['root_dir'] + '/projects/{project}/processed_data/{sample}/illumina'
+complete_data_root = illumina_root + '/complete_data'
 
 ##############
 # Demux vars #
@@ -100,76 +97,61 @@ fastqc_ext = ['zip', 'html']
 picard_tools = config['external_bin']['picard_tools']
 dropseq_tools = config['external_bin']['dropseq_tools']
 
-# set per sample vars
-dropseq_root = processed_data_illumina + '/complete_data'
-
-data_root = dropseq_root
-dropseq_reports_dir = dropseq_root + '/reports'
-dropseq_tmp_dir = dropseq_root + '/tmp'
+reports_dir = complete_data_root + '/reports'
+tmp_dir = complete_data_root + '/tmp'
 smart_adapter = config['adapters']['smart']
 
-dropseq_merged_reads = dropseq_root + '/unaligned.bam'
+merged_reads = complete_data_root + '/unaligned.bam'
 
 ###
 # splitting the reads
 ###
 
-united_split_reads_root = united_complete_data_root + '/split_reads/'
-united_unmapped_bam = united_split_reads_root + 'unmapped.bam'
+split_reads_root = complete_data_root + '/split_reads{polyA_adapter_trimmed}/'
 
-united_split_reads_sam_names = ['plus_plus', 'plus_minus', 'minus_minus', 'minus_plus', 'plus_AMB', 'minus_AMB']
-united_split_reads_sam_pattern = united_split_reads_root + '{file_name}.sam'
-united_split_reads_bam_pattern = united_split_reads_root + '{file_name}.bam'
+split_reads_sam_names = ['plus_plus', 'plus_minus', 'minus_minus', 'minus_plus', 'plus_AMB', 'minus_AMB']
+split_reads_sam_pattern = split_reads_root + '{file_name}.sam'
+split_reads_bam_pattern = split_reads_root + '{file_name}.bam'
 
-united_split_reads_sam_files = [united_split_reads_root + x + '.sam' for x in united_split_reads_sam_names]
+split_reads_sam_files = [split_reads_root + x + '.sam' for x in split_reads_sam_names]
 
-united_split_reads_strand_type = united_split_reads_root + 'strand_type_num.txt'
-united_split_reads_read_type = united_split_reads_root + 'read_type_num.txt'
+split_reads_strand_type = split_reads_root + 'strand_type_num.txt'
+split_reads_read_type = split_reads_root + 'read_type_num.txt'
 
 #######################
 # post dropseq and QC #
 #######################
-# qc generation for ALL samples, merged and non-merged
-# umi cutoffs. used by qc-s and automated reports
-umi_cutoffs = [10, 50, 100]
 
-# parameters file for not merged samples
-qc_sheet_parameters_file = data_root + '/qc_sheet_parameters.yaml'
-
-united_qc_sheet = united_complete_data_root +'/qc_sheet_{united_sample}_{puck}.html'
-united_star_log = united_complete_data_root + '/star_Log.final.out'
-united_reads_type_out = united_split_reads_read_type
-united_qc_sheet_parameters_file = united_complete_data_root + '/qc_sheet_parameters.yaml'
-united_barcode_readcounts = united_complete_data_root + '/out_readcounts.txt.gz'
-united_strand_info = united_split_reads_strand_type
+qc_sheet = complete_data_root +'/qc_sheet_{sample}_{puck}.html'
+reads_type_out = split_reads_read_type
+barcode_readcounts = complete_data_root + '/out_readcounts{polyA_adapter_trimmed}.txt.gz'
+strand_info = split_reads_strand_type
 
 # united final.bam
-united_final_bam = united_complete_data_root + '/final.bam'
-united_top_barcodes = united_complete_data_root + '/topBarcodes.txt'
-united_top_barcodes_clean = united_complete_data_root + '/topBarcodesClean.txt'
+top_barcodes = complete_data_root + '/topBarcodes{polyA_adapter_trimmed}.{n_beads}_beads.txt'
+top_barcodes_clean = complete_data_root + '/topBarcodesClean{polyA_adapter_trimmed}.{n_beads}_beads.txt'
 
-# united dge
-dge_root = united_complete_data_root + '/dge'
+# united dgu
+dge_root = complete_data_root + '/dge'
 dge_out_prefix = dge_root + '/dge{dge_type}{dge_cleaned}'
-dge_out = dge_out_prefix + '.txt.gz'
-dge_out_summary = dge_out_prefix + '_summary.txt'
-dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
+dge_out_suffix = '{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads'
+dge_out = dge_out_prefix + dge_out_suffix + '.txt.gz'
+dge_out_summary = dge_out_prefix + dge_out_suffix + '.summary.txt'
+dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all']
 
-dge_all_summary = united_complete_data_root +  '/dge/dge_all_summary.txt'
-dge_all_cleaned_summary = united_complete_data_root +  '/dge/dge_all_cleaned_summary.txt'
-dge_all_summary_fasta= united_complete_data_root +  '/dge/dge_all_summary.fa'
-dge_all = united_complete_data_root +  '/dge/dge_all.txt.gz'
-dge_all_cleaned = united_complete_data_root +  '/dge/dge_all_cleaned.txt.gz'
+dge_all_summary = complete_data_root +  '/dge/dge.all'+ dge_out_suffix + '.summary.txt'
+# cleaned dge and summary
+dge_all_cleaned = complete_data_root +  '/dge/dge.all.cleaned.txt.gz'
+dge_all_cleaned_summary = complete_data_root +  '/dge/dge.all.cleaned' +dge_out_suffix + '.summary.txt'
 
-# primer analysis
-united_primer_tagged_final_bam = united_complete_data_root +  '/primer_tagged_final.bam'
-united_primer_tagged_summary = united_complete_data_root + '/primer_tagged_summary.txt'
+# dge and summary
+dge_all = complete_data_root +  '/dge/dge_all' + dge_out_suffix + '.txt.gz'
 
 # kmer stats per position
-kmer_stats_file = data_root + '/kmer_stats/{kmer_len}mer_counts.csv'
+kmer_stats_file = complete_data_root + '/kmer_stats/{kmer_len}mer_counts.csv'
 
 # map paired-end to check errors
-paired_end_prefix = data_root + '/mapped_paired_end/'
+paired_end_prefix = complete_data_root + '/mapped_paired_end/'
 paired_end_sam = paired_end_prefix + '{sample}_paired_end.sam'
 paired_end_bam = paired_end_prefix + '{sample}_paired_end.bam'
 paired_end_flagstat = paired_end_prefix + '{sample}_paired_end_flagstat.txt'
@@ -177,68 +159,63 @@ paired_end_log = paired_end_prefix + '{sample}_paired_end.log'
 paired_end_mapping_stats = paired_end_prefix + '{sample}_paired_end_mapping_stats.txt'
 
 # automated analysis
-automated_analysis_root = united_complete_data_root + '/automated_analysis/umi_cutoff_{umi_cutoff}'
-automated_report = automated_analysis_root + '/{united_sample}_{puck}_illumina_automated_report.html'
+automated_analysis_root = complete_data_root + '/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}'
+automated_report = automated_analysis_root + '/{sample}_{puck}_illumina_automated_report.html'
 
 automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
 
 automated_analysis_processed_data_files = {
     'cluster_markers': '/top10_cluster_markers.csv',
     'obs_df': '/obs_df.tsv',
-    'var_df': '/var_df.tsv',
-    'long_expr_df': '/long_expr_df.tsv'
+    'var_df': '/var_df.tsv'
     }
 
 # prepend automated_result_root
 automated_analysis_processed_data_files = {key: automated_analysis_root + value for key, value in automated_analysis_processed_data_files.items()}
 
-# blast out
-blast_db_primers = repo_dir + '/sequences/primers.fa'
-blast_db_primers_files = [blast_db_primers + '.' + x for x in ['nhr', 'nin', 'nog', 'nsd', 'nsi', 'nsq']]
-blast_header_out = "qseqid sseqid pident length mismatch gapopen qstart qend sstart send sstrand evalue bitscore"
-united_barcode_blast_out = united_complete_data_root + '/cell_barcode_primer_blast_out.txt'
-
 # downsample vars
-downsample_root = united_illumina_root + '/downsampled_data'
+downsample_root = illumina_root + '/downsampled_data'
 
 # in silico repo depletion
-ribo_depletion_log = data_root + '/ribo_depletion_log.txt'
-united_ribo_depletion_log = united_complete_data_root + '/ribo_depletion_log.txt'
-united_parsed_ribo_depletion_log = united_complete_data_root + '/parsed_ribo_depletion_log.txt'
+ribo_depletion_log = complete_data_root + '/ribo_depletion_log.txt'
+ribo_depletion_log = complete_data_root + '/ribo_depletion_log.txt'
+parsed_ribo_depletion_log = complete_data_root + '/parsed_ribo_depletion_log.txt'
 
 # global wildcard constraints
 wildcard_constraints:
     sample='(?!merged_).+',
     project='(?!merged_).+',
-    dge_cleaned='|_cleaned',
+    dge_cleaned='|.cleaned',
     dge_type = '|'.join(dge_types),
-    pacbio_ext = 'fq|fastq'
+    pacbio_ext = 'fq|fastq',
+    polyA_adapter_trimmed = '|.polyA_adapter_trimmed',
+    mm_included = '|.mm_included',
+    n_beads = '[0-9]+'
 
 # #########################
 #  dropseq rules and vars #
 # #########################
-dropseq_tagged = dropseq_root + '/unaligned_bc_tagged.bam'
-dropseq_unassigned = dropseq_root + '/unaligned_bc_unassigned.bam'
-
-# filter out XC tag
-dropseq_tagged_filtered = dropseq_root + '/unaligned_tagged_filtered.bam'
+tagged_bam = complete_data_root + '/unaligned_bc_tagged.bam'
+unassigned = complete_data_root + '/unaligned_bc_unassigned.bam'
 
 # trim smart adapter from the reads
-dropseq_tagged_trimmed = dropseq_root + '/unaligned_tagged_trimmed.bam'
+tagged_trimmed_bam = complete_data_root + '/unaligned_bc_tagged_trimmed.bam'
 
 # trim polyA overheang if exists
-dropseq_tagged_trimmed_polyA = dropseq_root + '/unaligned_tagged_trimmed_polyA.bam'
+tagged_polyA_adapter_trimmed_bam = complete_data_root + '/unaligned_bc_tagged.polyA_adapter_trimmed.bam'
+
+tagged_bam_pattern = complete_data_root + '/unaligned_bc_tagged{polyA_adapter_trimmed}.bam'
 
 # mapped reads
-dropseq_mapped_reads_sorted_headerless = dropseq_root + '/star_Aligned.sorted.headerless.out.bam'
-dropseq_mapped_reads_sorted = dropseq_root + '/star_Aligned.sorted.out.bam'
-star_log_file = dropseq_root + '/star_Log.final.out'
+#mapped_reads_sorted_headerless = complete_data_root + '/star{polyA_adapter_trimmed}.Aligned.headerless.out.bam'
+mapped_reads_qname_sorted = complete_data_root + '/star{polyA_adapter_trimmed}.Aligned.out.bam'
+star_log_file = complete_data_root + '/star{polyA_adapter_trimmed}.Log.final.out'
+star_prefix  = complete_data_root + '/star{polyA_adapter_trimmed}.'
 
-# final dropseq bfinal dropseq bam
-dropseq_final_bam = dropseq_root + '/final.bam'
-
-# index bam file
-dropseq_final_bam_ix = dropseq_final_bam + '.bai'
+# final bam file
+final_bam = complete_data_root + '/final{polyA_adapter_trimmed}.bam'
+final_bam_mm_included = complete_data_root + '/final{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam'
+final_bam_pattern = complete_data_root + '/final{polyA_adapter_trimmed}{mm_included}.bam'
 
 # include dropseq
 include: 'snakemake/dropseq.smk'
@@ -246,66 +223,35 @@ include: 'snakemake/dropseq.smk'
 ################################
 # Final output file generation #
 ################################
-def get_final_output_files(pattern, projects = None, samples = None, skip_merged = False, **kwargs):
-    df = project_df
-
-    if skip_merged:
-        df = df[~df.is_merged]
-
-    samples_to_run = df.T.to_dict().values()
-
-    if projects is not None:
-        samples_to_run = [s for s in samples_to_run if s['project_id'] in projects]
-
-    if samples is not None:
-        samples_to_run = [s for s in samples_to_run if s['sample_id'] in samples]
-
-    out_files = [expand(pattern,
-            project=s['project_id'], 
-            sample=s['sample_id'],
-            puck=s['puck_id'], **kwargs) for s in samples_to_run]
-
-    out_files = [item for sublist in out_files for item in sublist]
-    
-    return out_files
-
-def get_united_output_files(pattern, projects = None, samples = None,
-                            skip_projects = None, skip_samples = None, **kwargs):
+def get_output_files(pattern, projects = [], samples = [],
+                            skip_projects = [], skip_samples = [], **kwargs):
     out_files = []
     df = project_df
 
-    if projects is None and samples is None:
-        # nothing is set, assume we need to use all samples
-        pass
-    elif samples is None and projects is not None:
-        df = df[df.project_id.isin(projects)]
-    elif samples is not None and projects is None:
-        df = df[df.sample_id.isin(samples)]
-    else:
-        # both are set
-        df = df[df.sample_id.isin(samples) | df.project_id.isin(projects)]
+    if samples or projects:
+        # one of the lists is not empty
+        df = df.query('sample_id in @samples or project_id in @projects')
 
-
-    if skip_samples is not None:
-        df = df[~df.sample_id.isin(skip_samples)]
+    if skip_samples:
+        df = df.query('sample_id not in @skip_samples')
 
     if skip_projects is not None:
-        df = df[~df.project_id.isin(skip_projects)]
+        df = df.query('project_id not in @skip_projects')
 
     for index, row in df.iterrows():
-        umi_cutoff = get_downstream_analysis_variables(project_id = row['project_id'],
-            sample_id = row['sample_id'])['umi_cutoff']
-
-        out_files = out_files + expand(pattern,
-            united_project = row['project_id'],
-            united_sample = row['sample_id'],
-            puck=row['puck_id'], 
-            umi_cutoff = umi_cutoff,
-            **kwargs)
+        for run_mode in row['run_mode']:
+            run_mode_variables = get_run_mode_variables(run_mode)
+            out_files = out_files + expand(pattern,
+                project = index[0],
+                sample = index[1],
+                puck=row['puck_id'], 
+                run_mode=run_mode,
+                umi_cutoff=run_mode_variables['umi_cutoff'],
+                **kwargs)
 
     return out_files
 
-human_mouse_samples = project_df[project_df.species.isin(['human', 'mouse'])].sample_id.to_list()
+human_mouse_samples = project_df[project_df.species.isin(['human', 'mouse'])].index.get_level_values('sample_id')
 
 ##################
 # include pacbio #
@@ -329,8 +275,8 @@ rule all:
     input:
         #get_final_output_files(fastqc_pattern, skip_merged = True, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
-        get_united_output_files(automated_report),
-        get_united_output_files(united_qc_sheet)
+        #get_output_files(automated_report),
+        get_output_files(qc_sheet)
 
 ########################
 # CREATE METADATA FILE #
@@ -361,11 +307,11 @@ rule create_sample_db:
 ################
 # DOWNSAMPLING #
 ################
-include: 'snakemake/downsample.smk'
+#include: 'snakemake/downsample.smk'
 
-rule downsample:
-    input:
-        get_united_output_files(downsample_saturation_analysis, projects = config['downsample']['projects'], samples = config['downsample']['samples'])
+#rule downsample:
+#    input:
+ #       get_output_files(downsample_saturation_analysis, projects = config['downsample']['projects'], samples = config['downsample']['samples'])
 
 #################
 # MERGE SAMPLES #
@@ -381,10 +327,9 @@ rule demultiplex_data:
     params:
         demux_barcode_mismatch=lambda wildcards: int(get_metadata('demux_barcode_mismatch', demux_dir = wildcards.demux_dir)),
         sample_sheet=lambda wildcards: get_metadata('sample_sheet', demux_dir = wildcards.demux_dir),
-        flowcell_id=lambda wildcards:  get_metadata('flowcell_id', demux_dir = wildcards.demux_dir),
         output_dir= lambda wildcards: expand(demux_dir_pattern, demux_dir=wildcards.demux_dir)
     input:
-        unpack(get_basecalls_dir)
+        lambda wildcards: get_metadata('basecalls_dir', demux_dir = wildcards.demux_dir)
     output:
         demux_indicator
     threads: 8
@@ -396,7 +341,7 @@ rule demultiplex_data:
             --barcode-mismatch {params.demux_barcode_mismatch} \
             --output-dir {params.output_dir} \
             --sample-sheet {params.sample_sheet} \
-            --runfolder-dir  {input} \
+            --runfolder-dir {input} \
             -p {threads}            
 
             echo "demux finished: $(date)" > {output}
@@ -420,6 +365,9 @@ rule link_demultiplexed_reads:
         """
 
 def get_reads(wildcards):
+    ###
+    # R1 and R2 for demultiplexed reads will return none
+    ### 
     return([get_metadata('R'+ wildcards.mate, sample_id = wildcards.sample, project_id = wildcards.project)])
 
 rule link_raw_reads:
@@ -435,9 +383,10 @@ rule link_raw_reads:
 rule zcat_pipe:
     input: "{name}.fastq.gz"
     output: temp("{name}.fastq")
-    shell: "zcat {input} >> {output}"
+    threads: 2
+    shell: "unpigz --keep --processes {threads} --stdout $(readlink {input}) >> {output}"
 
-dropseq_tagged_pipe = dropseq_tagged.replace('.bam', '.uncompressed.bam')
+tagged_pipe = tagged_bam.replace('.bam', '.uncompressed.bam')
 
 rule reverse_first_mate:
     input:
@@ -447,8 +396,8 @@ rule reverse_first_mate:
     params:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
-        assigned = pipe(dropseq_tagged),
-        unassigned = dropseq_unassigned,
+        assigned = temp(tagged_bam),
+        unassigned = unassigned,
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
@@ -494,24 +443,16 @@ rule run_fastqc:
         fastqc -t {threads} -o {params.output_dir} {input}
         """
 
-#rule index_bam_file:
-#    input:
-#        dropseq_final_bam
-#    output:
-#        dropseq_final_bam_ix 
-#    shell:
-#       "sambamba index {input}"
-
 rule get_barcode_readcounts:
     # this rule takes the final.bam file (output of the dropseq pipeline) and creates a barcode read count file
     input:
-        united_final_bam
+        final_bam
     output:
-        united_barcode_readcounts
+        barcode_readcounts
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.united_project,
-            sample_id = wildcards.united_sample)['{cell}'],
+            project_id = wildcards.project,
+            sample_id = wildcards.sample)['{cell}'],
     shell:
         """
         {dropseq_tools}/BamTagHistogram \
@@ -522,19 +463,17 @@ rule get_barcode_readcounts:
 
 rule create_top_barcodes:
     input:
-        united_barcode_readcounts
+        barcode_readcounts
     output:
-        united_top_barcodes
-    params:
-        n_beads=lambda wildcards: get_downstream_analysis_variables(sample_id = wildcards.united_sample, project_id = wildcards.united_project)['expected_n_beads'],
+        top_barcodes
     shell:
-        "set +o pipefail; zcat {input} | cut -f2 | head -{params.n_beads} > {output}"
+        "set +o pipefail; zcat {input} | cut -f2 | head -{wildcards.n_beads} > {output}"
 
 rule clean_top_barcodes:
     input:
-        united_top_barcodes
+        top_barcodes
     output:
-        united_top_barcodes_clean
+        top_barcodes_clean
     script:
         'snakemake/scripts/clean_top_barcodes.py'
 
@@ -543,7 +482,7 @@ rule create_dge:
     # topBarcodesClean.txt file or just the regular topBarcodes.txt
     input:
         unpack(get_top_barcodes),
-        reads=united_final_bam
+        unpack(get_mapped_final_bam)
     output:
         dge=dge_out,
         dge_summary=dge_out_summary
@@ -551,11 +490,11 @@ rule create_dge:
         dge_root = dge_root,
         dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.united_project,
-            sample_id = wildcards.united_sample)['{cell}'],
+            project_id = wildcards.project,
+            sample_id = wildcards.sample)['{cell}'],
         umi_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.united_project,
-            sample_id = wildcards.united_sample)['{UMI}']
+            project_id = wildcards.project,
+            sample_id = wildcards.sample)['{UMI}']
     shell:
         """
         mkdir -p {params.dge_root}
@@ -572,30 +511,23 @@ rule create_dge:
         {params.dge_extra_params}
         """
 
-rule create_qc_parameters:
-    params:
-        sample_params=lambda wildcards: get_qc_sheet_parameters(wildcards.project, wildcards.sample)
-    output:
-        qc_sheet_parameters_file
-    script:
-        "analysis/qc_sequencing_create_parameters_from_sample_sheet.py"
-
 rule parse_ribo_log:
-    input: united_ribo_depletion_log
-    output: united_parsed_ribo_depletion_log
+    input: ribo_depletion_log
+    output: parsed_ribo_depletion_log
     script: 'snakemake/scripts/parse_ribo_log.py'
 
 rule create_qc_sheet:
     input:
         unpack(get_dge_type),
-        star_log = united_star_log,
-        reads_type_out=united_reads_type_out,
-        parameters_file=united_qc_sheet_parameters_file,
-        read_counts = united_barcode_readcounts,
-        strand_info = united_strand_info,
-        ribo_log=united_parsed_ribo_depletion_log
+        unpack(get_qc_sheet_input_files),
+        ribo_log=parsed_ribo_depletion_log
+    params:
+        sample_info = lambda wildcards: get_sample_info(
+            wildcards.project, wildcards.sample),
+        run_modes = lambda wildcards: get_run_modes_from_sample(
+            wildcards.project, wildcards.sample)
     output:
-        united_qc_sheet
+        qc_sheet
     script:
         "analysis/qc_sequencing_create_sheet.Rmd"
 
@@ -604,8 +536,9 @@ rule run_automated_analysis:
         unpack(get_puck_file),
         unpack(get_dge_type)
     output:
-       automated_analysis_result_file
-    # set 4 threads so that not too many are run together
+        automated_analysis_result_file
+    params:
+        downstream_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode)
     threads: 2
     script:
         'analysis/automated_analysis.py'
@@ -620,48 +553,40 @@ rule create_automated_analysis_processed_data_files:
         
 rule create_automated_report:
     input:
-        star_log=united_star_log,
-        parameters_file=united_qc_sheet_parameters_file,
+        #star_log=star_log_file,
         **automated_analysis_processed_data_files
     output:
         automated_report
     params:
-        downstream_stats = lambda wildcards: get_downstream_analysis_variables(wildcards.united_project,
-            wildcards.united_sample),
+        downstream_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode),
         r_shared_scripts= repo_dir + '/analysis/shared_functions.R'
     script:
         'analysis/automated_analysis_create_report.Rmd'
 
 rule split_final_bam:
     input:
-        united_final_bam
+        final_bam
     output:
-        temp(united_split_reads_sam_files),
-        united_split_reads_read_type,
-        united_split_reads_strand_type
+        temp(split_reads_sam_files),
+        split_reads_read_type,
+        split_reads_strand_type
     params:
-        prefix=united_split_reads_root
+        prefix=split_reads_root
     shell:
-        "sambamba view -F 'mapping_quality==255' -h {input} | python {repo_dir}/snakemake/scripts/split_reads_by_strand_info.py --prefix {params.prefix} /dev/stdin"
+        """
+        sambamba view -F 'mapping_quality==255' -h {input} | \
+        python {repo_dir}/snakemake/scripts/split_reads_by_strand_info.py \
+        --prefix {params.prefix} /dev/stdin
+        """
 
 rule split_reads_sam_to_bam:
     input:
-        united_split_reads_sam_pattern
+        split_reads_sam_pattern
     output:
-        united_split_reads_bam_pattern
+        split_reads_bam_pattern
     threads: 2
     shell:
         "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
-
-rule get_unmapped_reads:
-    input:
-        united_final_bam
-    output:
-        united_unmapped_bam
-    threads: 2
-    shell:
-        "sambamba view -F 'unmapped' -h -f bam -t {threads} -o {output} {input}"
-
 
 rule map_to_rRNA:
     input:

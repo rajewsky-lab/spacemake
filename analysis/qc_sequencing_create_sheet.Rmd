@@ -42,7 +42,11 @@ readStarLog <- function(log_file){
 
 		out$uniq_mapped_reads = (lines[9] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
 
-		#out$avg_length = (lines[11] %>% strsplit('\t') %>% unlist)[2] %>% as.numeric
+        out$multi_mapped_reads = (lines[24] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
+
+		out$avg_mapped_length = (lines[11] %>% strsplit('\t') %>% unlist)[2] %>% as.numeric
+
+        out$unmapped_too_short = (lines[31] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
@@ -106,29 +110,44 @@ shift_legend <- function(p){
 
 ```{r save_snakemake, echo = F}
 #write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
-#snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
+snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
-### Overview
+```{r read_sample_information_tables, echo = F}
+#TODO: here create  1) overview table with sample name etc: done
+#                   2) run parameters info table
+#                   3) mapping quality scores, per polyA trimmed and untrimmed
+run_mode_settings <- tibble(run_mode = names(snakemake@params$run_mode)) %>%
+    bind_cols(bind_rows(snakemake@params$run_mode)) %>%
+    gather('variable_name', 'value', -run_mode) %>%
+    spread(run_mode, value)
 
-```{r read_qc_parameters_yaml, echo = F}
-parameters <- read_yaml(snakemake@input$parameters_file)
+run_mode_names <- run_mode_settings[-1] %>% names
+run_mode_n <- length(run_mode_names)
 
-parameter_stats <- parameters %>%
-    as_tibble() %>%
-    gather('metric', 'value')
+sample_info <- bind_rows(snakemake@params$sample_info) %>%
+    select(species, sequencing_date, investigator, experiment,
+           puck_barcode_file) %>%
+    unique %>%
+    gather('info_name', 'value') %>%
+    add_row(info_name = 'project_id',
+            value = snakemake@wildcards$project, .before=1)%>%
+    add_row(info_name = 'sample_id',
+            value = snakemake@wildcards$sample, .after=1)%>%
+    add_row(info_name = 'puck_id',
+            value = snakemake@wildcards$puck, .after=2)
 
 cPalette = list('grey'= "#999999", 'light_orange'="#E69F00",
          'light_blue'="#56B4E9", 'green' = "#009E73",
          'yellow' = "#F0E442", 'blue'= "#0072B2", 'orange'="#D55E00",
          'pink'="#CC79A7")
 
-clrs = c('umis'=cPalette$light_orange, 'pcr' = cPalette$light_blue, 'reads'=cPalette$green,
-         'genes'=cPalette$pink, 'n_beads'= 'black')
+clrs = c('umis'=cPalette$light_orange, 'genes' = cPalette$light_blue, 'reads'=cPalette$green,
+         'pcr'=cPalette$pink)
 
-median_clrs = clrs
-names(median_clrs) = paste0('median_', names(clrs))
-clrs = c(clrs, median_clrs)
+summarised_clrs = c(clrs, 'black')
+names(summarised_clrs) = c(paste0('median_', names(clrs)), 'log10_n_beads')
+
 nucl_clrs = c('A'='#F5C900',
               'C'='#F55D59',
               'T'='#3AA861',
@@ -136,7 +155,32 @@ nucl_clrs = c('A'='#F5C900',
               'N'='#999999')
 ```
 
-```{r plot_read_statistics, echo =F}
+### Overview {.tabset}
+
+#### Sample info
+
+```{r show_sample_info, echo = F}
+sample_info %>%
+    kbl(col.names=NULL) %>%
+    kable_classic_2(full_width=F, position='left')
+```
+
+#### Run modes
+
+This sample was processed using the following run modes, and run mode variables
+
+```{r plot_run_modes, echo = F}
+col_names_to_show <- colnames(run_mode_settings)[-1]
+
+run_mode_settings %>%
+    kbl(col.names = c('', col_names_to_show)) %>%
+    kable_classic_2(full_width=F, position='left') %>%
+    add_header_above(c(" ", "Run modes" = length(col_names_to_show))) %>%
+    column_spec(1, border_right=T) %>%
+    row_spec(0, bold=T)
+```
+
+```{r load_read_statistics, echo =F}
 rRNA_stats <- read_table2(snakemake@input$ribo_log, col_names=c('observation', 'value')) %>%
     spread(observation, value) %>%
     mutate(mapped_to_rRNA = aligned_reads) %>%
@@ -144,15 +188,30 @@ rRNA_stats <- read_table2(snakemake@input$ribo_log, col_names=c('observation', '
     filter(observation == 'mapped_to_rRNA') %>%
     mutate(value = ifelse(value == 'None', 0, value))
  
-read_stats <- readStarLog(snakemake@input$star_log) %>%
-    rbind(rRNA_stats) %>%
-    rbind(read_table2(snakemake@input$reads_type_out, col_names=c('observation', 'value'))) %>%
+read_stats <- tibble(star_logs = snakemake@input$star_log,
+                     reads_type_out = snakemake@input$reads_type_out) %>%
+    mutate(trimmed = ifelse(grepl('polyA_adapter_trimmed', reads_type_out, fixed=TRUE),
+                            'polyA_adapter_trimmed', 'untrimmed')) %>%
+    mutate(star_log_dat = map(star_logs, ~ readStarLog(.)),
+           reads_type_out_dat = map(reads_type_out, ~ read_table2(.,
+                                                                  col_names = c('observation',
+                                                                                'value')))) %>%
+    mutate(rRNA_stats_dat = map(star_logs, ~ rbind(rRNA_stats))) %>%
+    select(-star_logs, -reads_type_out) %>%
+    gather('dat_type', 'dat', -trimmed) %>%
+    select(-dat_type) %>%
+    unnest(dat) %>%
+    group_by(trimmed) %>%
+    #rbind(rRNA_stats) %>%
     # convert to millions
-    mutate(value = round(value / 1e6, 2)) %>%
-    {
-        mutate(., input_reads = filter(., observation == 'input_reads')$value)
-    } %>%
-    mutate(label = ifelse(observation == 'input_reads', value, paste0(value, ' (', round(value/input_reads*100, 1), '%)'))) %>%
+    mutate(value = ifelse(observation != 'avg_mapped_length',
+                          round(value / 1e6, 2), value)) %>%
+    # add input_reads as a column per group
+    spread(observation, value) %>%
+    mutate(inp_reads = input_reads) %>%
+    gather('observation', 'value', -trimmed, -inp_reads) %>%
+    mutate(label = ifelse(observation %in% c('input_reads', 'avg_mapped_length'),
+                          value, paste0(value, ' (', round(value/inp_reads*100, 1), '%)'))) %>%
     dplyr::select(observation, label) %>%
     spread(observation, label) %>%
     dplyr::rename(as.utr = UTR,
@@ -161,43 +220,71 @@ read_stats <- readStarLog(snakemake@input$star_log) %>%
                   ambiguous = AMB,
                   as.cds = CODING) %>%
     # reorder columns
-    dplyr::select(input_reads, uniq_mapped_reads, mapped_to_rRNA, intergenic, intronic, as.cds, ambiguous, as.utr) %>%
-    gather('metric', 'value')
+    dplyr::select(input_reads, uniq_mapped_reads, avg_mapped_length, multi_mapped_reads, 
+                  unmapped_too_short, intergenic, intronic, as.cds, ambiguous, as.utr,
+                  mapped_to_rRNA) %>%
+    gather('metric', 'value', -trimmed) %>%
+    spread(trimmed, value) %>%
+    # change order
+    slice(5, 10, 2,3,7,6,1,4,9,11,8)
 
-parameter_stats %>%
-    bind_rows(read_stats) %>%
-    kbl(col.names=NULL) %>%
-    kable_classic_2(full_width=F) %>%
-    pack_rows('Sample info', 1, 7) %>%
-    pack_rows('Read statistics', 8, 15)
+map_types = colnames(select(read_stats, -metric))
 ```
 
-### QC plots
+#### Mapping statistics
+
+The sample was mapped using `r map_types` reads. The mapping statistics are shown here for each method:
+
+```{r show_read_stats, echo = F}
+col_names_to_show <- colnames(read_stats)[-1]
+read_stats %>%
+    kbl(col.names = c('', col_names_to_show)) %>%
+    kable_classic_2(full_width=F, position='left') %>%
+    add_header_above(c(" ", "Mapping mode" = length(col_names_to_show))) %>%
+    column_spec(1, border_right=T) %>%
+    row_spec(0, bold=T) %>%
+    add_indent(c(3,4,5,6,7)) %>%
+    footnote(general ='All values, except avg_mapped_length, shown in millions')
+```
+
+
+### QC plots {.tabset}
+
+Each of the QC plots we show on a per run mode basis, to see if there are any downstream differences based on the run mode variable settings.
 
 #### 'Knee'-plot
 
-Expected number of barcodes is `r parameters$expected_n_beads`, here we plot a Knee-plot with `r parameters$expected_n_beads` beads.
+```{r knee_plot, echo = F, fig.height=4, fig.width = 4*run_mode_n}
+dge_summary <- tibble(run_mode = run_mode_names,
+                      dge_summary_file = snakemake@input[paste0(run_mode, '.dge_summary')]) %>%
+    unnest(dge_summary_file) %>%
+    mutate(dat = map(dge_summary_file, ~ read_table2(.,
+                                                     skip=7,
+                                                     col_names = c('cell_bc', 'reads',
+                                                                   'umis', 'genes')))) %>%
+    unnest(dat) %>%
+    select(-dge_summary_file) %>%
+    mutate(pcr = reads/ umis) %>%
+    group_by(run_mode)
 
-```{r knee_plot, echo = F}
-read_counts <- read_table2(snakemake@input$read_counts, skip=1, col_names=c('reads', 'cell_bc')) %>%
+
+read_counts <- dge_summary %>%
+    select(run_mode, cell_bc, reads) %>%
     mutate(reads_cumsum = cumsum(reads),
            ix = 1:n())
 
 read_counts %>%
-    slice_head(n=parameters$expected_n_beads) %>%
     ggplot(aes(ix, reads_cumsum)) +
         geom_line() +
-        ggtitle(paste0('Knee-plot, top ', parameters$expected_n_beads, ' beads')) +
-        labs(x='Beads sorted by number of reads', y='Cummulative fraction of reads')
+        ggtitle(paste0('Knee-plot, top  beads')) +
+        labs(x='Beads sorted by number of reads', y='Cummulative sum of reads') +
+        facet_wrap(~run_mode)
 ```
 
 #### Umi-cutoff plots
 
 ```{r umi_cutoff_plot, echo = F, fig.width = 10, fig.height=5, dpi=300}
-umi_cutoffs <- seq(0, 1000, 10)
-
-dge_summary <- read_table2(snakemake@input$dge_all_summary, skip=7, col_names = c('cell_bc', 'reads', 'umis', 'genes')) %>%
-    mutate(pcr = reads/ umis)
+umi_cutoffs <- seq(10, 20000, 10)
 
 cell_bc_len = nchar((dge_summary %$% cell_bc)[1])
 
@@ -220,15 +307,20 @@ umi_cutoff_data <- tibble(umi_cutoffs = umi_cutoffs) %>%
     unnest(dat)
 
 p <- umi_cutoff_data %>%
-    gather('obs', 'value', -umi_cutoffs) %>%
-    ggplot(aes(umi_cutoffs, value, color=obs)) +
+    mutate(log10_n_beads = log10(n_beads)) %>%
+    select(-n_beads) %>%
+    gather('obs', 'value', -umi_cutoffs, -run_mode) %>%
+    ggplot(aes(umi_cutoffs, value, color=obs, linetype = run_mode)) +
         geom_line() +
-        scale_color_manual(values=clrs) +
+        scale_color_manual(values=summarised_clrs) +
         facet_wrap(~obs, ncol=3, scales='free') +
+        scale_x_log10(breaks = c(10, 100, 1000, 10000, 20000)) +
+        annotation_logticks(sides='b') +
         ggtitle('Summarised metrics based on minimum UMI cutoff') + 
         theme(strip.background=element_blank(), strip.text.x=element_blank(),
-              text = element_text(size=18, face = 'plain')) +
-        labs(color='') +
+              text = element_text(size=18, face = 'plain'), 
+              legend.title = element_blank()) +
+        labs(color='', linetype='') +
         guides(colour = guide_legend(override.aes = list(size=5)))
 
 grid.draw(shift_legend(p))
@@ -236,23 +328,53 @@ grid.draw(shift_legend(p))
 
 #### Histogram of metrics over beads
 
-```{r plot_n_reads_bead_hist, echo = F, fig.width=10, dpi=300}
-dge_summary %>%
-    gather('obs', 'val', -cell_bc, -quartile) %>%
-    ggplot(aes(x = val, fill=obs)) +
-        geom_histogram(bins=100) +
-        scale_x_log10() +
-        annotation_logticks(sides='b') +
-        scale_fill_manual(values=clrs) +
-        facet_wrap(~obs, ncol=2, scales='free') +
-        ggtitle('Histogram of metrics',
-                subtitle=paste0('Over all beads (n=',nrow(dge_summary), ')')) +
-        theme(legend.position = 'bottom', text = element_text(size=18, face='plain'))
+```{r plot_n_reads_bead_hist, echo = F, fig.width=12, fig.height=5*run_mode_n, dpi=300}
+to_plot <- dge_summary %>%
+    gather('obs', 'val', -cell_bc, -quartile, -run_mode)
+
+min_difference <- to_plot %>% group_by(obs) %>%
+    summarise(min_val = min(val,na.rm=T ),
+              max_val = max(val,na.rm=T),
+              difference = max_val - min_val) %>%
+    summarise(min_difference = min(difference)) %$%
+    min_difference
+
+metric_plot <- function(metric, legend_pos='none'){
+    pl <- to_plot %>%
+        filter(obs == metric) %>%
+        ggplot(aes(x = val, fill=obs)) +
+            geom_histogram(bins=100) +
+            scale_x_log10() +
+            scale_fill_manual(values=clrs) +
+            facet_grid(run_mode~obs, scales='free_y') +
+            theme(legend.position = legend_pos,
+                  strip.background.x=element_blank(), strip.text.x=element_blank())
+
+    if(min_difference > 1){
+        pl <- pl + 
+            annotation_logticks(sides='b')
+    }
+
+    return(pl)
+}
+pl1 = metric_plot('reads')
+pl2 = metric_plot('pcr')
+pl3 = metric_plot('genes', 'bottom')
+pl4 = metric_plot('umis')
+
+plt_legend <- get_legend(pl3)
+
+pl_metrics <- plot_grid(pl1, pl2, pl3 + theme(legend.position='none'),
+                        pl4, align='vh', hjust=-1, labels="", nrow=2)
+
+plot_grid(pl_metrics, plt_legend, ncol=1, rel_heights = c(1, .1))
+
+#theme(legend.position = 'none', text = element_text(size=18, face='plain'))
 ```
 
 #### Nucleotide distribution per beads
 
-```{r plot_nucl_freq, echo = F, fig.height=7, fig.width=10}
+```{r plot_nucl_freq, echo = F, fig.height=7, fig.width=10, eval=F}
 nucls <- dge_summary %$%
     cell_bc %>% strsplit("")
 
@@ -278,7 +400,7 @@ nucls %>%
 
 #### Shannon entropy and string compression
 
-```{r calc_shannon, echo = F}
+```{r calc_shannon, echo = F, eval=F}
 calc_shannon_entropy <- function(barcode){
     counts <- strsplit(barcode, '')[[1]] %>% table
     len <- nchar(barcode) 
@@ -311,7 +433,7 @@ dge_summary <- dge_summary %>%
     unnest(theoretical_string_compression)
 ```
 
-```{r plot_shannon, echo = F}
+```{r plot_shannon, echo = F, eval=F}
 dge_summary %>%
     dplyr::select(-reads, -umis, -genes, -pcr, -quartile) %>%
     gather('observation', 'value', -cell_bc) %>%

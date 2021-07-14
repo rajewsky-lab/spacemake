@@ -3,6 +3,7 @@ import pandas as pd
 import scanpy as sc
 import itertools
 from scipy.spatial.distance import cdist
+from scipy.sparse import csr_matrix
 
 #############
 # FUNCTIONS #
@@ -20,7 +21,6 @@ def compute_neighbors(adata, min_dist=None, max_dist=None):
     # Calculate all Euclidean distances on the adata
     dist_mtrx = cdist(adata.obsm['spatial'],
                       adata.obsm['spatial'])
-
     neighbors = dict()
 
     for i in range(adata.obs.shape[0]):
@@ -38,6 +38,8 @@ def compute_islands(adata, min_umi):
         islands: A list of lists of spots forming contiguity islands
     '''
     # this is hard coded for now for visium, to have 6 neighbors per spot
+    # TODO: define an iterative approach where he key is to have around 6 
+    # neighbors per spot on average
     neighbors = compute_neighbors(adata, min_dist = 0, max_dist=3)
     spots_cluster = np.where(np.array(adata.obs['total_counts']) < min_umi)[0]
 
@@ -91,20 +93,19 @@ def detect_tissue(adata, min_umi):
 # CODE #
 ########
 dge_path = snakemake.input['dge']
-#dge_path = '/scratch/home/tsztank/sts-sequencing/projects/cdr1as_ko_visium/processed_data/cdr1as_ko_visium_wt_1/illumina/complete_data/dge/dge_all.txt.gz'
 
 # umi cutoff 
 umi_cutoff = int(snakemake.wildcards['umi_cutoff'])
-#umi_cutoff = 500
 
 adata = sc.read_text(dge_path, delimiter='\t').T
+adata.X = csr_matrix(adata.X)
+
+print('data read')
 
 has_barcode_file = 'barcode_file' in snakemake.input.keys()
-#has_barcode_file = True
 
 # ATTACH BARCODE FILE #
 if has_barcode_file:
-    #barcode_file = '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-sequencing/visium_barcode_positions.csv'
     barcode_file = snakemake.input['barcode_file']
     bc = pd.read_csv(barcode_file, sep='[,|\t]', engine='python')
 
@@ -122,24 +123,24 @@ if has_barcode_file:
     adata.obs = new_obs
     adata.obsm['spatial'] = adata.obs[['x_pos', 'y_pos']].to_numpy()
 
-print(adata)
 
 # filter out cells based on umi, and genes based on number of cells
 sc.pp.filter_cells(adata, min_genes=1)
 sc.pp.filter_genes(adata, min_cells=3)
-print(adata)
+
+print('data filtered')
 
 # calculate mitochondrial gene percentage
-adata.var['mt'] = adata.var_names.str.startswith('Mt-') | adata.var_names.str.startswith('mt-')
+adata.var['mt'] = adata.var_names.str.startswith('Mt-') |\
+        adata.var_names.str.startswith('mt-') |\
+        adata.var_names.str.startswith('MT-')
 
 sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
 
 # DETECT TISSUE #
 # if there is no barcode file, filter adata based on UMI, otherwise detect tissue with UMI cutoff
-if has_barcode_file:
+if has_barcode_file and snakemake.params['downstream_variables']['detect_tissue']:
     tissue_indices = detect_tissue(adata, umi_cutoff)
-    print(tissue_indices)
-    print('tissue indices len: ', len(tissue_indices))
     adata = adata[tissue_indices, :]
 else:
     adata = adata[adata.obs.total_counts > umi_cutoff, :]
@@ -152,16 +153,19 @@ nrow, ncol = adata.shape
 
 # require at least 1000 genes expressed in the sample
 if nrow > 1 and ncol >= 1000:
+    print('starting analysis')
     try:
         sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000)
     except ValueError:
         sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=1000, span = 1)
     
     # calculate log(cpm)
+    print('normalising and log-scaling')
     sc.pp.normalize_total(adata, target_sum=1e4)
     sc.pp.log1p(adata, base=2)
     
     # PCA ANALYSIS
+    print('calculating pca components')
     sc.tl.pca(adata, svd_solver='arpack')
     
     # get number of pcs-s identified. Sometimes can be smaller than 50, if
@@ -171,18 +175,22 @@ if nrow > 1 and ncol >= 1000:
     n_pcs = n_pcs if n_pcs < 40 else 40
     
     # Compute the neighborhood graph
+    print('computing neighborhood graph')
     sc.pp.neighbors(adata, n_pcs=n_pcs)
     
     # compute UMAP
     # for a very low number of cells, scanpy will throw an error here
     try:
+        print('dimensionality reduction')
         sc.tl.umap(adata)   
     except TypeError:
         pass
     
     # find out the clusters
     # restrict to max 20 clusters
-    resolution = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2]
+    resolution = [0.4, 0.6, 0.8, 1]
+
+    print('clustering')
     
     for res in resolution:
         res_key = 'leiden_' + str(res)
@@ -190,6 +198,7 @@ if nrow > 1 and ncol >= 1000:
         sc.tl.leiden(adata, resolution = res, key_added = res_key)
         
         # finding marker genes
+        print(f'ranking genes for resolution {res}')
         sc.tl.rank_genes_groups(adata, res_key, method='t-test', key_added = 'rank_genes_groups_' + res_key, pts=True)
 
 adata.write(snakemake.output[0])

@@ -1,21 +1,22 @@
-PROJECT_DF_COLUMNS = [
-    "sample_id",
-    "puck_id",
-    "project_id",
-    "sample_sheet",
-    "flowcell_id",
-    "species",
-    "demux_barcode_mismatch",
-    "demux_dir",
-    "R1",
-    "R2",
-    "investigator",
-    "sequencing_date",
-    "experiment",
-    "puck_barcode_file",
-    "downstream_analysis_type",
-    "is_merged",
-]
+# default values of the project dataframe columns
+project_df_default_values = {
+    "sample_id": "none",
+    "puck_id": "no_optical_puck",
+    "project_id": "none",
+    "sample_sheet": "none",
+    "species": "none",
+    "demux_barcode_mismatch": 1,
+    "demux_dir": "none",
+    "basecalls_dir": "none",
+    "R1": "none",
+    "R2": "none",
+    "investigator": "unknown",
+    "sequencing_date": "unknown",
+    "experiment": "unknown",
+    "puck_barcode_file": "none",
+    "run_mode": "default",
+    "barcode_flavor": "default",
+    "is_merged":False}
 
 # barcode flavor parsing and query functions
 class dotdict(dict):
@@ -38,64 +39,32 @@ def parse_barcode_flavors(
     ),
 ):
     """
-    Reads the 'barcode_flavor' top-level block of config.yaml as well
-    as the corresponding block from 'knowledge'.
-    Gathers all mappings of project_id -> bc_flavor and sample_id -> bc_flavor
+    Reads the 'barcode_flavor' from 'knowledge' section of the config.yaml.
+    parses and gathers the settings for barcode flavors
     """
-    default_barcode_flavor = "dropseq"
-    project_barcode_flavor = {}
-    sample_barcode_flavor = {}
     preprocess_settings = {}
-    for flavor, v in config["barcode_flavor"].items():
+    for flavor, flavor_settings in config["knowledge"]['barcode_flavor'].items():
         # for each flavor, also retrieve the configuration
         # first make a copy of the default values
         d = dict(bc_default_settings)
-        d.update(config["knowledge"]["barcode_flavor"][flavor])
+        d.update(flavor_settings)
         preprocess_settings[flavor] = dotdict(d)
-
-        if v == "default":
-            default_barcode_flavor = flavor
-            continue
-
-        for name in v.get("projects", []):
-            project_barcode_flavor[name] = flavor
-
-        for name in v.get("samples", []):
-            sample_barcode_flavor[name] = flavor
 
     res = dotdict(
         dict(
-            default=default_barcode_flavor,
-            projects=project_barcode_flavor,
-            samples=sample_barcode_flavor,
             preprocess_settings=preprocess_settings,
         )
     )
 
     return res
 
-
-def get_barcode_flavor(project_id, sample_id):
-    default = bc_flavor_data.default
-    project_default = bc_flavor_data.projects.get(project_id, default)
-    return bc_flavor_data.samples.get(sample_id, project_default)
-
-
-def df_assign_bc_flavor(df):
-    # assign the barcode layout for each sample as specified in the config.yaml
-    def flavor_choice(row):
-        return get_barcode_flavor(row.project_id, row.sample_id)
-
-    df["barcode_flavor"] = df[["project_id", "sample_id"]].apply(flavor_choice, axis=1)
-    return df
-
-
 def get_bc_preprocess_settings(wildcards):
     """
     This function will return a dictionary of information
     on the read1 preprocessing, according to barcode_flavor
     """
-    flavor = get_barcode_flavor(wildcards.project, wildcards.sample)
+    flavor = get_metadata('barcode_flavor', project_id = wildcards.project,
+            sample_id = wildcards.sample)
     settings = bc_flavor_data.preprocess_settings[flavor]
 
     return settings
@@ -169,9 +138,8 @@ def find_barcode_file(puck_id):
         path = os.path.join(puck_dir, config["puck_data"]["barcode_file"])
 
     return get_barcode_file(path)
-
-
-def read_sample_sheet(sample_sheet_path, flowcell_id):
+    
+def read_sample_sheet(sample_sheet_path, basecalls_dir):
     with open(sample_sheet_path) as sample_sheet:
         ix = 0
         investigator = "none"
@@ -184,40 +152,39 @@ def read_sample_sheet(sample_sheet_path, flowcell_id):
             if "Date" in line:
                 sequencing_date = line.split(",")[1]
             if "[Data]" in line:
+                # the counter ix stops here
                 break
             else:
                 ix = ix + 1
 
+    # read everything after th [Data]
     df = pd.read_csv(sample_sheet_path, skiprows=ix + 1)
-    df["species"] = df["Description"].str.split("_").str[-1]
-    df["investigator"] = investigator
-    df["sequencing_date"] = sequencing_date
-
-    # mock R1 and R2
-    df["R1"] = "none"
-    df["R2"] = "none"
-
-    df["downstream_analysis_type"] = "default"
-    df["is_merged"] = False
-
-    # merge additional info and sanitize column names
-    df.rename(
-        columns={
+    # rename columns
+    to_rename={
             "Sample_ID": "sample_id",
             "Sample_Name": "puck_id",
             "Sample_Project": "project_id",
             "Description": "experiment",
-        },
+            "index": "index"
+        }
+    df.rename(
+        columns=to_rename,
         inplace=True,
     )
-    df["flowcell_id"] = flowcell_id
+    # select only renamed columns
+    df = df[to_rename.values()]
+    df["species"] = df["experiment"].str.split("_").str[-1]
+    df["investigator"] = investigator
+    df["sequencing_date"] = sequencing_date
+
+    # rename columns 
+    df["basecalls_dir"] = basecalls_dir
     df["demux_barcode_mismatch"] = compute_max_barcode_mismatch(df["index"])
     df["sample_sheet"] = sample_sheet_path
     df["demux_dir"] = df["sample_sheet"].str.split("/").str[-1].str.split(".").str[0]
     df["puck_barcode_file"] = df.puck_id.apply(find_barcode_file)
 
-    return df[PROJECT_DF_COLUMNS]
-
+    return df
 
 def df_assign_merge_samples(project_df):
     # added samples to merged to the project_df
@@ -248,56 +215,61 @@ def df_assign_merge_samples(project_df):
 
     return project_df
 
+def create_project_df(config):
+    project_df = pd.DataFrame(columns=project_df_default_values.keys())
 
-def create_project_df():
-    project_df = pd.DataFrame(columns=PROJECT_DF_COLUMNS)
+    # load first projects specified in the samplesheets
+    demux_projects = config.get('projects', None)
 
-    if projects is not None:
+    if demux_projects is not None:
         # if we have projects in the config file
         # get the samples
-        project_df = project_df.append(
-            pd.concat(
-                [
-                    read_sample_sheet(ip["sample_sheet"], ip["flowcell_id"])
-                    for ip in projects
-                ],
-                ignore_index=True,
-            ),
-            ignore_index=True,
-        )
+        demux_project_df = pd.concat(
+            [read_sample_sheet(ip['sample_sheet'], ip['basecalls_dir']) for ip in demux_projects],
+            ignore_index=True)
+
+        for ix, row in demux_project_df.iterrows():
+            new_project = pd.Series(project_df_default_values)
+            new_project.update(row)
+
+            project_df = project_df.append(new_project, ignore_index=True)
+
+    project_df.set_index(['project_id', 'sample_id'], inplace=True)
 
     # add additional samples from config.yaml, which have already been demultiplexed.
-    for project in config["additional_projects"]:
+    for project in config['additional_projects']:
+        new_project = pd.Series(project_df_default_values)
         project_series = pd.Series(project)
-        project_series["is_merged"] = False
+        
+        new_project.update(project_series)
 
-        project_index = project_df.loc[
-            (project_df.project_id == project_series.project_id)
-            & (project_df.sample_id == project_series.sample_id)
-        ].index
-        if not project_index.empty:
+        # get the index of the new project
+        project_index = tuple(new_project[['project_id', 'sample_id']].values)
+
+        # set the name to the index
+        new_project.name = project_index
+        new_project.drop(['project_id', 'sample_id'], inplace=True)
+
+        # if key exists, update
+        if project_index in project_df.index:
             # if index not empty, that is there is a sample in the dataframe with this id, update
-            project_df.loc[project_index, project_series.keys()] = project_series.values
+            project_df.loc[project_index, new_project.keys()] = new_project.values
         else:
             # add project
-            project_df = project_df.append(project_series, ignore_index=True)
+            project_df = project_df.append(new_project)
 
-    # remove empty fields and add 'none' instead
-    project_df = project_df.replace(np.nan, "none")
-
-    project_df = df_assign_merge_samples(project_df)
-
-    # fill downstream variables with default
-    project_df.loc[
-        project_df[project_df.downstream_analysis_type == "none"].index,
-        "downstream_analysis_type",
-    ] = "default"
+    #project_df = df_assign_merge_samples(project_df)
 
     return project_df
 
-
-def get_metadata(field, **kwargs):
+def get_metadata(field, sample_id=None, project_id=None, **kwargs):
     df = project_df
+    if sample_id is not None:
+        df = df.query('sample_id == @sample_id')
+
+    if project_id is not None:
+        df = df.query('project_id == @project_id')
+
     for key, value in kwargs.items():
         df = df.loc[df.loc[:, key] == value]
 
@@ -310,6 +282,19 @@ def get_demux_indicator(wildcards):
     )
 
     return expand(demux_indicator, demux_dir=demux_dir)
+
+
+def get_star_input_bam(wildcards):
+    if wildcards.polyA_adapter_trimmed == '.polyA_adapter_trimmed':
+        return {'reads': tagged_polyA_adapter_trimmed_bam}
+    else:
+        return {'reads': tagged_bam}
+
+def get_mapped_final_bam(wildcards):
+    if wildcards.mm_included == '.mm_included':
+        return {'reads': final_bam_mm_included}
+    else:
+        return {'reads': final_bam}
 
 
 def get_species_info(wildcards):
@@ -342,64 +327,56 @@ def get_rRNA_index(wildcards):
     return {"rRNA_index": index}
 
 
-def get_downstream_analysis_variables(project_id, sample_id):
-    downstream_analysis_type = get_metadata(
-        "downstream_analysis_type", project_id=project_id, sample_id=sample_id
-    )
 
-    return config["downstream_analysis_variables"][downstream_analysis_type]
+def get_run_mode_variables(run_mode):
+    # return the run mode variables
+    # first set the default, for each
+    # then update each if there is no default
+    # load the default
+    run_mode_variables = dict(config['run_mode_variables']['default'])
 
+    # first update the default with parent
+    if 'parent_run_mode' in config['run_mode_variables'][run_mode].keys():
+        parent_run_mode = config['run_mode_variables'][run_mode]['parent_run_mode']
+        run_mode_variables.update(config['run_mode_variables'][parent_run_mode])
+
+    run_mode_variables.update(config['run_mode_variables'][run_mode])
+
+    return run_mode_variables
+
+def get_run_modes_from_sample(project_id, sample_id):
+    run_mode_names = get_metadata('run_mode', project_id=project_id, sample_id=sample_id)
+    
+    run_modes = {}
+
+    for run_mode in run_mode_names:
+        run_modes[run_mode] = get_run_mode_variables(run_mode)
+
+    return run_modes
 
 def get_dge_extra_params(wildcards):
     dge_type = wildcards.dge_type
 
-    if dge_type == "_exon":
-        return ""
-    elif dge_type == "_intron":
-        return "LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
-    elif dge_type == "_all":
-        return "LOCUS_FUNCTION_LIST=INTRONIC"
-    if dge_type == "Reads_exon":
-        return "OUTPUT_READS_INSTEAD=true"
-    elif dge_type == "Reads_intron":
-        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
-    elif dge_type == "Reads_all":
-        return "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=INTRONIC"
+    extra_params = ""
 
+    if dge_type == ".exon":
+        extra_params = ""
+    elif dge_type == ".intron":
+        extra_params = "LOCUS_FUNCTION_LIST=null LOCUS_FUNCTION_LIST=INTRONIC"
+    elif dge_type == ".all":
+        extra_params = "LOCUS_FUNCTION_LIST=INTRONIC"
+    if dge_type == ".Reads_exon":
+        extra_params = "OUTPUT_READS_INSTEAD=true"
+    elif dge_type == ".Reads_intron":
+        extra_params = "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=null"+\
+                "LOCUS_FUNCTION_LIST=INTRONIC"
+    elif dge_type == ".Reads_all":
+        extra_params = "OUTPUT_READS_INSTEAD=true LOCUS_FUNCTION_LIST=INTRONIC"
 
-def get_basecalls_dir(wildcards):
-    flowcell_id = get_metadata("flowcell_id", demux_dir=wildcards.demux_dir)
+    if wildcards.mm_included == '.mm_included':
+        extra_params = extra_params + " READ_MQ=0"
 
-    if "basecall_folders" in config:
-        for folder in config["basecall_folders"]:
-            bcl_folder = os.path.join(folder, flowcell_id)
-            if os.path.isdir(bcl_folder):
-                return [bcl_folder]
-    # else return a fake path, which won't be present, so snakemake will fail for this, as input directory will be missing
-    return ["none"]
-
-
-###############################
-# Joining optical to illumina #
-###############################
-
-
-def get_sample_info(raw_folder):
-    batches = os.listdir(raw_folder)
-
-    df = pd.DataFrame(columns=["batch_id", "puck_id"])
-
-    for batch in batches:
-        batch_dir = microscopy_raw + "/" + batch
-
-        puck_ids = os.listdir(batch_dir)
-
-        df = df.append(
-            pd.DataFrame({"batch_id": batch, "puck_id": puck_ids}), ignore_index=True
-        )
-
-    return df
-
+    return extra_params
 
 ###################
 # Merging samples #
@@ -471,14 +448,9 @@ def get_merged_ribo_depletion_log_inputs(wildcards):
     return ribo_depletion_logs
 
 
-def get_qc_sheet_parameters(project_id, sample_id):
-    # returns a single row for a given sample_id
-    # this will be the input of the parameters for the qc sheet parameter generation
-    out_dict = project_df.loc[project_df.sample_id == sample_id].iloc[0].to_dict()
-
-    out_dict["input_beads"] = str(
-        get_downstream_analysis_variables(project_id, sample_id)["expected_n_beads"]
-    )
+def get_sample_info(project_id, sample_id):
+    # returns sample info from the projects df
+    out_dict = project_df.loc[(project_id, sample_id)].to_dict()
 
     return out_dict
 
@@ -493,28 +465,103 @@ def get_bt2_index(wildcards):
 
 def get_top_barcodes(wildcards):
     if wildcards.dge_cleaned == "":
-        return {"top_barcodes": united_top_barcodes}
+        return {"top_barcodes": top_barcodes}
     else:
-        return {"top_barcodes": united_top_barcodes_clean}
+        return {'top_barcodes': top_barcodes_clean}
 
+def get_dge_from_run_mode(project_id, sample_id, run_mode):
+    run_mode_variables = get_run_mode_variables(run_mode)
+    
+    dge_type = '.exon'
+    dge_cleaned = ''
+    polyA_adapter_trimmed = ''
+    mm_included = ''
+
+    if run_mode_variables['polyA_adapter_trimming']:
+        polyA_adapter_trimmed = '.polyA_adapter_trimmed'
+
+    if run_mode_variables['count_intronic_reads']:
+        dge_type = '.all'
+
+    if run_mode_variables['count_mm_reads']:
+        mm_included = '.mm_included'
+
+    if run_mode_variables['clean_dge']:
+        dge_cleaned = '.cleaned'
+
+
+    dge_out_file = expand(dge_out,
+            project = project_id,
+            sample = sample_id,
+            dge_type = dge_type,
+            dge_cleaned = dge_cleaned,
+            polyA_adapter_trimmed = polyA_adapter_trimmed,
+            mm_included = mm_included,
+            n_beads = run_mode_variables['n_beads'])[0]
+
+    dge_out_summary_file = expand(dge_out_summary,
+            project = project_id,
+            sample = sample_id,
+            dge_type = dge_type,
+            dge_cleaned = dge_cleaned,
+            polyA_adapter_trimmed = polyA_adapter_trimmed,
+            mm_included = mm_included,
+            n_beads = run_mode_variables['n_beads'])[0]
+
+    return {'dge_summary': dge_out_summary_file,
+            'dge': dge_out_file}
 
 def get_dge_type(wildcards):
-    downstream_analysis_type = get_metadata(
-        "downstream_analysis_type",
-        project_id=wildcards.united_project,
-        sample_id=wildcards.united_sample,
-    )
+    # expects wildcards to have either a run_mode set, in which case
+    # returns one dge+summary pair
+    # or project_id and sample_id set and then return all dges
+    # associated to this sample (to the run modes of it)
+    wildcards_keys = wildcards.keys()
+    if 'run_mode' in wildcards_keys:
+        return get_dge_from_run_mode(wildcards.project, wildcards.sample,
+                wildcards.run_mode)
+    elif 'project' in wildcards_keys and 'sample' in wildcards_keys:
+        run_modes = get_run_modes_from_sample(wildcards.project, wildcards.sample).keys()
 
-    if config["downstream_analysis_variables"][downstream_analysis_type]["clean_dge"]:
-        return {"dge_all_summary": dge_all_cleaned_summary, "dge": dge_all_cleaned}
-    else:
-        return {"dge_all_summary": dge_all_summary, "dge": dge_all}
+        dges = {}
 
+        for run_mode in run_modes:
+            run_mode_dge = get_dge_from_run_mode(wildcards.project,
+                    wildcards.sample, run_mode)
+
+            dges[f'{run_mode}.dge'] = run_mode_dge['dge']
+            dges[f'{run_mode}.dge_summary'] = run_mode_dge['dge_summary']
+
+        return dges
+
+def get_qc_sheet_input_files(wildcards):
+    # returns star_log, reads_type_out, strand_info
+    # first checks the run modes, and returns either polyA_adapter_trimmed, untrimmed
+    # or both
+    run_modes = get_run_modes_from_sample(wildcards.project, wildcards.sample)
+
+    is_polyA_adapter_trimmed = set([x['polyA_adapter_trimming'] for x in run_modes.values()])
+
+    # if sample has both polyA trimmed and untrimmed mapped bam files
+    if len(is_polyA_adapter_trimmed) == 2:
+        polyA_adapter_trimmed_wildcard = ['', '.polyA_adapter_trimmed']
+    elif True in is_polyA_adapter_trimmed:
+        polyA_adapter_trimmed_wildcard = ['.polyA_adapter_trimmed']
+    elif False in is_polyA_adapter_trimmed:
+        polyA_adapter_trimmed_wildcard = ['']
+
+    extra_args = {'sample': wildcards.sample,
+                  'project': wildcards.project,
+                  'polyA_adapter_trimmed': polyA_adapter_trimmed_wildcard}
+
+    return {
+        'star_log': expand(star_log_file, **extra_args),
+        'reads_type_out': expand(reads_type_out, **extra_args),
+        'strand_info': expand(strand_info, **extra_args)}
 
 def get_bam_tag_names(project_id, sample_id):
-    barcode_flavor = get_metadata(
-        "barcode_flavor", project_id=project_id, sample_id=sample_id
-    )
+    barcode_flavor = get_metadata('barcode_flavor', project_id = project_id,
+            sample_id = sample_id)
 
     bam_tags = config["knowledge"]["barcode_flavor"][barcode_flavor]["bam_tags"]
 
@@ -529,11 +576,9 @@ def get_bam_tag_names(project_id, sample_id):
 
 
 def get_puck_file(wildcards):
-    puck_barcode_file = get_metadata(
-        "puck_barcode_file",
-        project_id=wildcards.united_project,
-        sample_id=wildcards.united_sample,
-    )
+    puck_barcode_file = get_metadata('puck_barcode_file',
+            project_id = wildcards.project,
+            sample_id = wildcards.sample)
 
     if puck_barcode_file == "none":
         return []
