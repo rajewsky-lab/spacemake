@@ -1,1 +1,1 @@
-global-include *.smk *.csv
+global-include *.smk *.csv *.py *.R *.Rmd
