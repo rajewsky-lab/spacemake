@@ -107,7 +107,7 @@ merged_reads = complete_data_root + '/unaligned.bam'
 # splitting the reads
 ###
 
-split_reads_root = complete_data_root + '/split_reads{polyA_trimmed}/'
+split_reads_root = complete_data_root + '/split_reads{polyA_adapter_trimmed}/'
 
 split_reads_sam_names = ['plus_plus', 'plus_minus', 'minus_minus', 'minus_plus', 'plus_AMB', 'minus_AMB']
 split_reads_sam_pattern = split_reads_root + '{file_name}.sam'
@@ -124,17 +124,17 @@ split_reads_read_type = split_reads_root + 'read_type_num.txt'
 
 qc_sheet = complete_data_root +'/qc_sheet_{sample}_{puck}.html'
 reads_type_out = split_reads_read_type
-barcode_readcounts = complete_data_root + '/out_readcounts{polyA_trimmed}.txt.gz'
+barcode_readcounts = complete_data_root + '/out_readcounts{polyA_adapter_trimmed}.txt.gz'
 strand_info = split_reads_strand_type
 
 # united final.bam
-top_barcodes = complete_data_root + '/topBarcodes{polyA_trimmed}.{n_beads}_beads.txt'
-top_barcodes_clean = complete_data_root + '/topBarcodesClean{polyA_trimmed}.{n_beads}_beads.txt'
+top_barcodes = complete_data_root + '/topBarcodes{polyA_adapter_trimmed}.{n_beads}_beads.txt'
+top_barcodes_clean = complete_data_root + '/topBarcodesClean{polyA_adapter_trimmed}.{n_beads}_beads.txt'
 
 # united dgu
 dge_root = complete_data_root + '/dge'
 dge_out_prefix = dge_root + '/dge{dge_type}{dge_cleaned}'
-dge_out_suffix = '{polyA_trimmed}{mm_included}.{n_beads}_beads'
+dge_out_suffix = '{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads'
 dge_out = dge_out_prefix + dge_out_suffix + '.txt.gz'
 dge_out_summary = dge_out_prefix + dge_out_suffix + '.summary.txt'
 dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all']
@@ -188,7 +188,7 @@ wildcard_constraints:
     dge_cleaned='|.cleaned',
     dge_type = '|'.join(dge_types),
     pacbio_ext = 'fq|fastq',
-    polyA_trimmed = '|.polyA_trimmed',
+    polyA_adapter_trimmed = '|.polyA_adapter_trimmed',
     mm_included = '|.mm_included',
     n_beads = '[0-9]+'
 
@@ -202,20 +202,20 @@ unassigned = complete_data_root + '/unaligned_bc_unassigned.bam'
 tagged_trimmed_bam = complete_data_root + '/unaligned_bc_tagged_trimmed.bam'
 
 # trim polyA overheang if exists
-tagged_polyA_trimmed_bam = complete_data_root + '/unaligned_bc_tagged.polyA_trimmed.bam'
+tagged_polyA_adapter_trimmed_bam = complete_data_root + '/unaligned_bc_tagged.polyA_adapter_trimmed.bam'
 
-tagged_bam_pattern = complete_data_root + '/unaligned_bc_tagged{polyA_trimmed}.bam'
+tagged_bam_pattern = complete_data_root + '/unaligned_bc_tagged{polyA_adapter_trimmed}.bam'
 
 # mapped reads
-#mapped_reads_sorted_headerless = complete_data_root + '/star{polyA_trimmed}.Aligned.headerless.out.bam'
-mapped_reads_qname_sorted = complete_data_root + '/star{polyA_trimmed}.Aligned.out.bam'
-star_log_file = complete_data_root + '/star{polyA_trimmed}.Log.final.out'
-star_prefix  = complete_data_root + '/star{polyA_trimmed}.'
+#mapped_reads_sorted_headerless = complete_data_root + '/star{polyA_adapter_trimmed}.Aligned.headerless.out.bam'
+mapped_reads_qname_sorted = complete_data_root + '/star{polyA_adapter_trimmed}.Aligned.out.bam'
+star_log_file = complete_data_root + '/star{polyA_adapter_trimmed}.Log.final.out'
+star_prefix  = complete_data_root + '/star{polyA_adapter_trimmed}.'
 
 # final bam file
-final_bam = complete_data_root + '/final{polyA_trimmed}.bam'
-final_bam_mm_included = complete_data_root + '/final{dge_type}{dge_cleaned}{polyA_trimmed}.mm_included.bam'
-final_bam_pattern = complete_data_root + '/final{polyA_trimmed}{mm_included}.bam'
+final_bam = complete_data_root + '/final{polyA_adapter_trimmed}.bam'
+final_bam_mm_included = complete_data_root + '/final{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam'
+final_bam_pattern = complete_data_root + '/final{polyA_adapter_trimmed}{mm_included}.bam'
 
 # include dropseq
 include: 'snakemake/dropseq.smk'
@@ -522,8 +522,10 @@ rule create_qc_sheet:
         unpack(get_qc_sheet_input_files),
         ribo_log=parsed_ribo_depletion_log
     params:
-        run_modes = lambda wildcards: get_run_modes_from_sample(wildcards.project,
-            wildcards.sample)
+        sample_info = lambda wildcards: get_sample_info(
+            wildcards.project, wildcards.sample),
+        run_modes = lambda wildcards: get_run_modes_from_sample(
+            wildcards.project, wildcards.sample)
     output:
         qc_sheet
     script:

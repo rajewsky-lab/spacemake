@@ -11,7 +11,7 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 ###################################################
 rule remove_smart_adapter:
     input:
-        tagged_bam  # rules.remove_xc_tag.output
+        tagged_bam
     output:
         pipe(tagged_trimmed_bam)
     params:
@@ -33,7 +33,7 @@ rule remove_polyA:
     input:
         tagged_trimmed_bam
     output:
-        temp(tagged_polyA_trimmed_bam)
+        temp(tagged_polyA_adapter_trimmed_bam)
     params:
         reports_dir = reports_dir
     shell:

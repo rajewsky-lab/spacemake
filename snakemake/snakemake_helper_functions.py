@@ -285,8 +285,8 @@ def get_demux_indicator(wildcards):
 
 
 def get_star_input_bam(wildcards):
-    if wildcards.polyA_trimmed == '.polyA_trimmed':
-        return {'reads': tagged_polyA_trimmed_bam}
+    if wildcards.polyA_adapter_trimmed == '.polyA_adapter_trimmed':
+        return {'reads': tagged_polyA_adapter_trimmed_bam}
     else:
         return {'reads': tagged_bam}
 
@@ -333,7 +333,7 @@ def get_run_mode_variables(run_mode):
     # first set the default, for each
     # then update each if there is no default
     # load the default
-    run_mode_variables = config['run_mode_variables']['default']
+    run_mode_variables = dict(config['run_mode_variables']['default'])
 
     # first update the default with parent
     if 'parent_run_mode' in config['run_mode_variables'][run_mode].keys():
@@ -448,12 +448,9 @@ def get_merged_ribo_depletion_log_inputs(wildcards):
     return ribo_depletion_logs
 
 
-def get_qc_sheet_parameters(project_id, sample_id):
-    # returns a single row for a given sample_id
-    # this will be the input of the parameters for the qc sheet parameter generation
-    out_dict = project_df.loc[project_df.sample_id == sample_id].iloc[0].to_dict()
-
-    out_dict["input_beads"] = str(get_run_mode_variables(project_id, sample_id)['expected_n_beads'])
+def get_sample_info(project_id, sample_id):
+    # returns sample info from the projects df
+    out_dict = project_df.loc[(project_id, sample_id)].to_dict()
 
     return out_dict
 
@@ -477,11 +474,11 @@ def get_dge_from_run_mode(project_id, sample_id, run_mode):
     
     dge_type = '.exon'
     dge_cleaned = ''
-    polyA_trimmed = ''
+    polyA_adapter_trimmed = ''
     mm_included = ''
 
     if run_mode_variables['polyA_adapter_trimming']:
-        polyA_trimmed = '.polyA_trimmed'
+        polyA_adapter_trimmed = '.polyA_adapter_trimmed'
 
     if run_mode_variables['count_intronic_reads']:
         dge_type = '.all'
@@ -498,7 +495,7 @@ def get_dge_from_run_mode(project_id, sample_id, run_mode):
             sample = sample_id,
             dge_type = dge_type,
             dge_cleaned = dge_cleaned,
-            polyA_trimmed = polyA_trimmed,
+            polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
             n_beads = run_mode_variables['n_beads'])[0]
 
@@ -507,7 +504,7 @@ def get_dge_from_run_mode(project_id, sample_id, run_mode):
             sample = sample_id,
             dge_type = dge_type,
             dge_cleaned = dge_cleaned,
-            polyA_trimmed = polyA_trimmed,
+            polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
             n_beads = run_mode_variables['n_beads'])[0]
 
@@ -539,23 +536,23 @@ def get_dge_type(wildcards):
 
 def get_qc_sheet_input_files(wildcards):
     # returns star_log, reads_type_out, strand_info
-    # first checks the run modes, and returns either polyA_trimmed, untrimmed
+    # first checks the run modes, and returns either polyA_adapter_trimmed, untrimmed
     # or both
     run_modes = get_run_modes_from_sample(wildcards.project, wildcards.sample)
 
-    is_polyA_trimmed = set([x['polyA_adapter_trimming'] for x in run_modes.values()])
+    is_polyA_adapter_trimmed = set([x['polyA_adapter_trimming'] for x in run_modes.values()])
 
     # if sample has both polyA trimmed and untrimmed mapped bam files
-    if len(is_polyA_trimmed) == 2:
-        polyA_trimmed_wildcard = ['', '.polyA_trimmed']
-    elif 'True' in is_polyA_trimmed:
-        polyA_trimmed_wildcard = ['.polyA_trimmed']
-    elif 'False' in is_polyA_trimmed:
-        polyA_trimmed_wildcard = ['']
+    if len(is_polyA_adapter_trimmed) == 2:
+        polyA_adapter_trimmed_wildcard = ['', '.polyA_adapter_trimmed']
+    elif True in is_polyA_adapter_trimmed:
+        polyA_adapter_trimmed_wildcard = ['.polyA_adapter_trimmed']
+    elif False in is_polyA_adapter_trimmed:
+        polyA_adapter_trimmed_wildcard = ['']
 
     extra_args = {'sample': wildcards.sample,
                   'project': wildcards.project,
-                  'polyA_trimmed': polyA_trimmed_wildcard}
+                  'polyA_adapter_trimmed': polyA_adapter_trimmed_wildcard}
 
     return {
         'star_log': expand(star_log_file, **extra_args),

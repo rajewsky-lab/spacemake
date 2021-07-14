@@ -39,7 +39,7 @@ run_mode_variables:
         count_mm_reads: True
     visium_exon_trimmed:
         parent_run_mode: 'visium'
-        polyA_adapter_trimming: 'True'
+        polyA_adapter_trimming: True
         count_intronic_reads: False
         count_mm_reads: False
     slideseq:
