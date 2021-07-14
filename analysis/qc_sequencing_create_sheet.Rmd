@@ -66,11 +66,11 @@ cPalette = list('grey'= "#999999", 'light_orange'="#E69F00",
          'pink'="#CC79A7")
 
 clrs = c('umis'=cPalette$light_orange, 'genes' = cPalette$light_blue, 'reads'=cPalette$green,
-         'pcr'=cPalette$pink, 'n_beads'= 'black')
+         'pcr'=cPalette$pink, 'n_beads'= 'black', 'log10_n_beads' ='black')
 
 median_clrs = clrs
 names(median_clrs) = paste0('median_', names(clrs))
-clrs = c(clrs, median_clrs)
+
 nucl_clrs = c('A'='#F5C900',
               'C'='#F55D59',
               'T'='#3AA861',
@@ -162,10 +162,11 @@ umi_cutoff_data <- tibble(umi_cutoffs = umi_cutoffs) %>%
     unnest(dat)
 
 umi_cutoff_data %>%
-    gather('obs', 'value', -umi_cutoffs) %>%
+    mutate(log10_n_beads = log10(n_beads)) %>%
+    gather('obs', 'value', -umi_cutoffs, -n_beads) %>%
     ggplot(aes(umi_cutoffs, value, color=obs)) +
         geom_line() +
-        scale_color_manual(values=clrs) +
+        scale_color_manual(values=median_clrs) +
         facet_wrap(~obs, ncol=3, scales='free') +
         ggtitle('Summarised metrics based on UMI-cutoff') + 
         theme(legend.position = 'bottom')
@@ -174,16 +175,33 @@ umi_cutoff_data %>%
 #### Histogram of metrics over beads
 
 ```{r plot_n_reads_bead_hist, echo = F, fig.width=10, dpi=300}
-dge_summary %>%
-    gather('obs', 'val', -cell_bc, -quartile) %>%
+to_plot <- dge_summary %>%
+    gather('obs', 'val', -cell_bc, -quartile)
+
+min_difference <- to_plot %>% group_by(obs) %>%
+    summarise(min_val = min(val),
+              max_val = max(val),
+              difference = max_val - min_val) %>%
+    summarise(min_difference = min(difference)) %$%
+    min_difference
+
+pl <- to_plot %>%
     ggplot(aes(x = val, fill=obs)) +
         geom_histogram(bins=100) +
         scale_x_log10() +
-        annotation_logticks(sides='b') +
         scale_fill_manual(values=clrs) +
         facet_wrap(~obs, ncol=2, scales='free') +
         ggtitle('Distribution of metrics over beads') +
         theme(legend.position = 'bottom')
+
+# if min_difference is bigger than 1, we can add logtick annotation. otherwise we cant,
+# as R will complain (too little ticks to be added)
+if(min_difference > 1){
+    pl <- pl + 
+        annotation_logticks(sides='b')
+}
+
+print(pl)
 ```
 
 #### Nucleotide distribution per beads
