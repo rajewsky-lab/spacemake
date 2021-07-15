@@ -239,7 +239,7 @@ def report_stats(N, prefix=""):
         logging.info(f"{prefix}{k}\t{v}\t{100.0 * v/N['total']:.2f}")
 
 
-def match_BC1(bc1_matcher, seq, qstart, tstart, N, debug=False):
+def match_BC1(bc1_matcher, seq, qstart, tstart, N, debug=False, threshold=0.5):
     if tstart == 0:  # the start of opseq primer is intact
         bc1 = seq[qstart - 8 : qstart]
         BC1, ref1, score1 = bc1_matcher.align(bc1, debug=debug)
@@ -254,7 +254,7 @@ def match_BC1(bc1_matcher, seq, qstart, tstart, N, debug=False):
     N[f"BC1_score_{score1}"] += 1
     if BC1 == NO_CALL:
         N["BC1_ambig"] += 1
-    elif score1 < 2 * len(BC1) * args.threshold:
+    elif score1 < 2 * len(BC1) * threshold:
         N["BC1_low_score"] += 1
         BC1 = NO_CALL
     else:
@@ -263,7 +263,7 @@ def match_BC1(bc1_matcher, seq, qstart, tstart, N, debug=False):
     return bc1, BC1, ref1, score1
 
 
-def match_BC2(bc2_matcher, seq, qend, tend, N):
+def match_BC2(bc2_matcher, seq, qend, tend, N, threshold=0.5):
     bc2_choices = [
         seq[qend:],  # assume local alignment catches entire opseq
         seq[qend - 1 :],  # assume the last opseq base is in fact BC
@@ -281,7 +281,7 @@ def match_BC2(bc2_matcher, seq, qend, tend, N):
     N[f"BC2_score_{score2}"] += 1
     if BC2 == NO_CALL:
         N["BC2_ambig"] += 1
-    elif score2 < 2 * len(BC2) * args.threshold:
+    elif score2 < 2 * len(BC2) * threshold:
         N["BC2_low_score"] += 1
         BC2 = NO_CALL
     else:
@@ -474,10 +474,15 @@ def process_combinatorial(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
                 else:
                     # identify barcodes
                     bc1, BC1, ref1, score1 = match_BC1(
-                        bc1_matcher, res.seqB, res.start, tstart, N
+                        bc1_matcher,
+                        res.seqB,
+                        res.start,
+                        tstart,
+                        N,
+                        threshold=args.threshold,
                     )
                     # bc2, BC2, ref2, score2 = match_BC2(
-                    #     bc2_matcher, res.seqB, res.end, tend, N
+                    #     bc2_matcher, res.seqB, res.end, tend, N, threshold=args.threshold
                     # )
                     bc2, BC2, ref2, score2 = "na", "NA", "na", -1
 
@@ -788,6 +793,7 @@ class Output:
         self.cell_raw = args.cell_raw
         self.cell = args.cell
         self.UMI = args.UMI
+        self.na = args.na
 
         # precompile functions for speed-up
         self.f_cell_raw = compile(self.cell_raw, "<string cell_raw>", "eval")
@@ -892,10 +898,10 @@ class Output:
         **kw,
     ):
         if BC1 is None:
-            BC1 = args.na
+            BC1 = self.na
 
         if BC2 is None:
-            BC2 = args.na
+            BC2 = self.na
 
         # slightly concerned about security here...
         # at least all () and ; raise an assertion in __init__
@@ -928,7 +934,7 @@ class Output:
 
 def setup_logging(args):
     FORMAT = f"%(asctime)-20s\t%(levelname)s\t{args.sample}\t%(name)s\t%(message)s"
-    formatter = logging.Formatter(FORMAT)
+    # formatter = logging.Formatter(FORMAT)
     lvl = getattr(logging, args.log_level, logging.INFO)
     logging.basicConfig(level=lvl, format=FORMAT)
 
@@ -949,7 +955,7 @@ def setup_logging(args):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Convert combinatorial barcode read1 sequences to Dropseq pipeline compatible read1 FASTQ"
+        description="Convert raw reads1 and reads2 FASTQ into a single BAM file with cell barcode and UMI as BAM-tags"
     )
     parser.add_argument(
         "--sample",
