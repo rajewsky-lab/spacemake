@@ -34,12 +34,12 @@ include: 'scripts/snakemake_helper_functions.py'
 ###############
 temp_dir = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
+spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
 # create puck_data root directory from pattern
 config['puck_data']['root'] = config['microscopy_out']
 
 # set root dir where the processed_data goes
-project_dir = config['root_dir'] + '/projects/{project}'
-
+project_dir = os.path.join(config['root_dir'], 'projects/{project}')
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
 project_df = create_project_df(config)
@@ -54,20 +54,22 @@ raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
 processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
-reports_root = config['root_dir'] + '/reports'
+reports_root = os.path.join(config['root_dir'], 'reports')
+
 project_df_file = reports_root + '/project_df.csv'
 sample_overview_file = reports_root + '/sample_overview.html'
 sample_read_metrics_db = reports_root + '/sample_read_metrics_db.tsv'
 
-illumina_root = config['root_dir'] + '/projects/{project}/processed_data/{sample}/illumina'
+illumina_root = project_dir + '/processed_data/{sample}/illumina'
 complete_data_root = illumina_root + '/complete_data'
+print(complete_data_root)
 
 ##############
 # Demux vars #
 ##############
 # Undetermined files pattern
 # they are the output of bcl2fastq, and serve as an indicator to see if the demultiplexing has finished
-demux_dir_pattern = config['root_dir'] + '/raw_data/demultiplex_data/{demux_dir}'
+demux_dir_pattern = os.path.join(config['root_dir'], 'raw_data/demultiplex_data/{demux_dir}')
 demux_indicator = demux_dir_pattern + '/indicator.log'
 
 ####################################
@@ -177,7 +179,6 @@ automated_analysis_processed_data_files = {key: automated_analysis_root + value 
 downsample_root = illumina_root + '/downsampled_data'
 
 # in silico repo depletion
-ribo_depletion_log = complete_data_root + '/ribo_depletion_log.txt'
 ribo_depletion_log = complete_data_root + '/ribo_depletion_log.txt'
 parsed_ribo_depletion_log = complete_data_root + '/parsed_ribo_depletion_log.txt'
 
@@ -403,7 +404,7 @@ rule reverse_first_mate:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
     threads: 16
     shell:
-        "python {repo_dir}/preprocess.py "
+        "python {spacemake_dir}/preprocess.py "
         "--sample={wildcards.sample} "
         "--read1={input.R1} "
         "--read2={input.R2} "

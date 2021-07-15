@@ -8,6 +8,14 @@ from shutil import copyfile
 
 config_path = 'config.yaml'
 
+class ConfigFile:
+    def __init__(self, file_path):
+        variables = yaml.load(open(file_path),
+                    Loader=yaml.FullLoader)
+
+def spacemake_config(args):
+    pass
+
 def spacemake_init(args):
     if os.path.isfile(config_path):
         msg = "spacemake has already been initiated in this directory.\n"
@@ -28,7 +36,9 @@ def spacemake_run(args):
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), 'snakemake/main.smk')
     # run snakemake
-    snakemake.snakemake(snakefile, configfiles=[config_path], cores = args.cores, dryrun=args.dryrun)
+    snakemake.snakemake(snakefile, configfiles=[config_path],
+            cores = args.cores, dryrun=args.dryrun,
+            config={'root_dir': '', 'temp_dir': '/tmp'})
 
 ## define parser
 parser = argparse.ArgumentParser(description='spacemake: bioinformatic pipeline for processing and analysis of spatial-transcriptomics data')
@@ -44,6 +54,8 @@ parser_run = subparsers.add_parser('run', help = 'run spacemake')
 parser_run.add_argument('--cores', type=int, default=1, help = 'number of cores to be used in total')
 parser_run.add_argument('--dryrun', '-n', action='store_true', help = 'invokes a dry snakemake run, printing only commands')
 parser_run.set_defaults(func=spacemake_run)
+
+## spacemake_config args
 
 def cmdline():
     args = parser.parse_args()

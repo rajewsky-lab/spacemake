@@ -73,7 +73,7 @@ rule map_reads_final_bam:
             --outStd BAM_Unsorted \
             --outSAMtype BAM Unsorted \
             --runThreadN {threads} | \
-            python {repo_dir}/snakemake/scripts/fix_bam_header.py \
+            python {repo_dir}/scripts/fix_bam_header.py \
                 --in-bam-star /dev/stdin \
                 --in-bam-tagged {input.unmapped_tagged_reads} \
                 --out-bam /dev/stdout | \
