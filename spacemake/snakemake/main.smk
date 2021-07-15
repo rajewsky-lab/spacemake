@@ -22,7 +22,7 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; umask g+w;
 #############
 # FUNCTIONS #
 #############
-include: 'snakemake/snakemake_helper_functions.py'
+include: 'scripts/snakemake_helper_functions.py'
 
 ####
 # this file should contain all sample information, sample name etc.
@@ -218,7 +218,7 @@ final_bam_mm_included = complete_data_root + '/final{dge_type}{dge_cleaned}{poly
 final_bam_pattern = complete_data_root + '/final{polyA_adapter_trimmed}{mm_included}.bam'
 
 # include dropseq
-include: 'snakemake/dropseq.smk'
+include: 'dropseq.smk'
 
 ################################
 # Final output file generation #
@@ -266,7 +266,7 @@ pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf
 pacbio_overview_csv = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.csv'
 pacbio_bead_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_bead_overview.pdf'
 
-include: 'snakemake/pacbio.smk' 
+include: 'pacbio.smk' 
 
 #############
 # Main rule #
@@ -294,7 +294,7 @@ rule create_sample_overview:
     output:
         sample_overview_file
     script:
-        'snakemake/scripts/create_sample_overview.Rmd'
+        'scripts/create_sample_overview.Rmd'
 
 rule create_sample_db:
     input:
@@ -302,12 +302,12 @@ rule create_sample_db:
     output:
         sample_read_metrics_db
     script:
-        'snakemake/scripts/create_sample_db.R'
+        'scripts/create_sample_db.R'
 
 ################
 # DOWNSAMPLING #
 ################
-#include: 'snakemake/downsample.smk'
+#include: 'downsample.smk'
 
 #rule downsample:
 #    input:
@@ -316,7 +316,7 @@ rule create_sample_db:
 #################
 # MERGE SAMPLES #
 #################
-include: 'snakemake/merge_samples.smk'
+include: 'merge_samples.smk'
 
 #########
 # RULES #
@@ -403,7 +403,7 @@ rule reverse_first_mate:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
     threads: 16
     shell:
-        "python {repo_dir}/snakemake/scripts/preprocess_read1.py "
+        "python {repo_dir}/preprocess.py "
         "--sample={wildcards.sample} "
         "--read1={input.R1} "
         "--read2={input.R2} "
@@ -475,7 +475,7 @@ rule clean_top_barcodes:
     output:
         top_barcodes_clean
     script:
-        'snakemake/scripts/clean_top_barcodes.py'
+        'scripts/clean_top_barcodes.py'
 
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
@@ -514,7 +514,7 @@ rule create_dge:
 rule parse_ribo_log:
     input: ribo_depletion_log
     output: parsed_ribo_depletion_log
-    script: 'snakemake/scripts/parse_ribo_log.py'
+    script: 'scripts/parse_ribo_log.py'
 
 rule create_qc_sheet:
     input:
@@ -529,7 +529,7 @@ rule create_qc_sheet:
     output:
         qc_sheet
     script:
-        "analysis/qc_sequencing_create_sheet.Rmd"
+        "scripts/qc_sequencing_create_sheet.Rmd"
 
 rule run_automated_analysis:
     input:
@@ -541,7 +541,7 @@ rule run_automated_analysis:
         downstream_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode)
     threads: 2
     script:
-        'analysis/automated_analysis.py'
+        'scripts/automated_analysis.py'
 
 rule create_automated_analysis_processed_data_files:
     input:
@@ -549,7 +549,7 @@ rule create_automated_analysis_processed_data_files:
     output:
         **automated_analysis_processed_data_files
     script:
-        'analysis/automated_analysis_create_processed_data_files.py'
+        'scripts/automated_analysis_create_processed_data_files.py'
         
 rule create_automated_report:
     input:
@@ -559,9 +559,9 @@ rule create_automated_report:
         automated_report
     params:
         downstream_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode),
-        r_shared_scripts= repo_dir + '/analysis/shared_functions.R'
+        r_shared_scripts= repo_dir + '/scripts/shared_functions.R'
     script:
-        'analysis/automated_analysis_create_report.Rmd'
+        'scripts/automated_analysis_create_report.Rmd'
 
 rule split_final_bam:
     input:
@@ -575,7 +575,7 @@ rule split_final_bam:
     shell:
         """
         sambamba view -F 'mapping_quality==255' -h {input} | \
-        python {repo_dir}/snakemake/scripts/split_reads_by_strand_info.py \
+        python {repo_dir}/scripts/split_reads_by_strand_info.py \
         --prefix {params.prefix} /dev/stdin
         """
 
@@ -600,13 +600,3 @@ rule map_to_rRNA:
             shell("bowtie2 -x {params.index} -U {input} -p 20 --very-fast-local > /dev/null 2> {output}")
         else:
             shell("echo 'no_rRNA_index' > {output}")
-
-rule calculate_kmer_counts:
-    input:
-        raw_reads_mate_1
-    output:
-        kmer_stats_file
-    params:
-        kmer_len = lambda wildcards: wildcards.kmer_len
-    script:
-        'snakemake/scripts/kmer_stats_from_fastq.py'
