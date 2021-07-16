@@ -61,11 +61,17 @@ rule map_reads:
         STAR \
             --runThreadN {threads} \
             --genomeDir  {input.index} \
+            --genomeLoad NoSharedMemory \
+            --sjdbGTFfile {input.annotation} \
             --readFilesIn {input.reads} \
             --readFilesType SAM SE \
             --readFilesCommand samtools view \
             --outSAMtype BAM Unsorted \
             --outSAMunmapped Within \
+            --outSAMattributes AllBestScore \
+            --outFilterScoreMinOverLread 0 \
+            --outFilterMatchNminOverLread 0 \
+            --outFilterMatchNmin 0 \
             --outStd BAM_Unsorted \
             --outFileNamePrefix {params.star_prefix} > {output}
 
