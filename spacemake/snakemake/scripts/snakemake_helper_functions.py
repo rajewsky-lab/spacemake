@@ -333,14 +333,14 @@ def get_run_mode_variables(run_mode):
     # first set the default, for each
     # then update each if there is no default
     # load the default
-    run_mode_variables = dict(config['run_mode_variables']['default'])
+    run_mode_variables = dict(config['run_modes']['default'])
 
     # first update the default with parent
-    if 'parent_run_mode' in config['run_mode_variables'][run_mode].keys():
-        parent_run_mode = config['run_mode_variables'][run_mode]['parent_run_mode']
-        run_mode_variables.update(config['run_mode_variables'][parent_run_mode])
+    if 'parent_run_mode' in config['run_modes'][run_mode].keys():
+        parent_run_mode = config['run_modes'][run_mode]['parent_run_mode']
+        run_mode_variables.update(config['run_modes'][parent_run_mode])
 
-    run_mode_variables.update(config['run_mode_variables'][run_mode])
+    run_mode_variables.update(config['run_modes'][run_mode])
 
     return run_mode_variables
 
