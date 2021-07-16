@@ -68,7 +68,8 @@ rule map_reads:
             --readFilesCommand samtools view \
             --outSAMtype BAM Unsorted \
             --outSAMunmapped Within \
-            --outSAMattributes AllBestScore \
+            --outSAMattributes All \
+            --outSAMprimaryFlag AllBestScore \
             --outFilterScoreMinOverLread 0 \
             --outFilterMatchNminOverLread 0 \
             --outFilterMatchNmin 0 \
