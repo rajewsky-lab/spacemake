@@ -1,23 +1,3 @@
-# default values of the project dataframe columns
-project_df_default_values = {
-    "sample_id": "none",
-    "puck_id": "no_optical_puck",
-    "project_id": "none",
-    "sample_sheet": "none",
-    "species": "none",
-    "demux_barcode_mismatch": 1,
-    "demux_dir": "none",
-    "basecalls_dir": "none",
-    "R1": "none",
-    "R2": "none",
-    "investigator": "unknown",
-    "sequencing_date": "unknown",
-    "experiment": "unknown",
-    "puck_barcode_file": "none",
-    "run_mode": "default",
-    "barcode_flavor": "default",
-    "is_merged":False}
-
 # barcode flavor parsing and query functions
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
@@ -69,122 +49,9 @@ def get_bc_preprocess_settings(wildcards):
 
     return settings
 
-
-# def get_bc_preprocessing_threads(wildcards):
-#     # 2 extra cores are needed for the zcat_pipes
-#     if hasattr(workflow, "cores"):
-#         # from at least Snakemake version 5.13 on
-#         t = workflow.cores
-#     else:
-#         t = 8  # a safe default value?
-#         import logging
-
-#         logging.warning(
-#             "can not determine number of cores in this "
-#             f"Snakemake version. Defaulting to {t} for "
-#             "barcode preprocessing"
-#         )
-#     return t
-
-
 # all barcode flavor info from config.yaml
 # is kept here for convenient lookup
 bc_flavor_data = parse_barcode_flavors(config)
-
-
-def hamming_distance(string1, string2):
-    return sum(c1 != c2 for c1, c2 in zip(string1, string2))
-
-
-def compute_max_barcode_mismatch(indices):
-    """computes the maximum number of mismatches allowed for demultiplexing based
-    on the indices present in the sample sheet."""
-    num_samples = len(indices)
-
-    if num_samples == 1:
-        return 4
-    else:
-        max_mismatch = 3
-        for i in range(num_samples - 1):
-            for j in range(i + 1, num_samples):
-                hd = hamming_distance(indices[i], indices[j])
-                max_mismatch = min(max_mismatch, math.ceil(hd / 2) - 1)
-    return max_mismatch
-
-
-def get_barcode_file(path):
-    if path is None:
-        return "none"
-
-    if os.path.isfile(path):
-        return path
-
-    return "none"
-
-
-def find_barcode_file(puck_id):
-    # first find directory of puck file
-
-    def find_dir(name, path):
-        for root, dirs, files in os.walk(path):
-            if name in dirs:
-                return os.path.join(root, name)
-
-    puck_dir = find_dir(puck_id, config["puck_data"]["root"])
-    path = None
-
-    if puck_dir is not None:
-        # puck dir exists, look for barcode file pattern
-        path = os.path.join(puck_dir, config["puck_data"]["barcode_file"])
-
-    return get_barcode_file(path)
-    
-def read_sample_sheet(sample_sheet_path, basecalls_dir):
-    with open(sample_sheet_path) as sample_sheet:
-        ix = 0
-        investigator = "none"
-        sequencing_date = "none"
-
-        for line in sample_sheet:
-            line = line.strip("\n")
-            if "Investigator" in line:
-                investigator = line.split(",")[1]
-            if "Date" in line:
-                sequencing_date = line.split(",")[1]
-            if "[Data]" in line:
-                # the counter ix stops here
-                break
-            else:
-                ix = ix + 1
-
-    # read everything after th [Data]
-    df = pd.read_csv(sample_sheet_path, skiprows=ix + 1)
-    # rename columns
-    to_rename={
-            "Sample_ID": "sample_id",
-            "Sample_Name": "puck_id",
-            "Sample_Project": "project_id",
-            "Description": "experiment",
-            "index": "index"
-        }
-    df.rename(
-        columns=to_rename,
-        inplace=True,
-    )
-    # select only renamed columns
-    df = df[to_rename.values()]
-    df["species"] = df["experiment"].str.split("_").str[-1]
-    df["investigator"] = investigator
-    df["sequencing_date"] = sequencing_date
-
-    # rename columns 
-    df["basecalls_dir"] = basecalls_dir
-    df["demux_barcode_mismatch"] = compute_max_barcode_mismatch(df["index"])
-    df["sample_sheet"] = sample_sheet_path
-    df["demux_dir"] = df["sample_sheet"].str.split("/").str[-1].str.split(".").str[0]
-    df["puck_barcode_file"] = df.puck_id.apply(find_barcode_file)
-
-    return df
 
 def df_assign_merge_samples(project_df):
     # added samples to merged to the project_df
@@ -215,52 +82,6 @@ def df_assign_merge_samples(project_df):
 
     return project_df
 
-def create_project_df(config):
-    project_df = pd.DataFrame(columns=project_df_default_values.keys())
-
-    # load first projects specified in the samplesheets
-    demux_projects = config.get('projects', None)
-
-    if demux_projects is not None:
-        # if we have projects in the config file
-        # get the samples
-        demux_project_df = pd.concat(
-            [read_sample_sheet(ip['sample_sheet'], ip['basecalls_dir']) for ip in demux_projects],
-            ignore_index=True)
-
-        for ix, row in demux_project_df.iterrows():
-            new_project = pd.Series(project_df_default_values)
-            new_project.update(row)
-
-            project_df = project_df.append(new_project, ignore_index=True)
-
-    project_df.set_index(['project_id', 'sample_id'], inplace=True)
-
-    # add additional samples from config.yaml, which have already been demultiplexed.
-    for project in config['additional_projects']:
-        new_project = pd.Series(project_df_default_values)
-        project_series = pd.Series(project)
-        
-        new_project.update(project_series)
-
-        # get the index of the new project
-        project_index = tuple(new_project[['project_id', 'sample_id']].values)
-
-        # set the name to the index
-        new_project.name = project_index
-        new_project.drop(['project_id', 'sample_id'], inplace=True)
-
-        # if key exists, update
-        if project_index in project_df.index:
-            # if index not empty, that is there is a sample in the dataframe with this id, update
-            project_df.loc[project_index, new_project.keys()] = new_project.values
-        else:
-            # add project
-            project_df = project_df.append(new_project)
-
-    #project_df = df_assign_merge_samples(project_df)
-
-    return project_df
 
 def get_metadata(field, sample_id=None, project_id=None, **kwargs):
     df = project_df
@@ -573,7 +394,6 @@ def get_bam_tag_names(project_id, sample_id):
         tag_names[tag_variable] = tag_name
 
     return tag_names
-
 
 def get_puck_file(wildcards):
     puck_barcode_file = get_metadata('puck_barcode_file',

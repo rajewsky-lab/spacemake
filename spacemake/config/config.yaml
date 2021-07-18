@@ -7,11 +7,8 @@ external_bin:
     picard_tools: '/data/rajewsky/shared_bins/picard-tools-2.9.0/picard.jar'
 
 puck_data:
-    barcode_file: predictions_ml.csv
-
-projects:
-    #- sample_sheet: /data/rajewsky/projects/slide_seq/sample_sheets/210329_NR_Sts_79.csv
-    #  basecalls_dir: /data/remote/basecalls/210329_NS500648_0564_AHGJLMBGXG
+    barcode_file: 'predictions_ml.csv'
+    root: 'puck_data'
 
 run_mode_variables:
     default:
@@ -49,86 +46,11 @@ run_mode_variables:
         plot_bead_size: 0.1
         detect_tissue: False
 
-additional_projects:
-    #    - project_id: slideseq_v2
-    #      sample_id: slideseq_v2_e12
-    #      puck_id: Puck_190926_03
-    #      species: mouse
-    #      R1: /data/rajewsky/home/tsztank/projects/spatial/slideseqv2/raw_data/Puck_190926_03_R1.fastq.gz
-    #      R2: /data/rajewsky/home/tsztank/projects/spatial/slideseqv2/raw_data/Puck_190926_03_R2.fastq.gz
-    #      run_mode: 'slideseq'
-    #    - project_id: slideseq_v2
-    #      sample_id: slideseq_v2_mouse_hippo
-    #      puck_id: Puck_200115_08
-    #      species: mouse
-    #      R1: /data/rajewsky/home/tsztank/projects/spatial/slideseqv2/raw_data/Puck_200115_08_R1.fastq.gz
-    #      R2: /data/rajewsky/home/tsztank/projects/spatial/slideseqv2/raw_data/Puck_200115_08_R2.fastq.gz
-    #      puck_barcode_file: /data/rajewsky/home/tsztank/projects/spatial/slideseqv2/Puck_200115_08_bead_locations.csv
-    #      run_mode: 'slideseq'
-    #    - project_id: cdr1as_ko_visium
-    #      sample_id: cdr1as_ko_visium_wt_1
-    #      puck_id: NoOptical
-    #      species: mouse
-    #      R1: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R1_001.fastq.gz
-    #      R2: /data/rajewsky/projects/cdr1as_ko_visium/data/reads/linked/wt_1_S3_L002_R2_001.fastq.gz
-    #      run_mode: 'visium'
-    #      puck_barcode_file: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-sequencing/visium_barcode_positions.csv
-    #    - project_id: visium
-    #      sample_id: public_1
-    #      puck_id: visium_public_1
-    #      species: mouse
-    #      R1: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/V1_Adult_Mouse_Brain_fastqs/visium_public_lane_joined_R1.fastq.gz
-    #      R2: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/V1_Adult_Mouse_Brain_fastqs/visium_public_lane_joined_R2.fastq.gz
-    #      run_mode: 'visium'
-    #      puck_barcode_file: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-sequencing/visium_barcode_positions.csv
-    #    - project_id: visium
-    #      sample_id: test_2
-    #      puck_id: visium_test_1
-    #      species: mouse
-    #      R1: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/V1_Adult_Mouse_Brain_fastqs/visium_public_lane_joined_1m_R1.fastq.gz
-    #      R2: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/V1_Adult_Mouse_Brain_fastqs/visium_public_lane_joined_1m_R2.fastq.gz
-    #      run_mode: ['visium']
-    #      barcode_flavor: 'visium'
-    #      puck_barcode_file: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-sequencing/visium_barcode_positions.csv
-    - project_id: visium
-      sample_id: test_1
-      puck_id: visium_test_1
-      species: mouse
-      R1: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/V1_Adult_Mouse_Brain_fastqs/visium_public_lane_joined_1m_R1.fastq.gz
-      R2: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/V1_Adult_Mouse_Brain_fastqs/visium_public_lane_joined_1m_R2.fastq.gz
-      run_mode: ['visium_spaceranger', 'visium_exon_trimmed']
-      barcode_flavor: 'visium'
-      puck_barcode_file: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-sequencing/visium_barcode_positions.csv
-
-# downsample and saturation analysis
-downsample: 
-    projects:
-        - cdr1as_ko_visium
-        - slideseq_v2
-    samples:
-        - cdr1as_ko_visium_wt_1
-
-# in the output each will have an merged_ prepended to their root directory
-# samples_to_merge:`
-
 adapters:
     smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'
     optical_primer: 'GAATCACGATACGTACACCA'
 
 knowledge:
-    annotations:
-        human: /data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/gencode.v32.primary_assembly.annotation.gtf
-        mouse: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/refdata-mm10-M23/genes/genes.gtf
-    genomes:
-        human: /data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/GRCh38.primary_assembly.genome.fa
-        mouse: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/refdata-mm10-M23/fasta/genome.fa
-    indices:
-        human:
-            star: /data/rajewsky/home/nkarais/hg38_GRCh38_gencode.v32_STAR_2.7.1a/STAR_index
-        mouse:
-            star: /data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_public_data/refdata-mm10-M23/star
-            bt2_rRNA: /data/rajewsky/indices/mm10_rRNA_bowtie2_2.3.3.1/mouse_rRNA
-
     barcode_flavor:
         dropseq:
             cell: "r1[8:20][::-1]"
