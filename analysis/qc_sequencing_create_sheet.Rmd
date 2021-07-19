@@ -48,7 +48,7 @@ readStarLog <- function(log_file){
 
 ```{r save_snakemake, echo = F}
 #write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
-#snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
+snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
 ### Overview
@@ -179,8 +179,8 @@ to_plot <- dge_summary %>%
     gather('obs', 'val', -cell_bc, -quartile)
 
 min_difference <- to_plot %>% group_by(obs) %>%
-    summarise(min_val = min(val),
-              max_val = max(val),
+    summarise(min_val = min(val, na.rm=T),
+              max_val = max(val, na.rm=T),
               difference = max_val - min_val) %>%
     summarise(min_difference = min(difference)) %$%
     min_difference
