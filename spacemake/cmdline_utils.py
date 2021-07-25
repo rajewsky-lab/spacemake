@@ -357,8 +357,9 @@ class ProjectDF:
         if self.sample_exists(project_id, sample_id):
             print(f'sample with {ix} already exists in ProjectDF')
             print(f'updating')
-            new_project = self.df.loc[ix]
+            new_project = self.df.loc[ix].copy()
             new_project.update(pd.Series(kwargs))
+            self.df.loc[ix] = new_project
         else:
             new_project = pd.Series(self.project_df_default_values)
             new_project.name = ix

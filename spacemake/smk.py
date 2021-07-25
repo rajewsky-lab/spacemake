@@ -132,7 +132,7 @@ parser_sample_add_samples_yaml.add_argument('samples_yaml',
     type=str,
     help='path to the .yaml file containing sample info')
 parser_sample_add_samples_yaml.set_defaults(
-    func = ProjectDF.add_samples_from_yaml,
+    func = ProjectDF.add_samples_from_yaml_cmdline,
     project_df_file=project_df)
 
 # ADD SAMPLE
