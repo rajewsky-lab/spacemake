@@ -10,7 +10,7 @@ puck_data:
     barcode_file: 'predictions_ml.csv'
     root: 'puck_data'
 
-run_mode_variables:
+run_modes:
     default:
         n_beads: 100000
         umi_cutoff: [100, 300]
