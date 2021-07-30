@@ -42,7 +42,9 @@ config['puck_data']['root'] = config['microscopy_out']
 project_dir = os.path.join(config['root_dir'], 'projects/{project}')
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
-project_df = create_project_df(config)
+project_df = pd.read_csv(config['project_df'],
+    index_col = ['project_id', 'sample_id'],
+    converters={'run_mode': eval})
 
 #################
 # DIRECTORY STR #
@@ -62,7 +64,6 @@ sample_read_metrics_db = reports_root + '/sample_read_metrics_db.tsv'
 
 illumina_root = project_dir + '/processed_data/{sample}/illumina'
 complete_data_root = illumina_root + '/complete_data'
-print(complete_data_root)
 
 ##############
 # Demux vars #

@@ -119,7 +119,7 @@ rule filter_mm_reads:
         pipe(final_bam_mm_included)
     shell:
         """
-        python {repo_dir}/snakemake/scripts/filter_mm_reads.py \
+        python {repo_dir}/scripts/filter_mm_reads.py \
             --in-bam {input} \
             --out-bam {output}
         """

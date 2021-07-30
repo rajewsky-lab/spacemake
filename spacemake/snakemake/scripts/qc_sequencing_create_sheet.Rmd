@@ -110,15 +110,16 @@ shift_legend <- function(p){
 
 ```{r save_snakemake, echo = F}
 #write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
-snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
+#snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
 ```{r read_sample_information_tables, echo = F}
 #TODO: here create  1) overview table with sample name etc: done
 #                   2) run parameters info table
 #                   3) mapping quality scores, per polyA trimmed and untrimmed
-run_mode_settings <- tibble(run_mode = names(snakemake@params$run_mode)) %>%
-    bind_cols(bind_rows(snakemake@params$run_mode)) %>%
+run_mode_settings <- bind_rows(snakemake@params$run_mode) %>%
+    nest(umi_cutoff = c(umi_cutoff)) %>%
+    bind_cols(tibble(run_mode = names(snakemake@params$run_mode))) %>%
     gather('variable_name', 'value', -run_mode) %>%
     spread(run_mode, value)
 

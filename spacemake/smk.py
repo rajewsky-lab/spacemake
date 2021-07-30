@@ -56,7 +56,7 @@ def spacemake_init(args):
         # get the snakefile for downloading the .gtf and .fa files
         snakefile = os.path.join(os.path.dirname(__file__), 'snakemake/species_init.smk')
         # run snakemake: download species data and place them in the right place
-        snakemake.snakemake(snakefile, cores = 1, config=snakemake_config, dryrun=True)
+        snakemake.snakemake(snakefile, cores = 1, config=snakemake_config)
 
     cf = ConfigFile(initial_config)
     # update the file path 
@@ -77,9 +77,9 @@ def spacemake_run(args):
     snakefile = os.path.join(os.path.dirname(__file__), 'snakemake/main.smk')
     # run snakemake
     snakemake.snakemake(snakefile, configfiles=[config_path],
-        cores = args['cores'], #dryrun=args.dryrun,
-        config={'root_dir': '', 'temp_dir': '/tmp'}, dryrun=True)
-
+        cores = args['cores'], dryrun=args['dryrun'],
+        config={'root_dir': '', 'temp_dir': '/tmp',
+                'project_df': project_df})
 #################
 # DEFINE PARSER #
 #################
