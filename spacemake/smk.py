@@ -66,7 +66,6 @@ def spacemake_init(args):
     # save
     cf.dump()
 
-
 def spacemake_run(args):
     if not os.path.isfile(config_path):
         msg = "spacemake has not been initalised yet.\n"
@@ -83,6 +82,11 @@ def spacemake_run(args):
 #################
 # DEFINE PARSER #
 #################
+# we add main parser to a dictionary
+# so that we can later call the help function
+# based on the sub-command. this is to print the 
+# -h (help) functionality if no parameters are provided,
+# rather than printing an error.
 
 parsers = {
     'main': argparse.ArgumentParser(
@@ -95,9 +99,15 @@ subparsers = parsers['main'].add_subparsers(help='sub-command help', dest='main'
 # SPACEMAKE INIT #
 ##################
 parsers['init'] = subparsers.add_parser('init', help = 'initialise spacemake: create config files, download genomes and annotations')
+parsers['init'].add_argument('--root_dir', default='.',
+    help = 'where to output the results of the spacemake run. defaults to .')
+parsers['init'].add_argument('--temp_dir', default='/tmp',
+    help='temporary directory used when running spacemake. defaults to /tmp')
 parsers['init'].set_defaults(func=spacemake_init)
 
-## spacemake_run args
+#################
+# SPACEMAKE RUN #
+#################
 parsers['run'] = subparsers.add_parser('run', help = 'run spacemake')
 parsers['run'].add_argument('--cores',
     default=1,

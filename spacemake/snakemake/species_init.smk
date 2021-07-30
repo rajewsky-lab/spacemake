@@ -18,8 +18,6 @@ rule unzip:
     shell: "unpigz {input}"
 
 def get_url(wildcards):
-    print('asd')
-    print(wildcards)
     return config[wildcards.species + '_' + wildcards.data_type + '_url']
 
 rule download_species_annotation:

@@ -1,4 +1,5 @@
 config.yaml
+samples.yaml
 *.rds
 *.html
 *.csv
