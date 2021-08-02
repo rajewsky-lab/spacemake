@@ -4,6 +4,8 @@ import yaml
 import math
 import argparse
 import datetime
+from functools import reduce
+from operator import getitem
 
 class ConfigFile:
     def __init__(self, file_path):
@@ -33,6 +35,10 @@ class ConfigFile:
 
     def barcode_flavor_exists(self, barcode_flavor):
         return barcode_flavor in self.variables['knowledge']['barcode_flavor'].keys()
+    
+    def list_variable(self, path):
+        var = reduce(getitem, path, self.variables)
+        print(yaml.dump(var))
 
     @classmethod
     def delete_run_mode(cls, args):
@@ -47,13 +53,8 @@ class ConfigFile:
     @classmethod
     def list_run_modes(cls, args):
         cf = cls(args['config_file_path'])
-
-        run_modes = cf.variables['run_modes']
-
-        print(yaml.dump(run_modes))
-
-        return run_modes
-
+        cf.list_variables(['run_modes'])
+        
     @classmethod
     def add_run_mode(cls, args):
         cf = cls(args['config_file_path'])
@@ -162,6 +163,11 @@ class ConfigFile:
                  'have one unique read mapped to a CDS or UTR region will be counted')
 
         return parser
+    
+    @classmethod
+    def list_barcode_flavors(cls, args):
+        cf = cls(args['config_file_path'])
+        cf.list_variable(['knowledge', 'barcode_flavor'])
 
     @staticmethod
     def add_config_subparsers(subparsers, config_path):
@@ -170,22 +176,23 @@ class ConfigFile:
 
         ## list run_modes ##
         parser_config_list_run_modes = parser_config_subparsers.add_parser('list_run_modes',
-                help = 'list available run_modes')
+            help = 'list available run_modes')
         parser_config_list_run_modes.set_defaults(func=ConfigFile.list_run_modes,
-                config_file_path = config_path)
+            config_file_path = config_path)
 
         # add run_mode
         parser_config_add_run_mode = parser_config_subparsers.add_parser('add_run_mode',
-                help = 'add a new run_mode', parents=[ConfigFile.get_add_update_run_mode_parser()])
+            help = 'add a new run_mode',
+            parents=[ConfigFile.get_add_update_run_mode_parser()])
         parser_config_add_run_mode.set_defaults(func=ConfigFile.add_run_mode,
-                config_file_path = config_path)
+            config_file_path = config_path)
 
         # update run mode
         parser_config_update_run_mode = parser_config_subparsers.add_parser('update_run_mode',
-                help = 'update run_mode',
-                parents=[ConfigFile.get_add_update_run_mode_parser()])
+            help = 'update run_mode',
+            parents=[ConfigFile.get_add_update_run_mode_parser()])
         parser_config_update_run_mode.set_defaults(func=ConfigFile.update_run_mode,
-                config_file_path = config_path)
+            config_file_path = config_path)
 
         parser_config_delete_run_mode = parser_config_subparsers.add_parser('delete_run_mode',
             help = 'delete a run_mode')
@@ -194,9 +201,18 @@ class ConfigFile:
             type=str,
             help='run_mode to be deleted')
         parser_config_delete_run_mode.set_defaults(func=ConfigFile.delete_run_mode)
+
+        # list barcode flavors
+        parser_config_list_barcode_flavors = parser_config_subparsers\
+            .add_parser('list_barcode_flavors',
+                help = 'list barcode flavors and their settings')
+
+        parser_config_list_barcode_flavors.set_defaults(
+            func=ConfigFile.list_barcode_flavors,
+            config_file_path = config_path)
+
         
         return parser_config
-
 
 class ProjectDF:
     # default values of the project dataframe columns
@@ -539,4 +555,3 @@ class ProjectDF:
         project_df.add_samples_from_yaml(args['samples_yaml'])
 
         project_df.dump()
-
