@@ -4,6 +4,7 @@ import yaml
 import math
 import argparse
 import datetime
+import re
 from functools import reduce
 from operator import getitem
 
@@ -36,9 +37,15 @@ class ConfigFile:
     def barcode_flavor_exists(self, barcode_flavor):
         return barcode_flavor in self.variables['knowledge']['barcode_flavor'].keys()
     
+    def get_variable(self, path):
+        return reduce(getitem, path, self.variables)  
+
     def list_variable(self, path):
-        var = reduce(getitem, path, self.variables)
-        print(yaml.dump(var))
+        print(yaml.dump(self.get_variable(path)))
+
+    def set_variable(self, path, **kwargs):
+        item = self.get_variable(path[:-1])
+        item[path[-1]] = kwarg
 
     @classmethod
     def delete_run_mode(cls, args):
@@ -120,7 +127,7 @@ class ConfigFile:
         parser = argparse.ArgumentParser(
             description='add/update run_mode parent parser',
             add_help = False)
-        parser.add_argument('--name', type=str, required=True,
+        parser.add_argument('name', type=str,
             help='name of the run_mode to be added')
         parser.add_argument('--parent_run_mode', type=str,
             help='Name of the parent run_mode. All run_modes will fall back to \'default\'')
@@ -169,6 +176,86 @@ class ConfigFile:
         cf = cls(args['config_file_path'])
         cf.list_variable(['knowledge', 'barcode_flavor'])
 
+    @classmethod
+    def delete_barcode_flavor(cls, args):
+        cf = cls(args['config_file_path'])
+        flavor_name = args['name']
+        barcode_flavor = cf.get_variable(['knowledge', 'barcode_flavor'])
+
+        msg = '-'*50 + '\n'
+        msg += f'deleting {flavor_name} from barcode flavors\n'
+        msg += '-'*50 + '\n'
+
+        if flavor_name not in barcode_flavor.keys():
+            msg += 'barcode flavor with {flavor_name} do not exists'
+            msg += ', so cant be deleted.\n'
+            msg += 'aborting'
+        else:
+            flavor = barcode_flavor[flavor_name]
+            msg += yaml.dump(flavor)
+            msg += '\n' + '-'*50 + '\n'
+            del barcode_flavor[flavor_name]
+            cf.dump()
+            msg += 'success!'
+
+        print(msg)
+
+    @classmethod
+    def add_barcode_flavor(cls, args):
+        cf = cls(args['config_file_path'])
+        umi = args['umi']
+        cell_barcode = args['cell_barcode']
+        flavor_name = args['name']
+        bam_tags = 'CR:{cell},XC:{cell},XM:{UMI},RG:{assigned}'
+
+        # r(1|2) and then string slice
+        to_match = r'r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$'
+
+        msg = '-'*50+'\n'
+        msg += f'adding {flavor_name} to barcode flavors\n'
+        msg += '-'*50+'\n'
+
+        barcode_flavor = cf.get_variable(['knowledge', 'barcode_flavor'])
+
+        if flavor_name in barcode_flavor.keys():
+            msg += f'barcode flavor {flavor_name} already exists.\n'
+            msg += 'to update you need to delete, and set it again.\n'
+            msg += 'aborting'
+            
+            print(msg)
+            return 1
+
+        if re.match(to_match, umi) is None:
+            msg += f'provided umi {umi} has the wrong structure.\n'
+            msg += 'aborting'
+
+            print(msg)
+            return 1
+
+        if re.match(to_match, cell_barcode) is None:
+            msg += f'provided cell_barcode {cell_barcode} has the wrong structure.\n'
+            msg += 'aborting'
+
+            print(msg)
+            return 1
+
+        barcode_flavor[flavor_name] = {
+            'UMI': umi,
+            'bam_tags': bam_tags,
+            'cell': cell_barcode}
+        
+        msg += yaml.dump(barcode_flavor[flavor_name])
+        
+        cf.dump()
+
+        msg += 'success!'
+        print(msg)
+
+        return 0
+
+    #@classmethod
+    #def list_species
+
     @staticmethod
     def add_config_subparsers(subparsers, config_path):
         parser_config = subparsers.add_parser('config', help = 'configure spacemake')
@@ -196,8 +283,7 @@ class ConfigFile:
 
         parser_config_delete_run_mode = parser_config_subparsers.add_parser('delete_run_mode',
             help = 'delete a run_mode')
-        parser_config_delete_run_mode.add_argument('--name',
-            required=True,
+        parser_config_delete_run_mode.add_argument('name',
             type=str,
             help='run_mode to be deleted')
         parser_config_delete_run_mode.set_defaults(func=ConfigFile.delete_run_mode)
@@ -206,12 +292,35 @@ class ConfigFile:
         parser_config_list_barcode_flavors = parser_config_subparsers\
             .add_parser('list_barcode_flavors',
                 help = 'list barcode flavors and their settings')
-
         parser_config_list_barcode_flavors.set_defaults(
             func=ConfigFile.list_barcode_flavors,
             config_file_path = config_path)
 
-        
+        # delete barcode flavor
+        parser_config_delete_barcode_flavor = parser_config_subparsers\
+            .add_parser('delete_barcode_flavor',
+                help = 'delete barcode flavor')
+        parser_config_delete_barcode_flavor.add_argument('name',
+            help = 'name of the barcode flavor to be deleted',
+            type=str)
+        parser_config_delete_barcode_flavor.set_defaults(
+            func=ConfigFile.delete_barcode_flavor,
+            config_file_path = config_path)
+
+        # add barcode flavor
+        parser_config_add_barcode_flavor = parser_config_subparsers\
+            .add_parser('add_barcode_flavor',
+                help = 'add a new barcode_flavor')
+        parser_config_add_barcode_flavor.add_argument('name',
+            help = 'name of the barcode flavor', type = str)
+        parser_config_add_barcode_flavor.add_argument('umi',
+            help = 'structure of UMI', type=str)
+        parser_config_add_barcode_flavor.add_argument('cell_barcode',
+            help = 'structure of CELL BARCODE', type=str)
+        parser_config_add_barcode_flavor.set_defaults(
+            func=ConfigFile.add_barcode_flavor,
+            config_file_path = config_path)
+
         return parser_config
 
 class ProjectDF:
