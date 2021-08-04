@@ -4,6 +4,7 @@ samples.yaml
 *.html
 *.csv
 *.pdf
+*.txt.gz
 .snakemake
 
 scratch
