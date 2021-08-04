@@ -1,5 +1,5 @@
 ---
-output:
+iutput:
   html_document:
     toc: true
     toc_depth: 4
@@ -28,7 +28,7 @@ library(cowplot)
 library(grid)
 library(gtable)
 
-theme_set(theme_cowplot(12))
+theme_set(theme_cowplot(18))
 
 cpalette <- list('orange' = '#D55E00', 'blue' = '#0072B2', 'green' = '#009E73', 'black' = '#000000', 'yellow' = '#F0E442', 
 				 'grey' = '#999999', 'light_orange' = "#E69F00", 'light_blue' = "#56B4E9")
@@ -51,7 +51,7 @@ readStarLog <- function(log_file){
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
 shift_legend <- function(p){
-
+  # function copied from: https://stackoverflow.com/questions/54438495/shift-legend-into-empty-facets-of-a-faceted-plot-in-ggplot2
   # check if p is a valid object
   if(!"gtable" %in% class(p)){
     if("ggplot" %in% class(p)){
@@ -114,9 +114,6 @@ shift_legend <- function(p){
 ```
 
 ```{r read_sample_information_tables, echo = F}
-#TODO: here create  1) overview table with sample name etc: done
-#                   2) run parameters info table
-#                   3) mapping quality scores, per polyA trimmed and untrimmed
 run_mode_settings <- bind_rows(snakemake@params$run_mode) %>%
     nest(umi_cutoff = c(umi_cutoff)) %>%
     bind_cols(tibble(run_mode = names(snakemake@params$run_mode))) %>%
@@ -284,7 +281,7 @@ read_counts %>%
 
 #### Umi-cutoff plots
 
-```{r umi_cutoff_plot, echo = F, fig.width = 10, fig.height=5, dpi=300}
+```{r umi_cutoff_plot, echo = F, fig.width = 10, fig.height=6, dpi=300}
 umi_cutoffs <- seq(10, 20000, 10)
 
 cell_bc_len = nchar((dge_summary %$% cell_bc)[1])
@@ -315,12 +312,12 @@ p <- umi_cutoff_data %>%
         geom_line() +
         scale_color_manual(values=summarised_clrs) +
         facet_wrap(~obs, ncol=3, scales='free') +
-        scale_x_log10(breaks = c(10, 100, 1000, 10000, 20000)) +
+        scale_x_log10(breaks = c(10, 100, 1000, 10000)) +
         annotation_logticks(sides='b') +
-        ggtitle('Summarised metrics based on minimum UMI cutoff') + 
         theme(strip.background=element_blank(), strip.text.x=element_blank(),
               text = element_text(size=18, face = 'plain'), 
-              legend.title = element_blank()) +
+              legend.title = element_blank(), legend.margin = margin(t=0.1, b=0.1, unit = 'cm'),
+              legend.spacing = unit(0, 'cm')) +
         labs(color='', linetype='') +
         guides(colour = guide_legend(override.aes = list(size=5)))
 
