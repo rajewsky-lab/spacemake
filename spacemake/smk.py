@@ -62,7 +62,9 @@ def spacemake_init(args):
     # update the file path 
     cf.set_file_path(config_path)
     # add species info which we just generated
-    cf.add_species_info(species_info)
+    print(species_info)
+    for key, value in species_info.items():
+        cf.add_species_info(key, value['genome'], value['annotation'])
     # save
     cf.dump()
 

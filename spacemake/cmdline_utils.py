@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import errno
 import yaml
 import math
 import argparse
@@ -9,6 +10,8 @@ from functools import reduce
 from operator import getitem
 
 class ConfigFile:
+    line_separator = '-'*50+'\n'
+
     def __init__(self, file_path):
         self.file_path = file_path
         self.variables = yaml.load(open(file_path),
@@ -21,15 +24,30 @@ class ConfigFile:
     def set_file_path(self, file_path):
         self.file_path = file_path
 
-    def add_species_info(self, species_info):
-        for species, data_type in species_info.items():
-            if not species in self.variables['knowledge']:
-                self.variables['knowledge'][species] = {}
+    def add_species_info(self, name, genome, annotation):
+        if 'annotations' not in self.variables['knowledge']:
+            self.variables['knowledge']['annotations'] = {}
 
-            for data_type_name, data_type_value in data_type.items():
-                if data_type_name in self.variables['knowledge'][species].keys():
-                    print(f'{species} already has {data_type_name}, omitting.')
-                self.variables['knowledge'][species][data_type_name] = data_type_value
+        if 'genomes' not in self.variables['knowledge']:
+            self.variables['knowledge']['genomes'] = {}
+
+        if name in self.variables['knowledge']['annotations'].keys() and\
+                name in self.variables['knowledge']['genomes'].keys():
+           return False
+
+        if os.path.isfile(annotation):
+            self.variables['knowledge']['annotations'][name] = annotation
+        else:
+            raise FileNotFoundError(
+                errno.ENOENT, os.strerror(errno.ENOENT), annotation)
+
+        if os.path.isfile(genome):
+            self.variables['knowledge']['genomes'][name] = genome
+        else:
+            raise FileNotFoundError(
+                errno.ENOENT, os.strerror(errno.ENOENT), genome)
+
+        return True
 
     def run_mode_exists(self, run_mode):
         return run_mode in self.variables['run_modes'].keys()
@@ -43,12 +61,8 @@ class ConfigFile:
     def list_variable(self, path):
         print(yaml.dump(self.get_variable(path)))
 
-    def set_variable(self, path, **kwargs):
-        item = self.get_variable(path[:-1])
-        item[path[-1]] = kwarg
-
     @classmethod
-    def delete_run_mode(cls, args):
+    def delete_run_mode_cmdline(cls, args):
         name = args['name']
         cf = cls(config_path)
         if not name in cf.variables['run_modes'].keys():
@@ -58,12 +72,12 @@ class ConfigFile:
         cf.dump()
 
     @classmethod
-    def list_run_modes(cls, args):
+    def list_run_modes_cmdline(cls, args):
         cf = cls(args['config_file_path'])
-        cf.list_variables(['run_modes'])
+        cf.list_variable(['run_modes'])
         
     @classmethod
-    def add_run_mode(cls, args):
+    def add_run_mode_cmdline(cls, args):
         cf = cls(args['config_file_path'])
 
         name = args['name']
@@ -80,9 +94,9 @@ class ConfigFile:
             return 0
 
         msg = f'adding run_mode: {name}\n'
-        msg += '----------\n'
+        msg += cf.line_separator
         msg += 'variables:\n'
-        msg += '----------\n'
+        msg += cf.line_separator
         msg += yaml.dump(args, sort_keys=False)
 
         print(msg)
@@ -95,7 +109,7 @@ class ConfigFile:
         return 1
     
     @classmethod
-    def update_run_mode(cls, args):
+    def update_run_mode_cmdline(cls, args):
         cf = cls(args['config_file_path'])
 
         name = args['name']
@@ -108,9 +122,9 @@ class ConfigFile:
             return 0
 
         msg = f'updating run_mode: {name}\n'
-        msg += '----------\n'
+        msg += cf.line_separator
         msg += 'variables:\n'
-        msg += '----------\n'
+        msg += cf.line_separator
         msg += yaml.dump(args, sort_keys=False)
 
         print(msg)
@@ -172,19 +186,19 @@ class ConfigFile:
         return parser
     
     @classmethod
-    def list_barcode_flavors(cls, args):
+    def list_barcode_flavors_cmdline(cls, args):
         cf = cls(args['config_file_path'])
         cf.list_variable(['knowledge', 'barcode_flavor'])
 
     @classmethod
-    def delete_barcode_flavor(cls, args):
+    def delete_barcode_flavor_cmdline(cls, args):
         cf = cls(args['config_file_path'])
         flavor_name = args['name']
         barcode_flavor = cf.get_variable(['knowledge', 'barcode_flavor'])
 
-        msg = '-'*50 + '\n'
+        msg = cf.line_separator
         msg += f'deleting {flavor_name} from barcode flavors\n'
-        msg += '-'*50 + '\n'
+        msg += cf.line_separator
 
         if flavor_name not in barcode_flavor.keys():
             msg += 'barcode flavor with {flavor_name} do not exists'
@@ -193,7 +207,7 @@ class ConfigFile:
         else:
             flavor = barcode_flavor[flavor_name]
             msg += yaml.dump(flavor)
-            msg += '\n' + '-'*50 + '\n'
+            msg += '\n' + cf.line_separator
             del barcode_flavor[flavor_name]
             cf.dump()
             msg += 'success!'
@@ -201,7 +215,7 @@ class ConfigFile:
         print(msg)
 
     @classmethod
-    def add_barcode_flavor(cls, args):
+    def add_barcode_flavor_cmdline(cls, args):
         cf = cls(args['config_file_path'])
         umi = args['umi']
         cell_barcode = args['cell_barcode']
@@ -211,9 +225,9 @@ class ConfigFile:
         # r(1|2) and then string slice
         to_match = r'r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$'
 
-        msg = '-'*50+'\n'
+        msg = cf.line_separator
         msg += f'adding {flavor_name} to barcode flavors\n'
-        msg += '-'*50+'\n'
+        msg += cf.line_separator
 
         barcode_flavor = cf.get_variable(['knowledge', 'barcode_flavor'])
 
@@ -253,8 +267,84 @@ class ConfigFile:
 
         return 0
 
-    #@classmethod
-    #def list_species
+    @classmethod
+    def list_species_cmdline(cls, args):
+        cf = cls(args['config_file_path'])
+        # list annotations first
+        msg = cf.line_separator
+        msg += 'annotations\n'
+        msg += cf.line_separator
+        print(msg)
+        cf.list_variable(['knowledge', 'annotations'])
+
+        # list genomes next
+        msg = cf.line_separator
+        msg += 'genomes\n'
+        msg += cf.line_separator
+        print(msg)
+        cf.list_variable(['knowledge', 'genomes'])
+
+    @classmethod
+    def delete_species_cmdline(cls, args):
+        cf = cls(args['config_file_path'])
+        species_name = args['name']
+        annotations = cf.get_variable(['knowledge', 'annotations'])
+        genomes = cf.get_variable(['knowledge', 'genomes'])
+
+        msg = cf.line_separator
+        msg += f'deleting {species_name} annotation and genome info.\n'
+        msg += cf.line_separator
+
+        if species_name not in annotations.keys():
+            msg += 'species {species_name} not in annotations.\n'
+            msg += 'skipping.\n'
+        else:
+            del annotations[species_name]
+            msg += 'deleted from annotations.\n'
+
+        if species_name not in genomes.keys():
+            msg += 'species {species_name} not in genomes.\n'
+            msg += 'skipping.\n'
+        else:
+            del genomes[species_name]
+            msg += 'deleted from genomes.\n'
+
+        cf.dump()
+
+        msg += cf.line_separator
+        msg += 'success!'
+
+        print(msg)
+
+    @classmethod
+    def add_species_cmdline(cls, args):
+        cf = cls(args['config_file_path'])
+        species_name = args['name']
+        annotation = args['annotation']
+        genome = args['genome']
+
+        msg = cf.line_separator
+        msg += f'adding genome, annotation of {species_name}\n'
+        msg += cf.line_separator
+
+        try:
+            added = cf.add_species_info(species_name, genome, annotation)
+            if added:
+                msg += f'added {species_name}.\n'
+                msg += f'genome: {genome}\n'
+                msg += f'annotation: {annotation}\n'
+                msg += cf.line_separator
+                msg += 'success!'
+            else:
+                msg += f'{species_name} already exists!\n'
+                msg += 'aborting.'
+        except FileNotFoundError as e:
+            msg += f'Error: {e.filename} is not found!\n'
+            msg += 'aborting.'
+
+        cf.dump()
+
+        print(msg) 
 
     @staticmethod
     def add_config_subparsers(subparsers, config_path):
@@ -264,21 +354,21 @@ class ConfigFile:
         ## list run_modes ##
         parser_config_list_run_modes = parser_config_subparsers.add_parser('list_run_modes',
             help = 'list available run_modes')
-        parser_config_list_run_modes.set_defaults(func=ConfigFile.list_run_modes,
+        parser_config_list_run_modes.set_defaults(func=ConfigFile.list_run_modes_cmdline,
             config_file_path = config_path)
 
         # add run_mode
         parser_config_add_run_mode = parser_config_subparsers.add_parser('add_run_mode',
             help = 'add a new run_mode',
             parents=[ConfigFile.get_add_update_run_mode_parser()])
-        parser_config_add_run_mode.set_defaults(func=ConfigFile.add_run_mode,
+        parser_config_add_run_mode.set_defaults(func=ConfigFile.add_run_mode_cmdline,
             config_file_path = config_path)
 
         # update run mode
         parser_config_update_run_mode = parser_config_subparsers.add_parser('update_run_mode',
             help = 'update run_mode',
             parents=[ConfigFile.get_add_update_run_mode_parser()])
-        parser_config_update_run_mode.set_defaults(func=ConfigFile.update_run_mode,
+        parser_config_update_run_mode.set_defaults(func=ConfigFile.update_run_mode_cmdline,
             config_file_path = config_path)
 
         parser_config_delete_run_mode = parser_config_subparsers.add_parser('delete_run_mode',
@@ -286,14 +376,14 @@ class ConfigFile:
         parser_config_delete_run_mode.add_argument('name',
             type=str,
             help='run_mode to be deleted')
-        parser_config_delete_run_mode.set_defaults(func=ConfigFile.delete_run_mode)
+        parser_config_delete_run_mode.set_defaults(func=ConfigFile.delete_run_mode_cmdline)
 
         # list barcode flavors
         parser_config_list_barcode_flavors = parser_config_subparsers\
             .add_parser('list_barcode_flavors',
                 help = 'list barcode flavors and their settings')
         parser_config_list_barcode_flavors.set_defaults(
-            func=ConfigFile.list_barcode_flavors,
+            func=ConfigFile.list_barcode_flavors_cmdline,
             config_file_path = config_path)
 
         # delete barcode flavor
@@ -304,7 +394,7 @@ class ConfigFile:
             help = 'name of the barcode flavor to be deleted',
             type=str)
         parser_config_delete_barcode_flavor.set_defaults(
-            func=ConfigFile.delete_barcode_flavor,
+            func=ConfigFile.delete_barcode_flavor_cmdline,
             config_file_path = config_path)
 
         # add barcode flavor
@@ -318,7 +408,42 @@ class ConfigFile:
         parser_config_add_barcode_flavor.add_argument('cell_barcode',
             help = 'structure of CELL BARCODE', type=str)
         parser_config_add_barcode_flavor.set_defaults(
-            func=ConfigFile.add_barcode_flavor,
+            func=ConfigFile.add_barcode_flavor_cmdline,
+            config_file_path = config_path)
+
+        # list species settings
+        parser_config_list_species = parser_config_subparsers\
+            .add_parser('list_species',
+                help = 'list all defined species and their genomes, annotations')
+        parser_config_list_species.set_defaults(
+            func=ConfigFile.list_species_cmdline,
+            config_file_path = config_path)
+
+        # delete species
+        parser_config_delete_species = parser_config_subparsers\
+            .add_parser('delete_species',
+                help = 'delete a species (genome and annotation) from configuration')
+        parser_config_delete_species.add_argument('name',
+            help = 'name of the species to be deleted',
+            type=str)
+        parser_config_delete_species.set_defaults(
+            func=ConfigFile.delete_species_cmdline,
+            config_file_path = config_path)
+        # add species
+        parser_config_add_species = parser_config_subparsers\
+            .add_parser('add_species',
+                help = 'add a new species: genome (.fa) and annotation (.gtf) files')
+        parser_config_add_species.add_argument('name',
+            help = 'name of the species to be added',
+            type = str)
+        parser_config_add_species.add_argument('genome',
+            help = 'path to the genome (.fa) file for the species to be added',
+            type = str)
+        parser_config_add_species.add_argument('annotation',
+            help = 'path to the annotation (.gtf) file for the species to be added',
+            type = str)
+        parser_config_add_species.set_defaults(
+            func=ConfigFile.add_species_cmdline,
             config_file_path = config_path)
 
         return parser_config
@@ -596,13 +721,13 @@ class ProjectDF:
         sample_id = args['sample_id']
 
         msg = f'Adding ({project_id}, {sample_id})\n'
-        msg += '----------------------------------\n'
+        msg += cf.line_separator
         project_df = cls(args['project_df_file'])
         sample_added, sample = project_df.add_sample(**args)
 
         if sample_added :
             msg += 'SUCCESS: sample added successfully\n'
-            msg += '----------------------------------\n'
+            msg += cf.line_separator
             msg += sample.__str__()
             project_df.dump()
         else:
@@ -618,13 +743,13 @@ class ProjectDF:
         sample_id = args['sample_id']
 
         msg = f'Updating ({project_id}, {sample_id})\n'
-        msg += '----------------------------------\n'
+        msg += cf.line_separator
         project_df = cls(args['project_df_file'])
         sample_updated, sample = project_df.update_sample(**args)
 
         if sample_updated:
             msg += 'SUCCESS: sample updated successfully\n'
-            msg += '----------------------------------\n'
+            msg += cf.line_separator
             msg += sample.__str__()
             project_df.dump()
         else:
