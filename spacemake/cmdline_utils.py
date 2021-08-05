@@ -450,6 +450,7 @@ class ConfigFile:
 
 class ProjectDF:
     # default values of the project dataframe columns
+    line_separator = '-'*50+'\n'
     project_df_default_values = {
         "puck_id": "no_optical_puck",
         "sample_sheet": "none",
@@ -721,13 +722,13 @@ class ProjectDF:
         sample_id = args['sample_id']
 
         msg = f'Adding ({project_id}, {sample_id})\n'
-        msg += cf.line_separator
         project_df = cls(args['project_df_file'])
+        msg += project_df.line_separator
         sample_added, sample = project_df.add_sample(**args)
 
         if sample_added :
             msg += 'SUCCESS: sample added successfully\n'
-            msg += cf.line_separator
+            msg += project_df.line_separator
             msg += sample.__str__()
             project_df.dump()
         else:
@@ -743,13 +744,13 @@ class ProjectDF:
         sample_id = args['sample_id']
 
         msg = f'Updating ({project_id}, {sample_id})\n'
-        msg += cf.line_separator
         project_df = cls(args['project_df_file'])
+        msg += project_df.line_separator
         sample_updated, sample = project_df.update_sample(**args)
 
         if sample_updated:
             msg += 'SUCCESS: sample updated successfully\n'
-            msg += cf.line_separator
+            msg += project_df.line_separator
             msg += sample.__str__()
             project_df.dump()
         else:

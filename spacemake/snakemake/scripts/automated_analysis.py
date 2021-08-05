@@ -188,7 +188,7 @@ if nrow > 1 and ncol >= 1000:
     
     # find out the clusters
     # restrict to max 20 clusters
-    resolution = [0.4, 0.6, 0.8, 1]
+    resolution = [0.2, 0.4, 0.6, 0.8, 1]
 
     print('clustering')
     
