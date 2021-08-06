@@ -122,46 +122,14 @@ parsers['run'].set_defaults(func=spacemake_run)
 # SPACEMAKE CONFIG #
 ####################
 ## spacemake_config args
-parsers['config'] = ConfigFile.add_config_subparsers(subparsers, config_path)
+cf = ConfigFile(config_path)
+parsers['config'] = cf.get_subparsers(subparsers)
 
 ####################
 # SPACEMAKE SAMPLE #
 ####################
-parsers['projects'] = subparsers.add_parser('projects', help ='manage projects and samples')
-parser_sample_subparsers = parsers['projects'].add_subparsers(help = 'sample sub-command help')
-
-# ADD SAMPLE SHEET
-parser_sample_add_sample_sheet = parser_sample_subparsers.add_parser('add_sample_sheet',
-    help = 'add projects and samples from Illumina sample sheet',
-    parents=[ProjectDF.get_add_sample_sheet_parser()])
-parser_sample_add_sample_sheet.set_defaults(func=ProjectDF.add_sample_sheet_cmdline,
-    project_df_file=project_df)
-
-# ADD SAMPLES FROM YAML
-parser_sample_add_samples_yaml = parser_sample_subparsers.add_parser('add_samples_from_yaml',
-    help = 'add several samples at once from a .yaml file')
-parser_sample_add_samples_yaml.add_argument('samples_yaml',
-    type=str,
-    help='path to the .yaml file containing sample info')
-parser_sample_add_samples_yaml.set_defaults(
-    func = ProjectDF.add_samples_from_yaml_cmdline,
-    project_df_file=project_df)
-
-# ADD SAMPLE
-parser_sample_add = parser_sample_subparsers.add_parser('add_sample',
-    help = 'add new sample',
-    parents=[ProjectDF.get_add_update_sample_parser(),
-             ProjectDF.get_read_species_parser(reads_required=True)])
-parser_sample_add.set_defaults(func=ProjectDF.add_sample_cmdline,
-    project_df_file=project_df)
-
-# UPDATE SAMPLE
-parser_sample_add = parser_sample_subparsers.add_parser('update_sample',
-    help = 'update_existing_sample',
-    parents=[ProjectDF.get_add_update_sample_parser(),
-             ProjectDF.get_read_species_parser(reads_required=False)])
-parser_sample_add.set_defaults(func=ProjectDF.update_sample_cmdline,
-    project_df_file=project_df)
+pdf = ProjectDF(project_df, cf)
+parsers['projects'] = pdf.get_subparsers(subparsers)
 
 def cmdline():
     args = parsers['main'].parse_args()

@@ -23,6 +23,10 @@ class ConfigFile:
 
     def set_file_path(self, file_path):
         self.file_path = file_path
+        
+    @property
+    def puck_data(self):
+        return self.variables['puck_data']
 
     def add_species_info(self, name, genome, annotation):
         if 'annotations' not in self.variables['knowledge']:
@@ -61,30 +65,23 @@ class ConfigFile:
     def list_variable(self, path):
         print(yaml.dump(self.get_variable(path)))
 
-    @classmethod
-    def delete_run_mode_cmdline(cls, args):
+    def delete_run_mode_cmdline(self, args):
         name = args['name']
-        cf = cls(config_path)
-        if not name in cf.variables['run_modes'].keys():
+        if not name in self.variables['run_modes'].keys():
             print(f'run_mode: {name} does not exists, so it cannot be deleted')
             return 0
-        del cf.variables['run_modes'][name]
-        cf.dump()
+        del self.variables['run_modes'][name]
+        self.dump()
 
-    @classmethod
-    def list_run_modes_cmdline(cls, args):
-        cf = cls(args['config_file_path'])
-        cf.list_variable(['run_modes'])
+    def list_run_modes_cmdline(self, args):
+        self.list_variable(['run_modes'])
         
-    @classmethod
-    def add_run_mode_cmdline(cls, args):
-        cf = cls(args['config_file_path'])
-
+    def add_run_mode_cmdline(self, args):
         name = args['name']
         del args['name']
         
         # add and save new run mode
-        if name in cf.variables['run_modes']:
+        if name in self.variables['run_modes']:
             msg = f'run_mode: {name} already exists, so it cannot be added.\n'
             msg += 'you can update this run_mode using the `spacemake config update_run_mode`'
             msg += ' command.\nor delete it using the `spacemake config delete_run_mode`' 
@@ -94,50 +91,46 @@ class ConfigFile:
             return 0
 
         msg = f'adding run_mode: {name}\n'
-        msg += cf.line_separator
+        msg += self.line_separator
         msg += 'variables:\n'
-        msg += cf.line_separator
+        msg += self.line_separator
         msg += yaml.dump(args, sort_keys=False)
 
         print(msg)
 
-        cf.variables['run_modes'][name] = args
-        cf.dump()
+        self.variables['run_modes'][name] = args
+        self.dump()
 
         print(f'run_mode: {name} added')
 
         return 1
     
-    @classmethod
-    def update_run_mode_cmdline(cls, args):
-        cf = cls(args['config_file_path'])
-
+    def update_run_mode_cmdline(self, args):
         name = args['name']
         del args['name']
 
-        if not name in cf.variables['run_modes']:
+        if not name in self.variables['run_modes']:
             msg = f'run_mode: {name} does not exists, so it cannot be updated.\n'
             msg += 'add this run_mode using the `spacemake config add_run_mode` command'
             print(msg)
             return 0
 
         msg = f'updating run_mode: {name}\n'
-        msg += cf.line_separator
+        msg += self.line_separator
         msg += 'variables:\n'
-        msg += cf.line_separator
+        msg += self.line_separator
         msg += yaml.dump(args, sort_keys=False)
 
         print(msg)
 
-        cf.variables['run_modes'][name].update(args)
-        cf.dump()
+        self.variables['run_modes'][name].update(args)
+        self.dump()
 
         print(f'run_mode: {name} updated')
 
         return 1
 
-    @staticmethod 
-    def get_add_update_run_mode_parser():
+    def get_add_update_run_mode_parser(self):
         parser = argparse.ArgumentParser(
             description='add/update run_mode parent parser',
             add_help = False)
@@ -185,20 +178,16 @@ class ConfigFile:
 
         return parser
     
-    @classmethod
-    def list_barcode_flavors_cmdline(cls, args):
-        cf = cls(args['config_file_path'])
-        cf.list_variable(['knowledge', 'barcode_flavor'])
+    def list_barcode_flavors_cmdline(self, args):
+        self.list_variable(['knowledge', 'barcode_flavor'])
 
-    @classmethod
-    def delete_barcode_flavor_cmdline(cls, args):
-        cf = cls(args['config_file_path'])
+    def delete_barcode_flavor_cmdline(self, args):
         flavor_name = args['name']
-        barcode_flavor = cf.get_variable(['knowledge', 'barcode_flavor'])
+        barcode_flavor = self.get_variable(['knowledge', 'barcode_flavor'])
 
-        msg = cf.line_separator
+        msg = self.line_separator
         msg += f'deleting {flavor_name} from barcode flavors\n'
-        msg += cf.line_separator
+        msg += self.line_separator
 
         if flavor_name not in barcode_flavor.keys():
             msg += 'barcode flavor with {flavor_name} do not exists'
@@ -207,16 +196,14 @@ class ConfigFile:
         else:
             flavor = barcode_flavor[flavor_name]
             msg += yaml.dump(flavor)
-            msg += '\n' + cf.line_separator
+            msg += '\n' + self.line_separator
             del barcode_flavor[flavor_name]
-            cf.dump()
+            self.dump()
             msg += 'success!'
 
         print(msg)
 
-    @classmethod
-    def add_barcode_flavor_cmdline(cls, args):
-        cf = cls(args['config_file_path'])
+    def add_barcode_flavor_cmdline(self, args):
         umi = args['umi']
         cell_barcode = args['cell_barcode']
         flavor_name = args['name']
@@ -225,11 +212,11 @@ class ConfigFile:
         # r(1|2) and then string slice
         to_match = r'r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$'
 
-        msg = cf.line_separator
+        msg = self.line_separator
         msg += f'adding {flavor_name} to barcode flavors\n'
-        msg += cf.line_separator
+        msg += self.line_separator
 
-        barcode_flavor = cf.get_variable(['knowledge', 'barcode_flavor'])
+        barcode_flavor = self.get_variable(['knowledge', 'barcode_flavor'])
 
         if flavor_name in barcode_flavor.keys():
             msg += f'barcode flavor {flavor_name} already exists.\n'
@@ -260,40 +247,36 @@ class ConfigFile:
         
         msg += yaml.dump(barcode_flavor[flavor_name])
         
-        cf.dump()
+        self.dump()
 
         msg += 'success!'
         print(msg)
 
         return 0
 
-    @classmethod
-    def list_species_cmdline(cls, args):
-        cf = cls(args['config_file_path'])
+    def list_species_cmdline(self, args):
         # list annotations first
-        msg = cf.line_separator
+        msg = self.line_separator
         msg += 'annotations\n'
-        msg += cf.line_separator
+        msg += self.line_separator
         print(msg)
-        cf.list_variable(['knowledge', 'annotations'])
+        self.list_variable(['knowledge', 'annotations'])
 
         # list genomes next
-        msg = cf.line_separator
+        msg = self.line_separator
         msg += 'genomes\n'
-        msg += cf.line_separator
+        msg += self.line_separator
         print(msg)
-        cf.list_variable(['knowledge', 'genomes'])
+        self.list_variable(['knowledge', 'genomes'])
 
-    @classmethod
-    def delete_species_cmdline(cls, args):
-        cf = cls(args['config_file_path'])
+    def delete_species_cmdline(self, args):
         species_name = args['name']
-        annotations = cf.get_variable(['knowledge', 'annotations'])
-        genomes = cf.get_variable(['knowledge', 'genomes'])
+        annotations = self.get_variable(['knowledge', 'annotations'])
+        genomes = self.get_variable(['knowledge', 'genomes'])
 
-        msg = cf.line_separator
+        msg = self.line_separator
         msg += f'deleting {species_name} annotation and genome info.\n'
-        msg += cf.line_separator
+        msg += self.line_separator
 
         if species_name not in annotations.keys():
             msg += 'species {species_name} not in annotations.\n'
@@ -309,31 +292,29 @@ class ConfigFile:
             del genomes[species_name]
             msg += 'deleted from genomes.\n'
 
-        cf.dump()
+        self.dump()
 
-        msg += cf.line_separator
+        msg += self.line_separator
         msg += 'success!'
 
         print(msg)
 
-    @classmethod
-    def add_species_cmdline(cls, args):
-        cf = cls(args['config_file_path'])
+    def add_species_cmdline(self, args):
         species_name = args['name']
         annotation = args['annotation']
         genome = args['genome']
 
-        msg = cf.line_separator
+        msg = self.line_separator
         msg += f'adding genome, annotation of {species_name}\n'
-        msg += cf.line_separator
+        msg += self.line_separator
 
         try:
-            added = cf.add_species_info(species_name, genome, annotation)
+            added = self.add_species_info(species_name, genome, annotation)
             if added:
                 msg += f'added {species_name}.\n'
                 msg += f'genome: {genome}\n'
                 msg += f'annotation: {annotation}\n'
-                msg += cf.line_separator
+                msg += self.line_separator
                 msg += 'success!'
             else:
                 msg += f'{species_name} already exists!\n'
@@ -342,49 +323,44 @@ class ConfigFile:
             msg += f'Error: {e.filename} is not found!\n'
             msg += 'aborting.'
 
-        cf.dump()
+        self.dump()
 
         print(msg) 
 
-    @staticmethod
-    def add_config_subparsers(subparsers, config_path):
+    def get_subparsers(self, subparsers):
         parser_config = subparsers.add_parser('config', help = 'configure spacemake')
         parser_config_subparsers = parser_config.add_subparsers(help = 'config sub-command help')
 
         ## list run_modes ##
         parser_config_list_run_modes = parser_config_subparsers.add_parser('list_run_modes',
             help = 'list available run_modes')
-        parser_config_list_run_modes.set_defaults(func=ConfigFile.list_run_modes_cmdline,
-            config_file_path = config_path)
+        parser_config_list_run_modes.set_defaults(func=self.list_run_modes_cmdline)
 
         # add run_mode
         parser_config_add_run_mode = parser_config_subparsers.add_parser('add_run_mode',
             help = 'add a new run_mode',
-            parents=[ConfigFile.get_add_update_run_mode_parser()])
-        parser_config_add_run_mode.set_defaults(func=ConfigFile.add_run_mode_cmdline,
-            config_file_path = config_path)
+            parents=[self.get_add_update_run_mode_parser()])
+        parser_config_add_run_mode.set_defaults(func=self.add_run_mode_cmdline)
 
         # update run mode
         parser_config_update_run_mode = parser_config_subparsers.add_parser('update_run_mode',
             help = 'update run_mode',
-            parents=[ConfigFile.get_add_update_run_mode_parser()])
-        parser_config_update_run_mode.set_defaults(func=ConfigFile.update_run_mode_cmdline,
-            config_file_path = config_path)
+            parents=[self.get_add_update_run_mode_parser()])
+        parser_config_update_run_mode.set_defaults(func=self.update_run_mode_cmdline)
 
         parser_config_delete_run_mode = parser_config_subparsers.add_parser('delete_run_mode',
             help = 'delete a run_mode')
         parser_config_delete_run_mode.add_argument('name',
             type=str,
             help='run_mode to be deleted')
-        parser_config_delete_run_mode.set_defaults(func=ConfigFile.delete_run_mode_cmdline)
+        parser_config_delete_run_mode.set_defaults(func=self.delete_run_mode_cmdline)
 
         # list barcode flavors
         parser_config_list_barcode_flavors = parser_config_subparsers\
             .add_parser('list_barcode_flavors',
                 help = 'list barcode flavors and their settings')
         parser_config_list_barcode_flavors.set_defaults(
-            func=ConfigFile.list_barcode_flavors_cmdline,
-            config_file_path = config_path)
+            func=self.list_barcode_flavors_cmdline)
 
         # delete barcode flavor
         parser_config_delete_barcode_flavor = parser_config_subparsers\
@@ -394,8 +370,7 @@ class ConfigFile:
             help = 'name of the barcode flavor to be deleted',
             type=str)
         parser_config_delete_barcode_flavor.set_defaults(
-            func=ConfigFile.delete_barcode_flavor_cmdline,
-            config_file_path = config_path)
+            func=self.delete_barcode_flavor_cmdline)
 
         # add barcode flavor
         parser_config_add_barcode_flavor = parser_config_subparsers\
@@ -408,16 +383,14 @@ class ConfigFile:
         parser_config_add_barcode_flavor.add_argument('cell_barcode',
             help = 'structure of CELL BARCODE', type=str)
         parser_config_add_barcode_flavor.set_defaults(
-            func=ConfigFile.add_barcode_flavor_cmdline,
-            config_file_path = config_path)
+            func=self.add_barcode_flavor_cmdline)
 
         # list species settings
         parser_config_list_species = parser_config_subparsers\
             .add_parser('list_species',
                 help = 'list all defined species and their genomes, annotations')
         parser_config_list_species.set_defaults(
-            func=ConfigFile.list_species_cmdline,
-            config_file_path = config_path)
+            func=self.list_species_cmdline)
 
         # delete species
         parser_config_delete_species = parser_config_subparsers\
@@ -427,8 +400,7 @@ class ConfigFile:
             help = 'name of the species to be deleted',
             type=str)
         parser_config_delete_species.set_defaults(
-            func=ConfigFile.delete_species_cmdline,
-            config_file_path = config_path)
+            func=self.delete_species_cmdline)
         # add species
         parser_config_add_species = parser_config_subparsers\
             .add_parser('add_species',
@@ -443,8 +415,7 @@ class ConfigFile:
             help = 'path to the annotation (.gtf) file for the species to be added',
             type = str)
         parser_config_add_species.set_defaults(
-            func=ConfigFile.add_species_cmdline,
-            config_file_path = config_path)
+            func=self.add_species_cmdline)
 
         return parser_config
 
@@ -470,16 +441,15 @@ class ProjectDF:
     def __init__(
         self,
         file_path,
-        puck_data = {
-            'barcode_file': 'barcode_file.csv',
-            'root': 'puck_data'
-        }
+        config: ConfigFile
     ):
         self.file_path = file_path
+        self.config = config
 
         if os.path.isfile(file_path):
             self.df = pd.read_csv(file_path,
-                index_col=['project_id', 'sample_id'])
+                index_col=['project_id', 'sample_id'],
+                converters={'run_mode': eval})
         else:
             index = pd.MultiIndex(
                 names=['project_id', 'sample_id'],
@@ -487,8 +457,6 @@ class ProjectDF:
                 codes=[[],[]]) 
             self.df = pd.DataFrame(columns = self.project_df_default_values.keys(),
                 index=index)
-
-        self.puck_data = puck_data
 
     def __compute_max_barcode_mismatch(self, indices):
         """computes the maximum number of mismatches allowed for demultiplexing based
@@ -523,12 +491,12 @@ class ProjectDF:
                 if name in dirs:
                     return os.path.join(root, name)
 
-        puck_dir = find_dir(puck_id, self.puck_data['root'])
+        puck_dir = find_dir(puck_id, self.config.puck_data['root'])
         path = None
 
         if puck_dir is not None:
             # puck dir exists, look for barcode file pattern
-            path = os.path.join(puck_dir, self.puck_data["barcode_file"])
+            path = os.path.join(puck_dir, self.config.puck_data["barcode_file"])
 
             return get_barcode_file(path)
         else:
@@ -715,19 +683,18 @@ class ProjectDF:
 
         return parser
     
-    @classmethod
-    def add_sample_cmdline(cls, args):
+    def add_sample_cmdline(self, args):
         project_id = args['project_id']
         sample_id = args['sample_id']
 
         msg = f'Adding ({project_id}, {sample_id})\n'
-        msg += cf.line_separator
+        msg += self.line_separator
         project_df = cls(args['project_df_file'])
         sample_added, sample = project_df.add_sample(**args)
 
         if sample_added :
             msg += 'SUCCESS: sample added successfully\n'
-            msg += cf.line_separator
+            msg += self.line_separator
             msg += sample.__str__()
             project_df.dump()
         else:
@@ -737,19 +704,18 @@ class ProjectDF:
 
         print(msg)
 
-    @classmethod
-    def update_sample_cmdline(cls, args):
+    def update_sample_cmdline(self, args):
         project_id = args['project_id']
         sample_id = args['sample_id']
 
         msg = f'Updating ({project_id}, {sample_id})\n'
-        msg += cf.line_separator
+        msg += self.line_separator
         project_df = cls(args['project_df_file'])
         sample_updated, sample = project_df.update_sample(**args)
 
         if sample_updated:
             msg += 'SUCCESS: sample updated successfully\n'
-            msg += cf.line_separator
+            msg += self.line_separator
             msg += sample.__str__()
             project_df.dump()
         else:
@@ -759,8 +725,7 @@ class ProjectDF:
 
         print(msg)
 
-    @staticmethod
-    def get_add_sample_sheet_parser():
+    def get_add_sample_sheet_parser(self):
         parser = argparse.ArgumentParser(
             description = 'add a new sample sheet to the samples',
             add_help=False)
@@ -774,18 +739,76 @@ class ProjectDF:
 
         return parser
 
-    @classmethod
-    def add_sample_sheet_cmdline(cls, args):
-        project_df = cls(args['project_df_file'])
-        project_df.add_sample_sheet(args['sample_sheet'],
+    def add_sample_sheet_cmdline(self, args):
+        self.add_sample_sheet(args['sample_sheet'],
             args['basecalls_dir'])
 
-        project_df.dump()
+        self.dump()
 
-    @classmethod
-    def add_samples_from_yaml_cmdline(cls, args):
-        project_df = cls(args['project_df_file'])
+    def add_samples_from_yaml_cmdline(self, args):
+        self.add_samples_from_yaml(args['samples_yaml'])
 
-        project_df.add_samples_from_yaml(args['samples_yaml'])
+        self.dump()
 
-        project_df.dump()
+    def set_species_cmdline(self, args):
+        print(self.config.puck_data)
+        projects = args['project_id']
+        samples = args['sample_id']
+
+        ix = self.df.query(
+            'project_id in @projects or sample_id in @samples').index
+
+        self.df.loc[ix, 'species'] = args['species_name']
+
+        self.dump()
+
+    def get_subparsers(self, subparsers):
+        parser_project = subparsers.add_parser('projects', help ='manage projects and samples') 
+        parser_sample_subparsers = parser_project.add_subparsers(help = 'sample sub-command help')
+
+        # ADD SAMPLE SHEET
+        parser_sample_add_sample_sheet = parser_sample_subparsers.add_parser('add_sample_sheet',
+            help = 'add projects and samples from Illumina sample sheet',
+            parents=[self.get_add_sample_sheet_parser()])
+        parser_sample_add_sample_sheet.set_defaults(func=self.add_sample_sheet_cmdline)
+
+        # ADD SAMPLES FROM YAML
+        parser_sample_add_samples_yaml = parser_sample_subparsers.add_parser('add_samples_from_yaml',
+            help = 'add several samples at once from a .yaml file')
+        parser_sample_add_samples_yaml.add_argument('samples_yaml',
+            type=str,
+            help='path to the .yaml file containing sample info')
+        parser_sample_add_samples_yaml.set_defaults(
+            func = self.add_samples_from_yaml_cmdline)
+
+        # ADD SAMPLE
+        parser_sample_add = parser_sample_subparsers.add_parser('add_sample',
+            help = 'add new sample',
+            parents=[self.get_add_update_sample_parser(),
+                     self.get_read_species_parser(reads_required=True)])
+        parser_sample_add.set_defaults(func=self.add_sample_cmdline)
+
+        # UPDATE SAMPLE
+        parser_sample_add = parser_sample_subparsers.add_parser('update_sample',
+            help = 'update_existing_sample',
+            parents=[self.get_add_update_sample_parser(),
+                     self.get_read_species_parser(reads_required=False)])
+        parser_sample_add.set_defaults(func=self.update_sample_cmdline)
+
+        # SET SPECIES
+        parser_set_species = parser_sample_subparsers.add_parser('set_species',
+            help = 'set species for one or multiple projects/samples')
+        parser_set_species.add_argument('--species_name',
+            help = 'name of the species to be added',
+            type=str, required=True)
+        parser_set_species.add_argument('--project_id',
+            nargs='+',
+            default=[],
+            help = 'project id-s for which we should set this species')
+        parser_set_species.add_argument('--sample_id',
+            nargs='+',
+            default=[],
+            help = 'sample id-s for which we should set this species')
+        parser_set_species.set_defaults(func=self.set_species_cmdline)
+        
+        return parser_project
