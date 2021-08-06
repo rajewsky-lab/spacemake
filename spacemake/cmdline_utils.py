@@ -421,6 +421,7 @@ class ConfigFile:
 
 class ProjectDF:
     # default values of the project dataframe columns
+    line_separator = '-'*50+'\n'
     project_df_default_values = {
         "puck_id": "no_optical_puck",
         "sample_sheet": "none",
@@ -689,7 +690,6 @@ class ProjectDF:
 
         msg = f'Adding ({project_id}, {sample_id})\n'
         msg += self.line_separator
-        project_df = cls(args['project_df_file'])
         sample_added, sample = project_df.add_sample(**args)
 
         if sample_added :
@@ -710,7 +710,6 @@ class ProjectDF:
 
         msg = f'Updating ({project_id}, {sample_id})\n'
         msg += self.line_separator
-        project_df = cls(args['project_df_file'])
         sample_updated, sample = project_df.update_sample(**args)
 
         if sample_updated:

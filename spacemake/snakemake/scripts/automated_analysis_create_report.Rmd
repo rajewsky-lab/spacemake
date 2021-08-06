@@ -43,11 +43,11 @@ source(snakemake@params$r_shared_scripts)
 ```
 
 ```{r read_data, echo = F}
-parameters <- read_yaml(snakemake@input$parameters_file)
-
-parameter_stats <- parameters %>%
-    as_tibble() %>%
-    gather('metric', 'value')
+#parameters <- read_yaml(snakemake@input$parameters_file)
+#
+#parameter_stats <- parameters %>%
+#    as_tibble() %>%
+#    gather('metric', 'value')
 
 obs_df <- read_table2(snakemake@input$obs_df) %>%
     mutate(pct_counts_mt = as.double(pct_counts_mt))
@@ -59,7 +59,7 @@ data_empty <- n_beads == 0
 
 ### Overview
 
-```{r create_overview_table, echo = F}
+```{r create_overview_table, echo = F, eval = F}
 parameter_stats <- parameter_stats %>%
     rbind(c('UMI filter', snakemake@wildcards$umi_cutoff),
           c('# genes in data', nrow(var_df)),
@@ -169,11 +169,11 @@ if (barcode_file){
         obs_df %>%
             filter(res == 'leiden_1') %>%
             arrange(total_counts) %>%
-            mutate(total_counts = ifelse(total_counts > 6000, 6000, total_counts)) %>%
+            mutate(total_counts = ifelse(total_counts > 60000, 60000, total_counts)) %>%
             ggplot(aes(x_pos, y_pos, color = total_counts)) +
                 geom_point(size = snakemake@params$downstream_variables$plot_bead_size)+
                 coord_fixed()+
-                scale_color_viridis_c(option =  "magma", limits = c(0, 6000),  breaks = seq(1000, 5000, 500)) +
+                scale_color_viridis_c(option =  "magma", limits = c(0, 60000),  breaks = c(20000, 30000, 40000, 50000, 60000)) +
                 guides(color = guide_colorbar(barheight = 15)) + 
                 ggtitle('UMI distribution in 2D') +
                 labs(color='UMI') + 
@@ -249,7 +249,9 @@ cluster_clrs <- c('#ff8011',
                   '#E6DBCF',
                   '#99846B',
                   '#F711F7',
-                  '#7AF736')
+                  '#7AF736',
+                  '#4F5EF7',
+                  '#F75D1E')
 
 top10_marker_table <- read_table2(snakemake@input$cluster_markers)
 
