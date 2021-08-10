@@ -14,6 +14,10 @@ class FileWrongExtensionError(Exception):
         self.filename = filename
         self.expected_extension = expected_extension
 
+class BarcodeFlavorNotFoundError(Exception):
+    def __init__(self, barcode_flavor):
+        self.barcode_flavor = barcode_flavor
+
 class ConfigFile:
     line_separator = '-'*50+'\n'
 
@@ -677,6 +681,7 @@ class ProjectDF:
         config = yaml.load(open(projects_yaml_file),
                 Loader=yaml.FullLoader)
         demux_projects = config.get('projects', None)
+        barcode_flavors = config.get('barcode_flavor', None)
 
         if demux_projects is not None:
             # if we have projects in the config file
@@ -687,6 +692,10 @@ class ProjectDF:
         # add additional samples from config.yaml, which have already been demultiplexed.
         for project in config['additional_projects']:
             self.__add_update_sample(**project)
+
+        for barcode_flavor in barcode_flavors:
+            pass
+            # TODO add barcode flavor here
 
         #project_df = df_assign_merge_samples(project_df)
     
@@ -853,7 +862,7 @@ class ProjectDF:
         samples = args['sample_id']
         species = args['species_name']
 
-        msg = f'setting {species} for projects: {projects}\n'
+        msg = f'Setting species: {species} for projects: {projects}\n'
         msg += f'and for samples: {samples}\n'
         msg += self.line_separator
 
@@ -947,6 +956,34 @@ class ProjectDF:
 
         print(msg)
 
+    def set_barcode_flavor(self, barcode_flavor, projects = [], samples = []):
+        if self.config.barcode_flavor_exists(barcode_flavor):
+            ix = self.df.query('project_id in @projects or sample_id in @samples')
+            self.df.loc[ix, 'barcode_flavor'] = barcode_flavor
+        else:
+            raise BarcodeFlavorNotFoundError(barcode_flavor)
+
+    def set_barcode_flavor_cmdline(self, args):
+        barcode_flavor = args['barcode_flavor']
+        samples = args['sample_id']
+
+        projects = args['project_id']
+        try:
+            msg = f'Setting barcode flavor: {barcode_flavor} for projects: {projects}\n'
+            msg += f'and for samples: {samples}\n'
+            msg += self.line_separator
+
+            self.set_barcode_flavor(barcode_flavor,
+                                    projects,
+                                    samples)
+
+            msg += 'SUCCESS: barcode_flavor set successfully.\n'
+
+        except BarcodeFlavorNotFoundError as e:
+            msg += f'ERROR: barcode_flavor: {e.barcode_flavor} is not specified.\n'
+            msg += f'please add it with `spacemake config add_barcode_flavor`\n'
+        finally:
+            print(msg)
 
     def get_subparsers(self, subparsers):
         parser = subparsers.add_parser('projects', help ='manage projects and samples') 
@@ -989,6 +1026,15 @@ class ProjectDF:
             help = 'name of the species to be set',
             type=str, required=True)
         set_species.set_defaults(func=self.set_species_cmdline)
+
+        # SET BARCODE FLAVOR
+        set_species = projects_subparser.add_parser('set_barcode_flavor',
+            help = 'set barcode_flavor for one or multiple projects/samples',
+            parents=[self.__get_project_sample_lists_parser('set barcode_flavor')])
+        set_species.add_argument('--barcode_flavor',
+            help = 'name of the barcode_flavor to be set',
+            type=str, required=True)
+        set_species.set_defaults(func=self.set_barcode_flavor_cmdline)
 
         # SET RUN MODE
         set_run_mode = projects_subparser.add_parser('set_run_mode',
