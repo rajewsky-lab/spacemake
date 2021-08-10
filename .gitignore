@@ -5,6 +5,7 @@ samples.yaml
 *.csv
 *.pdf
 *.txt.gz
+*.fastq.gz
 .snakemake
 
 scratch

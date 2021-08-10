@@ -9,6 +9,11 @@ import re
 from functools import reduce
 from operator import getitem
 
+class FileWrongExtensionError(Exception):
+    def __init__(self, filename, expected_extension):
+        self.filename = filename
+        self.expected_extension = expected_extension
+
 class ConfigFile:
     line_separator = '-'*50+'\n'
 
@@ -343,13 +348,13 @@ class ConfigFile:
             else:
                 msg += f'{species_name} already exists!\n'
                 msg += 'aborting.'
+
+            self.dump()
         except FileNotFoundError as e:
-            msg += f'Error: {e.filename} is not found!\n'
+            msg += f'ERROR: {e.filename} is not found!\n'
             msg += 'aborting.'
-
-        self.dump()
-
-        print(msg) 
+        finally:
+            print(msg) 
 
     def get_subparsers(self, subparsers):
         parser_config = subparsers.add_parser('config', help = 'configure spacemake')
@@ -587,6 +592,31 @@ class ProjectDF:
 
             return ix in self.df.index
 
+    def __assert_file(self, file_path, default_value='none', extension='all'):
+        if file_path == default_value:
+            # file doesn't exist but has the default value,
+            # so we do not need to assert anything
+            return 0
+
+        # check if file exists, raise error if not
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(
+                errno.ENOENT, os.strerror(errno.ENOENT), file_path)
+
+
+        # check if file has correct extension, raise error otherwise
+        def get_file_ext(path):
+            path = path.split('.')
+            
+            return path[0], '.' + '.'.join(path[1:])
+
+        file_name, file_extension = get_file_ext(file_path)
+
+        if file_extension != extension and extension != 'all':
+            raise FileWrongExtensionError(file_path, extension)
+
+        return 0
+        
 
     def __add_update_sample(self, project_id = None,
             sample_id = None, return_series = False,
@@ -594,12 +624,27 @@ class ProjectDF:
         """
         adds or updates a sample with a given project_id and sample_id
         """
-
         ix = (project_id, sample_id) 
 
+        # assert files first
+        self.__assert_file(
+            kwargs.get('R1',
+                       self.project_df_default_values['R1']),
+            default_value=self.project_df_default_values['R1'],
+            extension = '.fastq.gz')
+
+        self.__assert_file(
+            kwargs.get('R2',
+                       self.project_df_default_values['R2']),
+            default_value=self.project_df_default_values['R2'],
+            extension = '.fastq.gz')
+
+        self.__assert_file(
+            kwargs.get('puck_barcode_file',
+                        self.project_df_default_values['puck_barcode_file']),
+            default_value=self.project_df_default_values['puck_barcode_file'])
+
         if self.sample_exists(project_id, sample_id):
-            print(f'sample with {ix} already exists in ProjectDF')
-            print(f'updating')
             new_project = self.df.loc[ix].copy()
             new_project.update(pd.Series(kwargs))
             self.df.loc[ix] = new_project
@@ -669,6 +714,10 @@ class ProjectDF:
             type=str,
             help = 'add the name of the investigator(s) responsible for this sample')
 
+        parser.add_argument('--experiment',
+            type=str,
+            help='description of the experiment')
+
         parser.add_argument('--sequencing_date',
             type=datetime.date.fromisoformat,
             help = 'sequencing date of the sample. format: YYYY-MM-DD')
@@ -709,41 +758,57 @@ class ProjectDF:
         project_id = args['project_id']
         sample_id = args['sample_id']
 
-        msg = f'Adding ({project_id}, {sample_id})\n'
-        msg += self.line_separator
-        sample_added, sample = project_df.add_sample(**args)
-
-        if sample_added :
-            msg += 'SUCCESS: sample added successfully\n'
+        try:
+            msg = f'Adding ({project_id}, {sample_id})\n'
             msg += self.line_separator
-            msg += sample.__str__()
-            project_df.dump()
-        else:
-            msg += f'ERROR: sample with index ({project_id}, {sample_id})'
-            msg +=' already exists. you need to update it first\n'
-            msg +='use `spacemake projects update_sample` to update it'
+            sample_added, sample = self.add_sample(**args)
 
-        print(msg)
+            if sample_added :
+                msg += 'SUCCESS: sample added successfully\n'
+                msg += self.line_separator
+                msg += sample.__str__()
+                self.dump()
+            else:
+                msg += f'ERROR: sample with index ({project_id}, {sample_id})'
+                msg +=' already exists. you need to update it first\n'
+                msg +='use `spacemake projects update_sample` to update it'
+
+        except FileNotFoundError as e:
+            msg += f'ERROR: {e.filename} not found.\n'
+            msg += 'aborting\n'
+        except FileWrongExtensionError as e:
+            msg += f'ERROR: {e.filename} doesnt have the correct extension.\n'
+            msg += f'extension should be {e.expected_extension}\n'
+        finally:
+            print(msg)
 
     def update_sample_cmdline(self, args):
         project_id = args['project_id']
         sample_id = args['sample_id']
 
-        msg = f'Updating ({project_id}, {sample_id})\n'
-        msg += self.line_separator
-        sample_updated, sample = project_df.update_sample(**args)
-
-        if sample_updated:
-            msg += 'SUCCESS: sample updated successfully\n'
+        try:
+            msg = f'Updating ({project_id}, {sample_id})\n'
             msg += self.line_separator
-            msg += sample.__str__()
-            project_df.dump()
-        else:
-            msg += f'ERROR: sample with index ({project_id}, {sample_id})'
-            msg +=' does not exist. you need to add it first\n'
-            msg +='use `spacemake projects add_sample` to update it'
+            sample_updated, sample = self.update_sample(**args)
 
-        print(msg)
+            if sample_updated:
+                msg += 'SUCCESS: sample updated successfully\n'
+                msg += self.line_separator
+                msg += sample.__str__()
+                self.dump()
+            else:
+                msg += f'ERROR: sample with index ({project_id}, {sample_id})'
+                msg +=' does not exist. you need to add it first\n'
+                msg +='use `spacemake projects add_sample` to update it'
+
+        except FileNotFoundError as e:
+            msg += f'ERROR: {e.filename} not found.\n'
+            msg += 'aborting\n'
+        except FileWrongExtensionError as e:
+            msg += f'ERROR: {e.filename} doesnt have the correct extension.\n'
+            msg += f'extension should be {e.expected_extension}\n'
+        finally:
+            print(msg)
 
     def __get_add_sample_sheet_parser(self):
         parser = argparse.ArgumentParser(
