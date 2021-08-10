@@ -28,6 +28,30 @@ class ConfigFile:
     def puck_data(self):
         return self.variables['puck_data']
 
+    @property
+    def annotations(self):
+        if 'annotations' not in self.variables['knowledge']:
+            self.variables['knowledge']['annotations'] = {}
+
+        self.dump()
+
+        return self.variables['knowledge']['annotations']
+
+    @property
+    def genomes(self):
+        if 'genomes' not in self.variables['knowledge']:
+            self.variables['knowledge']['genomes'] = {}
+
+        self.dump()
+
+        return self.variables['knowledge']['genomes']
+
+    def species_exists(self, species_name):
+        if species_name in self.annotations.keys() and species_name in self.genomes.keys():
+            return True
+        else:
+            return False
+
     def add_species_info(self, name, genome, annotation):
         if 'annotations' not in self.variables['knowledge']:
             self.variables['knowledge']['annotations'] = {}
@@ -130,7 +154,7 @@ class ConfigFile:
 
         return 1
 
-    def get_add_update_run_mode_parser(self):
+    def __get_add_update_run_mode_parser(self):
         parser = argparse.ArgumentParser(
             description='add/update run_mode parent parser',
             add_help = False)
@@ -339,13 +363,13 @@ class ConfigFile:
         # add run_mode
         parser_config_add_run_mode = parser_config_subparsers.add_parser('add_run_mode',
             help = 'add a new run_mode',
-            parents=[self.get_add_update_run_mode_parser()])
+            parents=[self.__get_add_update_run_mode_parser()])
         parser_config_add_run_mode.set_defaults(func=self.add_run_mode_cmdline)
 
         # update run mode
         parser_config_update_run_mode = parser_config_subparsers.add_parser('update_run_mode',
             help = 'update run_mode',
-            parents=[self.get_add_update_run_mode_parser()])
+            parents=[self.__get_add_update_run_mode_parser()])
         parser_config_update_run_mode.set_defaults(func=self.update_run_mode_cmdline)
 
         parser_config_delete_run_mode = parser_config_subparsers.add_parser('delete_run_mode',
@@ -621,8 +645,7 @@ class ProjectDF:
 
         #project_df = df_assign_merge_samples(project_df)
     
-    @staticmethod
-    def get_add_update_sample_parser():
+    def __get_add_update_sample_parser(self):
         parser = argparse.ArgumentParser(
             add_help=False)
 
@@ -661,8 +684,7 @@ class ProjectDF:
 
         return parser
 
-    @staticmethod
-    def get_read_species_parser(reads_required):
+    def __get_read_species_parser(self, reads_required):
         parser = argparse.ArgumentParser(
             add_help = False)
 
@@ -680,7 +702,6 @@ class ProjectDF:
             type=str,
             help = 'add the name of the species for this sample',
             required=reads_required)
-
 
         return parser
     
@@ -724,7 +745,7 @@ class ProjectDF:
 
         print(msg)
 
-    def get_add_sample_sheet_parser(self):
+    def __get_add_sample_sheet_parser(self):
         parser = argparse.ArgumentParser(
             description = 'add a new sample sheet to the samples',
             add_help=False)
@@ -749,65 +770,194 @@ class ProjectDF:
 
         self.dump()
 
+    def __get_project_sample_lists_parser(self, help_extra=''):
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument('--project_id',
+            nargs='*',
+            default=[],
+            help = 'project id-s for which we should ' + help_extra)
+        parser.add_argument('--sample_id',
+            nargs='*',
+            default=[],
+            help = 'sample id-s for which we should ' + help_extra)
+
+        return parser
+
     def set_species_cmdline(self, args):
-        print(self.config.puck_data)
         projects = args['project_id']
         samples = args['sample_id']
+        species = args['species_name']
+
+        msg = f'setting {species} for projects: {projects}\n'
+        msg += f'and for samples: {samples}\n'
+        msg += self.line_separator
 
         ix = self.df.query(
             'project_id in @projects or sample_id in @samples').index
 
-        self.df.loc[ix, 'species'] = args['species_name']
+        if ix is None:
+            msg += 'ERROR: no projects or samples provided.\n'
+
+        if self.config.species_exists(species):
+            self.df.loc[ix, 'species'] = species
+            msg += 'SUCCESS: species set successfully.\n'
+        else:
+            msg += f'ERROR: {species} does not exist.\n'
+            msg += 'you need to add it with `spacemake config add_species` first\n'
+
+        print(msg)
 
         self.dump()
 
+    def __add_run_mode(self, ix, run_mode):
+        i_run_mode = self.df.at[ix, 'run_mode']
+        i_run_mode.append(run_mode)
+        self.df.at[ix, 'run_mode'] = list(set(i_run_mode))
+
+    def __remove_run_mode(self, ix, run_mode):
+        i_run_mode = [rm for rm in self.df.at[ix, 'run_mode'] if rm != run_mode]
+        self.df.at[ix, 'run_mode'] = i_run_mode
+
+    def add_remove_run_mode_cmdline(self, args):
+        projects = args['project_id']
+        samples = args['sample_id']
+        run_modes = args['run_mode']
+        action = args['action']
+        
+        msg = f'{action}ing {run_modes} for projects: {projects}\n'
+        msg += f'and for samples: {samples}\n'
+        msg += self.line_separator
+        
+        ix = self.df.query(
+            'project_id in @projects or sample_id in @samples').index
+
+        if ix is None:
+            msg += 'ERROR: no projects or samples provided.\n'
+
+            print(msg)
+
+            return 1
+
+        for run_mode in run_modes:
+            if self.config.run_mode_exists(run_mode):
+                for i, row in self.df.loc[ix, :].iterrows():
+                    # add/remove run mode. if it already exists dont do anything
+                    if action == 'set':
+                        self.__add_run_mode(i, run_mode)
+                    elif action == 'remove':
+                        self.__remove_run_mode(i, run_mode)
+
+                msg += f'SUCCESS: run mode: {run_mode} {action}ed succesfully.\n'
+                msg += self.line_separator
+            else:
+                msg += f'ERROR: {run_mode} is not a valid run mode.\n'
+                msg += 'you need to first add it with `spacemake config add_run_mode`\n'
+                msg += self.line_separator
+
+        print(msg)
+
+        self.dump()
+
+    def list_projects_cmdline(self, args):
+        projects = args['project_id']
+        samples = args['sample_id']
+        variables = args['variables']
+
+        df = self.df
+
+        msg = 'Listing project/sample info\n'
+
+        if projects != [] or samples != []:
+            df = df.query('project_id in @projects or sample_id in @samples')
+            msg += f'for projects: {projects} and samples: {samples}\n'
+        else:
+            msg += 'for all projects and samples\n'
+
+        msg += self.line_separator
+        msg += f'Variables used: {variables}\n'
+        msg += self.line_separator
+        
+        # print the table
+        msg += df.loc[:, variables].__str__()
+
+        print(msg)
+
+
     def get_subparsers(self, subparsers):
-        parser_project = subparsers.add_parser('projects', help ='manage projects and samples') 
-        parser_sample_subparsers = parser_project.add_subparsers(help = 'sample sub-command help')
+        parser = subparsers.add_parser('projects', help ='manage projects and samples') 
+        projects_subparser = parser.add_subparsers(help = 'sample sub-command help')
 
         # ADD SAMPLE SHEET
-        parser_sample_add_sample_sheet = parser_sample_subparsers.add_parser('add_sample_sheet',
+        sample_add_sample_sheet = projects_subparser.add_parser('add_sample_sheet',
             help = 'add projects and samples from Illumina sample sheet',
-            parents=[self.get_add_sample_sheet_parser()])
-        parser_sample_add_sample_sheet.set_defaults(func=self.add_sample_sheet_cmdline)
+            parents=[self.__get_add_sample_sheet_parser()])
+        sample_add_sample_sheet.set_defaults(func=self.add_sample_sheet_cmdline)
 
         # ADD SAMPLES FROM YAML
-        parser_sample_add_samples_yaml = parser_sample_subparsers.add_parser('add_samples_from_yaml',
+        sample_add_samples_yaml = projects_subparser.add_parser('add_samples_from_yaml',
             help = 'add several samples at once from a .yaml file')
-        parser_sample_add_samples_yaml.add_argument('samples_yaml',
+        sample_add_samples_yaml.add_argument('samples_yaml',
             type=str,
             help='path to the .yaml file containing sample info')
-        parser_sample_add_samples_yaml.set_defaults(
+        sample_add_samples_yaml.set_defaults(
             func = self.add_samples_from_yaml_cmdline)
 
         # ADD SAMPLE
-        parser_sample_add = parser_sample_subparsers.add_parser('add_sample',
+        sample_add = projects_subparser.add_parser('add_sample',
             help = 'add new sample',
-            parents=[self.get_add_update_sample_parser(),
-                     self.get_read_species_parser(reads_required=True)])
-        parser_sample_add.set_defaults(func=self.add_sample_cmdline)
+            parents=[self.__get_add_update_sample_parser(),
+                     self.__get_read_species_parser(reads_required=True)])
+        sample_add.set_defaults(func=self.add_sample_cmdline)
 
         # UPDATE SAMPLE
-        parser_sample_add = parser_sample_subparsers.add_parser('update_sample',
+        sample_add = projects_subparser.add_parser('update_sample',
             help = 'update_existing_sample',
-            parents=[self.get_add_update_sample_parser(),
-                     self.get_read_species_parser(reads_required=False)])
-        parser_sample_add.set_defaults(func=self.update_sample_cmdline)
+            parents=[self.__get_add_update_sample_parser(),
+                     self.__get_read_species_parser(reads_required=False)])
+        sample_add.set_defaults(func=self.update_sample_cmdline)
 
         # SET SPECIES
-        parser_set_species = parser_sample_subparsers.add_parser('set_species',
-            help = 'set species for one or multiple projects/samples')
-        parser_set_species.add_argument('--species_name',
-            help = 'name of the species to be added',
+        set_species = projects_subparser.add_parser('set_species',
+            help = 'set species for one or multiple projects/samples',
+            parents=[self.__get_project_sample_lists_parser('set the species')])
+        set_species.add_argument('--species_name',
+            help = 'name of the species to be set',
             type=str, required=True)
-        parser_set_species.add_argument('--project_id',
-            nargs='+',
-            default=[],
-            help = 'project id-s for which we should set this species')
-        parser_set_species.add_argument('--sample_id',
-            nargs='+',
-            default=[],
-            help = 'sample id-s for which we should set this species')
-        parser_set_species.set_defaults(func=self.set_species_cmdline)
+        set_species.set_defaults(func=self.set_species_cmdline)
+
+        # SET RUN MODE
+        set_run_mode = projects_subparser.add_parser('set_run_mode',
+            help = 'set run mode(s) for one or multiple projects/samples',
+            parents=[self.__get_project_sample_lists_parser('set run mode(s)')])
+        set_run_mode.add_argument('--run_mode',
+            help = 'name of the run mode(s) to be set',
+            nargs = '+',
+            type=str, required=True)
+        set_run_mode.set_defaults(func=self.add_remove_run_mode_cmdline,
+            action = 'set')
         
-        return parser_project
+        # REMOVE RUN MODE
+        remove_run_mode = projects_subparser.add_parser('remove_run_mode',
+            help = 'remove run mode(s) for one or multiple projects/samples',
+            parents=[self.__get_project_sample_lists_parser('remove run mode(s)')])
+        remove_run_mode.add_argument('--run_mode',
+            help = 'name of the run mode(s) to be removed',
+            nargs = '+',
+            type=str, required=True)
+        remove_run_mode.set_defaults(func=self.add_remove_run_mode_cmdline,
+            action = 'remove')
+
+        # LIST PROJECTS
+        list_projects = projects_subparser.add_parser('list',
+            help = 'list several project(s) and sample(s) and their settings',
+            parents=[self.__get_project_sample_lists_parser(
+                'subset the data. If none provided, all will be displayed')])
+        list_projects.add_argument('--variables',
+            help = 'which variables to display per sample? If no variables are provided,' +\
+                    'puck_id, species, investigator, sequencing_date and experiment are shown.',
+            choices = self.project_df_default_values.keys(),
+            default = ['puck_id', 'species', 'investigator', 'sequencing_date', 'experiment'],
+            nargs='*')
+        list_projects.set_defaults(func=self.list_projects_cmdline)
+        
+        return parser
