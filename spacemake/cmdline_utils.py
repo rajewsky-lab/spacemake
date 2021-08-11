@@ -27,6 +27,10 @@ class BarcodeFlavorNotFoundError(Exception):
     def __init__(self, barcode_flavor):
         self.barcode_flavor = barcode_flavor
 
+class IncompleteRunModeError(Exception):
+    def __init__(self, run_mode_name):
+        pass
+
 class ConfigFile:
     def __init__(self, file_path):
         self.file_path = file_path
@@ -176,6 +180,9 @@ class ConfigFile:
         parser.add_argument('--umi_cutoff', type=int, nargs='+',
             help='umi_cutoff for this run_mode.' +\
                  'the automated analysis will be run with these cutoffs')
+        parser.add_argument('--n_beads',
+            type=int,
+            help='number of expected beads for this run_mode')
         parser.add_argument(
             '--clean_dge',
             required=False,
