@@ -9,18 +9,25 @@ import re
 from functools import reduce
 from operator import getitem
 
+LINE_SEPARATOR = '-'*50+'\n'
+
 class FileWrongExtensionError(Exception):
     def __init__(self, filename, expected_extension):
         self.filename = filename
         self.expected_extension = expected_extension
+
+    def __str__(self):
+        msg = LINE_SEPARATOR
+        msg += f'File {self.filename} has wrong extension.\n'
+        msg += f'The extension should be {self.expected_extension}\n'
+
+        return msg
 
 class BarcodeFlavorNotFoundError(Exception):
     def __init__(self, barcode_flavor):
         self.barcode_flavor = barcode_flavor
 
 class ConfigFile:
-    line_separator = '-'*50+'\n'
-
     def __init__(self, file_path):
         self.file_path = file_path
         self.variables = yaml.load(open(file_path),
@@ -110,33 +117,28 @@ class ConfigFile:
         self.list_variable(['run_modes'])
         
     def add_run_mode_cmdline(self, args):
+        # set the name and delete from dictionary
         name = args['name']
         del args['name']
         
+        msg = f'Adding run_mode: {name}\n'
+        msg += LINE_SEPARATOR
+        
         # add and save new run mode
         if name in self.variables['run_modes']:
-            msg = f'run_mode: {name} already exists, so it cannot be added.\n'
+            msg += f'ERROR: run_mode: {name} already exists, so it cannot be added.\n'
             msg += 'you can update this run_mode using the `spacemake config update_run_mode`'
             msg += ' command.\nor delete it using the `spacemake config delete_run_mode`' 
             msg += ' command.'
-
-            print(msg)
-            return 0
-
-        msg = f'adding run_mode: {name}\n'
-        msg += self.line_separator
-        msg += 'variables:\n'
-        msg += self.line_separator
-        msg += yaml.dump(args, sort_keys=False)
+        else:
+            self.variables['run_modes'][name] = args
+            self.dump()
+            msg += 'SUCCESS: run_mode added sucessfully.\n'
+            msg += f'variables added for run_mode: {name}:\n'
+            msg += LINE_SEPARATOR
+            msg += yaml.dump(args, sort_keys=False)
 
         print(msg)
-
-        self.variables['run_modes'][name] = args
-        self.dump()
-
-        print(f'run_mode: {name} added')
-
-        return 1
     
     def update_run_mode_cmdline(self, args):
         name = args['name']
@@ -149,9 +151,9 @@ class ConfigFile:
             return 0
 
         msg = f'updating run_mode: {name}\n'
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
         msg += 'variables:\n'
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
         msg += yaml.dump(args, sort_keys=False)
 
         print(msg)
@@ -218,9 +220,9 @@ class ConfigFile:
         flavor_name = args['name']
         barcode_flavor = self.get_variable(['knowledge', 'barcode_flavor'])
 
-        msg = self.line_separator
+        msg = LINE_SEPARATOR
         msg += f'deleting {flavor_name} from barcode flavors\n'
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
 
         if flavor_name not in barcode_flavor.keys():
             msg += 'barcode flavor with {flavor_name} do not exists'
@@ -229,7 +231,7 @@ class ConfigFile:
         else:
             flavor = barcode_flavor[flavor_name]
             msg += yaml.dump(flavor)
-            msg += '\n' + self.line_separator
+            msg += '\n' + LINE_SEPARATOR
             del barcode_flavor[flavor_name]
             self.dump()
             msg += 'success!'
@@ -245,9 +247,9 @@ class ConfigFile:
         # r(1|2) and then string slice
         to_match = r'r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$'
 
-        msg = self.line_separator
+        msg = LINE_SEPARATOR
         msg += f'adding {flavor_name} to barcode flavors\n'
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
 
         barcode_flavor = self.get_variable(['knowledge', 'barcode_flavor'])
 
@@ -289,16 +291,16 @@ class ConfigFile:
 
     def list_species_cmdline(self, args):
         # list annotations first
-        msg = self.line_separator
+        msg = LINE_SEPARATOR
         msg += 'annotations\n'
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
         print(msg)
         self.list_variable(['knowledge', 'annotations'])
 
         # list genomes next
-        msg = self.line_separator
+        msg = LINE_SEPARATOR
         msg += 'genomes\n'
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
         print(msg)
         self.list_variable(['knowledge', 'genomes'])
 
@@ -307,9 +309,9 @@ class ConfigFile:
         annotations = self.get_variable(['knowledge', 'annotations'])
         genomes = self.get_variable(['knowledge', 'genomes'])
 
-        msg = self.line_separator
+        msg = LINE_SEPARATOR
         msg += f'deleting {species_name} annotation and genome info.\n'
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
 
         if species_name not in annotations.keys():
             msg += 'species {species_name} not in annotations.\n'
@@ -327,7 +329,7 @@ class ConfigFile:
 
         self.dump()
 
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
         msg += 'success!'
 
         print(msg)
@@ -337,9 +339,9 @@ class ConfigFile:
         annotation = args['annotation']
         genome = args['genome']
 
-        msg = self.line_separator
+        msg = LINE_SEPARATOR
         msg += f'adding genome, annotation of {species_name}\n'
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
 
         try:
             added = self.add_species_info(species_name, genome, annotation)
@@ -347,7 +349,7 @@ class ConfigFile:
                 msg += f'added {species_name}.\n'
                 msg += f'genome: {genome}\n'
                 msg += f'annotation: {annotation}\n'
-                msg += self.line_separator
+                msg += LINE_SEPARATOR
                 msg += 'success!'
             else:
                 msg += f'{species_name} already exists!\n'
@@ -769,12 +771,11 @@ class ProjectDF:
 
         try:
             msg = f'Adding ({project_id}, {sample_id})\n'
-            msg += self.line_separator
             sample_added, sample = self.add_sample(**args)
 
             if sample_added :
                 msg += 'SUCCESS: sample added successfully\n'
-                msg += self.line_separator
+                msg += LINE_SEPARATOR
                 msg += sample.__str__()
                 self.dump()
             else:
@@ -783,11 +784,10 @@ class ProjectDF:
                 msg +='use `spacemake projects update_sample` to update it'
 
         except FileNotFoundError as e:
-            msg += f'ERROR: {e.filename} not found.\n'
-            msg += 'aborting\n'
+            msg += LINE_SEPARATOR
+            msg += str(e)
         except FileWrongExtensionError as e:
-            msg += f'ERROR: {e.filename} doesnt have the correct extension.\n'
-            msg += f'extension should be {e.expected_extension}\n'
+            msg += str(e)
         finally:
             print(msg)
 
@@ -797,12 +797,12 @@ class ProjectDF:
 
         try:
             msg = f'Updating ({project_id}, {sample_id})\n'
-            msg += self.line_separator
+            msg += LINE_SEPARATOR
             sample_updated, sample = self.update_sample(**args)
 
             if sample_updated:
                 msg += 'SUCCESS: sample updated successfully\n'
-                msg += self.line_separator
+                msg += LINE_SEPARATOR
                 msg += sample.__str__()
                 self.dump()
             else:
@@ -811,11 +811,9 @@ class ProjectDF:
                 msg +='use `spacemake projects add_sample` to update it'
 
         except FileNotFoundError as e:
-            msg += f'ERROR: {e.filename} not found.\n'
-            msg += 'aborting\n'
+            msg += str(e)
         except FileWrongExtensionError as e:
-            msg += f'ERROR: {e.filename} doesnt have the correct extension.\n'
-            msg += f'extension should be {e.expected_extension}\n'
+            msg += str(e)
         finally:
             print(msg)
 
@@ -864,7 +862,7 @@ class ProjectDF:
 
         msg = f'Setting species: {species} for projects: {projects}\n'
         msg += f'and for samples: {samples}\n'
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
 
         ix = self.df.query(
             'project_id in @projects or sample_id in @samples').index
@@ -900,7 +898,7 @@ class ProjectDF:
         
         msg = f'{action}ing {run_modes} for projects: {projects}\n'
         msg += f'and for samples: {samples}\n'
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
         
         ix = self.df.query(
             'project_id in @projects or sample_id in @samples').index
@@ -922,11 +920,11 @@ class ProjectDF:
                         self.__remove_run_mode(i, run_mode)
 
                 msg += f'SUCCESS: run mode: {run_mode} {action}ed succesfully.\n'
-                msg += self.line_separator
+                msg += LINE_SEPARATOR
             else:
                 msg += f'ERROR: {run_mode} is not a valid run mode.\n'
                 msg += 'you need to first add it with `spacemake config add_run_mode`\n'
-                msg += self.line_separator
+                msg += LINE_SEPARATOR
 
         print(msg)
 
@@ -947,9 +945,9 @@ class ProjectDF:
         else:
             msg += 'for all projects and samples\n'
 
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
         msg += f'Variables used: {variables}\n'
-        msg += self.line_separator
+        msg += LINE_SEPARATOR
         
         # print the table
         msg += df.loc[:, variables].__str__()
@@ -971,7 +969,7 @@ class ProjectDF:
         try:
             msg = f'Setting barcode flavor: {barcode_flavor} for projects: {projects}\n'
             msg += f'and for samples: {samples}\n'
-            msg += self.line_separator
+            msg += LINE_SEPARATOR
 
             self.set_barcode_flavor(barcode_flavor,
                                     projects,

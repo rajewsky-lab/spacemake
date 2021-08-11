@@ -137,6 +137,7 @@ def cmdline():
     # get the function to be run
     if 'func' in args:
         func = args.func
+    # else print help
     else:
         if args.main is not None:
             parsers[args.main].print_help()
@@ -147,6 +148,8 @@ def cmdline():
     # get the args and delete the func key, get only set values
     args = {key: value for key, value in vars(args).items() if value is not None}
     args.pop('func', None)
+    # pop also main, 
+    args.pop('main', None)
 
     func(args)
 
