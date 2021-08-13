@@ -17,7 +17,7 @@ class FileWrongExtensionError(Exception):
         self.expected_extension = expected_extension
 
     def __str__(self):
-        msg += f'File {self.filename} has wrong extension.\n'
+        msg = f'File {self.filename} has wrong extension.\n'
         msg += f'The extension should be {self.expected_extension}\n'
 
         return msg
@@ -27,9 +27,19 @@ class BarcodeFlavorNotFoundError(Exception):
         self.barcode_flavor = barcode_flavor
 
     def __str__(self):
-        msg += f'ERROR: barcode_flavor: {self.barcode_flavor} is not specified.\n'
-        msg += f'please add it with `spacemake config add_barcode_flavor`\n'
+        msg = f'ERROR: barcode_flavor: {self.barcode_flavor} is not specified.\n'
+        msg += f'you can add a new run_mode with `spacemake config add_barcode_flavor`\n'
         
+        return msg
+
+class SpeciesNotFoundError(Exception):
+    def __init__(self, species):
+        self.species = species
+
+    def __str__(self):
+        msg = f'ERROR: barcode_flavor: {self.species} is not a valid species.\n'
+        msg += f'you can add a new species with `spacemake config add_species`\n'
+
         return msg
 
 class RunModeNotFoundError(Exception):
@@ -37,8 +47,20 @@ class RunModeNotFoundError(Exception):
         self.run_mode_name = run_mode_name
 
     def __str__(self):
-        msg += f'ERROR: run_mode: {self.run_mode_name} not found.\n'
+        msg = f'ERROR: run_mode: {self.run_mode_name} not found.\n'
         msg += 'you can add a new run_mode using the `spacemake config add_run_mode` command.\n'
+
+        return msg
+
+class NoProjectSampleProvidedError(Exception):
+    def __init__(self):
+        pass
+
+    def __str__(self):
+        msg = f'ERROR: no project or samples were provided.\n'
+
+        return msg
+
 
 class ConfigFile:
     def __init__(self, file_path):
@@ -725,9 +747,13 @@ class ProjectDF:
         for project in config['additional_projects']:
             self.__add_update_sample(**project)
 
-        for barcode_flavor in barcode_flavors:
-            pass
-            # TODO add barcode flavor here
+        for barcode_flavor, to_set in barcode_flavors.items():
+            projects = to_set.get('projects', [])
+            samples = to_set.get('samples', [])
+
+            print(projects, samples)
+            self.set_barcode_flavor(barcode_flavor, projects, samples)
+
 
         #project_df = df_assign_merge_samples(project_df)
     
@@ -889,6 +915,18 @@ class ProjectDF:
 
         return parser
 
+    def set_species(self, species, projects, samples):
+        ix = self.df.query(
+            'project_id in @projects or sample_id in @samples').index
+
+        if ix is None:
+            raise NoProjectSampleProvidedError()
+
+        if self.config.species_exists(species):
+            self.df.loc[ix, 'species'] = species
+        else:
+            raise SpeciesNotFoundError(species)
+
     def set_species_cmdline(self, args):
         projects = args['project_id']
         samples = args['sample_id']
@@ -898,22 +936,15 @@ class ProjectDF:
         msg += f'and for samples: {samples}\n'
         msg += LINE_SEPARATOR
 
-        ix = self.df.query(
-            'project_id in @projects or sample_id in @samples').index
-
-        if ix is None:
-            msg += 'ERROR: no projects or samples provided.\n'
-
-        if self.config.species_exists(species):
-            self.df.loc[ix, 'species'] = species
+        try:
+            self.set_species(species, projects, samples)
             msg += 'SUCCESS: species set successfully.\n'
-        else:
-            msg += f'ERROR: {species} does not exist.\n'
-            msg += 'you need to add it with `spacemake config add_species` first\n'
+            self.dump()
+        except (NoProjectSampleProvidedError, SpeciesNotFoundError) as e:
+            msg += str(e)
+        finally:
+            print(msg)
 
-        print(msg)
-
-        self.dump()
 
     def __add_run_mode(self, ix, run_mode):
         i_run_mode = self.df.at[ix, 'run_mode']
@@ -938,11 +969,7 @@ class ProjectDF:
             'project_id in @projects or sample_id in @samples').index
 
         if ix is None:
-            msg += 'ERROR: no projects or samples provided.\n'
-
-            print(msg)
-
-            return 1
+            raise NoProjectSampleProvidedError()
 
         for run_mode in run_modes:
             if self.config.run_mode_exists(run_mode):
@@ -990,7 +1017,11 @@ class ProjectDF:
 
     def set_barcode_flavor(self, barcode_flavor, projects = [], samples = []):
         if self.config.barcode_flavor_exists(barcode_flavor):
-            ix = self.df.query('project_id in @projects or sample_id in @samples')
+            ix = self.df.query('project_id in @projects or sample_id in @samples').index
+
+            if ix is None:
+                raise NoProjectSampleProvidedError()
+
             self.df.loc[ix, 'barcode_flavor'] = barcode_flavor
         else:
             raise BarcodeFlavorNotFoundError(barcode_flavor)
@@ -998,8 +1029,8 @@ class ProjectDF:
     def set_barcode_flavor_cmdline(self, args):
         barcode_flavor = args['barcode_flavor']
         samples = args['sample_id']
-
         projects = args['project_id']
+
         try:
             msg = f'Setting barcode flavor: {barcode_flavor} for projects: {projects}\n'
             msg += f'and for samples: {samples}\n'
