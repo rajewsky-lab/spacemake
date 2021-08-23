@@ -17,8 +17,7 @@ class FileWrongExtensionError(Exception):
         self.expected_extension = expected_extension
 
     def __str__(self):
-        msg = LINE_SEPARATOR
-        msg += f'File {self.filename} has wrong extension.\n'
+        msg = f'File {self.filename} has wrong extension.\n'
         msg += f'The extension should be {self.expected_extension}\n'
 
         return msg
@@ -27,9 +26,41 @@ class BarcodeFlavorNotFoundError(Exception):
     def __init__(self, barcode_flavor):
         self.barcode_flavor = barcode_flavor
 
-class IncompleteRunModeError(Exception):
+    def __str__(self):
+        msg = f'ERROR: barcode_flavor: {self.barcode_flavor} is not specified.\n'
+        msg += f'you can add a new run_mode with `spacemake config add_barcode_flavor`\n'
+        
+        return msg
+
+class SpeciesNotFoundError(Exception):
+    def __init__(self, species):
+        self.species = species
+
+    def __str__(self):
+        msg = f'ERROR: barcode_flavor: {self.species} is not a valid species.\n'
+        msg += f'you can add a new species with `spacemake config add_species`\n'
+
+        return msg
+
+class RunModeNotFoundError(Exception):
     def __init__(self, run_mode_name):
+        self.run_mode_name = run_mode_name
+
+    def __str__(self):
+        msg = f'ERROR: run_mode: {self.run_mode_name} not found.\n'
+        msg += 'you can add a new run_mode using the `spacemake config add_run_mode` command.\n'
+
+        return msg
+
+class NoProjectSampleProvidedError(Exception):
+    def __init__(self):
         pass
+
+    def __str__(self):
+        msg = f'ERROR: no project or samples were provided.\n'
+
+        return msg
+
 
 class ConfigFile:
     def __init__(self, file_path):
@@ -364,8 +395,8 @@ class ConfigFile:
 
             self.dump()
         except FileNotFoundError as e:
-            msg += f'ERROR: {e.filename} is not found!\n'
-            msg += 'aborting.'
+            msg += LINE_SEPARATOR
+            msg += str(e)
         finally:
             print(msg) 
 
@@ -657,6 +688,11 @@ class ProjectDF:
                         self.project_df_default_values['puck_barcode_file']),
             default_value=self.project_df_default_values['puck_barcode_file'])
 
+        # check if run mode exists
+        for run_mode in kwargs.get('run_mode', []):
+            if not self.config.run_mode_exists(run_mode):
+                raise RunModeNotFoundError(run_mode)
+
         if self.sample_exists(project_id, sample_id):
             new_project = self.df.loc[ix].copy()
             new_project.update(pd.Series(kwargs))
@@ -686,6 +722,15 @@ class ProjectDF:
         else:
             return (False, None)
 
+    def remove_sample(self, project_id, sample_id):
+        if self.sample_exists(project_id, sample_id):
+            ix = (project_id, sample_id)
+            element = self.df.loc[ix]
+            self.df.drop(ix, inplace=True)
+            return (True, element)
+        else:
+            return (False, None)
+
     def add_samples_from_yaml(self, projects_yaml_file):
         config = yaml.load(open(projects_yaml_file),
                 Loader=yaml.FullLoader)
@@ -702,13 +747,17 @@ class ProjectDF:
         for project in config['additional_projects']:
             self.__add_update_sample(**project)
 
-        for barcode_flavor in barcode_flavors:
-            pass
-            # TODO add barcode flavor here
+        for barcode_flavor, to_set in barcode_flavors.items():
+            projects = to_set.get('projects', [])
+            samples = to_set.get('samples', [])
+
+            print(projects, samples)
+            self.set_barcode_flavor(barcode_flavor, projects, samples)
+
 
         #project_df = df_assign_merge_samples(project_df)
     
-    def __get_add_update_sample_parser(self):
+    def __get_project_sample_parser(self):
         parser = argparse.ArgumentParser(
             add_help=False)
 
@@ -719,6 +768,12 @@ class ProjectDF:
         parser.add_argument('--sample_id',
             type=str, required=True,
             help = 'sample_id of the sample to be added/updated')
+
+        return parser
+
+    def __get_sample_extra_arguments_parser(self):
+        parser = argparse.ArgumentParser(
+            add_help=False)
 
         parser.add_argument('--puck_id',
             type=str,
@@ -772,54 +827,52 @@ class ProjectDF:
 
         return parser
     
-    def add_sample_cmdline(self, args):
+    def add_update_remove_sample_cmdline(self, args):
         project_id = args['project_id']
         sample_id = args['sample_id']
+        action = args['action']
+
+        # remove the action from args
+        del args['action']
+
+        msg = ''
+
+        if action == 'add':
+            msg += 'Adding'
+            succ_msg = 'added'
+            err_msg = 'already exists'
+            opposite_action = 'remove'
+            func = self.add_sample
+        elif action == 'update':
+            msg += 'Updatig'
+            succ_msg = 'updated'
+            err_msg = 'does not exist'
+            opposite_action = 'add'
+            func = self.update_sample
+        elif action == 'remove':
+            msg += 'Removing'
+            succ_msg = 'removed'
+            opposite_action = 'add'
+            func = self.remove_sample
+
+        msg += f' ({project_id}, {sample_id})\n'
 
         try:
-            msg = f'Adding ({project_id}, {sample_id})\n'
-            sample_added, sample = self.add_sample(**args)
+            action_taken, sample = func(**args)
 
-            if sample_added :
-                msg += 'SUCCESS: sample added successfully\n'
+            if action_taken:
+                msg += f'SUCCESS: sample {succ_msg} successfully.\n'
                 msg += LINE_SEPARATOR
-                msg += sample.__str__()
+                msg += str(sample)
                 self.dump()
             else:
-                msg += f'ERROR: sample with index ({project_id}, {sample_id})'
-                msg +=' already exists. you need to update it first\n'
-                msg +='use `spacemake projects update_sample` to update it'
-
-        except FileNotFoundError as e:
+                msg += f'ERROR: sample with index ({project_id}, {sample_id}) {err_msg}\n'
+                msg += f'In order to {opposite_action} it, use `spacemake projects {opposite_action}_sample`\n'
+                if action == 'add':
+                    msg += f'You can also remove this sample using `spacemake projects remove_sample`\n'
+        except (RunModeNotFoundError, FileNotFoundError,
+                FileWrongExtensionError, BarcodeFlavorNotFoundError) as e:
             msg += LINE_SEPARATOR
-            msg += str(e)
-        except FileWrongExtensionError as e:
-            msg += str(e)
-        finally:
-            print(msg)
-
-    def update_sample_cmdline(self, args):
-        project_id = args['project_id']
-        sample_id = args['sample_id']
-
-        try:
-            msg = f'Updating ({project_id}, {sample_id})\n'
-            msg += LINE_SEPARATOR
-            sample_updated, sample = self.update_sample(**args)
-
-            if sample_updated:
-                msg += 'SUCCESS: sample updated successfully\n'
-                msg += LINE_SEPARATOR
-                msg += sample.__str__()
-                self.dump()
-            else:
-                msg += f'ERROR: sample with index ({project_id}, {sample_id})'
-                msg +=' does not exist. you need to add it first\n'
-                msg +='use `spacemake projects add_sample` to update it'
-
-        except FileNotFoundError as e:
-            msg += str(e)
-        except FileWrongExtensionError as e:
             msg += str(e)
         finally:
             print(msg)
@@ -862,6 +915,18 @@ class ProjectDF:
 
         return parser
 
+    def set_species(self, species, projects, samples):
+        ix = self.df.query(
+            'project_id in @projects or sample_id in @samples').index
+
+        if ix is None:
+            raise NoProjectSampleProvidedError()
+
+        if self.config.species_exists(species):
+            self.df.loc[ix, 'species'] = species
+        else:
+            raise SpeciesNotFoundError(species)
+
     def set_species_cmdline(self, args):
         projects = args['project_id']
         samples = args['sample_id']
@@ -871,22 +936,15 @@ class ProjectDF:
         msg += f'and for samples: {samples}\n'
         msg += LINE_SEPARATOR
 
-        ix = self.df.query(
-            'project_id in @projects or sample_id in @samples').index
-
-        if ix is None:
-            msg += 'ERROR: no projects or samples provided.\n'
-
-        if self.config.species_exists(species):
-            self.df.loc[ix, 'species'] = species
+        try:
+            self.set_species(species, projects, samples)
             msg += 'SUCCESS: species set successfully.\n'
-        else:
-            msg += f'ERROR: {species} does not exist.\n'
-            msg += 'you need to add it with `spacemake config add_species` first\n'
+            self.dump()
+        except (NoProjectSampleProvidedError, SpeciesNotFoundError) as e:
+            msg += str(e)
+        finally:
+            print(msg)
 
-        print(msg)
-
-        self.dump()
 
     def __add_run_mode(self, ix, run_mode):
         i_run_mode = self.df.at[ix, 'run_mode']
@@ -911,11 +969,7 @@ class ProjectDF:
             'project_id in @projects or sample_id in @samples').index
 
         if ix is None:
-            msg += 'ERROR: no projects or samples provided.\n'
-
-            print(msg)
-
-            return 1
+            raise NoProjectSampleProvidedError()
 
         for run_mode in run_modes:
             if self.config.run_mode_exists(run_mode):
@@ -963,7 +1017,11 @@ class ProjectDF:
 
     def set_barcode_flavor(self, barcode_flavor, projects = [], samples = []):
         if self.config.barcode_flavor_exists(barcode_flavor):
-            ix = self.df.query('project_id in @projects or sample_id in @samples')
+            ix = self.df.query('project_id in @projects or sample_id in @samples').index
+
+            if ix is None:
+                raise NoProjectSampleProvidedError()
+
             self.df.loc[ix, 'barcode_flavor'] = barcode_flavor
         else:
             raise BarcodeFlavorNotFoundError(barcode_flavor)
@@ -971,8 +1029,8 @@ class ProjectDF:
     def set_barcode_flavor_cmdline(self, args):
         barcode_flavor = args['barcode_flavor']
         samples = args['sample_id']
-
         projects = args['project_id']
+
         try:
             msg = f'Setting barcode flavor: {barcode_flavor} for projects: {projects}\n'
             msg += f'and for samples: {samples}\n'
@@ -985,8 +1043,7 @@ class ProjectDF:
             msg += 'SUCCESS: barcode_flavor set successfully.\n'
 
         except BarcodeFlavorNotFoundError as e:
-            msg += f'ERROR: barcode_flavor: {e.barcode_flavor} is not specified.\n'
-            msg += f'please add it with `spacemake config add_barcode_flavor`\n'
+            msg += str(e)
         finally:
             print(msg)
 
@@ -1012,16 +1069,26 @@ class ProjectDF:
         # ADD SAMPLE
         sample_add = projects_subparser.add_parser('add_sample',
             help = 'add new sample',
-            parents=[self.__get_add_update_sample_parser(),
+            parents = [self.__get_project_sample_parser(),
+                     self.__get_sample_extra_arguments_parser(),
                      self.__get_read_species_parser(reads_required=True)])
-        sample_add.set_defaults(func=self.add_sample_cmdline)
+        sample_add.set_defaults(func=self.add_update_remove_sample_cmdline,
+            action='add')
 
         # UPDATE SAMPLE
         sample_add = projects_subparser.add_parser('update_sample',
             help = 'update_existing_sample',
-            parents=[self.__get_add_update_sample_parser(),
+            parents = [self.__get_project_sample_parser(),
+                     self.__get_sample_extra_arguments_parser(),
                      self.__get_read_species_parser(reads_required=False)])
-        sample_add.set_defaults(func=self.update_sample_cmdline)
+        sample_add.set_defaults(func=self.add_update_remove_sample_cmdline,
+            action = 'update')
+
+        sample_remove = projects_subparser.add_parser('remove_sample',
+            help = 'remove existing sample',
+            parents = [self.__get_project_sample_parser()])
+        sample_remove.set_defaults(func=self.add_update_remove_sample_cmdline,
+            action = 'remove')
 
         # SET SPECIES
         set_species = projects_subparser.add_parser('set_species',
