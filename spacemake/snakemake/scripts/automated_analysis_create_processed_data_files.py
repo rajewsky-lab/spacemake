@@ -35,7 +35,8 @@ else:
         if res_key not in adata.obs.columns or rank_key not in adata.uns.keys():
             sc.tl.leiden(adata, resolution = res, key_added = res_key)
             sc.tl.rank_genes_groups(adata, res_key, method='t-test',
-                    key_added = rank_key, pts=True)
+                    key_added = rank_key, pts=True,
+                    use_raw = False)
         
         df = pd.DataFrame(adata.uns[rank_key]['names'])\
                 .head(10).melt(var_name = 'cluster', value_name = 'gene')

@@ -199,6 +199,7 @@ if nrow > 1 and ncol >= 1000:
         
         # finding marker genes
         print(f'ranking genes for resolution {res}')
-        sc.tl.rank_genes_groups(adata, res_key, method='t-test', key_added = 'rank_genes_groups_' + res_key, pts=True)
+        sc.tl.rank_genes_groups(adata, res_key, method='t-test', key_added = 'rank_genes_groups_' + res_key, pts=True,
+            use_raw = False)
 
 adata.write(snakemake.output[0])
