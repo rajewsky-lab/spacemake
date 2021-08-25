@@ -8,59 +8,10 @@ import datetime
 import re
 from functools import reduce
 from operator import getitem
+from spacemake.errors import FileWrongExtensionError, RunModeNotFoundError, \
+    BarcodeFlavorNotFoundError, NoProjectSampleProvidedError, SpeciesNotFoundError
 
 LINE_SEPARATOR = '-'*50+'\n'
-
-class FileWrongExtensionError(Exception):
-    def __init__(self, filename, expected_extension):
-        self.filename = filename
-        self.expected_extension = expected_extension
-
-    def __str__(self):
-        msg = f'File {self.filename} has wrong extension.\n'
-        msg += f'The extension should be {self.expected_extension}\n'
-
-        return msg
-
-class BarcodeFlavorNotFoundError(Exception):
-    def __init__(self, barcode_flavor):
-        self.barcode_flavor = barcode_flavor
-
-    def __str__(self):
-        msg = f'ERROR: barcode_flavor: {self.barcode_flavor} is not specified.\n'
-        msg += f'you can add a new run_mode with `spacemake config add_barcode_flavor`\n'
-        
-        return msg
-
-class SpeciesNotFoundError(Exception):
-    def __init__(self, species):
-        self.species = species
-
-    def __str__(self):
-        msg = f'ERROR: barcode_flavor: {self.species} is not a valid species.\n'
-        msg += f'you can add a new species with `spacemake config add_species`\n'
-
-        return msg
-
-class RunModeNotFoundError(Exception):
-    def __init__(self, run_mode_name):
-        self.run_mode_name = run_mode_name
-
-    def __str__(self):
-        msg = f'ERROR: run_mode: {self.run_mode_name} not found.\n'
-        msg += 'you can add a new run_mode using the `spacemake config add_run_mode` command.\n'
-
-        return msg
-
-class NoProjectSampleProvidedError(Exception):
-    def __init__(self):
-        pass
-
-    def __str__(self):
-        msg = f'ERROR: no project or samples were provided.\n'
-
-        return msg
-
 
 class ConfigFile:
     def __init__(self, file_path):
@@ -79,52 +30,41 @@ class ConfigFile:
     def puck_data(self):
         return self.variables['puck_data']
 
-    @property
-    def annotations(self):
-        if 'annotations' not in self.variables['knowledge']:
-            self.variables['knowledge']['annotations'] = {}
+    def __get_knowledge_var(self, var_name):
+        if var_name not in self.variables['knowledge']:
+            self.variables['knowledge'][var_name] = {}
 
         self.dump()
 
-        return self.variables['knowledge']['annotations']
+        return self.variables['knowledge'][var_name]
 
-    @property
-    def genomes(self):
-        if 'genomes' not in self.variables['knowledge']:
-            self.variables['knowledge']['genomes'] = {}
+    def __add_genome_annotation(self, var_name, species_name, file_path):
+        var_values = self.__get_knowledge_var(var_name)
 
-        self.dump()
-
-        return self.variables['knowledge']['genomes']
-
-    def species_exists(self, species_name):
-        if species_name in self.annotations.keys() and species_name in self.genomes.keys():
-            return True
-        else:
-            return False
-
-    def add_species_info(self, name, genome, annotation):
-        if 'annotations' not in self.variables['knowledge']:
-            self.variables['knowledge']['annotations'] = {}
-
-        if 'genomes' not in self.variables['knowledge']:
-            self.variables['knowledge']['genomes'] = {}
-
-        if name in self.variables['knowledge']['annotations'].keys() and\
-                name in self.variables['knowledge']['genomes'].keys():
-           return False
-
-        if os.path.isfile(annotation):
-            self.variables['knowledge']['annotations'][name] = annotation
+        if os.path.isfile(file_path):
+            self.variables['knowledge'][var_name][species_name] = file_path
         else:
             raise FileNotFoundError(
                 errno.ENOENT, os.strerror(errno.ENOENT), annotation)
 
-        if os.path.isfile(genome):
-            self.variables['knowledge']['genomes'][name] = genome
+
+    def species_exists(self, species_name):
+        if species_name in self.__get_knowledge_var('annotations').keys() \
+                and species_name in self.__get_knowledge_var('genomes').keys():
+            return True
         else:
-            raise FileNotFoundError(
-                errno.ENOENT, os.strerror(errno.ENOENT), genome)
+            return False
+
+    def add_species_info(self, name, genome, annotation,
+            rRNA_genome=None):
+        if self.species_exists(name):
+           return False
+
+        self.__add_genome_annotation('annotations', name, annotation)
+        self.__add_genome_annotation('genomes', name, genome)
+
+        if rRNA_genome is not None :
+            self.__add_genome_annotation('rRNA_genomes', name, rRNA_genome)
 
         return True
 
@@ -376,17 +316,21 @@ class ConfigFile:
         species_name = args['name']
         annotation = args['annotation']
         genome = args['genome']
+        rRNA_genome = args.get('rRNA_genome', None)
 
         msg = LINE_SEPARATOR
         msg += f'adding genome, annotation of {species_name}\n'
         msg += LINE_SEPARATOR
 
         try:
-            added = self.add_species_info(species_name, genome, annotation)
+            added = self.add_species_info(species_name, genome, annotation,
+                rRNA_genome)
             if added:
                 msg += f'added {species_name}.\n'
                 msg += f'genome: {genome}\n'
                 msg += f'annotation: {annotation}\n'
+                if rRNA_genome is not None:
+                    msg += f'rRNA_genome: {rRNA_genome}\n'
                 msg += LINE_SEPARATOR
                 msg += 'success!'
             else:
@@ -486,6 +430,10 @@ class ConfigFile:
             type = str)
         parser_config_add_species.add_argument('annotation',
             help = 'path to the annotation (.gtf) file for the species to be added',
+            type = str)
+        parser_config_add_species.add_argument('--rRNA_genome',
+            help = 'path to the ribosomal-RNA genome (.fa) file for the species to be added',
+            default=None,
             type = str)
         parser_config_add_species.set_defaults(
             func=self.add_species_cmdline)

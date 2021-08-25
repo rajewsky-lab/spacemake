@@ -1,3 +1,5 @@
+from spacemake.errors import BarcodeFlavorNotFoundError
+
 # barcode flavor parsing and query functions
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
@@ -38,6 +40,10 @@ def parse_barcode_flavors(
 
     return res
 
+# all barcode flavor info from config.yaml
+# is kept here for convenient lookup
+bc_flavor_data = parse_barcode_flavors(config)
+
 def get_bc_preprocess_settings(wildcards):
     """
     This function will return a dictionary of information
@@ -45,13 +51,12 @@ def get_bc_preprocess_settings(wildcards):
     """
     flavor = get_metadata('barcode_flavor', project_id = wildcards.project,
             sample_id = wildcards.sample)
+    if flavor not in bc_flavor_data.preprocess_settings:
+        raise BarcodeFlavorNotFoundError(flavor)
+
     settings = bc_flavor_data.preprocess_settings[flavor]
 
     return settings
-
-# all barcode flavor info from config.yaml
-# is kept here for convenient lookup
-bc_flavor_data = parse_barcode_flavors(config)
 
 def df_assign_merge_samples(project_df):
     # added samples to merged to the project_df
@@ -113,41 +118,63 @@ def get_star_input_bam(wildcards):
 
 def get_mapped_final_bam(wildcards):
     if wildcards.mm_included == '.mm_included':
-        return {'reads': final_bam_mm_included}
+        return {'reads': final_bam_mm_included_pipe}
     else:
         return {'reads': final_bam}
 
 
-def get_species_info(wildcards):
-    # This function will return 3 things required by STAR:
+def get_species_genome_annotation(wildcards):
+    # This function will return 2 things required by STAR:
     #    - annotation (.gtf file)
     #    - genome (.fa file)
-    #    - index (a directory where the STAR index is)
-    species = get_metadata(
-        "species", project_id=wildcards.project, sample_id=wildcards.sample
-    )
+    if 'species' not in wildcards.keys():
+        species = get_metadata(
+            "species", project_id=wildcards.project, sample_id=wildcards.sample
+        )
+    else:
+        species = wildcards.species
 
-    return {
+    files = {
         "annotation": config["knowledge"]["annotations"][species],
-        "genome": config["knowledge"]["genomes"][species],
-        "index": config["knowledge"]["indices"][species]["star"],
+        "genome": config["knowledge"]["genomes"][species]
     }
 
+    print(files)
+    return files
 
-def get_rRNA_index(wildcards):
+def get_star_index(wildcards):
+    # This function will return 1 things required by STAR:
+    #    - index directory
+    species = get_metadata(
+        "species", project_id=wildcards.project, sample_id=wildcards.sample
+    )
+    print(expand(star_index, species = species)[0])
+    return {'index': expand(star_index, species = species)[0]}
+
+def get_rRNA_genome(wildcards):
+    return [config['knowledge']['rRNA_genomes'][wildcards.species]]
+
+def get_bt2_rRNA_index(wildcards):
     species = get_metadata(
         "species", project_id=wildcards.project, sample_id=wildcards.sample
     )
 
-    index = ""
+    if 'rRNA_genomes' in config['knowledge']:
+        if species in config['knowledge']['rRNA_genomes']:
+            return {'index': expand(bt2_rRNA_index_dir, species = species)[0]}
+    
+    return []
 
-    # return index only if it exists
-    if "bt2_rRNA" in config["knowledge"]["indices"][species]:
-        index = config["knowledge"]["indices"][species]["bt2_rRNA"]
+def get_bt2_rRNA_index_basename(wildcards):
+    species = get_metadata(
+        "species", project_id=wildcards.project, sample_id=wildcards.sample
+    )
 
-    return {"rRNA_index": index}
-
-
+    if 'rRNA_genomes' in config['knowledge']:
+        if species in config['knowledge']['rRNA_genomes']:
+            return {'index': expand(bt2_rRNA_index_dir, species = species)[0]}
+    
+    return []
 
 def get_run_mode_variables(run_mode):
     # return the run mode variables
@@ -205,23 +232,6 @@ def get_dge_extra_params(wildcards):
 def get_project(sample):
     # return the project id for a given sample id
     return project_df[project_df.sample_id.eq(sample)].project_id.to_list()[0]
-
-
-def get_dropseq_final_bam(wildcards):
-    # merged_name contains all the samples which should be merged,
-    # separated by a dot each
-    samples = config["samples_to_merge"][wildcards.merged_project][
-        wildcards.merged_sample
-    ]
-
-    input_bams = []
-
-    for sample in samples:
-        input_bams = input_bams + expand(
-            dropseq_final_bam, project=get_project(sample), sample=sample
-        )
-    return input_bams
-
 
 def get_merged_bam_inputs(wildcards):
     # currently not used as we do not tag the bam files with the sample name
@@ -290,7 +300,14 @@ def get_top_barcodes(wildcards):
     else:
         return {'top_barcodes': top_barcodes_clean}
 
-def get_dge_from_run_mode(project_id, sample_id, run_mode):
+def get_dge_from_run_mode(
+        project_id,
+        sample_id,
+        run_mode,
+        dge_out_pattern = dge_out,
+        dge_out_summary_pattern = dge_out_summary,
+        **kwargs
+    ):
     run_mode_variables = get_run_mode_variables(run_mode)
     
     dge_type = '.exon'
@@ -311,26 +328,49 @@ def get_dge_from_run_mode(project_id, sample_id, run_mode):
         dge_cleaned = '.cleaned'
 
 
-    dge_out_file = expand(dge_out,
+    dge_out_file = expand(dge_out_pattern,
             project = project_id,
             sample = sample_id,
             dge_type = dge_type,
             dge_cleaned = dge_cleaned,
             polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
-            n_beads = run_mode_variables['n_beads'])[0]
+            n_beads = run_mode_variables['n_beads'],
+            **kwargs)[0]
 
-    dge_out_summary_file = expand(dge_out_summary,
+    dge_out_summary_file = expand(dge_out_summary_pattern,
             project = project_id,
             sample = sample_id,
             dge_type = dge_type,
             dge_cleaned = dge_cleaned,
             polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
-            n_beads = run_mode_variables['n_beads'])[0]
+            n_beads = run_mode_variables['n_beads'],
+            **kwargs)[0]
 
     return {'dge_summary': dge_out_summary_file,
             'dge': dge_out_file}
+
+
+def get_dges_from_project_sample(
+        project_id,
+        sample_id,
+        dge_out_pattern = dge_out,
+        dge_out_summary_pattern = dge_out_summary,
+        **kwargs
+    ):
+    run_modes = get_run_modes_from_sample(project_id, sample_id).keys()
+    dges = {}
+
+    for run_mode in run_modes:
+        run_mode_dge = get_dge_from_run_mode(project_id, sample_id, run_mode,
+            dge_out_pattern, dge_out_summary_pattern, **kwargs)
+
+        dges[f'{run_mode}.dge'] = run_mode_dge['dge']
+        dges[f'{run_mode}.dge_summary'] = run_mode_dge['dge_summary']
+
+    return dges
+
 
 def get_dge_type(wildcards):
     # expects wildcards to have either a run_mode set, in which case
@@ -342,18 +382,8 @@ def get_dge_type(wildcards):
         return get_dge_from_run_mode(wildcards.project, wildcards.sample,
                 wildcards.run_mode)
     elif 'project' in wildcards_keys and 'sample' in wildcards_keys:
-        run_modes = get_run_modes_from_sample(wildcards.project, wildcards.sample).keys()
-
-        dges = {}
-
-        for run_mode in run_modes:
-            run_mode_dge = get_dge_from_run_mode(wildcards.project,
-                    wildcards.sample, run_mode)
-
-            dges[f'{run_mode}.dge'] = run_mode_dge['dge']
-            dges[f'{run_mode}.dge_summary'] = run_mode_dge['dge_summary']
-
-        return dges
+        return get_dges_from_project_sample(project_id = wildcards.project,
+            sample_id = wildcards.sample)
 
 def get_qc_sheet_input_files(wildcards):
     # returns star_log, reads_type_out, strand_info

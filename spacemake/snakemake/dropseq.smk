@@ -45,14 +45,32 @@ rule remove_polyA:
             OUTPUT={output} \
         """
 
+rule create_star_index:
+    input:
+        unpack(get_species_genome_annotation)
+    output:
+        directory(star_index)
+    threads: 8
+    shell:
+        """
+        mkdir -p {output} 
+
+        STAR --runMode genomeGenerate \
+             --runThreadN {threads} \
+             --genomeDir {output} \
+             --genomeFastaFiles {input.genome} \
+             --sjdbGTFfile {input.annotation}
+        """
+
 rule map_reads_final_bam:
     input:
-        unpack(get_species_info),
+        unpack(get_species_genome_annotation),
         unpack(get_star_input_bam),
+        unpack(get_star_index),
         unmapped_tagged_reads=tagged_bam
     output:
-        final_bam
-    log: star_log_file
+        star_log_file,
+        final_bam=final_bam
     threads: 8
     params:
         tmp_dir = tmp_dir,
@@ -79,44 +97,17 @@ rule map_reads_final_bam:
                 --out-bam /dev/stdout | \
             {dropseq_tools}/TagReadWithGeneFunction \
                 I=/dev/stdin \
-                O={output} \
+                O={output.final_bam} \
                 ANNOTATIONS_FILE={input.annotation}
 
         rm -rf {params.tmp_dir}
         """
 
-#rule fix_star_bam_header:
-#    input:
-#        mapped_reads=mapped_reads_sorted_headerless,
-#        unmapped_tagged_reads=tagged_bam
-#    output: pipe(mapped_reads_sorted)
-#    shell:
-#        """
-#        python {repo_dir}/snakemake/scripts/fix_bam_header.py \
-#            --in-bam-star {input.mapped_reads} \
-#            --in-bam-tagged {input.unmapped_tagged_reads} \
-#            --out-bam {output}
-#        """
-
-#rule tag_read_with_gene:
-#    input:
-#        unpack(get_species_info), 
-#        reads=mapped_reads_qname_sorted
-#    output:
-#        final_bam
-#    shell:
-#        """
-#        {dropseq_tools}/TagReadWithGeneFunction \
-#            I={input.reads} \
-#            O={output} \
-#            ANNOTATIONS_FILE={input.annotation}
-#        """
-
 rule filter_mm_reads:
     input:
         final_bam
     output:
-        pipe(final_bam_mm_included)
+        pipe(final_bam_mm_included_pipe)
     shell:
         """
         python {repo_dir}/scripts/filter_mm_reads.py \

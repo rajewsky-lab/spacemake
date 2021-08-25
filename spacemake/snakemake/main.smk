@@ -17,12 +17,7 @@ import math
 ################
 # Shell prefix #
 ################
-shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; umask g+w; ')
-
-#############
-# FUNCTIONS #
-#############
-include: 'scripts/snakemake_helper_functions.py'
+shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 
 ####
 # this file should contain all sample information, sample name etc.
@@ -127,18 +122,21 @@ split_reads_read_type = split_reads_root + 'read_type_num.txt'
 
 qc_sheet = complete_data_root +'/qc_sheet_{sample}_{puck}.html'
 reads_type_out = split_reads_read_type
-barcode_readcounts = complete_data_root + '/out_readcounts{polyA_adapter_trimmed}.txt.gz'
+barcode_readcounts_suffix = '{polyA_adapter_trimmed}.txt.gz'
+barcode_readcounts = complete_data_root + '/out_readcounts' + barcode_readcounts_suffix
 strand_info = split_reads_strand_type
 
 # united final.bam
-top_barcodes = complete_data_root + '/topBarcodes{polyA_adapter_trimmed}.{n_beads}_beads.txt'
-top_barcodes_clean = complete_data_root + '/topBarcodesClean{polyA_adapter_trimmed}.{n_beads}_beads.txt'
+top_barcodes_suffix = '{polyA_adapter_trimmed}.{n_beads}_beads.txt'
+top_barcodes = complete_data_root + '/topBarcodes' + top_barcodes_suffix
+top_barcodes_clean = complete_data_root + '/topBarcodesClean' + top_barcodes_suffix
 
 # united dgu
 dge_root = complete_data_root + '/dge'
-dge_out_prefix = dge_root + '/dge{dge_type}{dge_cleaned}'
-dge_out_suffix = '{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads'
+dge_out_prefix = dge_root + '/dge'
+dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads'
 dge_out = dge_out_prefix + dge_out_suffix + '.txt.gz'
+
 dge_out_summary = dge_out_prefix + dge_out_suffix + '.summary.txt'
 dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all']
 
@@ -176,23 +174,9 @@ automated_analysis_processed_data_files = {
 # prepend automated_result_root
 automated_analysis_processed_data_files = {key: automated_analysis_root + value for key, value in automated_analysis_processed_data_files.items()}
 
-# downsample vars
-downsample_root = illumina_root + '/downsampled_data'
-
 # in silico repo depletion
 ribo_depletion_log = complete_data_root + '/ribo_depletion_log.txt'
 parsed_ribo_depletion_log = complete_data_root + '/parsed_ribo_depletion_log.txt'
-
-# global wildcard constraints
-wildcard_constraints:
-    sample='(?!merged_).+',
-    project='(?!merged_).+',
-    dge_cleaned='|.cleaned',
-    dge_type = '|'.join(dge_types),
-    pacbio_ext = 'fq|fastq',
-    polyA_adapter_trimmed = '|.polyA_adapter_trimmed',
-    mm_included = '|.mm_included',
-    n_beads = '[0-9]+'
 
 # #########################
 #  dropseq rules and vars #
@@ -209,18 +193,20 @@ tagged_polyA_adapter_trimmed_bam = complete_data_root + '/unaligned_bc_tagged.po
 tagged_bam_pattern = complete_data_root + '/unaligned_bc_tagged{polyA_adapter_trimmed}.bam'
 
 # mapped reads
-#mapped_reads_sorted_headerless = complete_data_root + '/star{polyA_adapter_trimmed}.Aligned.headerless.out.bam'
 mapped_reads_qname_sorted = complete_data_root + '/star{polyA_adapter_trimmed}.Aligned.out.bam'
 star_log_file = complete_data_root + '/star{polyA_adapter_trimmed}.Log.final.out'
 star_prefix  = complete_data_root + '/star{polyA_adapter_trimmed}.'
 
 # final bam file
 final_bam = complete_data_root + '/final{polyA_adapter_trimmed}.bam'
-final_bam_mm_included = complete_data_root + '/final{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam'
+bam_mm_included_pipe_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam'
+final_bam_mm_included_pipe = complete_data_root + '/final' + bam_mm_included_pipe_suffix
 final_bam_pattern = complete_data_root + '/final{polyA_adapter_trimmed}{mm_included}.bam'
 
-# include dropseq
-include: 'dropseq.smk'
+# index settings
+star_index = 'species_data/{species}/star_index'
+bt2_rRNA_index_dir = 'species_data/{species}/bt2_rRNA_index'
+bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'
 
 ################################
 # Final output file generation #
@@ -253,8 +239,6 @@ def get_output_files(pattern, projects = [], samples = [],
 
     return out_files
 
-human_mouse_samples = project_df[project_df.species.isin(['human', 'mouse'])].index.get_level_values('sample_id')
-
 ##################
 # include pacbio #
 ##################
@@ -268,7 +252,30 @@ pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf
 pacbio_overview_csv = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.csv'
 pacbio_bead_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_bead_overview.pdf'
 
+
+####################
+# HELPER FUNCTIONS #
+####################
+include: 'scripts/snakemake_helper_functions.py'
+
+######################### 
+# INCLUDE OTHER MODULES #
+#########################
+include: 'downsample.smk'
+include: 'dropseq.smk'
 include: 'pacbio.smk' 
+
+
+# global wildcard constraints
+wildcard_constraints:
+    sample='(?!merged_).+',
+    project='(?!merged_).+',
+    dge_cleaned='|.cleaned',
+    dge_type = '|'.join(dge_types),
+    pacbio_ext = 'fq|fastq',
+    polyA_adapter_trimmed = '|.polyA_adapter_trimmed',
+    mm_included = '|.mm_included',
+    n_beads = '[0-9]+'
 
 #############
 # Main rule #
@@ -306,10 +313,6 @@ rule create_sample_db:
     script:
         'scripts/create_sample_db.R'
 
-################
-# DOWNSAMPLING #
-################
-#include: 'downsample.smk'
 
 #rule downsample:
 #    input:
@@ -318,7 +321,7 @@ rule create_sample_db:
 #################
 # MERGE SAMPLES #
 #################
-include: 'merge_samples.smk'
+#include: 'merge_samples.smk'
 
 #########
 # RULES #
@@ -379,7 +382,7 @@ rule link_raw_reads:
         raw_reads_pattern
     shell:
         """
-        ln -s {input} {output}
+        ln -rs {input} {output}
         """
 
 rule zcat_pipe:
@@ -469,7 +472,7 @@ rule create_top_barcodes:
     output:
         top_barcodes
     shell:
-        "set +o pipefail; zcat {input} | cut -f2 | head -{wildcards.n_beads} > {output}"
+        "zcat {input} | cut -f2 | head -{wildcards.n_beads} > {output}"
 
 rule clean_top_barcodes:
     input:
@@ -590,15 +593,35 @@ rule split_reads_sam_to_bam:
     shell:
         "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
 
+rule create_rRNA_index:
+    input:
+        unpack(get_rRNA_genome)
+    output:
+        directory(bt2_rRNA_index_dir)
+    params:
+        basename=bt2_rRNA_index_basename
+    shell:
+        """
+        mkdir -p {output}
+
+        bowtie2-build --ftabchars 12 \
+                      --offrate 1 \
+                      {input} \
+                      {params.basename}
+        """
+
 rule map_to_rRNA:
     input:
-        raw_reads_mate_2
+        unpack(get_bt2_rRNA_index),
+        reads=raw_reads_mate_2
     output:
         ribo_depletion_log
     params:
-        index= lambda wildcards: get_rRNA_index(wildcards)['rRNA_index'] 
+        species=lambda wildcards: get_metadata(
+            'species', project_id = wildcards.project,
+            sample_id = wildcards.sample)
     run:
-        if wildcards.sample in human_mouse_samples:
-            shell("bowtie2 -x {params.index} -U {input} -p 20 --very-fast-local > /dev/null 2> {output}")
+        if 'index' in input.keys():
+            shell("bowtie2 -x {input.index}/{params.species}_rRNA -U {input.reads} -p 20 --very-fast-local > /dev/null 2> {output}")
         else:
             shell("echo 'no_rRNA_index' > {output}")

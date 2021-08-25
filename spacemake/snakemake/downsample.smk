@@ -9,27 +9,28 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 # first create downsampling for 10, 20 .. 90
 downsampled_ratios = range(10,100,10)
 
+downsample_root = illumina_root + '/downsampled_data'
 downsampled_sample_root = downsample_root + '/{ratio}'
-downsampled_bam = downsampled_sample_root + '/final_downsampled_{ratio}.bam'
-downsampled_readcounts = downsampled_sample_root + '/out_readcounts.txt.gz'
-downsampled_top_barcodes = downsampled_sample_root + '/topBarcodes.txt'
+downsampled_bam = downsampled_sample_root + '/final_downsampled_{ratio}{polyA_adapter_trimmed}.bam'
+downsampled_bam_mm_included_pipe = downsampled_sample_root + '/final_downsampled_{ratio}' + bam_mm_included_pipe_suffix
+
+downsampled_readcounts = downsampled_sample_root + '/out_readcounts' + barcode_readcounts_suffix
+downsampled_top_barcodes = downsampled_sample_root + '/topBarcodes' + top_barcodes_suffix
+downsampled_top_barcodes_clean = downsampled_sample_root + '/topBarcodesClean' + top_barcodes_suffix
 
 # dges
-downsample_dge_root = downsampled_sample_root + '/downsampled_dge'
-downsample_dge_out_prefix = downsample_dge_root + '/downsampled_dge{dge_type}'
-downsample_dge_out = downsample_dge_out_prefix + '.txt.gz'
-downsample_dge_out_summary = downsample_dge_out_prefix + '_summary.txt'
-downsample_dge_types = ['_exon', '_intron', '_all', 'Reads_exon', 'Reads_intron', 'Reads_all']
+downsampled_dge_root = downsampled_sample_root + '/dge'
+downsampled_dge_out_prefix = downsampled_dge_root + '/downsampled_dge'
+downsampled_dge_out = downsampled_dge_out_prefix + dge_out_suffix + '.txt.gz'
+downsampled_dge_out_summary = downsampled_dge_out_prefix + dge_out_suffix + '.summary.gz'
 
-downsample_qc_sheet = downsampled_sample_root  + '/qc_sheet_{united_sample}_{puck}_downsampled_{ratio}.html'
+#downsample_qc_sheet = downsampled_sample_root  + '/qc_sheet_{united_sample}_{puck}_downsampled_{ratio}.html'
 
-downsample_saturation_analysis = downsample_root + '/{united_sample}_saturation_analysis.html'
-
-downsample_saturation_script = repo_dir + '/saturation_analysis.Rmd'
+downsample_saturation_analysis = downsample_root + '/{project_id}_{sample_id}_{run_mode}_saturation_analysis.html'
 
 rule downsample_bam:
     input:
-        united_final_bam
+        final_bam
     output:
         downsampled_bam
     params:
@@ -42,6 +43,18 @@ rule downsample_bam:
         sambamba view -o {output} -f bam -t {threads} -s 0.{wildcards.ratio} {input}
         """
 
+rule downsampled_filter_mm_reads:
+    input:
+        downsampled_bam
+    output:
+        pipe(downsampled_bam_mm_included_pipe)
+    shell:
+        """
+        python {repo_dir}/scripts/filter_mm_reads.py \
+            --in-bam {input} \
+            --out-bam {output}
+        """
+
 rule downsample_bam_tag_histogram:
     input:
         downsampled_bam
@@ -49,8 +62,8 @@ rule downsample_bam_tag_histogram:
         downsampled_readcounts
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.united_project,
-            sample_id = wildcards.united_sample)['{cell}'],
+            project_id = wildcards.project,
+            sample_id = wildcards.sample)['{cell}'],
     shell:
         """
         {dropseq_tools}/BamTagHistogram \
@@ -65,74 +78,100 @@ rule create_downsampled_top_barcodes_file:
     output:
         downsampled_top_barcodes
     shell:
-        "zcat {input} | cut -f2 | head -100000 > {output}"
+        "zcat {input} | cut -f2 | head -{wildcards.n_beads} > {output}"
         
-rule create_downsample_dge:
+rule downsampled_clean_top_barcodes:
     input:
-        reads=downsampled_bam,
-        top_barcodes=downsampled_top_barcodes
+        downsampled_top_barcodes
     output:
-        downsample_dge=downsample_dge_out,
-        downsample_dge_summary=downsample_dge_out_summary
+        downsampled_top_barcodes_clean
+    script:
+        'scripts/clean_top_barcodes.py'
+
+def get_downsampled_top_barcodes(wildcards):
+    if wildcards.dge_cleaned == "":
+        return {"top_barcodes": downsampled_top_barcodes}
+    else:
+        return {'top_barcodes': downsampled_top_barcodes_clean}
+
+def get_downsampled_mapped_final_bam(wildcards):
+    if wildcards.mm_included == '.mm_included':
+        return {'reads': downsampled_bam_mm_included_pipe}
+    else:
+        return {'reads': downsampled_bam}
+
+rule create_downsampled_dge:
+    input:
+        unpack(get_downsampled_mapped_final_bam),
+        unpack(get_downsampled_top_barcodes) 
+    output:
+        downsampled_dge=downsampled_dge_out,
+        downsampled_dge_summary=downsampled_dge_out_summary
     params:
-        downsample_dge_root = downsample_dge_root,
-        downsample_dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
+        downsampled_dge_root = downsampled_dge_root,
+        downsampled_dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.united_project,
-            sample_id = wildcards.united_sample)['{cell}'],
+            project_id = wildcards.project,
+            sample_id = wildcards.sample)['{cell}'],
         umi_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.united_project,
-            sample_id = wildcards.united_sample)['{UMI}']
+            project_id = wildcards.project,
+            sample_id = wildcards.sample)['{UMI}']
     shell:
         """
-        mkdir -p {params.downsample_dge_root}
+        mkdir -p {params.downsampled_dge_root}
 
         {dropseq_tools}/DigitalExpression \
+        -m 16g \
         I= {input.reads}\
-        O= {output.downsample_dge} \
-        SUMMARY= {output.downsample_dge_summary} \
+        O= {output.downsampled_dge} \
+        SUMMARY= {output.downsampled_dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
         CELL_BARCODE_TAG={params.cell_barcode_tag} \
         MOLECULAR_BARCODE_TAG={params.umi_tag} \
-        {params.downsample_dge_extra_params}
+        TMP_DIR={temp_dir} \
+        {params.downsampled_dge_extra_params}
         """
 
-rule create_downsample_qc_sheet:
-    input:
-        star_log = united_star_log,
-        reads_type_out=united_reads_type_out,
-        parameters_file=united_qc_sheet_parameters_file,
-        read_counts=united_barcode_readcounts,
-        dge_all_summary = downsample_dge_root + '/downsampled_dge_all_summary.txt'
-    output:
-        downsample_qc_sheet
-    script:
-        "analysis/qc_sequencing_create_sheet.Rmd"
+#rule create_downsample_qc_sheet:
+#    input:
+#        star_log = united_star_log,
+#        reads_type_out=united_reads_type_out,
+#        parameters_file=united_qc_sheet_parameters_file,
+#        read_counts=united_barcode_readcounts,
+#        dge_all_summary = downsampled_dge_root + '/downsampled_dge_all_summary.txt'
+#    output:
+#        downsample_qc_sheet
+#    script:
+#        "analysis/qc_sequencing_create_sheet.Rmd"
 
 
 def get_saturation_analysis_input(wildcards):
-    # create dictionary with the right downsampling files where ratio is the key
-    dge_summaries = {
-        'downsampled_' + str(x): expand(downsample_dge_out_summary,
-        united_project = wildcards.united_project,
-        united_sample = wildcards.united_sample,
-        dge_type = '_all',
-        ratio = x)[0] for x in downsampled_ratios
-    }
-    
-    dge_summaries['downsampled_100'] = expand(dge_all_summary,
-        united_project = wildcards.united_project,
-        united_sample = wildcards.united_sample)
+    # create dictionary with the right downsampling files where  the key
+    files = {}
 
-    return dge_summaries
+    for ratio in downsampled_ratios:
+        # dge_files contains dge/summary file paths per run_mode
+        dge_files = get_dges_from_project_sample(
+            project_id = wildcards.project,
+            sample_id = wildcards.sample,
+            dge_out_pattern = downsampled_dge_out,
+            dge_out_summary_pattern = downsampled_dge_out_summary,
+            ratio=ratio)
+
+        for key, file_path in dge_files.items():
+            files[f'downsample_{ratio}_{key}'] = file_path
+
+    #dge_summaries['downsampled_100'] = expand(dge_all_summary,
+    #    united_project = wildcards.united_project,
+    #    united_sample = wildcards.united_sample)
+    #
+
+    return files
 
 rule create_saturation_analysis:
     input:
-        unpack(get_saturation_analysis_input),
-        parameters_file=united_qc_sheet_parameters_file,
-        star_log = united_star_log,
-        reads_type_out=united_reads_type_out,
+        unpack(get_saturation_analysis_input)
     output:
         downsample_saturation_analysis
     script:
-        "../analysis/saturation_analysis.Rmd"
+        "scripts/saturation_analysis.Rmd"
