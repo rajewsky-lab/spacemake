@@ -38,17 +38,11 @@ source(snakemake@params$r_shared_scripts)
 ```
 
 ```{r save_snakemake_object, echo = F}
-#write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
-#snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
+#write_rds(snakemake, '/data/local/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/fig_3_slideseq.rds')
+#snakemake <- read_rds('/data/local/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/fig_3_slideseq.rds')
 ```
 
 ```{r read_data, echo = F}
-#parameters <- read_yaml(snakemake@input$parameters_file)
-#
-#parameter_stats <- parameters %>%
-#    as_tibble() %>%
-#    gather('metric', 'value')
-
 obs_df <- read_table2(snakemake@input$obs_df) %>%
     mutate(pct_counts_mt = as.double(pct_counts_mt))
 var_df <- read_table2(snakemake@input$var_df)
@@ -126,8 +120,8 @@ if ('cluster' %in% colnames(obs_df)){
     data_complete = T
 }
 
-fig_height=5
-fig_width=5
+fig_height=6
+fig_width=6
 ```
 
 ```{r incompleteness_warning, eval=!data_complete, echo=F, results='asis'}
@@ -153,31 +147,19 @@ obs_colnames <- colnames(obs_df)
 barcode_file <- 'x_pos' %in% obs_colnames && 'y_pos' %in% obs_colnames
 
 if (barcode_file){
-    fig_width=fig_width * 2
-
-        obs_df %>%
-            filter(res == 'leiden_1') %>%
-            arrange(log1p_total_counts) %>%
-            ggplot(aes(x_pos, y_pos, color = log1p_total_counts)) +
-                geom_point(size = as.numeric(snakemake@params$downstream_variables$plot_bead_size))+
-                coord_fixed()+
-                scale_color_viridis_c(option =  "magma") +
-                ggtitle('UMI distribution in 2D') +
-                labs(color='log2(1+UMI)') + 
-                theme(panel.background = element_rect(fill = 'gray90'))
-
         obs_df %>%
             filter(res == 'leiden_1') %>%
             arrange(total_counts) %>%
-            mutate(total_counts = ifelse(total_counts > 60000, 60000, total_counts)) %>%
+            mutate(total_counts = ifelse(total_counts > 1000, 1000, total_counts)) %>%
             ggplot(aes(x_pos, y_pos, color = total_counts)) +
                 geom_point(size = as.numeric(snakemake@params$downstream_variables$plot_bead_size))+
                 coord_fixed()+
-                scale_color_viridis_c(option =  "magma", limits = c(0, 60000),  breaks = c(20000, 30000, 40000, 50000, 60000)) +
+                scale_color_viridis_c(option =  "magma", limits = c(0, 1100),  breaks = c(100, 300, 500, 700, 900)) +
+                #scale_color_viridis_c(option =  "magma", limits = c(0, 70000),  breaks = c(10000, 20000, 30000, 40000, 50000, 60000)) +
                 guides(color = guide_colorbar(barheight = 15)) + 
-                ggtitle('UMI distribution in 2D') +
-                labs(color='UMI') + 
-                theme(panel.background = element_rect(fill = 'gray90'))
+                labs(color='UMI count', y='', x='') + 
+                theme(panel.background = element_rect(fill = 'gray90'),
+                    axis.text = element_blank(), axis.ticks = element_blank())
     }
 
 # gene plotting function
@@ -258,28 +240,37 @@ top10_marker_table <- read_table2(snakemake@input$cluster_markers)
 for (i in obs_df %$% res %>% unique){
     res <- as.double(strsplit(i, '_')[[1]][2])
     cat(paste0('\n\n#### ', res, ' resolution {.tabset}\n\n'))
-    to_plot <- obs_df %>%
+    umap_plot <- obs_df %>%
         filter(res == i) %>%
         dplyr::select(cell_bc, umap_0, umap_1, cluster) %>%
-        rename(x_pos = umap_0, y_pos = umap_1) %>%
-        mutate(type = 'umap coordinates')
-
-    if (barcode_file) {
-        to_plot <- obs_df %>%
-            filter(res == i) %>%
-            dplyr::select(cell_bc, x_pos, y_pos, cluster) %>%
-            mutate(type = 'physical coordinates') %>%
-            bind_rows(to_plot)
-    }
-    
-    pl <- to_plot %>%
-        mutate(type = factor(type, levels = c('umap coordinates', 'physical coordinates'))) %>%
-        ggplot(aes(x_pos, y_pos, color = cluster)) +
+        ggplot(aes(umap_0, umap_1, color = cluster)) +
             geom_point(size=as.numeric(snakemake@params$downstream_variables$plot_bead_size, alpha=0.9)) +
-            facet_wrap(~type, ncol = 2, scales='free') +
             guides(colour = guide_legend(override.aes = list(size=3)))+
             scale_color_manual(values=cluster_clrs) +
-            theme(aspect.ratio=1, panel.background = element_rect(fill = 'gray90'))
-    print(pl)
+            labs(y='', x='UMAP coordinates') +
+            coord_fixed() +
+            theme(axis.text = element_blank(),
+                  legend.position = 'none', text=element_text(size=24),
+                axis.ticks = element_blank(), axis.line = element_line(color='white'))
+
+    if (barcode_file) {
+        physical_plot <- obs_df %>%
+            filter(res == i) %>%
+            dplyr::select(cell_bc, x_pos, y_pos, cluster) %>%
+            ggplot(aes(x_pos, y_pos, color = cluster)) +
+                geom_point(size=as.numeric(snakemake@params$downstream_variables$plot_bead_size, alpha=0.9)) +
+                guides(colour = guide_legend(override.aes = list(size=3)))+
+                scale_color_manual(values=cluster_clrs) +
+                labs(y = '', x='physical coordinates') +
+                coord_fixed()+
+                theme(panel.background = element_rect(fill = 'gray90'), 
+                  legend.position = 'none',
+                    axis.ticks = element_blank(), axis.text=element_blank(), text = element_text(size =24))
+
+        print(umap_plot)
+        print(physical_plot)
+    } else{
+        print(umap_plot)
+    }
 }
 ```

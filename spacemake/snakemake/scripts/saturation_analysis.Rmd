@@ -26,8 +26,12 @@ library(cowplot)
 library(knitr)
 library(grid)
 library(gtable)
+library(kableExtra)
 
-theme_set(theme_cowplot(12))
+theme_set(theme_cowplot(18))
+
+#write_rds(snakemake, '/data/local/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/fig_3_slideseq_saturation.rds')
+snakemake <- read_rds('/data/local/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/fig_3_slideseq_saturation.rds')
 ```
 
 ```{r functions, echo = F}
@@ -102,18 +106,37 @@ shift_legend <- function(p){
 }
 ```
 
+```{r load_run_info, echo = F}
+run_mode_settings <- bind_rows(snakemake@params$run_mode) %>%
+    nest(umi_cutoff = c(umi_cutoff)) %>%
+    bind_cols(tibble(run_mode = names(snakemake@params$run_mode))) %>%
+    gather('variable_name', 'value', -run_mode) %>%
+    spread(run_mode, value)
 
-```{r read_qc_params_file, echo = F}
-qc_params <- read_yaml(snakemake@input[['parameters_file']])
+run_mode_names <- run_mode_settings[-1] %>% names
+
+sample_info <- bind_rows(snakemake@params$sample_info) %>%
+    select(species, sequencing_date, investigator, experiment,
+           puck_barcode_file) %>%
+    unique %>%
+    gather('info_name', 'value') %>%
+    add_row(info_name = 'project_id',
+            value = snakemake@wildcards$project, .before=1)%>%
+    add_row(info_name = 'sample_id',
+            value = snakemake@wildcards$sample, .after=1)%>%
+    add_row(info_name = 'puck_id',
+            value = snakemake@wildcards$puck, .after=2)
 ```
+
 
 #### Run information
 
-- **Project**: `r qc_params$project_id`
-- **Sample**: `r qc_params$sample_id`
-- **Puck**: `r qc_params$puck_id`
-- **Experiment**: `r qc_params$experiment`
-- **Sequencing date**: `r qc_params$sequencing_date`
+```{r print_sample_info, echo = F}
+sample_info %>%
+    filter(info_name != 'puck_barcode_file') %>%
+    kbl(col.names=NULL) %>%
+    kable_classic_2(full_width=F, position='left')
+```
 
 saturation analysis v.0.1.1, generated on `r format(Sys.time(), '%d/%B/%Y')`
 
@@ -121,7 +144,7 @@ contact: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc-berlin.
 
 #### Downstream stats
 
-```{r parse_metadata, echo = F}
+```{r parse_metadata, echo = F, val = F, eval = F}
 metadata <- readStarLog(snakemake@input$star_log) %>%
     rbind(read_table2(snakemake@input$reads_type_out, col_names=c('observation', 'value'))) %>%
     # convert to millions
@@ -152,19 +175,25 @@ This can give us insight, whether we have reached the saturation point (in terms
 Results of this are plotted below.
 
 ```{r read_summaries, echo = F}
-downsampled_summaries <- snakemake@input[startsWith(names(snakemake@input), 'downsampled')]
+downsampled_summaries <- snakemake@input[startsWith(names(snakemake@input), 'downsample')]
+downsampled_summaries <- downsampled_summaries[endsWith(names(downsampled_summaries), 'dge_summary')]
 
-dge_data <- tibble(percentage = names(downsampled_summaries),
-                   filename = unlist(downsampled_summaries)) %>%
-            mutate(content = map(filename, 
-                                 ~ read_table2(., skip=6))) %>%
-            unnest(content) %>%
-            select(-filename) %>%
-            separate(percentage, into = c(NA, 'percentage')) %>%
-            mutate(pcr = NUM_GENIC_READS / NUM_TRANSCRIPTS) %>%
-            rename(umis = NUM_TRANSCRIPTS,
-                   genes = NUM_GENES,
-                   reads = NUM_GENIC_READS)
+dge_data <- tibble(name = names(downsampled_summaries),
+    filename = unlist(downsampled_summaries)) %>%
+    separate(name, into = c('name', NA), sep='[.]') %>%
+    # replace the first two occurrences of _ with a dot
+    # later we separate by this
+    mutate(name = str_replace(name, '_', '.')) %>%
+    mutate(name = str_replace(name, '_', '.')) %>%
+    separate(name, into = c(NA, 'percentage', 'run_mode'), sep='[.]') %>%
+    mutate(content = map(filename, 
+                      ~ read_table(., skip=6))) %>%
+    unnest(content) %>%
+    select(-filename) %>%
+    mutate(pcr = NUM_GENIC_READS / NUM_TRANSCRIPTS) %>%
+    rename(umis = NUM_TRANSCRIPTS,
+        genes = NUM_GENES,
+        reads = NUM_GENIC_READS)
 ```
 #### Plot distribution of observations
 
@@ -183,19 +212,21 @@ clrs = c(clrs, median_clrs)
 
 plot_observations <- function(metric, log_scale = T){
     pl <- dge_data %>%
-        select(CELL_BARCODE, percentage, pcr, umis, reads) %>%
+        filter(run_mode == 'slideseq') %>%
+        select(CELL_BARCODE, percentage, pcr, umis, reads, run_mode) %>%
         gather('obs', 'val', umis, pcr, reads) %>%
         filter(obs == metric) %>%
         mutate(percentage = as.integer(percentage)) %>%
         filter(percentage %in% c(20, 40, 60, 80, 100)) %>%
-        group_by(percentage, obs) %>%
+        group_by(percentage, obs, run_mode) %>%
         filter(between(val, quantile(val, 0.05, na.rm=T), quantile(val, 0.95, na.rm=T))) %>%
+        mutate(percentage = factor(paste0(percentage, '%'), levels = c('20%', '40%', '60%', '80%', '100%'))) %>%
         ggplot(aes(val, fill = obs)) +
             geom_density() +
-            facet_grid(percentage~obs, scales = 'free_y') +
+            facet_grid(percentage~run_mode, scales = 'free_y') +
             scale_fill_manual(values = clrs) +
             labs(x='') +
-            theme(legend.position='none')
+            theme(legend.position='none', axis.ticks.y = element_blank(), axis.text.y = element_blank())
     if (log_scale){
         pl <- pl +
             scale_x_log10()+
@@ -213,14 +244,14 @@ plot_observations('pcr', log_scale=F)
 
 ```{r plot_by_deciles, echo = F, fig.height=7, fig.width=7}
 decile_dat <- dge_data %>%
-    group_by(percentage) %>%
+    group_by(percentage, run_mode) %>%
     mutate(cumsum_reads = cumsum(reads),
            decile_limit = sum(reads)/10,
            # put beads into deciles by number of reads
            decile = floor(cumsum_reads / decile_limit) + 1) %>%
     # get top 10 deciles, 11 is an artifact of rounding, last beads
     filter(decile < 11) %>%
-    group_by(percentage, decile) %>%
+    group_by(percentage, decile, run_mode) %>%
     summarise(median_reads = median(reads),
               median_genes = median(genes),
               median_pcr = median(pcr),
@@ -240,7 +271,7 @@ decile_dat %>%
         geom_smooth(formula = y~log(x), size = 0.6) +
         geom_point(size=2,  color = 'black', pch=21) + 
         scale_x_continuous(breaks=seq(0, 100, 10)) +
-        facet_wrap(~observation, scales = 'free_y', ncol=2) +
+        facet_wrap(run_mode~observation, scales = 'free_y', ncol=2) +
         labs(y='', x='downsampling percentage')
 ```
 
@@ -248,7 +279,7 @@ decile_dat %>%
 plot_data <- function(umi_cutoff=1){
     dge_data %>%
         filter(umis > umi_cutoff) %>%
-        group_by(percentage) %>%
+        group_by(percentage, run_mode) %>%
         summarise(median_reads = median(reads),
                   median_umis = median(umis),
                   median_genes = median(genes),
@@ -268,7 +299,7 @@ plot_data <- function(umi_cutoff=1){
         geom_smooth(formula = y~log(x), size = 0.6) +
         geom_point(size=2, color = 'black', pch=21) + 
         scale_x_continuous(breaks=seq(0, 100, 10)) +
-        facet_wrap(~observation, scales = 'free', ncol=3) +
+        facet_wrap(run_mode~observation, scales = 'free', ncol=3) +
         labs(y='', x='downsampling percentage', color='', fill='') +
         theme(strip.background=element_blank(), strip.text.x=element_blank()) +
         guides(colour = guide_legend(override.aes = list(size=5))) +

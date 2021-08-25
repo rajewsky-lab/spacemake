@@ -26,7 +26,7 @@ downsampled_dge_out_summary = downsampled_dge_out_prefix + dge_out_suffix + '.su
 
 #downsample_qc_sheet = downsampled_sample_root  + '/qc_sheet_{united_sample}_{puck}_downsampled_{ratio}.html'
 
-downsample_saturation_analysis = downsample_root + '/{project_id}_{sample_id}_{run_mode}_saturation_analysis.html'
+downsample_saturation_analysis = downsample_root + '/{project}_{sample}_saturation_analysis.html'
 
 rule downsample_bam:
     input:
@@ -161,10 +161,12 @@ def get_saturation_analysis_input(wildcards):
         for key, file_path in dge_files.items():
             files[f'downsample_{ratio}_{key}'] = file_path
 
-    #dge_summaries['downsampled_100'] = expand(dge_all_summary,
-    #    united_project = wildcards.united_project,
-    #    united_sample = wildcards.united_sample)
-    #
+    full_dge_files = get_dges_from_project_sample(
+        project_id = wildcards.project,
+        sample_id = wildcards.sample)
+
+    for key, file_path in full_dge_files.items():
+        files[f'downsample_100_{key}'] = file_path
 
     return files
 
@@ -173,5 +175,10 @@ rule create_saturation_analysis:
         unpack(get_saturation_analysis_input)
     output:
         downsample_saturation_analysis
+    params:
+        sample_info = lambda wildcards: get_sample_info(
+            wildcards.project, wildcards.sample),
+        run_modes = lambda wildcards: get_run_modes_from_sample(
+            wildcards.project, wildcards.sample)
     script:
         "scripts/saturation_analysis.Rmd"
