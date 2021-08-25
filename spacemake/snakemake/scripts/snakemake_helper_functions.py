@@ -165,17 +165,6 @@ def get_bt2_rRNA_index(wildcards):
     
     return []
 
-def get_bt2_rRNA_index_basename(wildcards):
-    species = get_metadata(
-        "species", project_id=wildcards.project, sample_id=wildcards.sample
-    )
-
-    if 'rRNA_genomes' in config['knowledge']:
-        if species in config['knowledge']['rRNA_genomes']:
-            return {'index': expand(bt2_rRNA_index_dir, species = species)[0]}
-    
-    return []
-
 def get_run_mode_variables(run_mode):
     # return the run mode variables
     # first set the default, for each
