@@ -1,9 +1,10 @@
 ---
-iutput:
+output:
   html_document:
     toc: true
+    self_contained: yes
     toc_depth: 4
-version: 0.1.1
+version: 0.2.0
 author: Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos
 email: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc.berlin.de
 license: GPL
@@ -25,8 +26,6 @@ library(knitr)
 library(magrittr)
 library(kableExtra)
 library(cowplot)
-library(grid)
-library(gtable)
 
 theme_set(theme_cowplot(18))
 
@@ -50,67 +49,6 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
-shift_legend <- function(p){
-  # function copied from: https://stackoverflow.com/questions/54438495/shift-legend-into-empty-facets-of-a-faceted-plot-in-ggplot2
-  # check if p is a valid object
-  if(!"gtable" %in% class(p)){
-    if("ggplot" %in% class(p)){
-      gp <- ggplotGrob(p) # convert to grob
-    } else {
-      message("This is neither a ggplot object nor a grob generated from ggplotGrob. Returning original plot.")
-      return(p)
-    }
-  } else {
-    gp <- p
-  }
-
-  # check for unfilled facet panels
-  facet.panels <- grep("^panel", gp[["layout"]][["name"]])
-  empty.facet.panels <- sapply(facet.panels, function(i) "zeroGrob" %in% class(gp[["grobs"]][[i]]))
-  empty.facet.panels <- facet.panels[empty.facet.panels]
-  if(length(empty.facet.panels) == 0){
-    message("There are no unfilled facet panels to shift legend into. Returning original plot.")
-    return(p)
-  }
-
-  # establish extent of unfilled facet panels (including any axis cells in between)
-  empty.facet.panels <- gp[["layout"]][empty.facet.panels, ]
-  empty.facet.panels <- list(min(empty.facet.panels[["t"]]), min(empty.facet.panels[["l"]]),
-                             max(empty.facet.panels[["b"]]), max(empty.facet.panels[["r"]]))
-  names(empty.facet.panels) <- c("t", "l", "b", "r")
-
-  # extract legend & copy over to location of unfilled facet panels
-  guide.grob <- which(gp[["layout"]][["name"]] == "guide-box")
-  if(length(guide.grob) == 0){
-    message("There is no legend present. Returning original plot.")
-    return(p)
-  }
-  gp <- gtable_add_grob(x = gp,
-                        grobs = gp[["grobs"]][[guide.grob]],
-                        t = empty.facet.panels[["t"]],
-                        l = empty.facet.panels[["l"]],
-                        b = empty.facet.panels[["b"]],
-                        r = empty.facet.panels[["r"]],
-                        name = "new-guide-box")
-
-  # squash the original guide box's row / column (whichever applicable)
-  # & empty its cell
-  guide.grob <- gp[["layout"]][guide.grob, ]
-  if(guide.grob[["l"]] == guide.grob[["r"]]){
-    gp <- gtable_squash_cols(gp, cols = guide.grob[["l"]])
-  }
-  if(guide.grob[["t"]] == guide.grob[["b"]]){
-    gp <- gtable_squash_rows(gp, rows = guide.grob[["t"]])
-  }
-  gp <- gtable_remove_grobs(gp, "guide-box")
-
-  return(gp)
-}
-```
-
-```{r save_snakemake, echo = F}
-#write_rds(snakemake, '/scratch/home/tsztank/snakemake.rds')
-#snakemake <- read_rds('/scratch/home/tsztank/snakemake.rds')
 ```
 
 ```{r read_sample_information_tables, echo = F}
@@ -144,7 +82,7 @@ clrs = c('umis'=cPalette$light_orange, 'genes' = cPalette$light_blue, 'reads'=cP
          'pcr'=cPalette$pink)
 
 summarised_clrs = c(clrs, 'black')
-names(summarised_clrs) = c(paste0('median_', names(clrs)), 'log10_n_beads')
+names(summarised_clrs) = c(paste0('median_', names(clrs)), 'n_beads')
 
 nucl_clrs = c('A'='#F5C900',
               'C'='#F55D59',
@@ -159,6 +97,7 @@ nucl_clrs = c('A'='#F5C900',
 
 ```{r show_sample_info, echo = F}
 sample_info %>%
+    filter(info_name != 'puck_barcode_file') %>%
     kbl(col.names=NULL) %>%
     kable_classic_2(full_width=F, position='left')
 ```
@@ -243,6 +182,9 @@ read_stats %>%
     row_spec(0, bold=T) %>%
     add_indent(c(3,4,5,6,7)) %>%
     footnote(general ='All values, except avg_mapped_length, shown in millions')
+
+read_stats %>%
+    write_csv('table3.csv')
 ```
 
 
@@ -281,14 +223,20 @@ read_counts %>%
 
 #### Umi-cutoff plots
 
-```{r umi_cutoff_plot, echo = F, fig.width = 10, fig.height=6, dpi=300}
+```{r create_umi_cutoffs, echo = F, fig.width = 10, fig.height=5}
 umi_cutoffs <- seq(10, 20000, 10)
 
 cell_bc_len = nchar((dge_summary %$% cell_bc)[1])
 
 dge_summary <- dge_summary %>%
     filter(nchar(cell_bc) == cell_bc_len) %>%
-    mutate(quartile = ntile(1:n(), 4))
+    group_by(run_mode) %>%
+    mutate(reads_cumsum = cumsum(reads)) %>%
+    mutate(quartile = cut(reads_cumsum,
+                          breaks = 4,
+                          include.lowest= T,
+                          labels = c('Q1', 'Q2', 'Q3', 'Q4'))) %>%
+    select(-reads_cumsum)
 
 summarise_dge_summary <- function(umi_cutoff){
     dge_summary %>%
@@ -304,29 +252,56 @@ umi_cutoff_data <- tibble(umi_cutoffs = umi_cutoffs) %>%
     mutate(dat = map(umi_cutoffs, ~ summarise_dge_summary(.))) %>%
     unnest(dat)
 
-p <- umi_cutoff_data %>%
-    mutate(log10_n_beads = log10(n_beads)) %>%
-    select(-n_beads) %>%
-    gather('obs', 'value', -umi_cutoffs, -run_mode) %>%
-    ggplot(aes(umi_cutoffs, value, color=obs, linetype = run_mode)) +
-        geom_line() +
-        scale_color_manual(values=summarised_clrs) +
-        facet_wrap(~obs, ncol=3, scales='free') +
-        scale_x_log10(breaks = c(10, 100, 1000, 10000)) +
-        annotation_logticks(sides='b') +
-        theme(strip.background=element_blank(), strip.text.x=element_blank(),
-              text = element_text(size=18, face = 'plain'), 
-              legend.title = element_blank(), legend.margin = margin(t=0.1, b=0.1, unit = 'cm'),
-              legend.spacing = unit(0, 'cm')) +
-        labs(color='', linetype='') +
-        guides(colour = guide_legend(override.aes = list(size=5)))
+```
 
-grid.draw(shift_legend(p))
+
+```{r plot_umi_cutoff_plot, echo = F, fig.height=7.5, fig.width=12}
+umi_cutoff_plot <- function(metric, y_log_transform = F, legend_pos='none'){
+    pl <- umi_cutoff_data %>%
+        gather('obs', 'value', -umi_cutoffs, -run_mode) %>%
+        filter(obs == metric) %>%
+        ggplot(aes(umi_cutoffs, value, color=obs, linetype = run_mode)) +
+            geom_line() +
+            scale_color_manual(values=summarised_clrs) +
+            scale_x_log10(breaks = c(1e1, 1e2, 1e3, 1e4)) +
+            theme(strip.background=element_blank(), strip.text.x=element_blank(),
+                  text = element_text(size=18, face = 'plain'), legend.position=legend_pos,
+                  legend.title = element_blank(), legend.margin = margin(t=0.5, b=0.5,l=0.5,
+                                                                         r=0.5, unit = 'cm'),
+                  legend.spacing = unit(0, 'cm'), plot.margin = unit(c(1,1,1,1), "lines")) +
+            labs(color='', linetype='', y=paste0(metric, '\nper spot'), x='minimum umi value per spot') +
+            guides(linetype = guide_legend(override.aes = list(size = 1)),
+                   color = guide_legend(override.aes = list(size = 2)))
+
+    if (y_log_transform){
+        pl <- pl + scale_y_log10() +
+            annotation_logticks(sides='bl')
+    } else {
+        pl <- pl +
+            annotation_logticks(sides='b')
+    }
+
+    return(pl)
+}
+
+pl1 <- umi_cutoff_plot('n_beads', y_log_transform = T)
+pl2 <- umi_cutoff_plot('median_reads')
+pl3 <- umi_cutoff_plot('median_genes')
+pl4 <- umi_cutoff_plot('median_umis')
+pl5 <- umi_cutoff_plot('median_pcr', legend_pos = 'right')
+
+plt_legend <- get_legend(pl5)
+
+plot_grid(pl1, pl2, pl3,
+        pl4, pl5 + theme(legend.position='none'), plt_legend,
+        align='vh', hjust=-1, labels="", nrow=3)
 ```
 
 #### Histogram of metrics over beads
 
-```{r plot_n_reads_bead_hist, echo = F, fig.width=10, fig.height=4*run_mode_n, dpi=300}
+Next we show mertics such as number of UMIs, genes, reads and pcr per physical spot. We further distinguish between each run mode, showing one histogram for each. 
+
+```{r plot_n_reads_bead_hist, echo = F, fig.width=12, fig.height=5*run_mode_n, dpi=200}
 to_plot <- dge_summary %>%
     gather('obs', 'val', -cell_bc, -quartile, -run_mode)
 
@@ -344,9 +319,9 @@ metric_plot <- function(metric, legend_pos='none'){
             geom_histogram(bins=100) +
             scale_x_log10() +
             scale_fill_manual(values=clrs) +
-            facet_grid(run_mode~obs, scales='free_y') +
-            theme(legend.position = legend_pos,
-                  strip.background.x=element_blank(), strip.text.x=element_blank())
+            facet_wrap(~run_mode, scales='free_y', ncol=1) +
+            labs(x=paste0('# of ', metric, ' per spot'), y='# of spots') +
+            theme(legend.position = legend_pos)
 
     if(min_difference > 1){
         pl <- pl + 
@@ -366,13 +341,17 @@ pl_metrics <- plot_grid(pl1, pl2, pl3 + theme(legend.position='none'),
                         pl4, align='vh', hjust=-1, labels="", nrow=2)
 
 plot_grid(pl_metrics, plt_legend, ncol=1, rel_heights = c(1, .1))
-
-#theme(legend.position = 'none', text = element_text(size=18, face='plain'))
 ```
 
-#### Nucleotide distribution per beads
+#### Nucleotide distribution per beads {.tabset .tabset-dropdown}
 
-```{r plot_nucl_freq, echo = F, fig.height=3*run_mode_n, fig.width=12}
+Next we bin the data based on reads into quartile. For each run\_mode the data is divided into 4 beads, by reads. This means, that the first bin will contain beads which account 25% of the reads, the second will contain beads which account for the second 25% of reads and so on. 
+
+For each run mode we plot the nucleotide distribution per quartile.
+
+**You can pick the run\_mode to be shown from the dropdown list**
+
+```{r prepare_nucl_freq, echo = F}
 nucls <- dge_summary %$%
     cell_bc %>% strsplit("")
 
@@ -388,16 +367,42 @@ nucls <- dge_summary %>%
     ungroup() %>%
     tidyr::complete(run_mode, pos, nucl, quartile, fill=list(nucl_count=0))
 
-nucls %>%
-    ggplot(aes(pos, nucl_count, fill = nucl)) +
-        geom_bar(stat='identity', position='dodge') +
-        scale_fill_manual(values=nucl_clrs) +
-        scale_x_discrete(labels=seq(1, cell_bc_len, 1)) +
-        facet_grid(run_mode~quartile) +
-        ggtitle('Nucleotide distributions per nucleotide position and bead quartile')
 ```
 
-#### Shannon entropy and string compression
+```{r plot_nucl_freq, results='asis', fig.width=10, fig.height = 5, echo=F}
+plot_nucl_freq <- function(run_mode_in){
+    lbl_df <- dge_summary %>%
+        ungroup() %>%
+        filter(run_mode == run_mode_in) %>%
+        group_by(quartile) %>%
+        summarise(lbl = n()) %>%
+        mutate(lbl = paste0(quartile, ' (n=', lbl, ')'))
+
+    lbls <- lbl_df$lbl
+    names(lbls) <- lbl_df$quartile
+
+    nucls %>%
+        filter(run_mode == run_mode_in) %>%
+        ggplot(aes(pos, nucl_count, fill = nucl)) +
+            geom_bar(stat='identity', position='dodge') +
+            scale_fill_manual(values=nucl_clrs) +
+            scale_x_discrete(labels=seq(1, cell_bc_len, 1)) +
+            facet_wrap(~quartile, ncol=2, scales='free_y',
+                       labeller=as_labeller(lbls)) +
+            labs(x='nucleotide position in the barcode',
+                 y='nucletide count')+
+            theme(text = element_text(size =18 ))
+}
+
+for (run_mode in unique(dge_summary$run_mode)){
+    cat (paste0('\n\n ##### ', run_mode, '\n\n'))
+
+    print(plot_nucl_freq(run_mode))
+}
+
+```
+
+#### Shannon entropy and string compression {.tabset .tabset-dropdown}
 
 ```{r calc_shannon, echo = F}
 calc_shannon_entropy <- function(barcode){
@@ -432,20 +437,45 @@ dge_summary <- dge_summary %>%
     unnest(theoretical_string_compression)
 ```
 
-```{r plot_shannon, echo = F, fig.height=3*run_mode_n, fig.width=12}
-dge_summary %>%
-    dplyr::select(-reads, -umis, -genes, -pcr, -quartile) %>%
-    gather('observation', 'value', -cell_bc, -run_mode) %>%
-    # replace first _ with |, so we can separate later
-    mutate(observation = str_replace(observation, '_', ' '),
-           observation = str_replace(observation, '\\s', '|'),
-           observation = str_replace(observation, ' ', '_')) %>%
-    separate(observation, into = c('type', 'observation'), sep = '\\|') %>%
-    ggplot(aes(value, fill = type)) +
-        geom_histogram(bins=30, color='black', position='dodge') +
-        scale_fill_manual(values=c(cpalette$grey, cpalette$orange)) +
-        facet_grid(run_mode~observation, scales='free_x') +
-        labs(fill='') +
-        theme(legend.position = 'bottom', text = element_text(size=18, face='plain'))
+```{r plot_shannon, echo = F, fig.height=5, fig.width=10, results='asis'}
+plot_shannon_scompression <- function(run_mode_in){
+    dat <- dge_summary %>%
+        filter(run_mode == run_mode_in) %>%
+        dplyr::select(-reads, -umis, -genes, -pcr, -quartile) %>%
+        gather('observation', 'value', -cell_bc, -run_mode) %>%
+        # replace first _ with |, so we can separate later
+        mutate(observation = str_replace(observation, '_', ' '),
+               observation = str_replace(observation, '\\s', '|'),
+               observation = str_replace(observation, ' ', '_')) %>%
+        separate(observation, into = c('type', 'observation'), sep = '\\|')
+
+    pl1 <- dat %>%
+        filter(observation == 'entropy') %>%
+        ggplot(aes(value, fill = type)) +
+            geom_histogram(bins=30, color='black', position='dodge') +
+            scale_fill_manual(values=c(cpalette$grey, cpalette$orange)) +
+            labs(fill='', y='# of beads', x='shannon entropy of beads') +
+            theme(legend.position = c(0.1, 0.8), text = element_text(size=18, face='plain'))
+
+    pl2 <- dat %>%
+        filter(observation == 'string_compression') %>%
+        ggplot(aes(value, fill = type)) +
+            geom_histogram(bins=30, color='black', position='dodge') +
+            scale_fill_manual(values=c(cpalette$grey, cpalette$orange)) +
+            labs(fill='', y='# of beads', x='length of beads after compression') +
+            theme(text = element_text(size=18, face='plain'), legend.position='none')
+
+    plt_legend <- get_legend(pl2)
+
+    plot_grid(pl1, pl2,
+              align='vh', hjust=-1, labels="", nrow=2)
+
+}
+
+for (run_mode in unique(dge_summary$run_mode)){
+    cat (paste0('\n\n ##### ', run_mode, '\n\n'))
+
+    print(plot_shannon_scompression(run_mode))
+}
 ```
 

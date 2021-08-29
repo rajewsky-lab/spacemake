@@ -794,13 +794,14 @@ class ProjectDF:
         elif action == 'update':
             msg += 'Updatig'
             succ_msg = 'updated'
-            err_msg = 'does not exist'
+            err_msg = 'does not exist.'
             opposite_action = 'add'
             func = self.update_sample
         elif action == 'remove':
             msg += 'Removing'
             succ_msg = 'removed'
             opposite_action = 'add'
+            err_msg = 'does not exist.'
             func = self.remove_sample
 
         msg += f' ({project_id}, {sample_id})\n'
