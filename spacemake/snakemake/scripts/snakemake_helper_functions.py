@@ -337,6 +337,8 @@ def get_dge_from_run_mode(
             n_beads = run_mode_variables['n_beads'],
             **kwargs)[0]
 
+    print(dge_out_file)
+
     return {'dge_summary': dge_out_summary_file,
             'dge': dge_out_file}
 

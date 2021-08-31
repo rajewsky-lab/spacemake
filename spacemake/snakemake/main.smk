@@ -14,6 +14,8 @@ import pandas as pd
 import numpy as np
 import math
 
+from spacemake.util import dge_to_sparse
+
 ################
 # Shell prefix #
 ################
@@ -136,17 +138,10 @@ dge_root = complete_data_root + '/dge'
 dge_out_prefix = dge_root + '/dge'
 dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads'
 dge_out = dge_out_prefix + dge_out_suffix + '.txt.gz'
+dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.h5ad'
 
 dge_out_summary = dge_out_prefix + dge_out_suffix + '.summary.txt'
 dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all']
-
-dge_all_summary = complete_data_root +  '/dge/dge.all'+ dge_out_suffix + '.summary.txt'
-# cleaned dge and summary
-dge_all_cleaned = complete_data_root +  '/dge/dge.all.cleaned.txt.gz'
-dge_all_cleaned_summary = complete_data_root +  '/dge/dge.all.cleaned' +dge_out_suffix + '.summary.txt'
-
-# dge and summary
-dge_all = complete_data_root +  '/dge/dge_all' + dge_out_suffix + '.txt.gz'
 
 # kmer stats per position
 kmer_stats_file = complete_data_root + '/kmer_stats/{kmer_len}mer_counts.csv'
@@ -163,6 +158,7 @@ paired_end_mapping_stats = paired_end_prefix + '{sample}_paired_end_mapping_stat
 automated_analysis_root = complete_data_root + '/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}'
 automated_report = automated_analysis_root + '/{sample}_{puck}_illumina_automated_report.html'
 
+spatial_dge = automated_analysis_root + '/preprocessed_spatial_dge.h5ad'
 automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
 
 automated_analysis_processed_data_files = {
@@ -516,6 +512,13 @@ rule create_dge:
         {params.dge_extra_params}
         """
 
+rule create_h5ad_dge:
+    input: dge_out
+    output: dge_out_h5ad
+    run:
+        adata = dge_to_sparse(input[0])
+        adata.write(output[0])
+
 rule parse_ribo_log:
     input: ribo_depletion_log
     output: parsed_ribo_depletion_log
@@ -536,15 +539,27 @@ rule create_qc_sheet:
     script:
         "scripts/qc_sequencing_create_sheet.Rmd"
 
-rule run_automated_analysis:
+
+rule create_spatial_dge:
     input:
         unpack(get_puck_file),
-        unpack(get_dge_type)
+        dge=lambda wildcards: get_dge_from_run_mode(
+            wildcards.project,
+            wildcards.sample,
+            wildcards.run_mode,
+            dge_out_pattern = dge_out_h5ad)['dge']
     output:
-        automated_analysis_result_file
+        spatial_dge
     params:
         downstream_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode)
-    threads: 2
+    script:
+        "scripts/create_spatial_dge.py"
+
+rule run_automated_analysis:
+    input:
+        spatial_dge
+    output:
+        automated_analysis_result_file
     script:
         'scripts/automated_analysis.py'
 

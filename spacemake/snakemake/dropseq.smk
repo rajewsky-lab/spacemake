@@ -40,7 +40,6 @@ rule remove_polyA:
         """
         {dropseq_tools}/PolyATrimmer OUTPUT_SUMMARY={params.reports_dir}/remove_polyA.report.txt \
             MISMATCHES=0 \
-            NUM_BASES=20 \
             INPUT={input} \
             OUTPUT={output} \
         """
@@ -50,7 +49,7 @@ rule create_star_index:
         unpack(get_species_genome_annotation)
     output:
         directory(star_index)
-    threads: 8
+    threads: 16
     shell:
         """
         mkdir -p {output} 
