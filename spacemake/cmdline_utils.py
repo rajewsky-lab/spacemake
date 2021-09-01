@@ -45,7 +45,7 @@ class ConfigFile:
             self.variables['knowledge'][var_name][species_name] = file_path
         else:
             raise FileNotFoundError(
-                errno.ENOENT, os.strerror(errno.ENOENT), annotation)
+                errno.ENOENT, os.strerror(errno.ENOENT), file_path)
 
 
     def species_exists(self, species_name):
@@ -144,7 +144,7 @@ class ConfigFile:
         parser = argparse.ArgumentParser(
             description='add/update run_mode parent parser',
             add_help = False)
-        parser.add_argument('name', type=str,
+        parser.add_argument('--name', type=str,
             help='name of the run_mode to be added')
         parser.add_argument('--parent_run_mode', type=str,
             help='Name of the parent run_mode. All run_modes will fall back to \'default\'')
@@ -367,9 +367,9 @@ class ConfigFile:
 
         parser_config_delete_run_mode = parser_config_subparsers.add_parser('delete_run_mode',
             help = 'delete a run_mode')
-        parser_config_delete_run_mode.add_argument('name',
+        parser_config_delete_run_mode.add_argument('--name',
             type=str,
-            help='run_mode to be deleted')
+            help='run_mode to be deleted', required=True)
         parser_config_delete_run_mode.set_defaults(func=self.delete_run_mode_cmdline)
 
         # list barcode flavors
@@ -383,9 +383,9 @@ class ConfigFile:
         parser_config_delete_barcode_flavor = parser_config_subparsers\
             .add_parser('delete_barcode_flavor',
                 help = 'delete barcode flavor')
-        parser_config_delete_barcode_flavor.add_argument('name',
+        parser_config_delete_barcode_flavor.add_argument('--name',
             help = 'name of the barcode flavor to be deleted',
-            type=str)
+            type=str, required=True)
         parser_config_delete_barcode_flavor.set_defaults(
             func=self.delete_barcode_flavor_cmdline)
 
@@ -393,12 +393,13 @@ class ConfigFile:
         parser_config_add_barcode_flavor = parser_config_subparsers\
             .add_parser('add_barcode_flavor',
                 help = 'add a new barcode_flavor')
-        parser_config_add_barcode_flavor.add_argument('name',
-            help = 'name of the barcode flavor', type = str)
-        parser_config_add_barcode_flavor.add_argument('umi',
-            help = 'structure of UMI', type=str)
-        parser_config_add_barcode_flavor.add_argument('cell_barcode',
-            help = 'structure of CELL BARCODE', type=str)
+        parser_config_add_barcode_flavor.add_argument('--name',
+            help = 'name of the barcode flavor', type = str,
+            required = True)
+        parser_config_add_barcode_flavor.add_argument('--umi',
+            help = 'structure of UMI', type=str, required=True)
+        parser_config_add_barcode_flavor.add_argument('--cell_barcode',
+            help = 'structure of CELL BARCODE', type=str, required=True)
         parser_config_add_barcode_flavor.set_defaults(
             func=self.add_barcode_flavor_cmdline)
 
@@ -413,28 +414,28 @@ class ConfigFile:
         parser_config_delete_species = parser_config_subparsers\
             .add_parser('delete_species',
                 help = 'delete a species (genome and annotation) from configuration')
-        parser_config_delete_species.add_argument('name',
+        parser_config_delete_species.add_argument('--name',
             help = 'name of the species to be deleted',
-            type=str)
+            type=str, required=True)
         parser_config_delete_species.set_defaults(
             func=self.delete_species_cmdline)
         # add species
         parser_config_add_species = parser_config_subparsers\
             .add_parser('add_species',
                 help = 'add a new species: genome (.fa) and annotation (.gtf) files')
-        parser_config_add_species.add_argument('name',
+        parser_config_add_species.add_argument('--name',
             help = 'name of the species to be added',
-            type = str)
-        parser_config_add_species.add_argument('genome',
+            type = str, required=True)
+        parser_config_add_species.add_argument('--genome',
             help = 'path to the genome (.fa) file for the species to be added',
-            type = str)
-        parser_config_add_species.add_argument('annotation',
+            type = str, required=True)
+        parser_config_add_species.add_argument('--annotation',
             help = 'path to the annotation (.gtf) file for the species to be added',
-            type = str)
+            type = str, required=True)
         parser_config_add_species.add_argument('--rRNA_genome',
             help = 'path to the ribosomal-RNA genome (.fa) file for the species to be added',
             default=None,
-            type = str)
+            type = str, required=True)
         parser_config_add_species.set_defaults(
             func=self.add_species_cmdline)
 
@@ -1009,8 +1010,8 @@ class ProjectDF:
         # ADD SAMPLES FROM YAML
         sample_add_samples_yaml = projects_subparser.add_parser('add_samples_from_yaml',
             help = 'add several samples at once from a .yaml file')
-        sample_add_samples_yaml.add_argument('samples_yaml',
-            type=str,
+        sample_add_samples_yaml.add_argument('--samples_yaml',
+            type=str, required=True,
             help='path to the .yaml file containing sample info')
         sample_add_samples_yaml.set_defaults(
             func = self.add_samples_from_yaml_cmdline)
