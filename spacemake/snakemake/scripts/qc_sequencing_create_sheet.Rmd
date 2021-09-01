@@ -182,9 +182,6 @@ read_stats %>%
     row_spec(0, bold=T) %>%
     add_indent(c(3,4,5,6,7)) %>%
     footnote(general ='All values, except avg_mapped_length, shown in millions')
-
-read_stats %>%
-    write_csv('table3.csv')
 ```
 
 

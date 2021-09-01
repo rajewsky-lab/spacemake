@@ -5,7 +5,7 @@ class FileWrongExtensionError(Exception):
 
     def __str__(self):
         msg = f'File {self.filename} has wrong extension.\n'
-        msg += f'The extension should be {self.expected_extension}\n'
+        msg += f'The extension should be {self.expected_extension}.\n'
 
         return msg
 
@@ -15,7 +15,7 @@ class BarcodeFlavorNotFoundError(Exception):
 
     def __str__(self):
         msg = f'ERROR: barcode_flavor: {self.barcode_flavor} is not specified.\n'
-        msg += f'you can add a new run_mode with `spacemake config add_barcode_flavor`\n'
+        msg += f'you can add a new run_mode with `spacemake config add_barcode_flavor`.\n'
         
         return msg
 
@@ -24,8 +24,8 @@ class SpeciesNotFoundError(Exception):
         self.species = species
 
     def __str__(self):
-        msg = f'ERROR: barcode_flavor: {self.species} is not a valid species.\n'
-        msg += f'you can add a new species with `spacemake config add_species`\n'
+        msg = f'ERROR: species: {self.species} is not specified.\n'
+        msg += f'you can add a new species with `spacemake config add_species`.\n'
 
         return msg
 
@@ -44,7 +44,17 @@ class NoProjectSampleProvidedError(Exception):
         pass
 
     def __str__(self):
-        msg = f'ERROR: no project or samples were provided.\n'
+        msg = f'ERROR: no projects or samples were provided.\n'
 
         return msg
 
+class ProjectSampleNotFoundError(Exception):
+    def __init__(self, var_name, var_value):
+        self.var_name = var_name
+        self.var_value = var_value
+
+    def __str__(self):
+        msg = f'ERROR: sample with {self.var_name}={self.var_value} not found.\n'
+        msg += 'you can add a new sample with `spacemake projects add_sample` command.\n'
+
+        return msg

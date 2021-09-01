@@ -9,10 +9,36 @@ import re
 from functools import reduce
 from operator import getitem
 from spacemake.errors import FileWrongExtensionError, RunModeNotFoundError, \
-    BarcodeFlavorNotFoundError, NoProjectSampleProvidedError, SpeciesNotFoundError
+    BarcodeFlavorNotFoundError, NoProjectSampleProvidedError, SpeciesNotFoundError, \
+    ProjectSampleNotFoundError
 
 LINE_SEPARATOR = '-'*50+'\n'
 
+def assert_file(file_path, default_value='none', extension='all'):
+    if file_path == default_value:
+        # file doesn't exist but has the default value,
+        # so we do not need to assert anything
+        return 0
+
+    # check if file exists, raise error if not
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(
+            errno.ENOENT, os.strerror(errno.ENOENT), file_path)
+
+
+    # check if file has correct extension, raise error otherwise
+    def get_file_ext(path):
+        path = path.split('.')
+        
+        return path[0], '.' + '.'.join(path[1:])
+
+    file_name, file_extension = get_file_ext(file_path)
+
+    if file_extension != extension and extension != 'all':
+        raise FileWrongExtensionError(file_path, extension)
+
+    return 0
+        
 class ConfigFile:
     def __init__(self, file_path):
         self.file_path = file_path
@@ -41,12 +67,14 @@ class ConfigFile:
     def __add_genome_annotation(self, var_name, species_name, file_path):
         var_values = self.__get_knowledge_var(var_name)
 
-        if os.path.isfile(file_path):
-            self.variables['knowledge'][var_name][species_name] = file_path
-        else:
-            raise FileNotFoundError(
-                errno.ENOENT, os.strerror(errno.ENOENT), file_path)
+        if var_name == 'genomes':
+            file_extension = '.fa'
+        elif var_name == 'annotations':
+            file_extension = '.gtf'
 
+        assert_file(file_path, extension = file_extension)
+
+        self.variables['knowledge'][var_name][species_name] = file_path
 
     def species_exists(self, species_name):
         if species_name in self.__get_knowledge_var('annotations').keys() \
@@ -170,7 +198,7 @@ class ConfigFile:
         parser.add_argument(
             '--plot_bead_size',
             help='The bead size to be used when plotting the beads in 2D, during the '+\
-                 'automated report generation. Defaults to 1.')
+                 'automated report generation. Defaults to 1.', type=float)
         parser.add_argument(
             '--polyA_adapter_trimming',
             required=False,
@@ -585,32 +613,6 @@ class ProjectDF:
 
             return ix in self.df.index
 
-    def __assert_file(self, file_path, default_value='none', extension='all'):
-        if file_path == default_value:
-            # file doesn't exist but has the default value,
-            # so we do not need to assert anything
-            return 0
-
-        # check if file exists, raise error if not
-        if not os.path.isfile(file_path):
-            raise FileNotFoundError(
-                errno.ENOENT, os.strerror(errno.ENOENT), file_path)
-
-
-        # check if file has correct extension, raise error otherwise
-        def get_file_ext(path):
-            path = path.split('.')
-            
-            return path[0], '.' + '.'.join(path[1:])
-
-        file_name, file_extension = get_file_ext(file_path)
-
-        if file_extension != extension and extension != 'all':
-            raise FileWrongExtensionError(file_path, extension)
-
-        return 0
-        
-
     def __add_update_sample(self, project_id = None,
             sample_id = None, return_series = False,
             **kwargs):
@@ -620,19 +622,19 @@ class ProjectDF:
         ix = (project_id, sample_id) 
 
         # assert files first
-        self.__assert_file(
+        assert_file(
             kwargs.get('R1',
                        self.project_df_default_values['R1']),
             default_value=self.project_df_default_values['R1'],
             extension = '.fastq.gz')
 
-        self.__assert_file(
+        assert_file(
             kwargs.get('R2',
                        self.project_df_default_values['R2']),
             default_value=self.project_df_default_values['R2'],
             extension = '.fastq.gz')
 
-        self.__assert_file(
+        assert_file(
             kwargs.get('puck_barcode_file',
                         self.project_df_default_values['puck_barcode_file']),
             default_value=self.project_df_default_values['puck_barcode_file'])
@@ -865,15 +867,20 @@ class ProjectDF:
 
         return parser
 
-    def set_species(self, species, projects, samples):
+    def __set_species(self, species, projects, samples):
+        # raise error if both lists are empty
+        if projects == [] and samples == []:
+            raise NoProjectSampleProvidedError()
+
+        self.__assert_projects_samples_exist(projects, samples)
+
         ix = self.df.query(
             'project_id in @projects or sample_id in @samples').index
 
-        if ix is None:
-            raise NoProjectSampleProvidedError()
-
         if self.config.species_exists(species):
             self.df.loc[ix, 'species'] = species
+
+            return ix.to_list()
         else:
             raise SpeciesNotFoundError(species)
 
@@ -882,15 +889,20 @@ class ProjectDF:
         samples = args['sample_id']
         species = args['species_name']
 
-        msg = f'Setting species: {species} for projects: {projects}\n'
-        msg += f'and for samples: {samples}\n'
-        msg += LINE_SEPARATOR
+        msg = ''
 
         try:
-            self.set_species(species, projects, samples)
+            set_indices = self.__set_species(species, projects, samples)
+
+            msg += f'Setting species: {species} for the'
+            msg += f' following (project_id, sample_id) samples:\n'
+            msg += f'{set_indices}\n'
+            msg += LINE_SEPARATOR
             msg += 'SUCCESS: species set successfully.\n'
+
             self.dump()
-        except (NoProjectSampleProvidedError, SpeciesNotFoundError) as e:
+        except (NoProjectSampleProvidedError, SpeciesNotFoundError,
+                ProjectSampleNotFoundError) as e:
             msg += str(e)
         finally:
             print(msg)
@@ -905,21 +917,15 @@ class ProjectDF:
         i_run_mode = [rm for rm in self.df.at[ix, 'run_mode'] if rm != run_mode]
         self.df.at[ix, 'run_mode'] = i_run_mode
 
-    def add_remove_run_mode_cmdline(self, args):
-        projects = args['project_id']
-        samples = args['sample_id']
-        run_modes = args['run_mode']
-        action = args['action']
-        
-        msg = f'{action}ing {run_modes} for projects: {projects}\n'
-        msg += f'and for samples: {samples}\n'
-        msg += LINE_SEPARATOR
-        
+    def __set_remove_run_mode(self, run_modes, action, projects = [], samples = []):
+        # raise error if both lists are empty
+        if projects == [] and samples == []:
+            raise NoProjectSampleProvidedError()
+
+        self.__assert_projects_samples_exist(projects, samples)
+
         ix = self.df.query(
             'project_id in @projects or sample_id in @samples').index
-
-        if ix is None:
-            raise NoProjectSampleProvidedError()
 
         for run_mode in run_modes:
             if self.config.run_mode_exists(run_mode):
@@ -929,17 +935,39 @@ class ProjectDF:
                         self.__add_run_mode(i, run_mode)
                     elif action == 'remove':
                         self.__remove_run_mode(i, run_mode)
-
-                msg += f'SUCCESS: run mode: {run_mode} {action}ed succesfully.\n'
-                msg += LINE_SEPARATOR
             else:
-                msg += f'ERROR: {run_mode} is not a valid run mode.\n'
-                msg += 'you need to first add it with `spacemake config add_run_mode`\n'
-                msg += LINE_SEPARATOR
+                raise RunModeNotFoundError(run_mode)
 
-        print(msg)
+        return ix.to_list()
 
-        self.dump()
+    def set_remove_run_mode_cmdline(self, args):
+        projects = args['project_id']
+        samples = args['sample_id']
+        run_modes = args['run_mode']
+        action = args['action']
+
+        if action == 'set':
+            succ_msg = 'set'
+        elif action == 'remove':
+            succ_msg = 'removed'
+
+        msg =''
+
+        try:
+            set_indices = self.__set_remove_run_mode(run_modes, action, projects, samples)
+             
+            msg += f'{action}ing {run_modes} for the following (project_id, sample_id)'
+            msg += f' samples:\n{set_indices}\n'
+            msg += LINE_SEPARATOR
+            msg += f'SUCCESS: run mode: {run_mode} {action_msg} succesfully.\n'
+
+            self.dump()
+        except (NoProjectSampleProvidedError, ProjectSampleNotFoundError, 
+                RunModeNotFoundError) as e:
+
+            msg += str(e)
+        finally:
+            print(msg)
 
     def list_projects_cmdline(self, args):
         projects = args['project_id']
@@ -965,7 +993,23 @@ class ProjectDF:
 
         print(msg)
 
-    def set_barcode_flavor(self, barcode_flavor, projects = [], samples = []):
+    def __assert_projects_samples_exist(self, projects = [], samples = []):
+        for project in projects:
+            if project not in self.df.index.get_level_values('project_id'):
+                raise ProjectSampleNotFoundError('project_id', project)
+
+        for sample in samples:
+            if project not in self.df.index.get_level_values('project_id'):
+                raise ProjectSampleNotFoundError('sample_id', sample)
+        
+
+    def __set_barcode_flavor(self, barcode_flavor, projects = [], samples = []):
+        # raise error if both lists are empty
+        if projects == [] and samples == []:
+            raise NoProjectSampleProvidedError()
+
+        self.__assert_projects_samples_exist(projects, samples)
+
         if self.config.barcode_flavor_exists(barcode_flavor):
             ix = self.df.query('project_id in @projects or sample_id in @samples').index
 
@@ -973,6 +1017,8 @@ class ProjectDF:
                 raise NoProjectSampleProvidedError()
 
             self.df.loc[ix, 'barcode_flavor'] = barcode_flavor
+
+            return ix.to_list()
         else:
             raise BarcodeFlavorNotFoundError(barcode_flavor)
 
@@ -980,19 +1026,24 @@ class ProjectDF:
         barcode_flavor = args['barcode_flavor']
         samples = args['sample_id']
         projects = args['project_id']
+        
+        msg = ''
 
         try:
-            msg = f'Setting barcode flavor: {barcode_flavor} for projects: {projects}\n'
-            msg += f'and for samples: {samples}\n'
-            msg += LINE_SEPARATOR
-
-            self.set_barcode_flavor(barcode_flavor,
+            set_indices = self.__set_barcode_flavor(barcode_flavor,
                                     projects,
                                     samples)
 
+            msg += f'Setting barcode flavor: {barcode_flavor} for the'
+            msg += f' following (project_id, sample_id) samples:\n'
+            msg += f'{set_indices}\n'
+            msg += LINE_SEPARATOR
             msg += 'SUCCESS: barcode_flavor set successfully.\n'
+            
+            self.dump()
 
-        except BarcodeFlavorNotFoundError as e:
+        except (BarcodeFlavorNotFoundError, NoProjectSampleProvidedError,
+            ProjectSampleNotFoundError) as e:
             msg += str(e)
         finally:
             print(msg)
@@ -1050,13 +1101,13 @@ class ProjectDF:
         set_species.set_defaults(func=self.set_species_cmdline)
 
         # SET BARCODE FLAVOR
-        set_species = projects_subparser.add_parser('set_barcode_flavor',
+        set_barcode_flavor = projects_subparser.add_parser('set_barcode_flavor',
             help = 'set barcode_flavor for one or multiple projects/samples',
             parents=[self.__get_project_sample_lists_parser('set barcode_flavor')])
-        set_species.add_argument('--barcode_flavor',
+        set_barcode_flavor.add_argument('--barcode_flavor',
             help = 'name of the barcode_flavor to be set',
             type=str, required=True)
-        set_species.set_defaults(func=self.set_barcode_flavor_cmdline)
+        set_barcode_flavor.set_defaults(func=self.set_barcode_flavor_cmdline)
 
         # SET RUN MODE
         set_run_mode = projects_subparser.add_parser('set_run_mode',
@@ -1066,7 +1117,7 @@ class ProjectDF:
             help = 'name of the run mode(s) to be set',
             nargs = '+',
             type=str, required=True)
-        set_run_mode.set_defaults(func=self.add_remove_run_mode_cmdline,
+        set_run_mode.set_defaults(func=self.set_remove_run_mode_cmdline,
             action = 'set')
         
         # REMOVE RUN MODE
@@ -1077,7 +1128,7 @@ class ProjectDF:
             help = 'name of the run mode(s) to be removed',
             nargs = '+',
             type=str, required=True)
-        remove_run_mode.set_defaults(func=self.add_remove_run_mode_cmdline,
+        remove_run_mode.set_defaults(func=self.set_remove_run_mode_cmdline,
             action = 'remove')
 
         # LIST PROJECTS

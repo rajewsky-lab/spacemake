@@ -1,4 +1,4 @@
-from spacemake.errors import BarcodeFlavorNotFoundError
+from spacemake.errors import BarcodeFlavorNotFoundError, SpeciesNotFoundError
 
 # barcode flavor parsing and query functions
 class dotdict(dict):
@@ -134,12 +134,17 @@ def get_species_genome_annotation(wildcards):
     else:
         species = wildcards.species
 
+    if 'annotations' not in config['knowledge'].keys() or \
+            'genomes' not in config['knowledge'].keys() or \
+            species not in config['knowledge']['annotations'].keys() or \
+            species not in config['knowledge']['genomes'].keys():
+        raise SpeciesNotFoundError(species)
+
     files = {
         "annotation": config["knowledge"]["annotations"][species],
         "genome": config["knowledge"]["genomes"][species]
     }
 
-    print(files)
     return files
 
 def get_star_index(wildcards):
@@ -148,7 +153,6 @@ def get_star_index(wildcards):
     species = get_metadata(
         "species", project_id=wildcards.project, sample_id=wildcards.sample
     )
-    print(expand(star_index, species = species)[0])
     return {'index': expand(star_index, species = species)[0]}
 
 def get_rRNA_genome(wildcards):
@@ -336,8 +340,6 @@ def get_dge_from_run_mode(
             mm_included = mm_included,
             n_beads = run_mode_variables['n_beads'],
             **kwargs)[0]
-
-    print(dge_out_file)
 
     return {'dge_summary': dge_out_summary_file,
             'dge': dge_out_file}

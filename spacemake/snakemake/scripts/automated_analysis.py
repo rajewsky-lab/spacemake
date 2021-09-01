@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import itertools
 
 # expect fitlered .h5ad dge, with spatial coords attached, tissue detected
 adata = sc.read_h5ad(snakemake.input[0])

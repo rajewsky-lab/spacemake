@@ -528,6 +528,7 @@ rule create_qc_sheet:
     input:
         unpack(get_dge_type),
         unpack(get_qc_sheet_input_files),
+        unpack(get_puck_file),
         ribo_log=parsed_ribo_depletion_log
     params:
         sample_info = lambda wildcards: get_sample_info(

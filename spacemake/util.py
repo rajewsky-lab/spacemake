@@ -78,7 +78,7 @@ def compute_neighbors(adata, min_dist=None, max_dist=None):
     Returns:
         neighbors: a dictionary holding the spot IDs for every spot
     '''
-
+    import numpy as np
     from scipy.spatial.distance import cdist
 
     # Calculate all Euclidean distances on the adata
@@ -100,6 +100,9 @@ def compute_islands(adata, min_umi):
     Returns:
         islands: A list of lists of spots forming contiguity islands
     '''
+    import numpy as np
+    import itertools
+
     # this is hard coded for now for visium, to have 6 neighbors per spot
     # TODO: define an iterative approach where the key is to have around 6 
     # neighbors per spot on average
@@ -134,6 +137,7 @@ def detect_tissue(adata, min_umi):
     Returns:
         tissue_indices: a list of indices which should be kept for this AnnData object
     '''
+    import numpy as np
 
     islands = compute_islands(adata, min_umi)
 
