@@ -83,6 +83,7 @@ def spacemake_run(args):
     # run snakemake
     snakemake.snakemake(snakefile, configfiles=[config_path],
         cores = args['cores'], dryrun=args['dryrun'],
+        force_incomplete=args['rerun_incomplete'],
         config={'project_df': project_df})
 
 #################
@@ -126,6 +127,7 @@ parsers['run'].add_argument('--cores',
     type=int,
     help = 'number of cores to be used in total')
 parsers['run'].add_argument('--dryrun', '-n', action='store_true', help = 'invokes a dry snakemake run, printing only commands')
+parsers['run'].add_argument('--rerun-incomplete', '--ri', action='store_true', help = 'forces snakemake to rerun incompletely generated files')
 parsers['run'].set_defaults(func=spacemake_run)
 
 ####################
