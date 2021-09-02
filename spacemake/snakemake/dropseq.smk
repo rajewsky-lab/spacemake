@@ -49,7 +49,7 @@ rule create_star_index:
         unpack(get_species_genome_annotation)
     output:
         directory(star_index)
-    threads: 16
+    threads: max(workflow.cores * 0.25, 8)
     shell:
         """
         mkdir -p {output} 

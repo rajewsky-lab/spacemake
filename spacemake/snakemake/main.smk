@@ -402,7 +402,7 @@ rule reverse_first_mate:
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 16
+    threads: 4
     shell:
         "python {spacemake_dir}/preprocess.py "
         "--sample={wildcards.sample} "
