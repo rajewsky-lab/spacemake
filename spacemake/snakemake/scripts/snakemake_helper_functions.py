@@ -183,6 +183,16 @@ def get_run_mode_variables(run_mode):
 
     run_mode_variables.update(config['run_modes'][run_mode])
 
+    # set the right types
+    run_mode_variables['n_beads'] = int(run_mode_variables['n_beads'])
+    run_mode_variables['umi_cutoff'] = [int(x) for x  in run_mode_variables['umi_cutoff']]
+    run_mode_variables['clean_dge'] = bool(run_mode_variables['clean_dge'])
+    run_mode_variables['plot_bead_size'] = float(run_mode_variables['plot_bead_size'])
+    run_mode_variables['detect_tissue'] = bool(run_mode_variables['detect_tissue'])
+    run_mode_variables['polyA_adapter_trimming'] = bool(run_mode_variables['polyA_adapter_trimming'])
+    run_mode_variables['count_mm_reads'] = bool(run_mode_variables['count_mm_reads'])
+    run_mode_variables['count_intronic_reads'] = bool(run_mode_variables['count_intronic_reads'])
+
     return run_mode_variables
 
 def get_run_modes_from_sample(project_id, sample_id):

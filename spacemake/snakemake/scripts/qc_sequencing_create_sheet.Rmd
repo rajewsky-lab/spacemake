@@ -49,6 +49,7 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
+#write_rds(snakemake, '')
 ```
 
 ```{r read_sample_information_tables, echo = F}
