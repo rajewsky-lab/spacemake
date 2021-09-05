@@ -11,7 +11,7 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 ###################################################
 rule remove_smart_adapter:
     input:
-        tagged_bam
+        unpack(tagged_or_merged_bam)
     output:
         pipe(tagged_trimmed_bam)
     params:
@@ -66,7 +66,7 @@ rule map_reads_final_bam:
         unpack(get_species_genome_annotation),
         unpack(get_star_input_bam),
         unpack(get_star_index),
-        unmapped_tagged_reads=tagged_bam
+        unpack(tagged_or_merged_bam)
     output:
         star_log_file,
         final_bam=final_bam
@@ -92,7 +92,7 @@ rule map_reads_final_bam:
             --runThreadN {threads} | \
             python {repo_dir}/scripts/fix_bam_header.py \
                 --in-bam-star /dev/stdin \
-                --in-bam-tagged {input.unmapped_tagged_reads} \
+                --in-bam-tagged {input.tagged_bam} \
                 --out-bam /dev/stdout | \
             {dropseq_tools}/TagReadWithGeneFunction \
                 I=/dev/stdin \

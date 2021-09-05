@@ -259,8 +259,6 @@ for (i in obs_df %$% res %>% unique){
                 axis.ticks = element_blank(), axis.line = element_line(color='white'))
 
     n_clusters <- length(unique(dat$cluster))
-    print(n_clusters)
-
     if(n_clusters< 35){
         umap_plot <- umap_plot + scale_color_manual(values=cluster_clrs)
     }

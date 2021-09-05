@@ -49,7 +49,7 @@ def get_bc_preprocess_settings(wildcards):
     This function will return a dictionary of information
     on the read1 preprocessing, according to barcode_flavor
     """
-    flavor = get_metadata('barcode_flavor', project_id = wildcards.project,
+    flavor = project_df.get_metadata('barcode_flavor', project_id = wildcards.project,
             sample_id = wildcards.sample)
     if flavor not in bc_flavor_data.preprocess_settings:
         raise BarcodeFlavorNotFoundError(flavor)
@@ -58,52 +58,8 @@ def get_bc_preprocess_settings(wildcards):
 
     return settings
 
-def df_assign_merge_samples(project_df):
-    # added samples to merged to the project_df
-    # this will be saved as a metadata file in .config/ directory
-    if "samples_to_merge" in config:
-        for project_id in config["samples_to_merge"].keys():
-            for sample_id in config["samples_to_merge"][project_id].keys():
-                samples_to_merge = config["samples_to_merge"][project_id][sample_id]
-
-                samples_to_merge = project_df.loc[
-                    project_df.sample_id.isin(samples_to_merge)
-                ]
-
-                new_row = project_df[
-                    (project_df.project_id == project_id)
-                    & (project_df.sample_id == sample_id)
-                ].iloc[0]
-                new_row.sample_id = "merged_" + new_row.sample_id
-                new_row.project_id = "merged_" + new_row.project_id
-                new_row.is_merged = True
-                new_row.experiment = ",".join(samples_to_merge.experiment.to_list())
-                new_row.investigator = ",".join(samples_to_merge.investigator.to_list())
-                new_row.sequencing_date = ",".join(
-                    samples_to_merge.sequencing_date.to_list()
-                )
-
-                project_df = project_df.append(new_row, ignore_index=True)
-
-    return project_df
-
-
-def get_metadata(field, sample_id=None, project_id=None, **kwargs):
-    df = project_df
-    if sample_id is not None:
-        df = df.query('sample_id == @sample_id')
-
-    if project_id is not None:
-        df = df.query('project_id == @project_id')
-
-    for key, value in kwargs.items():
-        df = df.loc[df.loc[:, key] == value]
-
-    return df[field].to_list()[0]
-
-
 def get_demux_indicator(wildcards):
-    demux_dir = get_metadata(
+    demux_dir = project_df.get_metadata(
         "demux_dir", sample_id=wildcards.sample, project_id=wildcards.project
     )
 
@@ -114,7 +70,7 @@ def get_star_input_bam(wildcards):
     if wildcards.polyA_adapter_trimmed == '.polyA_adapter_trimmed':
         return {'reads': tagged_polyA_adapter_trimmed_bam}
     else:
-        return {'reads': tagged_bam}
+        return {'reads': tagged_or_merged_bam(wildcards)}
 
 def get_mapped_final_bam(wildcards):
     if wildcards.mm_included == '.mm_included':
@@ -128,7 +84,7 @@ def get_species_genome_annotation(wildcards):
     #    - annotation (.gtf file)
     #    - genome (.fa file)
     if 'species' not in wildcards.keys():
-        species = get_metadata(
+        species = project_df.get_metadata(
             "species", project_id=wildcards.project, sample_id=wildcards.sample
         )
     else:
@@ -150,7 +106,7 @@ def get_species_genome_annotation(wildcards):
 def get_star_index(wildcards):
     # This function will return 1 things required by STAR:
     #    - index directory
-    species = get_metadata(
+    species = project_df.get_metadata(
         "species", project_id=wildcards.project, sample_id=wildcards.sample
     )
     return {'index': expand(star_index, species = species)[0]}
@@ -159,7 +115,7 @@ def get_rRNA_genome(wildcards):
     return [config['knowledge']['rRNA_genomes'][wildcards.species]]
 
 def get_bt2_rRNA_index(wildcards):
-    species = get_metadata(
+    species = project_df.get_metadata(
         "species", project_id=wildcards.project, sample_id=wildcards.sample
     )
 
@@ -196,7 +152,7 @@ def get_run_mode_variables(run_mode):
     return run_mode_variables
 
 def get_run_modes_from_sample(project_id, sample_id):
-    run_mode_names = get_metadata('run_mode', project_id=project_id, sample_id=sample_id)
+    run_mode_names = project_df.get_metadata('run_mode', project_id=project_id, sample_id=sample_id)
     
     run_modes = {}
 
@@ -229,73 +185,52 @@ def get_dge_extra_params(wildcards):
 
     return extra_params
 
-###################
-# Merging samples #
-###################
-def get_project(sample):
-    # return the project id for a given sample id
-    return project_df[project_df.sample_id.eq(sample)].project_id.to_list()[0]
+def get_merged_raw_r2_input(wildcards):
+    merge_ix = project_df.get_metadata('merged_from',
+        sample_id = wildcards.sample,
+        project_id = wildcards.project)
 
-def get_merged_bam_inputs(wildcards):
-    # currently not used as we do not tag the bam files with the sample name
-    samples = config["samples_to_merge"][wildcards.merged_project][
-        wildcards.merged_sample
+    return [
+        expand(raw_reads_mate_2, project = p, sample = s)[0] \ 
+        for (p, s) in merge_ix
     ]
 
-    input_bams = []
+def get_merged_bam_input(wildcards):
+    merge_ix = project_df.get_metadata('merged_from',
+        sample_id = wildcards.sample,
+        project_id = wildcards.project)
 
-    for sample in samples:
-        input_bams = input_bams + expand(
-            sample_tagged_bam, merged_sample=wildcards.merged_name, sample=sample
-        )
-
-    return input_bams
-
-
-def get_merged_star_log_inputs(wildcards):
-    samples = config["samples_to_merge"][wildcards.merged_project][
-        wildcards.merged_sample
+    return [
+        expand(tagged_bam, project = p, sample = s)[0] \
+        for (p, s) in merge_ix
     ]
 
-    input_logs = []
+def tagged_or_merged_bam(wildcards):
+    is_merged = project_df.get_metadata('is_merged',
+        sample_id = wildcards.sample,
+        project_id = wildcards.project)
 
-    for sample in samples:
-        input_logs = input_logs + expand(
-            star_log_file, project=get_project(sample), sample=sample
-        )
+    if is_merged:
+        return {'tagged_bam': merged_bam}
+    else:
+        return {'tagged_bam': tagged_bam}
 
-    return input_logs
+def get_rRNA_reads_input(wildcards):
+    is_merged = project_df.get_metadata('is_merged',
+        sample_id = wildcards.sample,
+        project_id = wildcards.project)
 
-
-def get_merged_ribo_depletion_log_inputs(wildcards):
-    samples = config["samples_to_merge"][wildcards.merged_project][
-        wildcards.merged_sample
-    ]
-
-    ribo_depletion_logs = []
-
-    for sample in samples:
-        ribo_depletion_logs = ribo_depletion_logs + expand(
-            ribo_depletion_log, project=get_project(sample), sample=sample
-        )
-
-    return ribo_depletion_logs
-
-
-def get_sample_info(project_id, sample_id):
-    # returns sample info from the projects df
-    out_dict = project_df.loc[(project_id, sample_id)].to_dict()
-
-    return out_dict
-
+    if is_merged:
+        return {'reads': merged_raw_reads_mate_2}
+    else:
+        return {'reads': raw_reads_mate_2}
 
 def get_bt2_index(wildcards):
-    species = get_metadata(
+    species = project_df.get_metadata(
         "species", project_id=wildcards.project, sample_id=wildcards.sample
     )
 
     return config["knowledge"]["indices"][species]["bt2"]
-
 
 def get_top_barcodes(wildcards):
     if wildcards.dge_cleaned == "":
@@ -414,7 +349,7 @@ def get_qc_sheet_input_files(wildcards):
         'strand_info': expand(strand_info, **extra_args)}
 
 def get_bam_tag_names(project_id, sample_id):
-    barcode_flavor = get_metadata('barcode_flavor', project_id = project_id,
+    barcode_flavor = project_df.get_metadata('barcode_flavor', project_id = project_id,
             sample_id = sample_id)
 
     bam_tags = config["knowledge"]["barcode_flavor"][barcode_flavor]["bam_tags"]
@@ -429,7 +364,7 @@ def get_bam_tag_names(project_id, sample_id):
     return tag_names
 
 def get_puck_file(wildcards):
-    puck_barcode_file = get_metadata('puck_barcode_file',
+    puck_barcode_file = project_df.get_metadata('puck_barcode_file',
             project_id = wildcards.project,
             sample_id = wildcards.sample)
 

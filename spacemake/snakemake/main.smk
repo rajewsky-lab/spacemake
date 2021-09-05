@@ -15,6 +15,7 @@ import numpy as np
 import math
 
 from spacemake.util import dge_to_sparse
+from spacemake.cmdline_utils import ProjectDF
 
 ################
 # Shell prefix #
@@ -39,9 +40,7 @@ config['puck_data']['root'] = config['microscopy_out']
 project_dir = os.path.join(config['root_dir'], 'projects/{project}')
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
-project_df = pd.read_csv(config['project_df'],
-    index_col = ['project_id', 'sample_id'],
-    converters={'run_mode': eval})
+project_df = ProjectDF(config['project_df'])
 
 #################
 # DIRECTORY STR #
@@ -100,8 +99,6 @@ dropseq_tools = config['external_bin']['dropseq_tools']
 reports_dir = complete_data_root + '/reports'
 tmp_dir = complete_data_root + '/tmp'
 smart_adapter = config['adapters']['smart']
-
-merged_reads = complete_data_root + '/unaligned.bam'
 
 ###
 # splitting the reads
@@ -210,7 +207,7 @@ bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'
 def get_output_files(pattern, projects = [], samples = [],
                             skip_projects = [], skip_samples = [], **kwargs):
     out_files = []
-    df = project_df
+    df = project_df.df
 
     if samples or projects:
         # one of the lists is not empty
@@ -283,32 +280,9 @@ rule all:
         get_output_files(automated_report),
         get_output_files(qc_sheet)
 
-########################
-# CREATE METADATA FILE #
-########################
-rule create_project_df_file:
-    output:
-        project_df_file
-    run:
-        project_df.to_csv(output[0], index=False)
-        os.system('chmod 664 %s' % (output[0]))
-
-rule create_sample_overview:
-    input:
-        project_df_file
-    output:
-        sample_overview_file
-    script:
-        'scripts/create_sample_overview.Rmd'
-
-rule create_sample_db:
-    input:
-        project_df_file
-    output:
-        sample_read_metrics_db
-    script:
-        'scripts/create_sample_db.R'
-
+#####################
+# DOWNSAMPLE MODULE # 
+#####################
 
 #rule downsample:
 #    input:
@@ -317,7 +291,7 @@ rule create_sample_db:
 #################
 # MERGE SAMPLES #
 #################
-#include: 'merge_samples.smk'
+include: 'merge_samples.smk'
 
 #########
 # RULES #
@@ -326,11 +300,11 @@ ruleorder: link_raw_reads > link_demultiplexed_reads
 
 rule demultiplex_data:
     params:
-        demux_barcode_mismatch=lambda wildcards: int(get_metadata('demux_barcode_mismatch', demux_dir = wildcards.demux_dir)),
-        sample_sheet=lambda wildcards: get_metadata('sample_sheet', demux_dir = wildcards.demux_dir),
+        demux_barcode_mismatch=lambda wildcards: int(project_df.get_metadata('demux_barcode_mismatch', demux_dir = wildcards.demux_dir)),
+        sample_sheet=lambda wildcards: project_df.get_metadata('sample_sheet', demux_dir = wildcards.demux_dir),
         output_dir= lambda wildcards: expand(demux_dir_pattern, demux_dir=wildcards.demux_dir)
     input:
-        lambda wildcards: get_metadata('basecalls_dir', demux_dir = wildcards.demux_dir)
+        lambda wildcards: project_df.get_metadata('basecalls_dir', demux_dir = wildcards.demux_dir)
     output:
         demux_indicator
     threads: 8
@@ -355,7 +329,7 @@ rule link_demultiplexed_reads:
         raw_reads_pattern
     params:
         demux_dir = lambda wildcards: expand(demux_dir_pattern,
-            demux_dir = get_metadata('demux_dir', sample_id = wildcards.sample,
+            demux_dir = project_df.get_metadata('demux_dir', sample_id = wildcards.sample,
                                      project_id = wildcards.project)),
         reads_folder = raw_data_illumina_reads
     shell:
@@ -369,7 +343,7 @@ def get_reads(wildcards):
     ###
     # R1 and R2 for demultiplexed reads will return none
     ### 
-    return([get_metadata('R'+ wildcards.mate, sample_id = wildcards.sample, project_id = wildcards.project)])
+    return([project_df.get_metadata('R'+ wildcards.mate, sample_id = wildcards.sample, project_id = wildcards.project)])
 
 rule link_raw_reads:
     input:
@@ -387,8 +361,6 @@ rule zcat_pipe:
     threads: 2
     shell: "unpigz --keep --processes {threads} --stdout $(readlink {input}) >> {output}"
 
-tagged_pipe = tagged_bam.replace('.bam', '.uncompressed.bam')
-
 rule reverse_first_mate:
     input:
         # these implicitly depend on the raw reads via zcat_pipes
@@ -397,7 +369,7 @@ rule reverse_first_mate:
     params:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
-        assigned = temp(tagged_bam),
+        assigned = tagged_bam,
         unassigned = unassigned,
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
@@ -531,7 +503,7 @@ rule create_qc_sheet:
         unpack(get_puck_file),
         ribo_log=parsed_ribo_depletion_log
     params:
-        sample_info = lambda wildcards: get_sample_info(
+        sample_info = lambda wildcards: project_df.get_sample_info(
             wildcards.project, wildcards.sample),
         run_modes = lambda wildcards: get_run_modes_from_sample(
             wildcards.project, wildcards.sample)
@@ -629,11 +601,11 @@ rule create_rRNA_index:
 rule map_to_rRNA:
     input:
         unpack(get_bt2_rRNA_index),
-        reads=raw_reads_mate_2
+        unpack(get_rRNA_reads_input)
     output:
         ribo_depletion_log
     params:
-        species=lambda wildcards: get_metadata(
+        species=lambda wildcards: project_df.get_metadata(
             'species', project_id = wildcards.project,
             sample_id = wildcards.sample)
     run:
