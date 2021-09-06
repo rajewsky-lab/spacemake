@@ -492,7 +492,7 @@ rule create_h5ad_dge:
         adata.write(output[0])
 
 rule parse_ribo_log:
-    input: ribo_depletion_log
+    input: unpack(get_ribo_depletion_log)
     output: parsed_ribo_depletion_log
     script: 'scripts/parse_ribo_log.py'
 

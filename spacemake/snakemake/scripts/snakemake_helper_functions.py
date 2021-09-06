@@ -233,6 +233,16 @@ def get_unaligned_bc_tagged_bam(wildcards):
     else:
         return {'tagged_bam': tagged_bam}
 
+def get_ribo_depletion_log(wildcards):
+    is_merged = project_df.get_metadata('is_merged',
+        sample_id = wildcards.sample,
+        project_id = wildcards.project)
+
+    if is_merged:
+        return [merged_ribo_depletion_log]
+    else:
+        return [ribo_depletion_log]
+
 def get_rRNA_reads_input(wildcards):
     is_merged = project_df.get_metadata('is_merged',
         sample_id = wildcards.sample,
