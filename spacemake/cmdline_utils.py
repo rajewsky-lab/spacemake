@@ -1007,7 +1007,7 @@ class ProjectDF:
                 raise ProjectSampleNotFoundError('project_id', project)
 
         for sample in sample_id_list:
-            if project not in self.df.index.get_level_values('project_id'):
+            if sample not in self.df.index.get_level_values('sample_id'):
                 raise ProjectSampleNotFoundError('sample_id', sample)
         
 
@@ -1067,13 +1067,25 @@ class ProjectDF:
         # check if projects and samples with these IDs exist
         self.__assert_projects_samples_exist(project_id_list, sample_id_list)
 
-        ix = self.df.query(
-            'project_id in @project_id_list or sample_id in @sample_id_list').index
+        if project_id_list == []:
+            ix = self.df.query(
+                'sample_id in @sample_id_list').index
+        elif sample_id_list == []:
+            ix = self.df.query(
+                'sample_id in @project_id_list').index
+        else:
+            ix = self.df.query(
+                'project_id in @project_id_list and sample_id in @sample_id_list').index
 
         species = self.df.loc[ix].species.to_list()
 
+        if ix.to_list() == []:
+            raise ProjectSampleNotFoundError(
+                '(project_id_list, sample_id_list)',
+                (project_id_list, sample_id_list))
+
         if len(set(species)) > 1:
-            raise UnmatchingSpeciesDuringMerge
+            raise UnmatchingSpeciesDuringMerge()
         else:
             species = species[0]
 
