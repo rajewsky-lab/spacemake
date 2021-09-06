@@ -797,8 +797,8 @@ class ProjectDF:
         return parser
     
     def add_update_delete_sample_cmdline(self, args):
-        project_id = args['project_id_list']
-        sample_id = args['sample_id_list']
+        project_id = args['project_id']
+        sample_id = args['sample_id']
         action = args['action']
 
         # remove the action from args
@@ -1089,6 +1089,17 @@ class ProjectDF:
         else:
             species = species[0]
 
+        
+        fields_to_deduce = [
+            'investigator',
+            'experiment',
+            'sequencing_date'
+        ]
+
+        for field in fields_to_deduce:
+            if field not in kwargs.keys():
+                kwargs[field] = ';'.join(self.df.loc[ix, field].unique())
+
         sample_added = self.add_sample(
             project_id = merged_project_id,
             sample_id = merged_sample_id,
@@ -1104,6 +1115,8 @@ class ProjectDF:
 
         try:
             sample, set_indices = self.merge_samples(**args)
+
+            set_indices = set_indices.to_list()
 
             msg += f'Merging samples {set_indices}.\n'
             msg += LINE_SEPARATOR
