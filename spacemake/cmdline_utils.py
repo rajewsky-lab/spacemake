@@ -26,15 +26,7 @@ def assert_file(file_path, default_value='none', extension='all'):
             errno.ENOENT, os.strerror(errno.ENOENT), file_path)
 
 
-    # check if file has correct extension, raise error otherwise
-    def get_file_ext(path):
-        path = path.split('.')
-        
-        return path[0], '.' + '.'.join(path[1:])
-
-    file_name, file_extension = get_file_ext(file_path)
-
-    if file_extension != extension and extension != 'all':
+    if not file_path.endswith(extension) and extension != 'all':
         raise FileWrongExtensionError(file_path, extension)
 
     return 0
@@ -60,14 +52,12 @@ class ConfigFile:
         if var_name not in self.variables['knowledge']:
             self.variables['knowledge'][var_name] = {}
 
-        self.dump()
-
         return self.variables['knowledge'][var_name]
 
     def __add_genome_annotation(self, var_name, species_name, file_path):
         var_values = self.__get_knowledge_var(var_name)
 
-        if var_name == 'genomes':
+        if var_name == 'genomes' or var_name == 'rRNA_genomes':
             file_extension = '.fa'
         elif var_name == 'annotations':
             file_extension = '.gtf'
@@ -463,7 +453,7 @@ class ConfigFile:
         parser_config_add_species.add_argument('--rRNA_genome',
             help = 'path to the ribosomal-RNA genome (.fa) file for the species to be added',
             default=None,
-            type = str, required=True)
+            type = str)
         parser_config_add_species.set_defaults(
             func=self.add_species_cmdline)
 
@@ -471,7 +461,6 @@ class ConfigFile:
 
 class ProjectDF:
     # default values of the project dataframe columns
-    line_separator = '-'*50+'\n'
     project_df_default_values = {
         "puck_id": "no_optical_puck",
         "sample_sheet": "none",
@@ -487,12 +476,13 @@ class ProjectDF:
         "puck_barcode_file": "none",
         "run_mode": ["default"],
         "barcode_flavor": "default",
-        "is_merged":False}
+        "is_merged":False,
+        "merged_from":[]}
     
     def __init__(
         self,
         file_path,
-        config: ConfigFile
+        config: ConfigFile = None
     ):
         self.file_path = file_path
         self.config = config
@@ -500,7 +490,7 @@ class ProjectDF:
         if os.path.isfile(file_path):
             self.df = pd.read_csv(file_path,
                 index_col=['project_id', 'sample_id'],
-                converters={'run_mode': eval})
+                converters={'run_mode': eval, 'merged_from': eval})
         else:
             index = pd.MultiIndex(
                 names=['project_id', 'sample_id'],
@@ -552,6 +542,26 @@ class ProjectDF:
             return get_barcode_file(path)
         else:
             return self.project_df_default_values['puck_barcode_file']
+
+
+    def get_sample_info(self, project_id, sample_id):
+        # returns sample info from the projects df
+        out_dict = self.df.loc[(project_id, sample_id)].to_dict()
+
+        return out_dict
+
+    def get_metadata(self, field, sample_id=None, project_id=None, **kwargs):
+        df = self.df
+        if sample_id is not None:
+            df = df.query('sample_id == @sample_id')
+
+        if project_id is not None:
+            df = df.query('project_id == @project_id')
+
+        for key, value in kwargs.items():
+            df = df.loc[df.loc[:, key] == value]
+
+        return df[field].to_list()[0]
 
     def dump(self):
         self.df.to_csv(self.file_path)

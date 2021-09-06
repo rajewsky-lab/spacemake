@@ -11,7 +11,7 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 ###################################################
 rule remove_smart_adapter:
     input:
-        unpack(tagged_or_merged_bam)
+        unpack(get_unaligned_bc_tagged_bam)
     output:
         pipe(tagged_trimmed_bam)
     params:
@@ -66,7 +66,7 @@ rule map_reads_final_bam:
         unpack(get_species_genome_annotation),
         unpack(get_star_input_bam),
         unpack(get_star_index),
-        unpack(tagged_or_merged_bam)
+        unpack(get_unaligned_bc_tagged_bam)
     output:
         star_log_file,
         final_bam=final_bam

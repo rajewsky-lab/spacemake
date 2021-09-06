@@ -70,7 +70,7 @@ def get_star_input_bam(wildcards):
     if wildcards.polyA_adapter_trimmed == '.polyA_adapter_trimmed':
         return {'reads': tagged_polyA_adapter_trimmed_bam}
     else:
-        return {'reads': tagged_or_merged_bam(wildcards)}
+        return {'reads': get_unaligned_bc_tagged_bam(wildcards)}
 
 def get_mapped_final_bam(wildcards):
     if wildcards.mm_included == '.mm_included':
@@ -185,27 +185,21 @@ def get_dge_extra_params(wildcards):
 
     return extra_params
 
-def get_merged_raw_r2_input(wildcards):
-    merge_ix = project_df.get_metadata('merged_from',
-        sample_id = wildcards.sample,
-        project_id = wildcards.project)
+def get_files_to_merge(pattern):
+    # inner function to be returned
+    def get_merged_pattern(wildcards):
+        merge_ix = project_df.get_metadata('merged_from',
+            sample_id = wildcards.sample,
+            project_id = wildcards.project)
 
-    return [
-        expand(raw_reads_mate_2, project = p, sample = s)[0] \ 
-        for (p, s) in merge_ix
-    ]
+        return [
+            expand(pattern, project = p, sample = s)[0] \ 
+            for (p, s) in merge_ix
+        ]
 
-def get_merged_bam_input(wildcards):
-    merge_ix = project_df.get_metadata('merged_from',
-        sample_id = wildcards.sample,
-        project_id = wildcards.project)
+    return get_merged_pattern
 
-    return [
-        expand(tagged_bam, project = p, sample = s)[0] \
-        for (p, s) in merge_ix
-    ]
-
-def tagged_or_merged_bam(wildcards):
+def get_unaligned_bc_tagged_bam(wildcards):
     is_merged = project_df.get_metadata('is_merged',
         sample_id = wildcards.sample,
         project_id = wildcards.project)
