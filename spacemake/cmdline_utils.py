@@ -797,8 +797,8 @@ class ProjectDF:
         return parser
     
     def add_update_delete_sample_cmdline(self, args):
-        project_id = args['project_id']
-        sample_id = args['sample_id']
+        project_id = args['project_id_list']
+        sample_id = args['sample_id_list']
         action = args['action']
 
         # remove the action from args
@@ -892,8 +892,8 @@ class ProjectDF:
             raise SpeciesNotFoundError(species)
 
     def set_species_cmdline(self, args):
-        projects = args['project_id']
-        samples = args['sample_id']
+        projects = args['project_id_list']
+        samples = args['sample_id_list']
         species = args['species_name']
 
         msg = ''
@@ -948,8 +948,8 @@ class ProjectDF:
         return ix.to_list()
 
     def set_remove_run_mode_cmdline(self, args):
-        projects = args['project_id']
-        samples = args['sample_id']
+        projects = args['project_id_list']
+        samples = args['sample_id_list']
         run_modes = args['run_mode']
         action = args['action']
 
@@ -977,8 +977,8 @@ class ProjectDF:
             print(msg)
 
     def list_projects_cmdline(self, args):
-        projects = args['project_id']
-        samples = args['sample_id']
+        projects = args['project_id_list']
+        samples = args['sample_id_list']
         variables = args['variables']
 
         df = self.df
