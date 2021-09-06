@@ -10,7 +10,7 @@ from functools import reduce
 from operator import getitem
 from spacemake.errors import FileWrongExtensionError, RunModeNotFoundError, \
     BarcodeFlavorNotFoundError, NoProjectSampleProvidedError, SpeciesNotFoundError, \
-    ProjectSampleNotFoundError
+    ProjectSampleNotFoundError, SampleAlreadyExistsError, UnmatchingSpeciesDuringMerge
 
 LINE_SEPARATOR = '-'*50+'\n'
 
@@ -53,6 +53,10 @@ class ConfigFile:
             self.variables['knowledge'][var_name] = {}
 
         return self.variables['knowledge'][var_name]
+
+    @property
+    def available_species(self):
+        pass
 
     def __add_genome_annotation(self, var_name, species_name, file_path):
         var_values = self.__get_knowledge_var(var_name)
@@ -368,23 +372,23 @@ class ConfigFile:
 
         ## list run_modes ##
         parser_config_list_run_modes = parser_config_subparsers.add_parser('list_run_modes',
-            help = 'list available run_modes')
+            description = 'list available run_modes')
         parser_config_list_run_modes.set_defaults(func=self.list_run_modes_cmdline)
 
         # add run_mode
         parser_config_add_run_mode = parser_config_subparsers.add_parser('add_run_mode',
-            help = 'add a new run_mode',
+            description = 'add a new run_mode',
             parents=[self.__get_add_update_run_mode_parser()])
         parser_config_add_run_mode.set_defaults(func=self.add_run_mode_cmdline)
 
         # update run mode
         parser_config_update_run_mode = parser_config_subparsers.add_parser('update_run_mode',
-            help = 'update run_mode',
+            description = 'update run_mode',
             parents=[self.__get_add_update_run_mode_parser()])
         parser_config_update_run_mode.set_defaults(func=self.update_run_mode_cmdline)
 
         parser_config_delete_run_mode = parser_config_subparsers.add_parser('delete_run_mode',
-            help = 'delete a run_mode')
+            description = 'delete a run_mode')
         parser_config_delete_run_mode.add_argument('--name',
             type=str,
             help='run_mode to be deleted', required=True)
@@ -393,14 +397,14 @@ class ConfigFile:
         # list barcode flavors
         parser_config_list_barcode_flavors = parser_config_subparsers\
             .add_parser('list_barcode_flavors',
-                help = 'list barcode flavors and their settings')
+                description = 'list barcode flavors and their settings')
         parser_config_list_barcode_flavors.set_defaults(
             func=self.list_barcode_flavors_cmdline)
 
         # delete barcode flavor
         parser_config_delete_barcode_flavor = parser_config_subparsers\
             .add_parser('delete_barcode_flavor',
-                help = 'delete barcode flavor')
+                description = 'delete barcode flavor')
         parser_config_delete_barcode_flavor.add_argument('--name',
             help = 'name of the barcode flavor to be deleted',
             type=str, required=True)
@@ -410,7 +414,7 @@ class ConfigFile:
         # add barcode flavor
         parser_config_add_barcode_flavor = parser_config_subparsers\
             .add_parser('add_barcode_flavor',
-                help = 'add a new barcode_flavor')
+                description = 'add a new barcode_flavor')
         parser_config_add_barcode_flavor.add_argument('--name',
             help = 'name of the barcode flavor', type = str,
             required = True)
@@ -424,14 +428,14 @@ class ConfigFile:
         # list species settings
         parser_config_list_species = parser_config_subparsers\
             .add_parser('list_species',
-                help = 'list all defined species and their genomes, annotations')
+                description = 'list all defined species and their genomes, annotations')
         parser_config_list_species.set_defaults(
             func=self.list_species_cmdline)
 
         # delete species
         parser_config_delete_species = parser_config_subparsers\
             .add_parser('delete_species',
-                help = 'delete a species (genome and annotation) from configuration')
+                description = 'delete a species (genome and annotation) from configuration')
         parser_config_delete_species.add_argument('--name',
             help = 'name of the species to be deleted',
             type=str, required=True)
@@ -440,7 +444,7 @@ class ConfigFile:
         # add species
         parser_config_add_species = parser_config_subparsers\
             .add_parser('add_species',
-                help = 'add a new species: genome (.fa) and annotation (.gtf) files')
+                description = 'add a new species: genome (.fa) and annotation (.gtf) files')
         parser_config_add_species.add_argument('--name',
             help = 'name of the species to be added',
             type = str, required=True)
@@ -670,27 +674,28 @@ class ProjectDF:
 
     def add_sample(self, project_id, sample_id, **kwargs):
         if self.sample_exists(project_id, sample_id):
-            return (False, None)  
+            raise SampleAlreadyExistsError((project_id, sample_id))
         else:
-            return (True,
-                    self.__add_update_sample(project_id, sample_id,
-                    return_series=True, **kwargs))
+            return self.__add_update_sample(project_id, sample_id,
+                return_series=True, **kwargs)
 
     def update_sample(self, project_id, sample_id, **kwargs):
         if self.sample_exists(project_id, sample_id):
-            return (True, self.__add_update_sample(project_id, sample_id,
-                    return_series=True, **kwargs))
+            return self.__add_update_sample(project_id, sample_id,
+                return_series=True, **kwargs)
         else:
-            return (False, None)
+            raise ProjectSampleNotFoundError('(project_id, sample_id)',
+                (project_id, sample_id))
 
     def remove_sample(self, project_id, sample_id):
         if self.sample_exists(project_id, sample_id):
             ix = (project_id, sample_id)
             element = self.df.loc[ix]
             self.df.drop(ix, inplace=True)
-            return (True, element)
+            return element
         else:
-            return (False, None)
+            raise ProjectSampleNotFoundError('(project_id, sample_id)',
+                (project_id, sample_id))
 
     def add_samples_from_yaml(self, projects_yaml_file):
         config = yaml.load(open(projects_yaml_file),
@@ -716,8 +721,6 @@ class ProjectDF:
             self.set_barcode_flavor(barcode_flavor, projects, samples)
 
 
-        #project_df = df_assign_merge_samples(project_df)
-    
     def __get_project_sample_parser(self):
         parser = argparse.ArgumentParser(
             add_help=False)
@@ -760,14 +763,24 @@ class ProjectDF:
             type=str,
             nargs='+',
             help = 'run_mode names for this sample. the sample will be processed using the provided run_modes')
+        return parser
+
+    def __get_barcode_flavor_species_parser(self, species_required=False):
+        parser = argparse.ArgumentParser(
+            add_help = False)
 
         parser.add_argument('--barcode_flavor',
             type=str,
             help = 'barcode flavor for this sample')
 
+        parser.add_argument('--species',
+            type=str,
+            help = 'add the name of the species for this sample',
+            required=species_required)
+
         return parser
 
-    def __get_read_species_parser(self, reads_required):
+    def __get_read_parser(self, reads_required=False):
         parser = argparse.ArgumentParser(
             add_help = False)
 
@@ -781,14 +794,9 @@ class ProjectDF:
             help = '.fastq.gz file path to R2 reads',
             required=reads_required)
 
-        parser.add_argument('--species',
-            type=str,
-            help = 'add the name of the species for this sample',
-            required=reads_required)
-
         return parser
     
-    def add_update_remove_sample_cmdline(self, args):
+    def add_update_delete_sample_cmdline(self, args):
         project_id = args['project_id']
         sample_id = args['sample_id']
         action = args['action']
@@ -801,38 +809,27 @@ class ProjectDF:
         if action == 'add':
             msg += 'Adding'
             succ_msg = 'added'
-            err_msg = 'already exists'
-            opposite_action = 'remove'
             func = self.add_sample
         elif action == 'update':
             msg += 'Updatig'
             succ_msg = 'updated'
-            err_msg = 'does not exist.'
-            opposite_action = 'add'
             func = self.update_sample
-        elif action == 'remove':
-            msg += 'Removing'
-            succ_msg = 'removed'
-            opposite_action = 'add'
-            err_msg = 'does not exist.'
+        elif action == 'delete':
+            msg += 'Deleting'
+            succ_msg = 'deleted'
             func = self.remove_sample
 
         msg += f' ({project_id}, {sample_id})\n'
 
         try:
-            action_taken, sample = func(**args)
+            sample = func(**args)
 
-            if action_taken:
-                msg += f'SUCCESS: sample {succ_msg} successfully.\n'
-                msg += LINE_SEPARATOR
-                msg += str(sample)
-                self.dump()
-            else:
-                msg += f'ERROR: sample with index ({project_id}, {sample_id}) {err_msg}\n'
-                msg += f'In order to {opposite_action} it, use `spacemake projects {opposite_action}_sample`\n'
-                if action == 'add':
-                    msg += f'You can also remove this sample using `spacemake projects remove_sample`\n'
+            msg += f'SUCCESS: sample {succ_msg} successfully.\n'
+            msg += LINE_SEPARATOR
+            msg += str(sample)
+            self.dump()
         except (RunModeNotFoundError, FileNotFoundError,
+                SampleAlreadyExistsError, ProjectSampleNotFoundError,
                 FileWrongExtensionError, BarcodeFlavorNotFoundError) as e:
             msg += LINE_SEPARATOR
             msg += str(e)
@@ -866,23 +863,23 @@ class ProjectDF:
 
     def __get_project_sample_lists_parser(self, help_extra=''):
         parser = argparse.ArgumentParser(add_help=False)
-        parser.add_argument('--project_id',
+        parser.add_argument('--project_id_list',
             nargs='*',
             default=[],
             help = 'project id-s for which we should ' + help_extra)
-        parser.add_argument('--sample_id',
+        parser.add_argument('--sample_id_list',
             nargs='*',
             default=[],
             help = 'sample id-s for which we should ' + help_extra)
 
         return parser
 
-    def __set_species(self, species, projects, samples):
+    def __set_species(self, species, project_id_list, sample_id_list):
         # raise error if both lists are empty
-        if projects == [] and samples == []:
+        if project_id_list == [] and sample_id_list == []:
             raise NoProjectSampleProvidedError()
 
-        self.__assert_projects_samples_exist(projects, samples)
+        self.__assert_projects_samples_exist(project_id_list, sample_id_list)
 
         ix = self.df.query(
             'project_id in @projects or sample_id in @samples').index
@@ -1003,25 +1000,28 @@ class ProjectDF:
 
         print(msg)
 
-    def __assert_projects_samples_exist(self, projects = [], samples = []):
-        for project in projects:
+    def __assert_projects_samples_exist(self,
+            project_id_list = [], sample_id_list = []):
+        for project in project_id_list:
             if project not in self.df.index.get_level_values('project_id'):
                 raise ProjectSampleNotFoundError('project_id', project)
 
-        for sample in samples:
+        for sample in sample_id_list:
             if project not in self.df.index.get_level_values('project_id'):
                 raise ProjectSampleNotFoundError('sample_id', sample)
         
 
-    def __set_barcode_flavor(self, barcode_flavor, projects = [], samples = []):
+    def __set_barcode_flavor(self, barcode_flavor,
+            project_id_list = [], sample_id_list = []):
         # raise error if both lists are empty
-        if projects == [] and samples == []:
+        if project_id_list == [] and sample_id_list == []:
             raise NoProjectSampleProvidedError()
 
-        self.__assert_projects_samples_exist(projects, samples)
+        self.__assert_projects_samples_exist(project_id_list, sample_id_list)
 
         if self.config.barcode_flavor_exists(barcode_flavor):
-            ix = self.df.query('project_id in @projects or sample_id in @samples').index
+            ix = self.df.query(
+                'project_id in @project_id_list or sample_id in @sample_id_list').index
 
             if ix is None:
                 raise NoProjectSampleProvidedError()
@@ -1034,15 +1034,11 @@ class ProjectDF:
 
     def set_barcode_flavor_cmdline(self, args):
         barcode_flavor = args['barcode_flavor']
-        samples = args['sample_id']
-        projects = args['project_id']
         
         msg = ''
 
         try:
-            set_indices = self.__set_barcode_flavor(barcode_flavor,
-                                    projects,
-                                    samples)
+            set_indices = self.__set_barcode_flavor(**args)
 
             msg += f'Setting barcode flavor: {barcode_flavor} for the'
             msg += f' following (project_id, sample_id) samples:\n'
@@ -1058,19 +1054,94 @@ class ProjectDF:
         finally:
             print(msg)
 
+    def merge_samples(self,
+        merged_project_id,
+        merged_sample_id,
+        project_id_list = [],
+        sample_id_list = [],
+        **kwargs
+    ):
+        if project_id_list == [] and sample_id_list == []:
+            raise NoProjectSampleProvidedError()
+
+        # check if projects and samples with these IDs exist
+        self.__assert_projects_samples_exist(project_id_list, sample_id_list)
+
+        ix = self.df.query(
+            'project_id in @project_id_list or sample_id in @sample_id_list').index
+
+        species = self.df.loc[ix].species.to_list()
+
+        if len(set(species)) > 1:
+            raise UnmatchingSpeciesDuringMerge
+        else:
+            species = species[0]
+
+        sample_added = self.add_sample(
+            project_id = merged_project_id,
+            sample_id = merged_sample_id,
+            species = species,
+            is_merged=True,
+            merged_from = ix.to_list(),
+            **kwargs)
+
+        return (sample_added, ix)
+
+    def merge_samples_cmdline(self, args):
+        msg = ''
+
+        try:
+            sample, set_indices = self.merge_samples(**args)
+
+            msg += f'Merging samples {set_indices}.\n'
+            msg += LINE_SEPARATOR
+            msg += 'SUCCESS: samples merged successfully.\n'
+            msg += LINE_SEPARATOR
+            msg += str(sample)
+
+            self.dump()
+        except (NoProjectSampleProvidedError, SpeciesNotFoundError,
+                ProjectSampleNotFoundError) as e:
+            msg += str(e)
+        finally:
+            print(msg)
+
+
     def get_subparsers(self, subparsers):
-        parser = subparsers.add_parser('projects', help ='manage projects and samples') 
-        projects_subparser = parser.add_subparsers(help = 'sample sub-command help')
+        parser = subparsers.add_parser('projects',
+                help='manage projects and samples',
+                description ='Using one of the subcommands specified below, it is possible to' +\
+                        ' add/update/remove projects and their settings') 
+        projects_subparser = parser.add_subparsers()
+
+        help_desc = {
+            'add_sample_sheet' : 'add projects and samples from Illumina sample sheet',
+            'add_samples_from_yaml' : 'add several samples at once from a .yaml file',
+            'add_sample': 'add a single sample from the command line',
+            'update_sample':'update_existing_sample',
+            'delete_sample':'delete existing sample',
+            'merge_samples': 'merge several samples into one. ' +\
+                    'samples need to have the same species',
+            'set_species':'set species for one or multiple projects/samples',
+            'set_barcode_flavor':'set barcode_flavor for one or multiple projects/samples',
+            'set_run_mode':'set run mode(s) for one or multiple projects/samples',
+            'remove_run_mode':'remove run mode(s) for one or multiple projects/samples',
+            'list':'list several project(s) and sample(s) and their settings'
+        }
+
+
 
         # ADD SAMPLE SHEET
         sample_add_sample_sheet = projects_subparser.add_parser('add_sample_sheet',
-            help = 'add projects and samples from Illumina sample sheet',
+            description = help_desc['add_sample_sheet'],
+            help = help_desc['add_sample_sheet'],
             parents=[self.__get_add_sample_sheet_parser()])
         sample_add_sample_sheet.set_defaults(func=self.add_sample_sheet_cmdline)
 
         # ADD SAMPLES FROM YAML
         sample_add_samples_yaml = projects_subparser.add_parser('add_samples_from_yaml',
-            help = 'add several samples at once from a .yaml file')
+            description = help_desc['add_samples_from_yaml'],
+            help = help_desc['add_samples_from_yaml'])
         sample_add_samples_yaml.add_argument('--samples_yaml',
             type=str, required=True,
             help='path to the .yaml file containing sample info')
@@ -1079,32 +1150,52 @@ class ProjectDF:
 
         # ADD SAMPLE
         sample_add = projects_subparser.add_parser('add_sample',
-            help = 'add new sample',
+            description = help_desc['add_sample'],
+            help = help_desc['add_sample'],
             parents = [self.__get_project_sample_parser(),
                      self.__get_sample_extra_arguments_parser(),
-                     self.__get_read_species_parser(reads_required=True)])
-        sample_add.set_defaults(func=self.add_update_remove_sample_cmdline,
+                     self.__get_barcode_flavor_species_parser(species_required=True),
+                     self.__get_read_parser(reads_required=True)])
+        sample_add.set_defaults(func=self.add_update_delete_sample_cmdline,
             action='add')
 
         # UPDATE SAMPLE
-        sample_add = projects_subparser.add_parser('update_sample',
-            help = 'update_existing_sample',
+        sample_update = projects_subparser.add_parser('update_sample',
+            description = help_desc['update_sample'],
+            help = help_desc['update_sample'],
             parents = [self.__get_project_sample_parser(),
                      self.__get_sample_extra_arguments_parser(),
-                     self.__get_read_species_parser(reads_required=False)])
-        sample_add.set_defaults(func=self.add_update_remove_sample_cmdline,
+                     self.__get_barcode_flavor_species_parser(),
+                     self.__get_read_parser()])
+        sample_update.set_defaults(func=self.add_update_delete_sample_cmdline,
             action = 'update')
 
-        sample_remove = projects_subparser.add_parser('remove_sample',
-            help = 'remove existing sample',
+        # DELETE SAMPLE
+        sample_remove = projects_subparser.add_parser('delete_sample',
+            description = help_desc['delete_sample'],
+            help = help_desc['delete_sample'],
             parents = [self.__get_project_sample_parser()])
-        sample_remove.set_defaults(func=self.add_update_remove_sample_cmdline,
-            action = 'remove')
+        sample_remove.set_defaults(func=self.add_update_delete_sample_cmdline,
+            action = 'delete')
+
+        # MERGE SAMPLES
+        sample_merge = projects_subparser.add_parser('merge_samples',
+            description = help_desc['merge_samples'],
+            help = help_desc['merge_samples'],
+            parents=[self.__get_project_sample_lists_parser('perform the merge'),
+                    self.__get_sample_extra_arguments_parser()])
+        sample_merge.add_argument('--merged_project_id',
+            required=True, type = str)
+        sample_merge.add_argument('--merged_sample_id',
+            required=True, type = str)
+        sample_merge.set_defaults(func=self.merge_samples_cmdline)
 
         # SET SPECIES
         set_species = projects_subparser.add_parser('set_species',
-            help = 'set species for one or multiple projects/samples',
+            description = help_desc['set_species'],
+            help = help_desc['set_species'],
             parents=[self.__get_project_sample_lists_parser('set the species')])
+
         set_species.add_argument('--species_name',
             help = 'name of the species to be set',
             type=str, required=True)
@@ -1112,7 +1203,8 @@ class ProjectDF:
 
         # SET BARCODE FLAVOR
         set_barcode_flavor = projects_subparser.add_parser('set_barcode_flavor',
-            help = 'set barcode_flavor for one or multiple projects/samples',
+            description = help_desc['set_barcode_flavor'],
+            help = help_desc['set_barcode_flavor'],
             parents=[self.__get_project_sample_lists_parser('set barcode_flavor')])
         set_barcode_flavor.add_argument('--barcode_flavor',
             help = 'name of the barcode_flavor to be set',
@@ -1121,7 +1213,8 @@ class ProjectDF:
 
         # SET RUN MODE
         set_run_mode = projects_subparser.add_parser('set_run_mode',
-            help = 'set run mode(s) for one or multiple projects/samples',
+            description = help_desc['set_run_mode'],
+            help = help_desc['set_run_mode'],
             parents=[self.__get_project_sample_lists_parser('set run mode(s)')])
         set_run_mode.add_argument('--run_mode',
             help = 'name of the run mode(s) to be set',
@@ -1132,7 +1225,8 @@ class ProjectDF:
         
         # REMOVE RUN MODE
         remove_run_mode = projects_subparser.add_parser('remove_run_mode',
-            help = 'remove run mode(s) for one or multiple projects/samples',
+            description = help_desc['remove_run_mode'],
+            help = help_desc['remove_run_mode'],
             parents=[self.__get_project_sample_lists_parser('remove run mode(s)')])
         remove_run_mode.add_argument('--run_mode',
             help = 'name of the run mode(s) to be removed',
@@ -1143,7 +1237,8 @@ class ProjectDF:
 
         # LIST PROJECTS
         list_projects = projects_subparser.add_parser('list',
-            help = 'list several project(s) and sample(s) and their settings',
+            description = help_desc['list'],
+            help = help_desc['list'],
             parents=[self.__get_project_sample_lists_parser(
                 'subset the data. If none provided, all will be displayed')])
         list_projects.add_argument('--variables',

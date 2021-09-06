@@ -4,7 +4,7 @@ sorted_tagged_bam = complete_data_root + '/unaligned_bc_tagged.sorted.bam'
 
 rule create_merged_bam:
     input:
-        unpack(get_files_to_merge(raw_reads_mate_2))
+        unpack(get_files_to_merge_snakemake(tagged_bam))
     output:
         merged_bam
     shell:
@@ -12,7 +12,7 @@ rule create_merged_bam:
 
 rule create_merged_raw_r2:
     input:
-        unpack(get_files_to_merge(tagged_bam))
+        unpack(get_files_to_merge_snakemake(raw_reads_mate_2))
     output:
         merged_raw_reads_mate_2
     shell:

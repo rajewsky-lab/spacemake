@@ -58,3 +58,21 @@ class ProjectSampleNotFoundError(Exception):
         msg += 'you can add a new sample with `spacemake projects add_sample` command.\n'
 
         return msg
+
+class SampleAlreadyExistsError(Exception):
+    def __init__(self, ix):
+        self.ix = ix
+
+    def __str__(self):
+        msg = f'ERROR: sample with (project_id, sample_id)={self.ix} already exists.\n'
+        msg += 'In order to update this sample use `spacemake projects update_sample`,\n'
+        msg += 'to delete it use `spacemake projects delete_sample`.\n'
+
+        return msg
+
+class UnmatchingSpeciesDuringMerge(Exception):
+    def __str__(self):
+        msg = f'ERROR: the samples that you trying to merge have different species.\n'
+        msg += 'You can only merge samples which have the same species.\n'
+
+        return msg

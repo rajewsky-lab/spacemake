@@ -185,17 +185,41 @@ def get_dge_extra_params(wildcards):
 
     return extra_params
 
-def get_files_to_merge(pattern):
+def get_files_to_merge(project_id, sample_id, pattern):
+    # recursive function to find all files to merge. a merged sample can be merged
+    # from merged samples. to avoid cyclic dependencies, here we look for all files
+    # which are the dependencies of the underlying samples
+    is_merged = project_df.get_metadata('is_merged',
+        project_id = project_id,
+        sample_id = sample_id)
+
+    files = []
+
+    if not is_merged:
+        files = expand(pattern, sample=sample_id, project=project_id)
+    else:
+        merge_ix = project_df.get_metadata('merged_from',
+            sample_id = sample_id,
+            project_id = project_id)
+
+        for (p, s) in merge_ix:
+            files = files + get_files_to_merge(project_id = p, sample_id = s, pattern = pattern)
+
+    return list(set(files))
+
+def get_files_to_merge_snakemake(pattern):
     # inner function to be returned
     def get_merged_pattern(wildcards):
         merge_ix = project_df.get_metadata('merged_from',
             sample_id = wildcards.sample,
             project_id = wildcards.project)
 
-        return [
-            expand(pattern, project = p, sample = s)[0] \ 
-            for (p, s) in merge_ix
-        ]
+        files = get_files_to_merge(
+            project_id = wildcards.project,
+            sample_id = wildcards.sample,
+            pattern = pattern)
+        
+        return files
 
     return get_merged_pattern
 
