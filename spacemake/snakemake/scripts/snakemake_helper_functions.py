@@ -70,7 +70,7 @@ def get_star_input_bam(wildcards):
     if wildcards.polyA_adapter_trimmed == '.polyA_adapter_trimmed':
         return {'reads': tagged_polyA_adapter_trimmed_bam}
     else:
-        return {'reads': get_unaligned_bc_tagged_bam(wildcards)}
+        return {'reads': get_unaligned_bc_tagged_bam(wildcards)['tagged_bam']}
 
 def get_mapped_final_bam(wildcards):
     if wildcards.mm_included == '.mm_included':
@@ -100,7 +100,6 @@ def get_species_genome_annotation(wildcards):
         "annotation": config["knowledge"]["annotations"][species],
         "genome": config["knowledge"]["genomes"][species]
     }
-
     return files
 
 def get_star_index(wildcards):
@@ -229,9 +228,15 @@ def get_unaligned_bc_tagged_bam(wildcards):
         project_id = wildcards.project)
 
     if is_merged:
-        return {'tagged_bam': merged_bam}
+        files = {'tagged_bam': expand(merged_bam,
+                   project = wildcards.project,
+                   sample = wildcards.sample)[0]}
     else:
-        return {'tagged_bam': tagged_bam}
+        files = {'tagged_bam': expand(merged_bam,
+                   project = wildcards.project,
+                   sample = wildcards.sample)[0]}
+
+    return files
 
 def get_ribo_depletion_log(wildcards):
     is_merged = project_df.get_metadata('is_merged',
