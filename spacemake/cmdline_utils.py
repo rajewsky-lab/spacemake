@@ -765,7 +765,10 @@ class ProjectDF:
         parser.add_argument('--run_mode',
             type=str,
             nargs='+',
-            help = 'run_mode names for this sample. the sample will be processed using the provided run_modes')
+            help = 'run_mode names for this sample.\n' +\
+                'the sample will be processed using the provided run_modes.\n' +\
+                'for merged samples, if left empty, the run_modes of the \n' +\
+                'merged (input) samples will be intersected.\n')
         return parser
 
     def __get_barcode_flavor_species_parser(self, species_required=False):
@@ -1112,7 +1115,29 @@ class ProjectDF:
             if field not in kwargs.keys():
                 kwargs[field] = ';'.join(self.df.loc[ix, field].unique())
 
-        print(kwargs)
+            
+        # if no run_mode provided, overwrite with user defined one
+        if 'run_mode' not in kwargs.keys():
+            run_mode = [set(run_mode)
+                for run_mode in self.df.loc[ix].run_mode.to_list()
+            ]
+
+            # join run modes from parent samples
+            if len(run_mode) == 1:
+                run_mode = run_mode[0]
+            else:
+                run_mode = run_mode[0].intersection(*run_mode[1:])
+
+            # create a list from the set intersection
+            run_mode = list(run_mode)
+
+            # if there are no common elements, throw an error
+            if len(run_mode) == 0:
+                raise Exception('No run modes shared between merged samples')
+            
+            # finally add run mode to arguments
+            kwargs['run_mode'] = run_mode
+        
         sample_added = self.add_sample(
             project_id = merged_project_id,
             sample_id = merged_sample_id,

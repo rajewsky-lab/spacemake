@@ -28,24 +28,29 @@ rule create_merged_star_log:
         for f in input:
             with open(f, 'r') as fi:
                 logs = logs + [fi.read().splitlines()]
-
-        inp_reads = 0
-        uniquely_mapped = 0
+        
+        indices_to_save = [5, 8, 23, 10, 30]
+        value_dict = {ix: 0 for ix in indices_to_save}
+        indices_to_normalise = [10]
 
         # extract info from all logfiles, and add them up
+        # we are only interested in lines 5, 8, 23, 10, 30
+        # so: inp_reads, uniq_mapped_reads, avg_mapped_length, 
+        # multi_mapped_reads, unmapped_too_short
         for l in logs:
-            inp_reads = inp_reads + int(l[5].split('\t')[1])
-            uniquely_mapped = uniquely_mapped + int(l[8].split('\t')[1])
+            for ix in value_dict.keys():
+                value_dict[ix] = value_dict[ix] + float(l[ix].split('\t')[1])
+
+        for ix in indices_to_normalise:
+            value_dict[ix] = value_dict[ix] / len(logs)
 
         # print to output
         with open(output[0], 'w') as fo:
-            idx = 0
+            ix = 0
             for line in logs[0]:
                 entry = line.split('\t') 
-                if idx == 5:
-                    fo.write('%s\t%s\n' % (entry[0], inp_reads))
-                elif idx == 8:
-                    fo.write('%s\t%s\n' % (entry[0], uniquely_mapped))
+                if ix in value_dict.keys():
+                    fo.write('%s\t%s\n' % (entry[0], value_dict[ix]))
                 else:
                     fo.write('%s\t%s\n' % (entry[0], 'NA'))
-                idx = idx + 1
+                ix = ix + 1
