@@ -164,6 +164,7 @@ class ConfigFile:
 
     def __get_add_update_run_mode_parser(self):
         parser = argparse.ArgumentParser(
+            allow_abbrev=False,
             description='add/update run_mode parent parser',
             add_help = False)
         parser.add_argument('--name', type=str,
@@ -723,6 +724,7 @@ class ProjectDF:
 
     def __get_project_sample_parser(self):
         parser = argparse.ArgumentParser(
+            allow_abbrev=False,
             add_help=False)
 
         parser.add_argument('--project_id',
@@ -737,6 +739,7 @@ class ProjectDF:
 
     def __get_sample_extra_arguments_parser(self):
         parser = argparse.ArgumentParser(
+            allow_abbrev=False,
             add_help=False)
 
         parser.add_argument('--puck_id',
@@ -767,6 +770,7 @@ class ProjectDF:
 
     def __get_barcode_flavor_species_parser(self, species_required=False):
         parser = argparse.ArgumentParser(
+            allow_abbrev=False,
             add_help = False)
 
         parser.add_argument('--barcode_flavor',
@@ -782,6 +786,7 @@ class ProjectDF:
 
     def __get_read_parser(self, reads_required=False):
         parser = argparse.ArgumentParser(
+            allow_abbrev=False,
             add_help = False)
 
         parser.add_argument('--R1',
@@ -838,6 +843,7 @@ class ProjectDF:
 
     def __get_add_sample_sheet_parser(self):
         parser = argparse.ArgumentParser(
+            allow_abbrev=False,
             description = 'add a new sample sheet to the samples',
             add_help=False)
 
@@ -863,13 +869,16 @@ class ProjectDF:
 
     def __get_project_sample_lists_parser(self, help_extra=''):
         parser = argparse.ArgumentParser(add_help=False)
+        allow_abbrev=False,
         parser.add_argument('--project_id_list',
             nargs='*',
             default=[],
+            type=str,
             help = 'project id-s for which we should ' + help_extra)
         parser.add_argument('--sample_id_list',
             nargs='*',
             default=[],
+            type=str,
             help = 'sample id-s for which we should ' + help_extra)
 
         return parser
@@ -948,6 +957,7 @@ class ProjectDF:
         return ix.to_list()
 
     def set_remove_run_mode_cmdline(self, args):
+        print(args)
         projects = args['project_id_list']
         samples = args['sample_id_list']
         run_modes = args['run_mode']
@@ -955,18 +965,20 @@ class ProjectDF:
 
         if action == 'set':
             succ_msg = 'set'
+            action_msg = 'Setting'
         elif action == 'remove':
             succ_msg = 'removed'
+            action_msg = 'Removing'
 
         msg =''
 
         try:
             set_indices = self.__set_remove_run_mode(run_modes, action, projects, samples)
              
-            msg += f'{action}ing {run_modes} for the following (project_id, sample_id)'
+            msg += f'{action_msg} {run_modes} for the following (project_id, sample_id)'
             msg += f' samples:\n{set_indices}\n'
             msg += LINE_SEPARATOR
-            msg += f'SUCCESS: run mode: {run_mode} {action_msg} succesfully.\n'
+            msg += f'SUCCESS: run mode: {run_modes} {succ_msg} succesfully.\n'
 
             self.dump()
         except (NoProjectSampleProvidedError, ProjectSampleNotFoundError, 
@@ -1100,6 +1112,7 @@ class ProjectDF:
             if field not in kwargs.keys():
                 kwargs[field] = ';'.join(self.df.loc[ix, field].unique())
 
+        print(kwargs)
         sample_added = self.add_sample(
             project_id = merged_project_id,
             sample_id = merged_sample_id,
@@ -1112,7 +1125,7 @@ class ProjectDF:
 
     def merge_samples_cmdline(self, args):
         msg = ''
-
+        print(args)
         try:
             sample, set_indices = self.merge_samples(**args)
 

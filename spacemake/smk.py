@@ -98,6 +98,7 @@ def spacemake_run(args):
 
 parsers = {
     'main': argparse.ArgumentParser(
+        allow_abbrev=False,
         description='spacemake: bioinformatic pipeline for processing and analysis of spatial-transcriptomics data')
 }
 

@@ -70,14 +70,27 @@ def get_star_input_bam(wildcards):
     if wildcards.polyA_adapter_trimmed == '.polyA_adapter_trimmed':
         return {'reads': tagged_polyA_adapter_trimmed_bam}
     else:
-        return {'reads': get_unaligned_bc_tagged_bam(wildcards)['tagged_bam']}
+        return {'reads': tagged_bam}
 
-def get_mapped_final_bam(wildcards):
+def get_final_bam(wildcards):
+    is_merged = project_df.get_metadata('is_merged',
+        project_id = wildcards.project,
+        sample_id = wildcards.sample)
+
+    if is_merged:
+        return [final_merged_bam]
+    else:
+        return [final_bam]
+
+def get_dge_input_bam(wildcards):
+    is_merged = project_df.get_metadata('is_merged',
+        project_id = wildcards.project,
+        sample_id = wildcards.sample)
+
     if wildcards.mm_included == '.mm_included':
         return {'reads': final_bam_mm_included_pipe}
     else:
-        return {'reads': final_bam}
-
+        return {'reads': get_final_bam(wildcards)}
 
 def get_species_genome_annotation(wildcards):
     # This function will return 2 things required by STAR:
@@ -184,59 +197,42 @@ def get_dge_extra_params(wildcards):
 
     return extra_params
 
-def get_files_to_merge(project_id, sample_id, pattern):
+def get_files_to_merge(pattern, project, sample, **kwargs):
     # recursive function to find all files to merge. a merged sample can be merged
     # from merged samples. to avoid cyclic dependencies, here we look for all files
     # which are the dependencies of the underlying samples
     is_merged = project_df.get_metadata('is_merged',
-        project_id = project_id,
-        sample_id = sample_id)
+        project_id = project,
+        sample_id = sample)
 
     files = []
 
     if not is_merged:
-        files = expand(pattern, sample=sample_id, project=project_id)
+        files = expand(pattern, sample=sample, project=project, **kwargs)
     else:
         merge_ix = project_df.get_metadata('merged_from',
-            sample_id = sample_id,
-            project_id = project_id)
+            sample_id = sample,
+            project_id = project)
 
         for (p, s) in merge_ix:
-            files = files + get_files_to_merge(project_id = p, sample_id = s, pattern = pattern)
+            files = files + get_files_to_merge(project = p, sample = s, pattern = pattern, **kwargs)
 
     return list(set(files))
 
 def get_files_to_merge_snakemake(pattern):
     # inner function to be returned
     def get_merged_pattern(wildcards):
-        merge_ix = project_df.get_metadata('merged_from',
-            sample_id = wildcards.sample,
-            project_id = wildcards.project)
+        kwargs = {}
+        
+        # konvert wildcards to dict
+        for key, value in wildcards.items():
+            kwargs[key] = value
 
-        files = get_files_to_merge(
-            project_id = wildcards.project,
-            sample_id = wildcards.sample,
-            pattern = pattern)
+        files = get_files_to_merge(pattern = pattern, **kwargs)
         
         return files
 
     return get_merged_pattern
-
-def get_unaligned_bc_tagged_bam(wildcards):
-    is_merged = project_df.get_metadata('is_merged',
-        sample_id = wildcards.sample,
-        project_id = wildcards.project)
-
-    if is_merged:
-        files = {'tagged_bam': expand(merged_bam,
-                   project = wildcards.project,
-                   sample = wildcards.sample)[0]}
-    else:
-        files = {'tagged_bam': expand(merged_bam,
-                   project = wildcards.project,
-                   sample = wildcards.sample)[0]}
-
-    return files
 
 def get_ribo_depletion_log(wildcards):
     is_merged = project_df.get_metadata('is_merged',
@@ -247,16 +243,6 @@ def get_ribo_depletion_log(wildcards):
         return [merged_ribo_depletion_log]
     else:
         return [ribo_depletion_log]
-
-def get_rRNA_reads_input(wildcards):
-    is_merged = project_df.get_metadata('is_merged',
-        sample_id = wildcards.sample,
-        project_id = wildcards.project)
-
-    if is_merged:
-        return {'reads': merged_raw_reads_mate_2}
-    else:
-        return {'reads': raw_reads_mate_2}
 
 def get_bt2_index(wildcards):
     species = project_df.get_metadata(
@@ -360,6 +346,10 @@ def get_qc_sheet_input_files(wildcards):
     # returns star_log, reads_type_out, strand_info
     # first checks the run modes, and returns either polyA_adapter_trimmed, untrimmed
     # or both
+    is_merged = project_df.get_metadata('is_merged',
+        project_id = wildcards.project,
+        sample_id = wildcards.sample)
+
     run_modes = get_run_modes_from_sample(wildcards.project, wildcards.sample)
 
     is_polyA_adapter_trimmed = set([x['polyA_adapter_trimming'] for x in run_modes.values()])
@@ -376,8 +366,13 @@ def get_qc_sheet_input_files(wildcards):
                   'project': wildcards.project,
                   'polyA_adapter_trimmed': polyA_adapter_trimmed_wildcard}
 
+    if is_merged:
+        star_log_pattern = merged_star_log_file
+    else:
+        star_log_pattern = star_log_file
+
     return {
-        'star_log': expand(star_log_file, **extra_args),
+        'star_log': expand(star_log_pattern, **extra_args),
         'reads_type_out': expand(reads_type_out, **extra_args),
         'strand_info': expand(strand_info, **extra_args)}
 

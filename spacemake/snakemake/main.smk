@@ -186,15 +186,14 @@ tagged_polyA_adapter_trimmed_bam = complete_data_root + '/unaligned_bc_tagged.po
 tagged_bam_pattern = complete_data_root + '/unaligned_bc_tagged{polyA_adapter_trimmed}.bam'
 
 # mapped reads
-mapped_reads_qname_sorted = complete_data_root + '/star{polyA_adapter_trimmed}.Aligned.out.bam'
-star_log_file = complete_data_root + '/star{polyA_adapter_trimmed}.Log.final.out'
 star_prefix  = complete_data_root + '/star{polyA_adapter_trimmed}.'
+star_log_file = star_prefix + 'Log.final.out'
 
 # final bam file
-final_bam = complete_data_root + '/final{polyA_adapter_trimmed}.bam'
+final_bam_suffix = '/final{polyA_adapter_trimmed}'
+final_bam = complete_data_root + final_bam_suffix + '.bam'
 bam_mm_included_pipe_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam'
 final_bam_mm_included_pipe = complete_data_root + '/final' + bam_mm_included_pipe_suffix
-final_bam_pattern = complete_data_root + '/final{polyA_adapter_trimmed}{mm_included}.bam'
 
 # index settings
 star_index = 'species_data/{species}/star_index'
@@ -419,7 +418,7 @@ rule run_fastqc:
 rule get_barcode_readcounts:
     # this rule takes the final.bam file (output of the dropseq pipeline) and creates a barcode read count file
     input:
-        final_bam
+        unpack(get_final_bam)
     output:
         barcode_readcounts
     params:
@@ -455,7 +454,7 @@ rule create_dge:
     # topBarcodesClean.txt file or just the regular topBarcodes.txt
     input:
         unpack(get_top_barcodes),
-        unpack(get_mapped_final_bam)
+        unpack(get_dge_input_bam)
     output:
         dge=dge_out,
         dge_summary=dge_out_summary
@@ -558,7 +557,7 @@ rule create_automated_report:
 
 rule split_final_bam:
     input:
-        final_bam
+        unpack(get_final_bam)
     output:
         temp(split_reads_sam_files),
         split_reads_read_type,
@@ -601,7 +600,7 @@ rule create_rRNA_index:
 rule map_to_rRNA:
     input:
         unpack(get_bt2_rRNA_index),
-        unpack(get_rRNA_reads_input)
+        reads=raw_reads_mate_2
     output:
         ribo_depletion_log
     params:

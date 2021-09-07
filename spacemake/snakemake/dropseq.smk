@@ -11,7 +11,7 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 ###################################################
 rule remove_smart_adapter:
     input:
-        unpack(get_unaligned_bc_tagged_bam)
+        tagged_bam
     output:
         pipe(tagged_trimmed_bam)
     params:
@@ -66,7 +66,7 @@ rule map_reads_final_bam:
         unpack(get_species_genome_annotation),
         unpack(get_star_input_bam),
         unpack(get_star_index),
-        unpack(get_unaligned_bc_tagged_bam)
+        tagged_bam=tagged_bam
     output:
         star_log_file,
         final_bam=final_bam
@@ -104,7 +104,7 @@ rule map_reads_final_bam:
 
 rule filter_mm_reads:
     input:
-        final_bam
+        unpack(get_final_bam)
     output:
         pipe(final_bam_mm_included_pipe)
     shell:
