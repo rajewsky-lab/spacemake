@@ -10,7 +10,8 @@ from functools import reduce
 from operator import getitem
 from spacemake.errors import FileWrongExtensionError, RunModeNotFoundError, \
     BarcodeFlavorNotFoundError, NoProjectSampleProvidedError, SpeciesNotFoundError, \
-    ProjectSampleNotFoundError, SampleAlreadyExistsError, UnmatchingSpeciesDuringMerge
+    ProjectSampleNotFoundError, SampleAlreadyExistsError, \
+    InconsistentVariablesDuringMerge
 
 LINE_SEPARATOR = '-'*50+'\n'
 
@@ -659,6 +660,10 @@ class ProjectDF:
             if not self.config.run_mode_exists(run_mode):
                 raise RunModeNotFoundError(run_mode)
 
+        if 'barcode_flavor' in kwargs.keys():
+            if not self.config.barcode_flavor_exists(kwargs['barcode_flavor']):
+                raise BarcodeFlavorNotFoundError(kwargs['barcode_flavor'])
+
         if self.sample_exists(project_id, sample_id):
             new_project = self.df.loc[ix].copy()
             new_project.update(pd.Series(kwargs))
@@ -1092,28 +1097,36 @@ class ProjectDF:
             ix = self.df.query(
                 'project_id in @project_id_list and sample_id in @sample_id_list').index
 
-        species = self.df.loc[ix].species.to_list()
+        consistent_variables = ['species', 'barcode_flavor']
 
-        if ix.to_list() == []:
+        ix_list = ix.to_list()
+
+        if ix_list == []:
             raise ProjectSampleNotFoundError(
                 '(project_id_list, sample_id_list)',
                 (project_id_list, sample_id_list))
 
-        if len(set(species)) > 1:
-            raise UnmatchingSpeciesDuringMerge()
-        else:
-            species = species[0]
+        # check for variable inconsistency
+        # raise error if variable different between samples
+        for variable in consistent_variables:
+            variable_val = self.df.loc[ix, variable].to_list()
+
+            if len(set(variable_val)) > 1:
+                raise InconsistentVariablesDuringMerge(variable, ix_list)
+            else:
+                # attach the deduced, consisten variable
+                kwargs[variable] = variable_val[0]
 
         
-        fields_to_deduce = [
+        variables_to_deduce = [
             'investigator',
             'experiment',
             'sequencing_date'
         ]
 
-        for field in fields_to_deduce:
-            if field not in kwargs.keys():
-                kwargs[field] = ';'.join(self.df.loc[ix, field].unique())
+        for variable in variables_to_deduce:
+            if variable not in kwargs.keys():
+                kwargs[variable] = ';'.join(self.df.loc[ix, variable].unique())
 
             
         # if no run_mode provided, overwrite with user defined one
@@ -1141,7 +1154,6 @@ class ProjectDF:
         sample_added = self.add_sample(
             project_id = merged_project_id,
             sample_id = merged_sample_id,
-            species = species,
             is_merged=True,
             merged_from = ix.to_list(),
             **kwargs)
@@ -1150,7 +1162,6 @@ class ProjectDF:
 
     def merge_samples_cmdline(self, args):
         msg = ''
-        print(args)
         try:
             sample, set_indices = self.merge_samples(**args)
 
@@ -1164,7 +1175,7 @@ class ProjectDF:
 
             self.dump()
         except (NoProjectSampleProvidedError, SpeciesNotFoundError,
-                ProjectSampleNotFoundError) as e:
+                ProjectSampleNotFoundError, InconsistentVariablesDuringMerge) as e:
             msg += str(e)
         finally:
             print(msg)

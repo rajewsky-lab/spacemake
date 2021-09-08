@@ -70,9 +70,16 @@ class SampleAlreadyExistsError(Exception):
 
         return msg
 
-class UnmatchingSpeciesDuringMerge(Exception):
+class InconsistentVariablesDuringMerge(Exception):
+    def __init__(self, variable_name, ix):
+        self.variable_name = variable_name
+        self.ix = ix
+
     def __str__(self):
-        msg = f'ERROR: the samples that you trying to merge have different species.\n'
-        msg += 'You can only merge samples which have the same species.\n'
+        msg = f'ERROR: the samples that you trying to merge have different '
+        msg += f'{self.variable_name}.\n'
+        msg += f'samples: {self.ix}.\n'
+        msg += 'You can only merge samples which have the same '
+        msg += f'{self.variable_name}.\n'
 
         return msg
