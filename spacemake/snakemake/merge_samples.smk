@@ -7,8 +7,9 @@ rule create_final_merged_bam:
         unpack(get_files_to_merge_snakemake(final_bam))
     output:
         final_merged_bam
+    threads: 4
     shell:
-        "samtools merge -o {output} {input}"
+        "samtools merge -n -@ {threads} -o {output} {input}"
 
 rule create_merged_ribo_log:
     input:

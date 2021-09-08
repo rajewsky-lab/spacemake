@@ -169,7 +169,8 @@ class ConfigFile:
             description='add/update run_mode parent parser',
             add_help = False)
         parser.add_argument('--name', type=str,
-            help='name of the run_mode to be added')
+            help='name of the run_mode to be added',
+            required = True)
         parser.add_argument('--parent_run_mode', type=str,
             help='Name of the parent run_mode. All run_modes will fall back to \'default\'')
         parser.add_argument('--umi_cutoff', type=int, nargs='+',
