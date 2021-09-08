@@ -154,3 +154,25 @@ def detect_tissue(adata, min_umi):
     tissue_indices = np.append(tissue_indices, np.hstack(tissue_islands))
 
     return tissue_indices
+
+
+def attach_barcode_file(adata, barcode_file):
+    import pandas as pd
+
+    bc = pd.read_csv(barcode_file, sep='[,|\t]', engine='python')
+
+    # rename columns
+    bc = bc.rename(columns={'xcoord':'x_pos', 'ycoord':'y_pos','barcodes':'cell_bc', 'barcode':'cell_bc'})\
+        .set_index('cell_bc')\
+        .loc[:, ['x_pos', 'y_pos']]
+
+    bc = bc.loc[~bc.index.duplicated(keep='first')]
+
+    bc = bc.loc[~bc.index.duplicated(keep='first')]
+    # new obs has only the indices of the exact barcode matches
+    new_obs = adata.obs.merge(bc, left_index=True, right_index=True, how='inner')
+    adata = adata[new_obs.index, :]
+    adata.obs = new_obs
+    adata.obsm['spatial'] = adata.obs[['x_pos', 'y_pos']].to_numpy()
+
+    return adata
