@@ -18,19 +18,11 @@ has_barcode_file = 'barcode_file' in snakemake.input.keys()
 if has_barcode_file:
     adata = attach_barcode_file(adata, snakemake.input['barcode_file'])
 
-
 # filter out cells based on umi, and genes based on number of cells
 sc.pp.filter_cells(adata, min_genes=1)
 sc.pp.filter_genes(adata, min_cells=3)
 
 print('data filtered')
-
-# calculate mitochondrial gene percentage
-adata.var['mt'] = adata.var_names.str.startswith('Mt-') |\
-        adata.var_names.str.startswith('mt-') |\
-        adata.var_names.str.startswith('MT-')
-
-sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
 
 # DETECT TISSUE #
 # if there is no barcode file, filter adata based on UMI, otherwise detect tissue with UMI cutoff

@@ -14,7 +14,7 @@ import pandas as pd
 import numpy as np
 import math
 
-from spacemake.util import dge_to_sparse
+from spacemake.util import dge_to_sparse_adata
 from spacemake.cmdline_utils import ProjectDF
 
 ################
@@ -484,10 +484,10 @@ rule create_dge:
         """
 
 rule create_h5ad_dge:
-    input: dge_out
+    input: dge_out, dge_out_summary
     output: dge_out_h5ad
     run:
-        adata = dge_to_sparse(input[0])
+        adata = dge_to_sparse_adata(input[0], input[1])
         adata.write(output[0])
 
 rule parse_ribo_log:
