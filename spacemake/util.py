@@ -19,7 +19,7 @@ def read_fq(fname):
     for name, seq, _, qual in grouper(src, 4):
         yield name.rstrip()[1:], seq.rstrip(), qual.rstrip()
 
-def calculate_adata_metrics(adata, dge_summary_path):
+def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
     import scanpy as sc
     import pandas as pd
     # calculate mitochondrial gene percentage
@@ -28,15 +28,25 @@ def calculate_adata_metrics(adata, dge_summary_path):
             adata.var_names.str.startswith('MT-')
 
     sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
+    
+    add_reads = False
+    if dge_summary_path is not None:
+        dge_summary = pd.read_csv(dge_summary_path, skiprows=7, sep ='\t', index_col = 'cell_bc', names = ['cell_bc', 'n_reads', 'n_umi', 'n_genes'])
 
-    dge_summary = pd.read_csv(dge_summary_path, skiprows=7, sep ='\t', index_col = 'cell_bc', names = ['cell_bc', 'n_reads', 'n_umi', 'n_genes'])
+        adata.obs = pd.merge(adata.obs, dge_summary[['n_reads']], left_index=True, right_index=True)
 
-    adata.obs = pd.merge(adata.obs, dge_summary[['n_reads']], left_index=True, right_index=True)
-    adata.obs['reads_per_counts'] = adata.obs.n_reads / adata.obs.total_counts
+        add_reads = True
+
+    if n_reads is not None:
+        adata.obs['n_reads'] = n_reads
+        add_reads = True
+
+    if add_reads:
+        adata.obs['reads_per_counts'] = adata.obs.n_reads / adata.obs.total_counts
 
     return adata
 
-def dge_to_sparse(dge_path, dge_summary_path):
+def dge_to_sparse_adata(dge_path, dge_summary_path):
     import anndata
     import numpy as np
     import gzip
@@ -80,6 +90,8 @@ def dge_to_sparse(dge_path, dge_summary_path):
         X = vstack(matrices, format='csr')
         
         adata = anndata.AnnData(X.T, obs = pd.DataFrame(index=barcodes), var = pd.DataFrame(index=gene_names))
+
+        adata.obs.index.name = 'cell_bc'
 
         adata = calculate_adata_metrics(adata, dge_summary_path)
 
@@ -259,8 +271,8 @@ def create_meshed_adata(adata,
         height_um,
         spot_diameter_um,
         spot_distance_um,
-        push_x = spot_distance_um / 2,
-        push_y = np.sqrt(3) * spot_distance_um / 2)
+        push_x = spot_radius_um + spot_distance_um / 2,
+        push_y = spot_radius_um + np.sqrt(3) * spot_distance_um / 2)
 
     mesh = np.vstack((xy, xy_pushed))
     mesh_px = mesh/um_by_px
@@ -296,5 +308,15 @@ def create_meshed_adata(adata,
         var = adata.var)
 
     adata_out.obsm['spatial'] = joined_coordinates
+    
+    # rename index
+    adata_out.obs.index.name = 'cell_bc'
+
+    # summarise and attach n_reads, calculate metrics (incl. pcr)
+    n_reads = adata.obs.n_reads.to_numpy()[original_ilocs]
+    joined_n_reads = np.array([sum(n_reads[ix_array[n]]) for n in range(len(ix_array))])
+
+    adata_out = calculate_adata_metrics(adata_out, n_reads = joined_n_reads)
+    adata_out.obs['n_joined'] = [len(x) for x in ix_array]
 
     return adata_out

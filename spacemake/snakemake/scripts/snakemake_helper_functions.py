@@ -309,43 +309,13 @@ def get_dge_from_run_mode(
             'dge': dge_out_file}
 
 
-def get_dges_from_project_sample(
-        project_id,
-        sample_id,
-        dge_out_pattern = dge_out,
-        dge_out_summary_pattern = dge_out_summary,
-        **kwargs
-    ):
-    run_modes = get_run_modes_from_sample(project_id, sample_id).keys()
-    dges = {}
-
-    for run_mode in run_modes:
-        run_mode_dge = get_dge_from_run_mode(project_id, sample_id, run_mode,
-            dge_out_pattern, dge_out_summary_pattern, **kwargs)
-
-        dges[f'{run_mode}.dge'] = run_mode_dge['dge']
-        dges[f'{run_mode}.dge_summary'] = run_mode_dge['dge_summary']
-
-    return dges
-
-
-def get_dge_type(wildcards):
-    # expects wildcards to have either a run_mode set, in which case
-    # returns one dge+summary pair
-    # or project_id and sample_id set and then return all dges
-    # associated to this sample (to the run modes of it)
-    wildcards_keys = wildcards.keys()
-    if 'run_mode' in wildcards_keys:
-        return get_dge_from_run_mode(wildcards.project, wildcards.sample,
-                wildcards.run_mode)
-    elif 'project' in wildcards_keys and 'sample' in wildcards_keys:
-        return get_dges_from_project_sample(project_id = wildcards.project,
-            sample_id = wildcards.sample)
-
 def get_qc_sheet_input_files(wildcards):
     # returns star_log, reads_type_out, strand_info
     # first checks the run modes, and returns either polyA_adapter_trimmed, untrimmed
     # or both
+    project_id = wildcards.project
+    sample_id = wildcards.sample
+
     is_merged = project_df.get_metadata('is_merged',
         project_id = wildcards.project,
         sample_id = wildcards.sample)
@@ -371,10 +341,33 @@ def get_qc_sheet_input_files(wildcards):
     else:
         star_log_pattern = star_log_file
 
-    return {
+    to_return = {
         'star_log': expand(star_log_pattern, **extra_args),
         'reads_type_out': expand(reads_type_out, **extra_args),
         'strand_info': expand(strand_info, **extra_args)}
+
+
+    is_spatial = project_df.is_spatial(project_id=wildcards.project,
+        sample_id = wildcards.sample)
+
+    for run_mode in run_modes:
+        run_mode_dge = get_dge_from_run_mode(project_id, sample_id, run_mode,
+            dge_out_h5ad, dge_out_h5ad_obs)
+
+        to_return[f'normal.{run_mode}.dge_summary'] = run_mode_dge['dge_summary']
+        if is_spatial:
+            spatial_dge = get_dge_from_run_mode(
+                project_id, sample_id, run_mode,
+                dge_spatial_unfiltered, dge_spatial_unfiltered_obs)
+            to_return[f'spatial.{run_mode}.dge_summary'] = spatial_dge['dge_summary']
+            
+            meshed_dge = get_dge_from_run_mode(
+                project_id, sample_id, run_mode,
+                mesh_spatial_dge, mesh_spatial_dge_obs)
+            
+            to_return[f'meshed.{run_mode}.dge_summary'] = meshed_dge['dge_summary']
+
+    return to_return
 
 def get_bam_tag_names(project_id, sample_id):
     barcode_flavor = project_df.get_metadata('barcode_flavor', project_id = project_id,

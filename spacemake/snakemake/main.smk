@@ -13,8 +13,10 @@ import os
 import pandas as pd
 import numpy as np
 import math
+import scanpy as sc
 
-from spacemake.util import dge_to_sparse_adata
+from spacemake.util import dge_to_sparse_adata, attach_barcode_file,\
+    create_meshed_adata
 from spacemake.cmdline_utils import ProjectDF
 
 ################
@@ -136,6 +138,11 @@ dge_out_prefix = dge_root + '/dge'
 dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads'
 dge_out = dge_out_prefix + dge_out_suffix + '.txt.gz'
 dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.h5ad'
+dge_out_h5ad_obs = dge_out_prefix + dge_out_suffix + '.obs.csv'
+dge_spatial_unfiltered = dge_out_prefix + dge_out_suffix + '.spatial.h5ad'
+dge_spatial_unfiltered_obs = dge_out_prefix + dge_out_suffix + '.spatial.obs.csv'
+mesh_spatial_dge = dge_out_prefix + dge_out_suffix + '.spatial.mesh.h5ad'
+mesh_spatial_dge_obs = dge_out_prefix + dge_out_suffix + '.spatial.mesh.obs.csv'
 
 dge_out_summary = dge_out_prefix + dge_out_suffix + '.summary.txt'
 dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all']
@@ -485,10 +492,38 @@ rule create_dge:
 
 rule create_h5ad_dge:
     input: dge_out, dge_out_summary
-    output: dge_out_h5ad
+    output: dge_out_h5ad, dge_out_h5ad_obs
     run:
         adata = dge_to_sparse_adata(input[0], input[1])
         adata.write(output[0])
+        adata.obs.to_csv(output[1])
+
+rule create_unfiltered_spatial_dge:
+    input:
+        unpack(get_puck_file),
+        dge=dge_out_h5ad
+    output:
+        dge_spatial_unfiltered,
+        dge_spatial_unfiltered_obs
+    run:
+        adata = sc.read(input['dge'])
+        adata = attach_barcode_file(adata, input['barcode_file'])
+        adata.write(output[0])
+        adata.obs.to_csv(output[1])
+
+rule create_mesh_spatial_dge:
+    input:
+        dge_spatial_unfiltered
+    output:
+        mesh_spatial_dge,
+        mesh_spatial_dge_obs
+    run:
+        adata = sc.read(input[0])
+        adata = create_meshed_adata(adata,
+            width_um = 3000)
+        adata.write(output[0])
+        adata.obs.to_csv(output[1])
+
 
 rule parse_ribo_log:
     input: unpack(get_ribo_depletion_log)
@@ -497,9 +532,7 @@ rule parse_ribo_log:
 
 rule create_qc_sheet:
     input:
-        unpack(get_dge_type),
         unpack(get_qc_sheet_input_files),
-        unpack(get_puck_file),
         ribo_log=parsed_ribo_depletion_log
     params:
         sample_info = lambda wildcards: project_df.get_sample_info(

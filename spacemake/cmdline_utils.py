@@ -557,6 +557,16 @@ class ProjectDF:
 
         return out_dict
 
+    def is_spatial(self, sample_id, project_id):
+        puck_barcode_file = self.get_metadata('puck_barcode_file',
+            sample_id = sample_id,
+            project_id = project_id)
+        
+        if puck_barcode_file == 'none':
+            return False
+        else:
+            return True
+
     def get_metadata(self, field, sample_id=None, project_id=None, **kwargs):
         df = self.df
         if sample_id is not None:
