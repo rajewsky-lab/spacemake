@@ -42,6 +42,7 @@ rule remove_polyA:
             MISMATCHES=0 \
             INPUT={input} \
             OUTPUT={output} \
+            NUM_BASES=10
         """
 
 rule create_star_index:

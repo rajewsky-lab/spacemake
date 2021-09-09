@@ -247,11 +247,10 @@ def create_meshed_adata(adata,
         distance,
         push_x = 0,
         push_y = 0):
-        radius = diameter / 2
         distance_y = np.sqrt(3) * distance
         
-        x_coord = np.arange(push_x, width - radius, distance)
-        y_coord = np.arange(push_y, height - radius, distance_y)
+        x_coord = np.arange(push_x, width + diameter, distance)
+        y_coord = np.arange(push_y, height + diameter, distance_y)
         
         X, Y = np.meshgrid(x_coord, y_coord)
         xy = np.vstack((X.flatten(), Y.flatten())).T
@@ -276,6 +275,8 @@ def create_meshed_adata(adata,
 
     mesh = np.vstack((xy, xy_pushed))
     mesh_px = mesh/um_by_px
+    # add the top_left_corner
+    mesh_px = mesh_px + top_left_corner
 
     # the diameter of one visium spot is 55um. if we take any bead, which center
     # falls into that, assuming that a bead is 10um, we would in fact take all beads

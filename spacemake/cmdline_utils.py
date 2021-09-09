@@ -27,6 +27,8 @@ def assert_file(file_path, default_value='none', extension='all'):
             errno.ENOENT, os.strerror(errno.ENOENT), file_path)
 
 
+    print(extension)
+    print(file_path)
     if not file_path.endswith(extension) and extension != 'all':
         raise FileWrongExtensionError(file_path, extension)
 
@@ -100,8 +102,12 @@ class ConfigFile:
     def get_variable(self, path):
         return reduce(getitem, path, self.variables)  
 
-    def list_variable(self, path):
-        print(yaml.dump(self.get_variable(path)))
+    def list_variable(self, path, return_var = False):
+        var = yaml.dump(self.get_variable(path))
+        if return_var:
+            return var
+        else:
+            print(var)
 
     def delete_run_mode_cmdline(self, args):
         name = args['name']
@@ -293,19 +299,22 @@ class ConfigFile:
         return 0
 
     def list_species_cmdline(self, args):
-        # list annotations first
-        msg = LINE_SEPARATOR
-        msg += 'annotations\n'
-        msg += LINE_SEPARATOR
-        print(msg)
-        self.list_variable(['knowledge', 'annotations'])
+        try:
+            # list annotations first
+            msg = LINE_SEPARATOR
+            msg += 'annotations\n'
+            msg += LINE_SEPARATOR
+            msg += self.list_variable(['knowledge', 'annotations'], return_var = True)
 
-        # list genomes next
-        msg = LINE_SEPARATOR
-        msg += 'genomes\n'
-        msg += LINE_SEPARATOR
-        print(msg)
-        self.list_variable(['knowledge', 'genomes'])
+            # list genomes next
+            msg += LINE_SEPARATOR
+            msg += 'genomes\n'
+            msg += LINE_SEPARATOR
+            msg += self.list_variable(['knowledge', 'genomes'], return_var = True)
+        except KeyError:
+            msg = 'No species found. To add a species use `spacemake config add_species`'
+        finally:
+            print(msg)
 
     def delete_species_cmdline(self, args):
         species_name = args['name']

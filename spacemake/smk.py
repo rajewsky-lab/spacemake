@@ -73,6 +73,7 @@ def spacemake_init(args):
     cf.dump()
 
 def spacemake_run(args):
+    print(args)
     if not os.path.isfile(config_path):
         msg = "spacemake has not been initalised yet.\n"
         msg += "please run `spacemake init` to start a new project"
