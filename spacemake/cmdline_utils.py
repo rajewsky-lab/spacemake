@@ -504,9 +504,22 @@ class ProjectDF:
         self.config = config
 
         if os.path.isfile(file_path):
-            self.df = pd.read_csv(file_path,
+            df = pd.read_csv(file_path,
                 index_col=['project_id', 'sample_id'],
                 converters={'run_mode': eval, 'merged_from': eval})
+            project_list = []
+
+            # update with new columns, if they exist.
+            for ix, row in df.iterrows():
+                s = pd.Series(self.project_df_default_values)
+                s.update(row)
+                s.name = row.name
+                series_list.append(s)
+
+            self.df = pd.concat(project_list, axis=1).T
+
+            # dump the result
+            self.dump()
         else:
             index = pd.MultiIndex(
                 names=['project_id', 'sample_id'],
