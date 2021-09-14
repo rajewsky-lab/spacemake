@@ -83,3 +83,10 @@ class InconsistentVariablesDuringMerge(Exception):
         msg += f'{self.variable_name}.\n'
 
         return msg
+
+class PuckDoesNotExistError(Exception):
+    def __init__(self, puck_type):
+        self.variable_type = puck_type
+
+    def __str__(self):
+        msg = f'ERROR: there is no puck type {self.puck_type} defined'

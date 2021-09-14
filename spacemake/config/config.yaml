@@ -7,6 +7,14 @@ external_bin:
 puck_data:
     barcode_file: 'predictions_ml.csv'
     root: 'puck_data'
+    pucks:
+        default:
+            width_um: 3000
+            spot_size_um: 10
+        visium:
+            barcodes: 'puck_data/visium_barcode_positions.csv'
+            width_um: 6500
+            spot_size_um: 55
 
 run_modes:
     default:
@@ -18,6 +26,9 @@ run_modes:
         polyA_adapter_trimming: True
         count_intronic_reads: True
         count_mm_reads: True
+        mesh_data: False
+        mesh_spot_diameter: 55
+        mesh_spot_distance: 100
     visium:
         n_beads: 10000
         umi_cutoff: [1000]

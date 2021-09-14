@@ -88,9 +88,11 @@ def get_dge_input_bam(wildcards):
         sample_id = wildcards.sample)
 
     if wildcards.mm_included == '.mm_included':
-        return {'reads': final_bam_mm_included_pipe}
+        out = {'reads': final_bam_mm_included_pipe}
     else:
-        return {'reads': get_final_bam(wildcards)}
+        out = {'reads': get_final_bam(wildcards)}
+
+    return out
 
 def get_species_genome_annotation(wildcards):
     # This function will return 2 things required by STAR:
@@ -160,6 +162,9 @@ def get_run_mode_variables(run_mode):
     run_mode_variables['polyA_adapter_trimming'] = bool(run_mode_variables['polyA_adapter_trimming'])
     run_mode_variables['count_mm_reads'] = bool(run_mode_variables['count_mm_reads'])
     run_mode_variables['count_intronic_reads'] = bool(run_mode_variables['count_intronic_reads'])
+    run_mode_variables['mesh_data'] = bool(run_mode_variables['mesh_data'])
+    run_mode_variables['mesh_spot_diameter'] = int(run_mode_variables['mesh_spot_diameter'])
+    run_mode_variables['mesh_spot_distance'] = int(run_mode_variables['mesh_spot_distance'])
 
     return run_mode_variables
 
@@ -252,6 +257,8 @@ def get_bt2_index(wildcards):
     return config["knowledge"]["indices"][species]["bt2"]
 
 def get_top_barcodes(wildcards):
+    if wildcards.n_beads == 'spatial':
+        return {"top_barcodes": spatial_barcodes}
     if wildcards.dge_cleaned == "":
         return {"top_barcodes": top_barcodes}
     else:
@@ -260,10 +267,7 @@ def get_top_barcodes(wildcards):
 def get_dge_from_run_mode(
         project_id,
         sample_id,
-        run_mode,
-        dge_out_pattern = dge_out,
-        dge_out_summary_pattern = dge_out_summary,
-        **kwargs
+        run_mode
     ):
     run_mode_variables = get_run_mode_variables(run_mode)
     
@@ -284,6 +288,21 @@ def get_dge_from_run_mode(
     if run_mode_variables['clean_dge']:
         dge_cleaned = '.cleaned'
 
+    # select which pattern
+    # if sample is not spatial, we simply select the normal, umi_filtered
+    # dge, with the top_n barcodes
+    # otherwise, if sample is spatial, either we return he whole dge, containing
+    # all beads, or the a meshgrid
+    if not project_df.is_spatial(project_id = project_id,\
+            sample_id = sample_id):
+        dge_out_pattern = dge_out_h5ad
+        dge_out_summary_pattern = dge_out_h5ad_obs
+    elif run_mode_variables['mesh_data']:
+        dge_out_pattern = dge_spatial_mesh
+        dge_out_summary_pattern = dge_spatial_mesh_obs
+    else:
+        dge_out_pattern = dge_spatial
+        dge_out_summary_pattern = dge_spatial_obs
 
     dge_out_file = expand(dge_out_pattern,
             project = project_id,
@@ -293,7 +312,8 @@ def get_dge_from_run_mode(
             polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
             n_beads = run_mode_variables['n_beads'],
-            **kwargs)[0]
+            spot_diameter_um = run_mode_variables['mesh_spot_diameter'],
+            spot_distance_um = run_mode_variables['mesh_spot_distance'])
 
     dge_out_summary_file = expand(dge_out_summary_pattern,
             project = project_id,
@@ -302,8 +322,9 @@ def get_dge_from_run_mode(
             dge_cleaned = dge_cleaned,
             polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
-            n_beads = run_mode_variables['n_beads'],
-            **kwargs)[0]
+            spot_diameter_um = run_mode_variables['mesh_spot_diameter'],
+            spot_distance_um = run_mode_variables['mesh_spot_distance'],
+            n_beads = run_mode_variables['n_beads'])
 
     return {'dge_summary': dge_out_summary_file,
             'dge': dge_out_file}
@@ -346,26 +367,10 @@ def get_qc_sheet_input_files(wildcards):
         'reads_type_out': expand(reads_type_out, **extra_args),
         'strand_info': expand(strand_info, **extra_args)}
 
-
-    is_spatial = project_df.is_spatial(project_id=wildcards.project,
-        sample_id = wildcards.sample)
-
     for run_mode in run_modes:
-        run_mode_dge = get_dge_from_run_mode(project_id, sample_id, run_mode,
-            dge_out_h5ad, dge_out_h5ad_obs)
+        run_mode_dge = get_dge_from_run_mode(project_id, sample_id, run_mode)
 
-        to_return[f'normal.{run_mode}.dge_summary'] = run_mode_dge['dge_summary']
-        if is_spatial:
-            spatial_dge = get_dge_from_run_mode(
-                project_id, sample_id, run_mode,
-                dge_spatial_unfiltered, dge_spatial_unfiltered_obs)
-            to_return[f'spatial.{run_mode}.dge_summary'] = spatial_dge['dge_summary']
-            
-            meshed_dge = get_dge_from_run_mode(
-                project_id, sample_id, run_mode,
-                mesh_spatial_dge, mesh_spatial_dge_obs)
-            
-            to_return[f'meshed.{run_mode}.dge_summary'] = meshed_dge['dge_summary']
+        to_return[f'{run_mode}.dge_summary'] = run_mode_dge['dge_summary']
 
     return to_return
 
@@ -385,11 +390,29 @@ def get_bam_tag_names(project_id, sample_id):
     return tag_names
 
 def get_puck_file(wildcards):
+    if not project_df.is_spatial(project_id = wildcards.project,\
+            sample_id = wildcards.sample):
+        raise Exception(f'Sample {wildcards.sample_id} is no spatial')
+
     puck_barcode_file = project_df.get_metadata('puck_barcode_file',
             project_id = wildcards.project,
             sample_id = wildcards.sample)
 
+    puck_type = project_df.get_metadata('puck_type',
+        project_id = wildcards.project,
+        sample_id = wildcards.sample)
+
     if puck_barcode_file == "none":
-        return []
+        return {'barcode_file' :config['puck_data']['pucks'][puck_type]['barcodes']}
     else:
         return {"barcode_file": puck_barcode_file}
+
+def get_automated_analysis_dge_input(wildcards):
+    # there are three options:
+    # 1) no spatial dge
+    # 2) spatial dge, no mesh
+    # 3) spatial dge with a mesh
+    return [get_dge_from_run_mode(
+        project_id = wildcards.project,
+        sample_id = wildcards.sample,
+        run_mode = wildcards.run_mode)['dge']]

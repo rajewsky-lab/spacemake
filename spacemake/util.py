@@ -46,6 +46,39 @@ def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
 
     return adata
 
+def calculate_shannon_entropy_scompression(adata):
+    import math
+    import itertools
+    import numpy as np
+    from collections import Counter
+
+    def compute_shannon_entropy(barcode):
+        prob, length = Counter(barcode), float(len(barcode))
+        return -sum( count/length * math.log(count/length, 2) for count in prob.values())
+
+    def compute_string_compression(barcode):
+        compressed_barcode = ''.join(
+                letter + str(len(list(group)))
+                for letter, group in itertools.groupby(barcode))
+
+        return len(compressed_barcode)
+
+    bc = adata.obs.index.to_numpy()
+    bc_len = len(bc[0])
+    theoretical_barcodes = np.random.choice(['A','C', 'T', 'G'],
+        size = (bc.shape[0], bc_len))
+
+    adata.obs['exact_entropy'] = np.round(np.array(
+        [compute_shannon_entropy(cell_bc) for cell_bc in bc]), 2)
+    adata.obs['theoretical_entropy'] = np.round(np.array(
+        [compute_shannon_entropy(cell_bc) for cell_bc in theoretical_barcodes]), 2)
+    adata.obs['exact_compression'] = np.round(np.array(
+        [compute_string_compression(cell_bc) for cell_bc in bc]), 2)
+    adata.obs['theoretical_compression'] = np.round(np.array(
+        [compute_string_compression(cell_bc) for cell_bc in theoretical_barcodes]), 2)
+
+    return adata
+
 def dge_to_sparse_adata(dge_path, dge_summary_path):
     import anndata
     import numpy as np
@@ -94,6 +127,7 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
         adata.obs.index.name = 'cell_bc'
 
         adata = calculate_adata_metrics(adata, dge_summary_path)
+        adata = calculate_shannon_entropy_scompression(adata)
 
         return adata
 
@@ -182,10 +216,11 @@ def detect_tissue(adata, min_umi):
 
     tissue_indices = np.append(tissue_indices, np.hstack(tissue_islands))
 
-    return tissue_indices
+    adata = adata[tissue_indices, :]
 
+    return adata
 
-def attach_barcode_file(adata, barcode_file):
+def parse_barcode_file(barcode_file):
     import pandas as pd
 
     bc = pd.read_csv(barcode_file, sep='[,|\t]', engine='python')
@@ -198,6 +233,14 @@ def attach_barcode_file(adata, barcode_file):
     bc = bc.loc[~bc.index.duplicated(keep='first')]
 
     bc = bc.loc[~bc.index.duplicated(keep='first')]
+
+    return bc
+
+def attach_barcode_file(adata, barcode_file):
+    import pandas as pd
+
+    bc = parse_barcode_file(barcode_file)
+
     # new obs has only the indices of the exact barcode matches
     new_obs = adata.obs.merge(bc, left_index=True, right_index=True, how='inner')
     adata = adata[new_obs.index, :]
@@ -220,8 +263,6 @@ def create_meshed_adata(adata,
     from sklearn.metrics.pairwise import euclidean_distances
     from scipy.sparse import csr_matrix
     from scipy.sparse import vstack
-
-    from spacemake.util import attach_barcode_file
 
     coords = adata.obsm['spatial']
 
@@ -278,11 +319,11 @@ def create_meshed_adata(adata,
     # add the top_left_corner
     mesh_px = mesh_px + top_left_corner
 
-    # the diameter of one visium spot is 55um. if we take any bead, which center
+    # example: the diameter of one visium spot is 55um. if we take any bead, which center
     # falls into that, assuming that a bead is 10um, we would in fact take all beads
     # within 65um diameter. for this reason, the max distance should be 45um/2 between
     # visium spot center and other beads
-    max_distance_px = 45/um_by_px/2
+    max_distance_px = (spot_diameter_um - bead_diameter_um)/um_by_px/2
 
     distance_M = euclidean_distances(mesh_px, coords)
 
@@ -299,7 +340,7 @@ def create_meshed_adata(adata,
 
     ix_array = np.asarray(np.split(np.arange(new_ilocs.shape[0]), change_ix, axis=0), dtype='object')
 
-    joined_C_sumed = vstack([csr_matrix(joined_C[ix_array[n], :].sum(0)) for n in range(len(ix_array))])
+    joined_C_sumed = vstack([csr_matrix(joined_C[ix_array[n].astype(int), :].sum(0)) for n in range(len(ix_array))])
 
     joined_coordinates = mesh_px[np.unique(new_ilocs)]
 

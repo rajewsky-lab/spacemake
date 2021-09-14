@@ -72,6 +72,13 @@ def spacemake_init(args):
     # save
     cf.dump()
 
+    # copy visium_puck_barcode_file
+    dest_visium_path = 'puck_data/visium_barcode_positions.csv'
+    os.makedirs(os.path.dirname(dest_visium_path), exist_ok=True)
+    copyfile(os.path.join(os.path.dirname(__file__), 'data/visium_barcode_positions.csv'),
+        dest_visium_path)
+
+
 def spacemake_run(args):
     print(args)
     if not os.path.isfile(config_path):
@@ -140,6 +147,8 @@ parsers['run'].set_defaults(func=spacemake_run)
 ## spacemake_config args
 if os.path.isfile(config_path):
     cf = ConfigFile(config_path)
+    # save config file
+    cf.dump()
     parsers['config'] = cf.get_subparsers(subparsers)
 
 ####################

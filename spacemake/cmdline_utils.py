@@ -11,7 +11,7 @@ from operator import getitem
 from spacemake.errors import FileWrongExtensionError, RunModeNotFoundError, \
     BarcodeFlavorNotFoundError, NoProjectSampleProvidedError, SpeciesNotFoundError, \
     ProjectSampleNotFoundError, SampleAlreadyExistsError, \
-    InconsistentVariablesDuringMerge
+    InconsistentVariablesDuringMerge, PuckDoesNotExistError
 
 LINE_SEPARATOR = '-'*50+'\n'
 
@@ -35,10 +35,34 @@ def assert_file(file_path, default_value='none', extension='all'):
     return 0
         
 class ConfigFile:
+    initial_config_path = os.path.join(os.path.dirname(__file__),
+        'config/config.yaml') 
+
     def __init__(self, file_path):
         self.file_path = file_path
         self.variables = yaml.load(open(file_path),
                     Loader=yaml.FullLoader)
+
+        if file_path != self.initial_config_path:
+            initial_config = ConfigFile.get_initial_config()
+            default_run_mode = initial_config.variables['run_modes']['default']
+
+            if 'default' not in self.variables['run_modes'].keys():
+                self.variables['run_modes']['default'] = default_run_mode
+            else:
+                # update default run mode with missing values
+                default_run_mode.update(self.variables['run_modes']['default'])
+                self.variables['run_modes']['default'] = default_run_mode
+
+            if self.file_path != initial_config.file_path:
+                # only dump if not initial config
+                self.dump()
+
+    @classmethod
+    def get_initial_config(cls):
+        cf = cls(cls.initial_config_path)
+
+        return cf
 
     def dump(self):
         with open(self.file_path, 'w') as fo:
@@ -46,7 +70,7 @@ class ConfigFile:
 
     def set_file_path(self, file_path):
         self.file_path = file_path
-        
+
     @property
     def puck_data(self):
         return self.variables['puck_data']
@@ -98,6 +122,14 @@ class ConfigFile:
 
     def barcode_flavor_exists(self, barcode_flavor):
         return barcode_flavor in self.variables['knowledge']['barcode_flavor'].keys()
+
+    def get_puck(self, puck_type):
+        pucks = self.get_variable(['puck_data', 'pucks'])
+
+        if puck_type in pucks:
+            return pucks[puck_type]
+        else:
+            raise PuckDoesNotExistError(puck_type)
     
     def get_variable(self, path):
         return reduce(getitem, path, self.variables)  
@@ -493,7 +525,8 @@ class ProjectDF:
         "run_mode": ["default"],
         "barcode_flavor": "default",
         "is_merged":False,
-        "merged_from":[]}
+        "merged_from":[],
+        "puck_type":"none"}
     
     def __init__(
         self,
@@ -514,9 +547,10 @@ class ProjectDF:
                 s = pd.Series(self.project_df_default_values)
                 s.update(row)
                 s.name = row.name
-                series_list.append(s)
+                project_list.append(s)
 
             self.df = pd.concat(project_list, axis=1).T
+            self.df.index.names = ['project_id', 'sample_id']
 
             # dump the result
             self.dump()
@@ -583,11 +617,28 @@ class ProjectDF:
         puck_barcode_file = self.get_metadata('puck_barcode_file',
             sample_id = sample_id,
             project_id = project_id)
+
+        puck_type = self.get_metadata('puck_type',
+            project_id = project_id,
+            sample_id = sample_id)
+
+        puck_type_has_barcodes = False
+
+        if puck_type != self.project_df_default_values['puck_type']:
+            if 'barcodes' in self.config.get_puck(puck_type):
+                puck_type_has_barcodes = True
         
-        if puck_barcode_file == 'none':
-            return False
-        else:
+        if puck_barcode_file != 'none' or puck_type_has_barcodes:
             return True
+        else:
+            return False
+
+    def get_puck(self, project_id, sample_id):
+        puck_type = self.get_metadata('puck_type',
+            project_id = project_id,
+            sample_id = sample_id)
+
+        return self.config.get_puck(puck_type)
 
     def get_metadata(self, field, sample_id=None, project_id=None, **kwargs):
         df = self.df
@@ -998,7 +1049,6 @@ class ProjectDF:
         return ix.to_list()
 
     def set_remove_run_mode_cmdline(self, args):
-        print(args)
         projects = args['project_id_list']
         samples = args['sample_id_list']
         run_modes = args['run_mode']

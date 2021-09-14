@@ -2,8 +2,20 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
+from spacemake.util import detect_tissue
+
 # expect fitlered .h5ad dge, with spatial coords attached, tissue detected
 adata = sc.read_h5ad(snakemake.input[0])
+umi_cutoff = int(snakemake.wildcards['umi_cutoff'])
+
+# filter_umi or detect tissue
+# if data spatial and detect_tissue=True
+if 'spatial' in adata.obsm.keys() and snakemake.params['run_mode_variables']['detect_tissue']:
+    adata = detect_tissue(adata, umi_cutoff)
+    print('tissue detection')
+else:
+    print(f'filtering by umi cutoff: {umi_cutoff}')
+    adata = adata[adata.obs.total_counts > umi_cutoff, :]
 
 # save the raw counts
 adata.raw = adata
@@ -48,7 +60,7 @@ if nrow > 1 and ncol >= 1000:
     
     # find out the clusters
     # restrict to max 20 clusters
-    resolution = [0.6, 0.8, 1, 1.2]
+    resolution = [1]
 
     print('clustering')
     

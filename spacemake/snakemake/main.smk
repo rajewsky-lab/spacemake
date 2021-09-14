@@ -16,8 +16,8 @@ import math
 import scanpy as sc
 
 from spacemake.util import dge_to_sparse_adata, attach_barcode_file,\
-    create_meshed_adata
-from spacemake.cmdline_utils import ProjectDF
+    create_meshed_adata, parse_barcode_file
+from spacemake.cmdline_utils import ProjectDF, ConfigFile
 
 ################
 # Shell prefix #
@@ -42,7 +42,7 @@ config['puck_data']['root'] = config['microscopy_out']
 project_dir = os.path.join(config['root_dir'], 'projects/{project}')
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
-project_df = ProjectDF(config['project_df'])
+project_df = ProjectDF(config['project_df'], ConfigFile('config.yaml'))
 
 #################
 # DIRECTORY STR #
@@ -131,20 +131,23 @@ strand_info = split_reads_strand_type
 top_barcodes_suffix = '{polyA_adapter_trimmed}.{n_beads}_beads.txt'
 top_barcodes = complete_data_root + '/topBarcodes' + top_barcodes_suffix
 top_barcodes_clean = complete_data_root + '/topBarcodesClean' + top_barcodes_suffix
+spatial_barcodes = complete_data_root + '/spatialBarcodes.txt'
 
 # united dgu
 dge_root = complete_data_root + '/dge'
 dge_out_prefix = dge_root + '/dge'
-dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads'
-dge_out = dge_out_prefix + dge_out_suffix + '.txt.gz'
-dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.h5ad'
-dge_out_h5ad_obs = dge_out_prefix + dge_out_suffix + '.obs.csv'
-dge_spatial_unfiltered = dge_out_prefix + dge_out_suffix + '.spatial.h5ad'
-dge_spatial_unfiltered_obs = dge_out_prefix + dge_out_suffix + '.spatial.obs.csv'
-mesh_spatial_dge = dge_out_prefix + dge_out_suffix + '.spatial.mesh.h5ad'
-mesh_spatial_dge_obs = dge_out_prefix + dge_out_suffix + '.spatial.mesh.obs.csv'
+dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}'
+dge_out = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.txt.gz'
+dge_out_summary = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.summary.txt'
+dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.h5ad'
+dge_out_h5ad_obs = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.obs.csv'
+dge_spatial = dge_out_prefix + dge_out_suffix + '.spatial_beads.h5ad'
+dge_spatial_obs = dge_out_prefix + dge_out_suffix + '.spatial_beads.obs.csv'
+dge_spatial_mesh_suffix = '.spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}'
+dge_spatial_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_mesh_suffix
+dge_spatial_mesh = dge_spatial_mesh_prefix + '.h5ad'
+dge_spatial_mesh_obs = dge_spatial_mesh_prefix + '.obs.csv'
 
-dge_out_summary = dge_out_prefix + dge_out_suffix + '.summary.txt'
 dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all']
 
 # kmer stats per position
@@ -162,7 +165,6 @@ paired_end_mapping_stats = paired_end_prefix + '{sample}_paired_end_mapping_stat
 automated_analysis_root = complete_data_root + '/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}'
 automated_report = automated_analysis_root + '/{sample}_{puck}_illumina_automated_report.html'
 
-spatial_dge = automated_analysis_root + '/preprocessed_spatial_dge.h5ad'
 automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
 
 automated_analysis_processed_data_files = {
@@ -274,7 +276,9 @@ wildcard_constraints:
     pacbio_ext = 'fq|fastq',
     polyA_adapter_trimmed = '|.polyA_adapter_trimmed',
     mm_included = '|.mm_included',
-    n_beads = '[0-9]+'
+    n_beads = '[0-9]+|spatial',
+    spot_diameter_um = '[0-9]+',
+    spot_distance_um = '[0-9]+'
 
 #############
 # Main rule #
@@ -456,6 +460,16 @@ rule clean_top_barcodes:
     script:
         'scripts/clean_top_barcodes.py'
 
+rule create_spatial_barcodes:
+    input:
+        unpack(get_puck_file)
+    output:
+        temp(spatial_barcodes)
+    run:
+        bc = parse_barcode_file(input[0])
+        bc['cell_bc'] = bc.index
+        bc[['cell_bc']].to_csv(output[0], header=False, index=False)
+
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
     # topBarcodesClean.txt file or just the regular topBarcodes.txt
@@ -491,39 +505,40 @@ rule create_dge:
         """
 
 rule create_h5ad_dge:
-    input: dge_out, dge_out_summary
-    output: dge_out_h5ad, dge_out_h5ad_obs
-    run:
-        adata = dge_to_sparse_adata(input[0], input[1])
-        adata.write(output[0])
-        adata.obs.to_csv(output[1])
-
-rule create_unfiltered_spatial_dge:
     input:
         unpack(get_puck_file),
-        dge=dge_out_h5ad
-    output:
-        dge_spatial_unfiltered,
-        dge_spatial_unfiltered_obs
+        dge_txt = dge_out,
+        dge_summary_txt = dge_out_summary
+    # output here will either be n_beads=number, n_beads=spatial
+    output: dge_out_h5ad, dge_out_h5ad_obs
     run:
-        adata = sc.read(input['dge'])
-        adata = attach_barcode_file(adata, input['barcode_file'])
+        adata = dge_to_sparse_adata(
+            input['dge_txt'],
+            input['dge_summary_txt'])
+        if 'barcode_file' in input.keys() and wildcards.n_beads == 'spatial':
+            adata = attach_barcode_file(adata, input['barcode_file'])
         adata.write(output[0])
         adata.obs.to_csv(output[1])
 
 rule create_mesh_spatial_dge:
     input:
-        dge_spatial_unfiltered
+        dge_spatial
     output:
-        mesh_spatial_dge,
-        mesh_spatial_dge_obs
+        dge_spatial_mesh,
+        dge_spatial_mesh_obs
+    params:
+        puck_data = lambda wildcards: project_df.get_puck(
+            project_id = wildcards.project,
+            sample_id = wildcards.sample)
     run:
         adata = sc.read(input[0])
         adata = create_meshed_adata(adata,
-            width_um = 3000)
+            width_um = float(params['puck_data']['width_um']),
+            bead_diameter_um = float(params['puck_data']['bead_diameter_um']),
+            spot_diameter_um = float(wildcards.spot_diameter_um),
+            spot_distance_um = float(wildcards.spot_distance_um))
         adata.write(output[0])
         adata.obs.to_csv(output[1])
-
 
 rule parse_ribo_log:
     input: unpack(get_ribo_depletion_log)
@@ -544,27 +559,13 @@ rule create_qc_sheet:
     script:
         "scripts/qc_sequencing_create_sheet.Rmd"
 
-
-rule create_spatial_dge:
-    input:
-        unpack(get_puck_file),
-        dge=lambda wildcards: get_dge_from_run_mode(
-            wildcards.project,
-            wildcards.sample,
-            wildcards.run_mode,
-            dge_out_pattern = dge_out_h5ad)['dge']
-    output:
-        spatial_dge
-    params:
-        downstream_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode)
-    script:
-        "scripts/create_spatial_dge.py"
-
 rule run_automated_analysis:
     input:
-        spatial_dge
+        unpack(get_automated_analysis_dge_input)
     output:
         automated_analysis_result_file
+    params:
+        run_mode_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode)
     script:
         'scripts/automated_analysis.py'
 
@@ -583,7 +584,7 @@ rule create_automated_report:
     output:
         automated_report
     params:
-        downstream_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode),
+        run_mode_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode),
         r_shared_scripts= repo_dir + '/scripts/shared_functions.R'
     script:
         'scripts/automated_analysis_create_report.Rmd'

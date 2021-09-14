@@ -54,7 +54,7 @@ parameter_stats <- parameter_stats %>%
           c('# genes in data', nrow(var_df)),
           c('# of beads in data', nrow(obs_df)),
           c('median UMI', median(obs_df$total_counts)),
-          c('median genes', median(obs_df$n_genes)))
+          c('median genes', median(obs_df$n_genes_by_counts)))
 
 parameter_stats %>%
     kbl(col.names=NULL) %>%
@@ -71,9 +71,9 @@ cat('This dataset has 0 beads passing the filters')
 
 ```{r plot_histogram_of_metrics, echo = F, fig.width=10, eval=!data_empty}
 pl1 <- obs_df %>%
-    select(cell_bc, total_counts, n_genes) %>%
+    select(cell_bc, total_counts, n_genes_by_counts) %>%
     dplyr::rename(umis=total_counts,
-                  genes=n_genes) %>%
+                  genes=n_genes_by_counts) %>%
     gather('obs', 'value', -cell_bc) %>%
     ggplot(aes(value, fill=obs)) +
         geom_histogram(bins=100) +
