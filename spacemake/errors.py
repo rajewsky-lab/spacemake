@@ -1,3 +1,9 @@
+class SpacemakeError(Exception):
+    def __msg__(self):
+        msg = 'ERROR: ' + str(self.__class__) + '\n'
+
+        return msg
+
 class FileWrongExtensionError(Exception):
     def __init__(self, filename, expected_extension):
         self.filename = filename
@@ -9,33 +15,52 @@ class FileWrongExtensionError(Exception):
 
         return msg
 
-class BarcodeFlavorNotFoundError(Exception):
-    def __init__(self, barcode_flavor):
-        self.barcode_flavor = barcode_flavor
+class ConfigVariableError(Exception):
+    def __init__(self, variable_name, variable_value):
+        self.variable_name = variable_name
+        self.variable_value = variable_value
 
+class ConfigVariableNotFoundError(SpacemakeError, ConfigVariableError):
     def __str__(self):
-        msg = f'ERROR: barcode_flavor: {self.barcode_flavor} is not specified.\n'
-        msg += f'you can add a new run_mode with `spacemake config add_barcode_flavor`.\n'
-        
-        return msg
-
-class SpeciesNotFoundError(Exception):
-    def __init__(self, species):
-        self.species = species
-
-    def __str__(self):
-        msg = f'ERROR: species: {self.species} is not specified.\n'
-        msg += f'you can add a new species with `spacemake config add_species`.\n'
+        msg = super().__msg__()
+        msg += f'{self.variable_name}: {self.variable_value} not found.\n'
+        msg += f'you can add a new {self.variable_name} using the '
+        msg += f'`spacemake config add_{self.variable_name}` command.\n'
 
         return msg
 
-class RunModeNotFoundError(Exception):
-    def __init__(self, run_mode_name):
-        self.run_mode_name = run_mode_name
+class ConfigVariableIncompleteError(SpacemakeError, ConfigVariableError):
+    def __init__(self, missing_key, **kwargs):
+        super().__init__(**kwargs)
+        self.missing_key = missing_key
 
     def __str__(self):
-        msg = f'ERROR: run_mode: {self.run_mode_name} not found.\n'
-        msg += 'you can add a new run_mode using the `spacemake config add_run_mode` command.\n'
+        msg = super().__msg__()
+        msg += f'{self.variable_name}: {self.variable_value} '
+        msg += f'is missing required key {self.required_key}.\n'
+        msg += f'You can update this key of {self.variable_value} using the '
+        msg += f'`spacemake config update_{self.variable_name}` command.\n'
+
+        return msg
+
+class InvalidBarcodeStructureError(SpacemakeError):
+    def __init__(self, tag_name, to_match):
+        self.tag_name = tag_name
+        self.to_match = to_match
+
+    def __str__(self):
+        msg = super().__msg__()
+        msg += f'{self.tag_name} does not match {self.to_match}.\n'
+        msg += f'Example matching would be: r1[0:12] for the first 12n of Read1 '
+        msg += f'for {self.tag_name}\n'
+
+
+class DuplicateConfigVariableError(ConfigVariableError):
+    def __str__(self):
+        msg = super().__msg__()
+        msg += f'{self.variable_name}: {self.variable_value} already exists.\n'
+        msg += f'To update it use `spacemake config update_{self.variable_name}`,\n'
+        msg += f'To delete it use `spacemake config delete_{self.variable_name}.\n'
 
         return msg
 
@@ -83,10 +108,3 @@ class InconsistentVariablesDuringMerge(Exception):
         msg += f'{self.variable_name}.\n'
 
         return msg
-
-class PuckDoesNotExistError(Exception):
-    def __init__(self, puck_type):
-        self.variable_type = puck_type
-
-    def __str__(self):
-        msg = f'ERROR: there is no puck type {self.puck_type} defined'

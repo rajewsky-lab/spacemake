@@ -147,6 +147,8 @@ parsers['run'].set_defaults(func=spacemake_run)
 ## spacemake_config args
 if os.path.isfile(config_path):
     cf = ConfigFile(config_path)
+    # ensures backward compatibility
+    cf.correct()
     # save config file
     cf.dump()
     parsers['config'] = cf.get_subparsers(subparsers)

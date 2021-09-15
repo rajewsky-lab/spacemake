@@ -7,13 +7,12 @@ import argparse
 import datetime
 import re
 from functools import reduce
-from operator import getitem
-from spacemake.errors import FileWrongExtensionError, RunModeNotFoundError, \
-    BarcodeFlavorNotFoundError, NoProjectSampleProvidedError, SpeciesNotFoundError, \
-    ProjectSampleNotFoundError, SampleAlreadyExistsError, \
-    InconsistentVariablesDuringMerge, PuckDoesNotExistError
+from operator import getitem, setitem
+from spacemake.errors import *
 
 LINE_SEPARATOR = '-'*50+'\n'
+
+bool_in_str = ['True', 'true', 'False', 'false']
 
 def assert_file(file_path, default_value='none', extension='all'):
     if file_path == default_value:
@@ -27,16 +26,40 @@ def assert_file(file_path, default_value='none', extension='all'):
             errno.ENOENT, os.strerror(errno.ENOENT), file_path)
 
 
-    print(extension)
-    print(file_path)
     if not file_path.endswith(extension) and extension != 'all':
         raise FileWrongExtensionError(file_path, extension)
 
     return 0
+
+def str2bool(var):
+    if isinstance(var, bool):
+        return var
+    print(var)
+    if var in ['True', 'true']:
+        return True
+    elif var in ['False', 'false']:
+        return False
+    else:
+        raise ValueError(f'variable should be boolean, or one of: {bool_in_str}')
         
+def set_dict_variable(dictionary, path, new_val):
+    if len(path) == 1:
+        dictionary[path[0]] = new_val
+        return dictionary
+    elif len(path) > 1:
+        dictionary[path[0]] = set_dict_variable(dictionary[path[0]],
+            path[1:], new_val)
+
+        return dictionary
+    else:
+        raise ValueError(f'path cant be an empty list')
+
 class ConfigFile:
     initial_config_path = os.path.join(os.path.dirname(__file__),
         'config/config.yaml') 
+
+    main_variables = ['pucks', 'barcode_flavors',
+        'run_modes', 'species']
 
     def __init__(self, file_path):
         self.file_path = file_path
@@ -64,6 +87,48 @@ class ConfigFile:
 
         return cf
 
+    def correct(self):
+        # ensures backward compatibility
+        if 'pucks' not in self.variables.keys():
+            self.variables['pucks'] = self.variables['puck_data']['pucks']
+            del self.variables['puck_data']['pucks']
+
+        if 'barcode_flavors' not in self.variables.keys():
+            self.variables['barcode_flavors'] = self.variables['knowledge']['barcode_flavor']
+        
+        if 'species' not in self.variables.keys():
+            # get all the species and save them in the right place
+            self.variables['species'] = {}
+
+            # extract all annotation info
+            for species in self.variables['knowledge'].get('annotations', {}).keys():
+                if species not in self.variables['species'].keys():
+                    self.variables['species'][species] = {}
+
+                self.variables['species'][species]['annotation'] = \
+                    self.variables['knowledge']['annotations'][species]
+
+            for species in self.variables['knowledge'].get('genomes', {}).keys():
+                if species not in self.variables['species'].keys():
+                    self.variables['species'][species] = {}
+
+                self.variables['species'][species]['genome'] = \
+                    self.variables['knowledge']['genomes'][species]
+
+            for species in self.variables['knowledge'].get('rRNA_genomes', {}).keys():
+                if species not in self.variables['species'].keys():
+                    self.variables['species'][species] = {}
+
+                self.variables['species'][species]['rRNA_genome'] = \
+                    self.variables['knowledge']['rRNA_genomes'][species]
+
+        if 'knowledge' in self.variables.keys():
+            del self.variables['knowledge']
+
+
+        self.dump()
+
+
     def dump(self):
         with open(self.file_path, 'w') as fo:
             fo.write(yaml.dump(self.variables))
@@ -75,340 +140,211 @@ class ConfigFile:
     def puck_data(self):
         return self.variables['puck_data']
 
-    def __get_knowledge_var(self, var_name):
-        if var_name not in self.variables['knowledge']:
-            self.variables['knowledge'][var_name] = {}
+    def list_variables_cmdline(self, args):
+        variable = args['variable']
+        del args['variable']
 
-        return self.variables['knowledge'][var_name]
-
-    @property
-    def available_species(self):
-        pass
-
-    def __add_genome_annotation(self, var_name, species_name, file_path):
-        var_values = self.__get_knowledge_var(var_name)
-
-        if var_name == 'genomes' or var_name == 'rRNA_genomes':
-            file_extension = '.fa'
-        elif var_name == 'annotations':
-            file_extension = '.gtf'
-
-        assert_file(file_path, extension = file_extension)
-
-        self.variables['knowledge'][var_name][species_name] = file_path
-
-    def species_exists(self, species_name):
-        if species_name in self.__get_knowledge_var('annotations').keys() \
-                and species_name in self.__get_knowledge_var('genomes').keys():
-            return True
-        else:
-            return False
-
-    def add_species_info(self, name, genome, annotation,
-            rRNA_genome=None):
-        if self.species_exists(name):
-           return False
-
-        self.__add_genome_annotation('annotations', name, annotation)
-        self.__add_genome_annotation('genomes', name, genome)
-
-        if rRNA_genome is not None :
-            self.__add_genome_annotation('rRNA_genomes', name, rRNA_genome)
-
-        return True
-
-    def run_mode_exists(self, run_mode):
-        return run_mode in self.variables['run_modes'].keys()
-
-    def barcode_flavor_exists(self, barcode_flavor):
-        return barcode_flavor in self.variables['knowledge']['barcode_flavor'].keys()
-
-    def get_puck(self, puck_type):
-        pucks = self.get_variable(['puck_data', 'pucks'])
-
-        if puck_type in pucks:
-            return pucks[puck_type]
-        else:
-            raise PuckDoesNotExistError(puck_type)
-    
-    def get_variable(self, path):
-        return reduce(getitem, path, self.variables)  
-
-    def list_variable(self, path, return_var = False):
-        var = yaml.dump(self.get_variable(path))
-        if return_var:
-            return var
-        else:
-            print(var)
-
-    def delete_run_mode_cmdline(self, args):
-        name = args['name']
-        if not name in self.variables['run_modes'].keys():
-            print(f'run_mode: {name} does not exists, so it cannot be deleted')
-            return 0
-        del self.variables['run_modes'][name]
-        self.dump()
-
-    def list_run_modes_cmdline(self, args):
-        self.list_variable(['run_modes'])
-        
-    def add_run_mode_cmdline(self, args):
-        # set the name and delete from dictionary
-        name = args['name']
-        del args['name']
-        
-        msg = f'Adding run_mode: {name}\n'
+        msg = f'Listing {variable}\n'
         msg += LINE_SEPARATOR
-        
-        # add and save new run mode
-        if name in self.variables['run_modes']:
-            msg += f'ERROR: run_mode: {name} already exists, so it cannot be added.\n'
-            msg += 'you can update this run_mode using the `spacemake config update_run_mode`'
-            msg += ' command.\nor delete it using the `spacemake config delete_run_mode`' 
-            msg += ' command.'
-        else:
-            self.variables['run_modes'][name] = args
-            self.dump()
-            msg += 'SUCCESS: run_mode added sucessfully.\n'
-            msg += f'variables added for run_mode: {name}:\n'
-            msg += LINE_SEPARATOR
-            msg += yaml.dump(args, sort_keys=False)
-
-        print(msg)
-    
-    def update_run_mode_cmdline(self, args):
-        name = args['name']
-        del args['name']
-
-        if not name in self.variables['run_modes']:
-            msg = f'run_mode: {name} does not exists, so it cannot be updated.\n'
-            msg += 'add this run_mode using the `spacemake config add_run_mode` command'
-            print(msg)
-            return 0
-
-        msg = f'updating run_mode: {name}\n'
-        msg += LINE_SEPARATOR
-        msg += 'variables:\n'
-        msg += LINE_SEPARATOR
-        msg += yaml.dump(args, sort_keys=False)
+        msg += yaml.dump(self.variables[variable])
 
         print(msg)
 
-        self.variables['run_modes'][name].update(args)
-        self.dump()
+    def variable_exists(self, variable, name):
+        return name in self.variables[variable].keys()
 
-        print(f'run_mode: {name} updated')
+    def delete_variable(self, variable, name):
+        if not self.variable_exists(variable, name):
+            if variable in ['run_modes', 'pucks', 'barcode_flavors']:
+                # drop the last s
+                variable = variable[:-1]
 
-        return 1
-
-    def __get_add_update_run_mode_parser(self):
-        parser = argparse.ArgumentParser(
-            allow_abbrev=False,
-            description='add/update run_mode parent parser',
-            add_help = False)
-        parser.add_argument('--name', type=str,
-            help='name of the run_mode to be added',
-            required = True)
-        parser.add_argument('--parent_run_mode', type=str,
-            help='Name of the parent run_mode. All run_modes will fall back to \'default\'')
-        parser.add_argument('--umi_cutoff', type=int, nargs='+',
-            help='umi_cutoff for this run_mode.' +\
-                 'the automated analysis will be run with these cutoffs')
-        parser.add_argument('--n_beads',
-            type=int,
-            help='number of expected beads for this run_mode')
-        parser.add_argument(
-            '--clean_dge',
-            required=False,
-            action=argparse.BooleanOptionalAction,
-            help='if set, the DGE will be cleaned of barcodes which overlap with primers')
-        parser.add_argument(
-            '--detect_tissue',
-            required=False,
-            action=argparse.BooleanOptionalAction,
-            help='By default only beads having at least umi_cutoff UMI counts are analysed '+\
-                 'during the automated analysis, all other beads are filtered out. If this ' +\
-                 'parameter is set, contiguous islands within umi_cutoff passing beads will '+\
-                 'also be included in the analysis')
-        parser.add_argument(
-            '--plot_bead_size',
-            help='The bead size to be used when plotting the beads in 2D, during the '+\
-                 'automated report generation. Defaults to 1.', type=float)
-        parser.add_argument(
-            '--polyA_adapter_trimming',
-            required=False,
-            action=argparse.BooleanOptionalAction,
-            help='If set, reads will have polyA stretches and adapter sequence overlaps trimmed '+\
-                 'BEFORE mapping.')
-        parser.add_argument(
-            '--count_intronic_reads',
-            required=False,
-            action=argparse.BooleanOptionalAction,
-            help='If set, INTRONIC reads will also be countsed (apart from UTR and CDS)')
-        parser.add_argument(
-            '--count_mm_reads',
-            required=False,
-            action=argparse.BooleanOptionalAction,
-            help='If True, multi-mappers will also be counted. For every multimapper only reads which '+\
-                 'have one unique read mapped to a CDS or UTR region will be counted')
-
-        return parser
-    
-    def list_barcode_flavors_cmdline(self, args):
-        self.list_variable(['knowledge', 'barcode_flavor'])
-
-    def delete_barcode_flavor_cmdline(self, args):
-        flavor_name = args['name']
-        barcode_flavor = self.get_variable(['knowledge', 'barcode_flavor'])
-
-        msg = LINE_SEPARATOR
-        msg += f'deleting {flavor_name} from barcode flavors\n'
-        msg += LINE_SEPARATOR
-
-        if flavor_name not in barcode_flavor.keys():
-            msg += 'barcode flavor with {flavor_name} do not exists'
-            msg += ', so cant be deleted.\n'
-            msg += 'aborting'
+            raise ConfigVariableNotFoundError(variable, name)
         else:
-            flavor = barcode_flavor[flavor_name]
-            msg += yaml.dump(flavor)
-            msg += '\n' + LINE_SEPARATOR
-            del barcode_flavor[flavor_name]
-            self.dump()
-            msg += 'success!'
+            variable_data = self.variables[variable][name]
 
-        print(msg)
+            del self.variables[variable][name]
 
-    def add_barcode_flavor_cmdline(self, args):
-        umi = args['umi']
-        cell_barcode = args['cell_barcode']
-        flavor_name = args['name']
-        bam_tags = 'CR:{cell},XC:{cell},XM:{UMI},RG:{assigned}'
+            return variable_data
+
+    def __process_run_mode_args(self, **kwargs):
+        # typeset boolean values of run_mode
+        default_run_mode = self.get_variable('run_modes', 'default')
+
+        for key, value in default_run_mode.items():
+            if isinstance(value, bool) and key in kwargs.keys():
+                kwargs[key] = str2bool(value)
+
+        return kwargs
+
+    def __process_barcode_flavor_args(self, cell_barcode, umi):
+        bam_tags = 'CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}'
 
         # r(1|2) and then string slice
         to_match = r'r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$'
 
-        msg = LINE_SEPARATOR
-        msg += f'adding {flavor_name} to barcode flavors\n'
-        msg += LINE_SEPARATOR
-
-        barcode_flavor = self.get_variable(['knowledge', 'barcode_flavor'])
-
-        if flavor_name in barcode_flavor.keys():
-            msg += f'barcode flavor {flavor_name} already exists.\n'
-            msg += 'to update you need to delete, and set it again.\n'
-            msg += 'aborting'
-            
-            print(msg)
-            return 1
-
         if re.match(to_match, umi) is None:
-            msg += f'provided umi {umi} has the wrong structure.\n'
-            msg += 'aborting'
-
-            print(msg)
-            return 1
+            raise InvalidBarcodeStructure('umi', to_match)
 
         if re.match(to_match, cell_barcode) is None:
-            msg += f'provided cell_barcode {cell_barcode} has the wrong structure.\n'
-            msg += 'aborting'
+            raise InvalidBarcodeStructure('umi', to_match)
 
-            print(msg)
-            return 1
+        barcode_flavor = {
+                'UMI': umi,
+                'bam_tags': bam_tags,
+                'cell': cell_barcode}
 
-        barcode_flavor[flavor_name] = {
-            'UMI': umi,
-            'bam_tags': bam_tags,
-            'cell': cell_barcode}
+        return barcode_flavor
+
+    def __process_variable_args(self, variable, **kwargs):
+        if variable == 'barcode_flavors':
+            return self.__process_barcode_flavor_args(**kwargs)
+        elif variable == 'run_modes':
+            return self.__process_run_mode_args(**kwargs)
+        elif variable == 'pucks':
+            return kwargs
+        elif variable == 'species':
+            return kwargs
         
-        msg += yaml.dump(barcode_flavor[flavor_name])
+
+    def add_variable(self, variable, name, **kwargs):
+        if not self.variable_exists(variable, name):
+            values = self.__process_variable_args(variable, **kwargs)
+            self.variables[variable][name] = kwargs
+        else:
+            if variable in ['run_modes', 'pucks', 'barcode_flavors']:
+                # drop the last s
+                variable = variable[:-1]
+
+            raise DuplicateConfigVariableError(variable, name)
+
+        return kwargs
+
+    def update_variable(self, variable, name, **kwargs):
+        if self.variable_exists(variable, name):
+            values = self.__process_variable_args(variable, **kwargs)
+            self.variables[variable][name].update(values)
+
+            variable_data = self.variables[variable][name]
+        else:
+            if variable in ['run_modes', 'pucks', 'barcode_flavors']:
+                # drop the last s
+                variable = variable[:-1]
+
+            raise ConfigVariableNotFoundError(variable, name)
+
+        return variable_data
+
+    def get_variable(self, variable, name):
+        if not self.variable_exists(variable, name):
+            raise ConfigVariableNotFoundError(variable, name)
+        else:
+            return self.variables[variable][name]
         
-        self.dump()
+    def add_update_delete_variable_cmdline(self, args):
+        # set the name and delete from dictionary
+        name = args['name']
+        variable = args['variable']
+        action = args['action']
 
-        msg += 'success!'
-        print(msg)
+        if variable not in self.main_variables:
+            raise ValueError(f'variable has to be one of {self.main_variables}')
 
-        return 0
+        # remove the args from the dict
+        del args['action']
+        del args['variable']
+        del args['name']
 
-    def list_species_cmdline(self, args):
-        try:
-            # list annotations first
-            msg = LINE_SEPARATOR
-            msg += 'annotations\n'
-            msg += LINE_SEPARATOR
-            msg += self.list_variable(['knowledge', 'annotations'], return_var = True)
+        if action == 'add':
+            msg = 'Adding'
+            succ_msg = 'added'
+            func = self.add_variable
+        elif action == 'update':
+            msg = 'Updatig'
+            succ_msg = 'updated'
+            func = self.update_variable
+        elif action == 'delete':
+            msg = 'Deleting'
+            succ_msg = 'deleted'
+            func = self.delete_variable
 
-            # list genomes next
-            msg += LINE_SEPARATOR
-            msg += 'genomes\n'
-            msg += LINE_SEPARATOR
-            msg += self.list_variable(['knowledge', 'genomes'], return_var = True)
-        except KeyError:
-            msg = 'No species found. To add a species use `spacemake config add_species`'
-        finally:
-            print(msg)
-
-    def delete_species_cmdline(self, args):
-        species_name = args['name']
-        annotations = self.get_variable(['knowledge', 'annotations'])
-        genomes = self.get_variable(['knowledge', 'genomes'])
-
-        msg = LINE_SEPARATOR
-        msg += f'deleting {species_name} annotation and genome info.\n'
-        msg += LINE_SEPARATOR
-
-        if species_name not in annotations.keys():
-            msg += 'species {species_name} not in annotations.\n'
-            msg += 'skipping.\n'
-        else:
-            del annotations[species_name]
-            msg += 'deleted from annotations.\n'
-
-        if species_name not in genomes.keys():
-            msg += 'species {species_name} not in genomes.\n'
-            msg += 'skipping.\n'
-        else:
-            del genomes[species_name]
-            msg += 'deleted from genomes.\n'
-
-        self.dump()
-
-        msg += LINE_SEPARATOR
-        msg += 'success!'
-
-        print(msg)
-
-    def add_species_cmdline(self, args):
-        species_name = args['name']
-        annotation = args['annotation']
-        genome = args['genome']
-        rRNA_genome = args.get('rRNA_genome', None)
-
-        msg = LINE_SEPARATOR
-        msg += f'adding genome, annotation of {species_name}\n'
+        msg = f'{msg} {variable}: {name}\n'
         msg += LINE_SEPARATOR
 
         try:
-            added = self.add_species_info(species_name, genome, annotation,
-                rRNA_genome)
-            if added:
-                msg += f'added {species_name}.\n'
-                msg += f'genome: {genome}\n'
-                msg += f'annotation: {annotation}\n'
-                if rRNA_genome is not None:
-                    msg += f'rRNA_genome: {rRNA_genome}\n'
-                msg += LINE_SEPARATOR
-                msg += 'success!'
-            else:
-                msg += f'{species_name} already exists!\n'
-                msg += 'aborting.'
+            var_variables = func(variable=variable, name=name, **args)
 
+            msg += f'SUCCESS: {variable}={name} {succ_msg} successfully.\n'
+            msg += LINE_SEPARATOR
+            msg += f'{succ_msg} {variable} variables:\n'
+            msg += yaml.dump(var_variables, sort_keys=False)
             self.dump()
-        except FileNotFoundError as e:
-            msg += LINE_SEPARATOR
+        except (ConfigVariableNotFoundError, DuplicateConfigVariableError) as e:
             msg += str(e)
         finally:
-            print(msg) 
+            print(msg)
+
+    def __get_add_update_puck_parser(self):
+        pass
+
+    def __get_add_update_run_mode_parser(self):
+        parser = argparse.ArgumentParser(
+                allow_abbrev=False,
+                description='add/update run_mode parent parser',
+                add_help = False)
+        parser.add_argument('--name', type=str,
+                help='name of the run_mode to be added',
+                required = True)
+        parser.add_argument('--parent_run_mode', type=str,
+                help='Name of the parent run_mode. All run_modes will fall back to \'default\'')
+        parser.add_argument('--umi_cutoff', type=int, nargs='+',
+                help='umi_cutoff for this run_mode.' +\
+                        'the automated analysis will be run with these cutoffs')
+        parser.add_argument('--n_beads',
+                type=int,
+                help='number of expected beads for this run_mode')
+        parser.add_argument(
+                '--clean_dge',
+                required=False,
+                choices=bool_in_str,
+                type=str,
+                help='if True, the DGE will be cleaned of barcodes which overlap with primers')
+        parser.add_argument(
+                '--detect_tissue',
+                required=False,
+                choices=bool_in_str,
+                type=str,
+                help='By default only beads having at least umi_cutoff UMI counts are analysed '+\
+                        'during the automated analysis, all other beads are filtered out. If this ' +\
+                        'parameter is set, contiguous islands within umi_cutoff passing beads will '+\
+                        'also be included in the analysis')
+        parser.add_argument(
+                '--plot_bead_size',
+                help='The bead size to be used when plotting the beads in 2D, during the '+\
+                        'automated report generation. Defaults to 1.', type=float)
+        parser.add_argument(
+                '--polyA_adapter_trimming',
+                required=False,
+                choices=bool_in_str,
+                type=str,
+                help='If set, reads will have polyA stretches and adapter sequence overlaps trimmed '+\
+                        'BEFORE mapping.')
+        parser.add_argument(
+                '--count_intronic_reads',
+                required=False,
+                choices=bool_in_str,
+                type=str,
+                help='If set, INTRONIC reads will also be countsed (apart from UTR and CDS)')
+        parser.add_argument(
+                '--count_mm_reads',
+                required=False,
+                choices=bool_in_str,
+                type=str,
+                help='If True, multi-mappers will also be counted. For every multimapper only reads which '+\
+                        'have one unique read mapped to a CDS or UTR region will be counted')
+
+
+        return parser
 
     def get_subparsers(self, subparsers):
         parser_config = subparsers.add_parser('config', help = 'configure spacemake')
@@ -416,34 +352,38 @@ class ConfigFile:
 
         ## list run_modes ##
         parser_config_list_run_modes = parser_config_subparsers.add_parser('list_run_modes',
-            description = 'list available run_modes')
-        parser_config_list_run_modes.set_defaults(func=self.list_run_modes_cmdline)
+                description = 'list available run_modes')
+        parser_config_list_run_modes.set_defaults(func=self.list_variables_cmdline,
+                variable='run_modes')
 
         # add run_mode
         parser_config_add_run_mode = parser_config_subparsers.add_parser('add_run_mode',
-            description = 'add a new run_mode',
-            parents=[self.__get_add_update_run_mode_parser()])
-        parser_config_add_run_mode.set_defaults(func=self.add_run_mode_cmdline)
+                description = 'add a new run_mode',
+                parents=[self.__get_add_update_run_mode_parser()])
+        parser_config_add_run_mode.set_defaults(func=self.add_update_delete_variable_cmdline,
+                action = 'add', variable='run_modes')
 
         # update run mode
         parser_config_update_run_mode = parser_config_subparsers.add_parser('update_run_mode',
             description = 'update run_mode',
             parents=[self.__get_add_update_run_mode_parser()])
-        parser_config_update_run_mode.set_defaults(func=self.update_run_mode_cmdline)
+        parser_config_update_run_mode.set_defaults(func=self.add_update_delete_variable_cmdline,
+            action = 'update', variable='run_modes')
 
         parser_config_delete_run_mode = parser_config_subparsers.add_parser('delete_run_mode',
             description = 'delete a run_mode')
         parser_config_delete_run_mode.add_argument('--name',
             type=str,
             help='run_mode to be deleted', required=True)
-        parser_config_delete_run_mode.set_defaults(func=self.delete_run_mode_cmdline)
+        parser_config_delete_run_mode.set_defaults(func=self.add_update_delete_variable_cmdline,
+            action='delete', variable='run_modes')
 
         # list barcode flavors
         parser_config_list_barcode_flavors = parser_config_subparsers\
             .add_parser('list_barcode_flavors',
                 description = 'list barcode flavors and their settings')
         parser_config_list_barcode_flavors.set_defaults(
-            func=self.list_barcode_flavors_cmdline)
+            func=self.list_variables_cmdline, variable='barcode_flavors')
 
         # delete barcode flavor
         parser_config_delete_barcode_flavor = parser_config_subparsers\
@@ -453,7 +393,8 @@ class ConfigFile:
             help = 'name of the barcode flavor to be deleted',
             type=str, required=True)
         parser_config_delete_barcode_flavor.set_defaults(
-            func=self.delete_barcode_flavor_cmdline)
+            func=self.add_update_delete_variable_cmdline, action='delete',
+                variable='barcode_flavors')
 
         # add barcode flavor
         parser_config_add_barcode_flavor = parser_config_subparsers\
@@ -467,14 +408,15 @@ class ConfigFile:
         parser_config_add_barcode_flavor.add_argument('--cell_barcode',
             help = 'structure of CELL BARCODE', type=str, required=True)
         parser_config_add_barcode_flavor.set_defaults(
-            func=self.add_barcode_flavor_cmdline)
+            func=self.add_update_delete_variable_cmdline, action='add',
+                variable='barcode_flavors')
 
         # list species settings
         parser_config_list_species = parser_config_subparsers\
             .add_parser('list_species',
                 description = 'list all defined species and their genomes, annotations')
         parser_config_list_species.set_defaults(
-            func=self.list_species_cmdline)
+            func=self.list_variables_cmdline, variable = 'species')
 
         # delete species
         parser_config_delete_species = parser_config_subparsers\
@@ -484,7 +426,8 @@ class ConfigFile:
             help = 'name of the species to be deleted',
             type=str, required=True)
         parser_config_delete_species.set_defaults(
-            func=self.delete_species_cmdline)
+            func=self.add_update_delete_variable_cmdline, action='delete',
+                variable='species')
         # add species
         parser_config_add_species = parser_config_subparsers\
             .add_parser('add_species',
@@ -503,7 +446,7 @@ class ConfigFile:
             default=None,
             type = str)
         parser_config_add_species.set_defaults(
-            func=self.add_species_cmdline)
+            func=self.add_update_delete_variable_cmdline, action='add', variable='species')
 
         return parser_config
 
@@ -638,7 +581,7 @@ class ProjectDF:
             project_id = project_id,
             sample_id = sample_id)
 
-        return self.config.get_puck(puck_type)
+        return self.config.get_variable('pucks', name=puck_type)
 
     def get_metadata(self, field, sample_id=None, project_id=None, **kwargs):
         df = self.df
@@ -741,12 +684,13 @@ class ProjectDF:
 
         # check if run mode exists
         for run_mode in kwargs.get('run_mode', []):
-            if not self.config.run_mode_exists(run_mode):
-                raise RunModeNotFoundError(run_mode)
+            if not self.config.variable_exists('run_mode', run_mode):
+                raise ConfigVariableNotFoundError('run_modes', run_mode)
 
         if 'barcode_flavor' in kwargs.keys():
-            if not self.config.barcode_flavor_exists(kwargs['barcode_flavor']):
-                raise BarcodeFlavorNotFoundError(kwargs['barcode_flavor'])
+            if not self.config.variable_exists('barcode_flavors', kwargs['barcode_flavor']):
+                raise ConfigVariableNotFoundError('barcode_flavor',
+                        kwargs['barcode_flavor'])
 
         if self.sample_exists(project_id, sample_id):
             new_project = self.df.loc[ix].copy()
@@ -777,7 +721,7 @@ class ProjectDF:
             raise ProjectSampleNotFoundError('(project_id, sample_id)',
                 (project_id, sample_id))
 
-    def remove_sample(self, project_id, sample_id):
+    def delete_sample(self, project_id, sample_id):
         if self.sample_exists(project_id, sample_id):
             ix = (project_id, sample_id)
             element = self.df.loc[ix]
@@ -914,9 +858,10 @@ class ProjectDF:
         elif action == 'delete':
             msg += 'Deleting'
             succ_msg = 'deleted'
-            func = self.remove_sample
+            func = self.delete_sample
 
-        msg += f' ({project_id}, {sample_id})\n'
+        msg += f'{msg} sample: ({project_id}, {sample_id})\n'
+        msg += LINE_SEPARATOR
 
         try:
             sample = func(**args)
@@ -925,9 +870,9 @@ class ProjectDF:
             msg += LINE_SEPARATOR
             msg += str(sample)
             self.dump()
-        except (RunModeNotFoundError, FileNotFoundError,
+        except (ConfigVariableNotFoundError, FileNotFoundError,
                 SampleAlreadyExistsError, ProjectSampleNotFoundError,
-                FileWrongExtensionError, BarcodeFlavorNotFoundError) as e:
+                FileWrongExtensionError) as e:
             msg += LINE_SEPARATOR
             msg += str(e)
         finally:
@@ -985,12 +930,12 @@ class ProjectDF:
         ix = self.df.query(
             'project_id in @projects or sample_id in @samples').index
 
-        if self.config.species_exists(species):
+        if self.config.variable_exists('species', species):
             self.df.loc[ix, 'species'] = species
 
             return ix.to_list()
         else:
-            raise SpeciesNotFoundError(species)
+            raise ConfigVariableNotFoundError('species', species)
 
     def set_species_cmdline(self, args):
         projects = args['project_id_list']
@@ -1009,7 +954,7 @@ class ProjectDF:
             msg += 'SUCCESS: species set successfully.\n'
 
             self.dump()
-        except (NoProjectSampleProvidedError, SpeciesNotFoundError,
+        except (NoProjectSampleProvidedError, ConfigVariableNotFoundError,
                 ProjectSampleNotFoundError) as e:
             msg += str(e)
         finally:
@@ -1036,7 +981,7 @@ class ProjectDF:
             'project_id in @projects or sample_id in @samples').index
 
         for run_mode in run_modes:
-            if self.config.run_mode_exists(run_mode):
+            if self.config.variable_exists('run_modes', run_mode):
                 for i, row in self.df.loc[ix, :].iterrows():
                     # add/remove run mode. if it already exists dont do anything
                     if action == 'set':
@@ -1044,7 +989,7 @@ class ProjectDF:
                     elif action == 'remove':
                         self.__remove_run_mode(i, run_mode)
             else:
-                raise RunModeNotFoundError(run_mode)
+                raise ConfigVariableNotFoundError('run_modes', run_mode)
 
         return ix.to_list()
 
@@ -1073,7 +1018,7 @@ class ProjectDF:
 
             self.dump()
         except (NoProjectSampleProvidedError, ProjectSampleNotFoundError, 
-                RunModeNotFoundError) as e:
+                ConfigVariableNotFoundError) as e:
 
             msg += str(e)
         finally:
@@ -1122,7 +1067,7 @@ class ProjectDF:
 
         self.__assert_projects_samples_exist(project_id_list, sample_id_list)
 
-        if self.config.barcode_flavor_exists(barcode_flavor):
+        if self.config.variable_exists('barcode_flavor', barcode_flavor):
             ix = self.df.query(
                 'project_id in @project_id_list or sample_id in @sample_id_list').index
 
@@ -1133,7 +1078,7 @@ class ProjectDF:
 
             return ix.to_list()
         else:
-            raise BarcodeFlavorNotFoundError(barcode_flavor)
+            raise ConfigVariableNotFoundError('barcode_flavor', barcode_flavor)
 
     def set_barcode_flavor_cmdline(self, args):
         barcode_flavor = args['barcode_flavor']
@@ -1151,7 +1096,7 @@ class ProjectDF:
             
             self.dump()
 
-        except (BarcodeFlavorNotFoundError, NoProjectSampleProvidedError,
+        except (ConfigVariableNotFoundError, NoProjectSampleProvidedError,
             ProjectSampleNotFoundError) as e:
             msg += str(e)
         finally:
@@ -1257,7 +1202,7 @@ class ProjectDF:
             msg += str(sample)
 
             self.dump()
-        except (NoProjectSampleProvidedError, SpeciesNotFoundError,
+        except (NoProjectSampleProvidedError, ConfigVariableNotFoundError,
                 ProjectSampleNotFoundError, InconsistentVariablesDuringMerge) as e:
             msg += str(e)
         finally:
