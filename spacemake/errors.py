@@ -1,16 +1,17 @@
 class SpacemakeError(Exception):
     def __msg__(self):
-        msg = 'ERROR: ' + str(self.__class__) + '\n'
+        msg = 'ERROR: ' + str(self.__class__.__name__) + '\n'
 
         return msg
 
-class FileWrongExtensionError(Exception):
+class FileWrongExtensionError(SpacemakeError):
     def __init__(self, filename, expected_extension):
         self.filename = filename
         self.expected_extension = expected_extension
 
     def __str__(self):
-        msg = f'File {self.filename} has wrong extension.\n'
+        msg = super().__msg__()
+        msg += f'File {self.filename} has wrong extension.\n'
         msg += f'The extension should be {self.expected_extension}.\n'
 
         return msg

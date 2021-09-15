@@ -177,24 +177,59 @@ class ConfigFile:
 
         return kwargs
 
-    def __process_barcode_flavor_args(self, cell_barcode, umi):
+    def __process_barcode_flavor_args(self, cell_barcode=None, umi=None):
         bam_tags = 'CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}'
 
         # r(1|2) and then string slice
         to_match = r'r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$'
 
-        if re.match(to_match, umi) is None:
+        if umi is not None and re.match(to_match, umi) is None:
             raise InvalidBarcodeStructure('umi', to_match)
 
-        if re.match(to_match, cell_barcode) is None:
+        if cell_barcode is not None and re.match(to_match, cell_barcode) is None:
             raise InvalidBarcodeStructure('umi', to_match)
 
         barcode_flavor = {
-                'UMI': umi,
-                'bam_tags': bam_tags,
-                'cell': cell_barcode}
+                'bam_tags': bam_tags}
+
+        if umi is not None:
+            barcode_flavor['UMI'] = umi
+
+        if cell_barcode is not None:
+            barcode_flavor['cell'] = cell_barcode
 
         return barcode_flavor
+
+    def __process_species_args(self, genome=None, annotation=None, rRNA_genome = None):
+        assert_file(genome, default_value=None, extension = '.fa')
+        assert_file(annotation, default_value=None, extension = '.gtf')
+        assert_file(rRNA_genome, default_value = None, extension = '.fa')
+
+        species = {}
+
+        if genome is not None:
+            species['genome'] = genome
+        
+        if annotation is not None:
+            species['annotation'] = annotation
+
+        if rRNA_genome is not None:
+            species['rRNA_genome'] = rRNA_genome
+
+        return species
+
+    def __process_puck_args(self, width_um=None, spot_size_um=None, barcodes = None):
+        assert_file(barcodes, default_value = None, extension = 'all')
+        
+        puck = {
+            'width_um': float(width_um),
+            'spot_size_um': float(spot_size_um)
+        }
+
+        if barcodes is not None:
+            puck['barcodes'] = barcodes
+
+        return puck
 
     def __process_variable_args(self, variable, **kwargs):
         if variable == 'barcode_flavors':
@@ -202,11 +237,12 @@ class ConfigFile:
         elif variable == 'run_modes':
             return self.__process_run_mode_args(**kwargs)
         elif variable == 'pucks':
-            return kwargs
+            return self.__process_puck_args(**kwargs)
         elif variable == 'species':
-            return kwargs
+            return self.__process_species_args(**kwargs)
+        else:
+            ValueError(f'Invalid variable: {variable}')
         
-
     def add_variable(self, variable, name, **kwargs):
         if not self.variable_exists(variable, name):
             values = self.__process_variable_args(variable, **kwargs)
@@ -279,13 +315,28 @@ class ConfigFile:
             msg += f'{succ_msg} {variable} variables:\n'
             msg += yaml.dump(var_variables, sort_keys=False)
             self.dump()
-        except (ConfigVariableNotFoundError, DuplicateConfigVariableError) as e:
+        except SpacemakeError as e:
             msg += str(e)
         finally:
             print(msg)
 
     def __get_add_update_puck_parser(self):
         pass
+
+    def __get_barcode_flavor_parser(self, required=True):
+        parser = argparse.ArgumentParser(
+            allow_abbrev=False,
+            description='add/update barcode_flavor',
+            add_help = False)
+        parser.add_argument('--name',
+            help = 'name of the barcode flavor', type = str,
+            required = True)
+        parser.add_argument('--umi',
+            help = 'structure of UMI', type=str, required=required)
+        parser.add_argument('--cell_barcode',
+            help = 'structure of CELL BARCODE', type=str, required=required)
+
+        return parser
 
     def __get_add_update_run_mode_parser(self):
         parser = argparse.ArgumentParser(
@@ -399,16 +450,19 @@ class ConfigFile:
         # add barcode flavor
         parser_config_add_barcode_flavor = parser_config_subparsers\
             .add_parser('add_barcode_flavor',
+                parents=[self.__get_barcode_flavor_parser()],
                 description = 'add a new barcode_flavor')
-        parser_config_add_barcode_flavor.add_argument('--name',
-            help = 'name of the barcode flavor', type = str,
-            required = True)
-        parser_config_add_barcode_flavor.add_argument('--umi',
-            help = 'structure of UMI', type=str, required=True)
-        parser_config_add_barcode_flavor.add_argument('--cell_barcode',
-            help = 'structure of CELL BARCODE', type=str, required=True)
         parser_config_add_barcode_flavor.set_defaults(
             func=self.add_update_delete_variable_cmdline, action='add',
+                variable='barcode_flavors')
+
+        # update barcode flavor
+        parser_config_add_barcode_flavor = parser_config_subparsers\
+            .add_parser('update_barcode_flavor',
+                parents=[self.__get_barcode_flavor_parser(False)],
+                description = 'update an existing barcode_flavor')
+        parser_config_add_barcode_flavor.set_defaults(
+            func=self.add_update_delete_variable_cmdline, action='update',
                 variable='barcode_flavors')
 
         # list species settings
