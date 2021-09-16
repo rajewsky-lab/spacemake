@@ -332,9 +332,16 @@ class ConfigFile:
             help = 'name of the barcode flavor', type = str,
             required = True)
         parser.add_argument('--umi',
-            help = 'structure of UMI', type=str, required=required)
+            help = 'structure of UMI, using python\'s list syntax. Example: to set UMI to ' +
+            '13-20 NT of Read1, use --umi r1[12:20]. It is also possible to use the first 8nt of '+
+            'Read2 as UMI: --umi r2[0:8]',
+            type=str, required=required)
         parser.add_argument('--cell_barcode',
-            help = 'structure of CELL BARCODE', type=str, required=required)
+            help = 'structure of CELL BARCODE, using python\'s list syntax. Example: to set'+
+                ' the cell_barcode to 1-12 nt of Read1, use --cell_barcode r1[0:12]. It is also possible '+
+                ' to reverse the CELL BARCODE, for instance with r1[0:12][::-1] (reversing the first 12nt of' +
+                ' Read1, and assigning them as CELL BARCODE).',
+            type=str, required=required)
 
         return parser
 
