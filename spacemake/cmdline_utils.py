@@ -65,7 +65,7 @@ class ConfigFile:
         'species': 'species'
     }
 
-    main_variables_sg2pl = {value: key for main_variables_pl2sg.items()}
+    main_variables_sg2pl = {value: key for key, value in main_variables_pl2sg.items()}
 
     def __init__(self, file_path):
         self.file_path = file_path
@@ -74,14 +74,25 @@ class ConfigFile:
 
         if file_path != self.initial_config_path:
             initial_config = ConfigFile.get_initial_config()
-            default_run_mode = initial_config.variables['run_modes']['default']
 
-            if 'default' not in self.variables['run_modes'].keys():
-                self.variables['run_modes']['default'] = default_run_mode
-            else:
-                # update default run mode with missing values
-                default_run_mode.update(self.variables['run_modes']['default'])
-                self.variables['run_modes']['default'] = default_run_mode
+            # correct variables to ensure backward compatibility
+            self.correct() 
+            
+            for main_variable in self.main_variables_pl2sg.keys():
+                # update new main_variables
+                if main_variable not in self.variables:
+                    self.variables[main_variable] = initial_config.variables[main_variable]
+
+            vars_with_default = ['run_modes', 'pucks']
+
+            for var_with_default in vars_with_default:
+                default_val = initial_config.variables[var_with_default]['default']
+                if 'default' not in self.variables[var_with_default].keys():
+                    self.variables[var_with_default]['default'] = default_val
+                else:
+                    # update default run mode with missing values
+                    default_val.update(self.variables[var_with_default]['default'])
+                    self.variables[var_with_default]['default'] = default_val
 
             if self.file_path != initial_config.file_path:
                 # only dump if not initial config
@@ -100,42 +111,45 @@ class ConfigFile:
 
     def correct(self):
         # ensures backward compatibility
-        if 'pucks' not in self.variables.keys():
+        if 'pucks' not in self.variables.keys() and 'pucks' in self.variables['puck_data']:
             self.variables['pucks'] = self.variables['puck_data']['pucks']
             del self.variables['puck_data']['pucks']
 
-        if 'barcode_flavors' not in self.variables.keys():
+        if 'barcode_flavors' not in self.variables.keys() and 'barcode_flavor' in self.variables['knowledge']:
             self.variables['barcode_flavors'] = self.variables['knowledge']['barcode_flavor']
         
-        if 'species' not in self.variables.keys():
+        if 'species' not in self.variables and 'knowledge' in self.variables:
             # get all the species and save them in the right place
+            # if species is empty, create a species dictionary
             self.variables['species'] = {}
 
-            # extract all annotation info
-            for species in self.variables['knowledge'].get('annotations', {}).keys():
-                if species not in self.variables['species'].keys():
+            # extract all annotation info, if exists
+            for species in self.variables['knowledge'].get('annotations', {}):
+                if species not in self.variables['species']:
                     self.variables['species'][species] = {}
 
                 self.variables['species'][species]['annotation'] = \
                     self.variables['knowledge']['annotations'][species]
 
-            for species in self.variables['knowledge'].get('genomes', {}).keys():
-                if species not in self.variables['species'].keys():
+            for species in self.variables['knowledge'].get('genomes', {}):
+                if species not in self.variables['species']:
                     self.variables['species'][species] = {}
 
                 self.variables['species'][species]['genome'] = \
                     self.variables['knowledge']['genomes'][species]
 
-            for species in self.variables['knowledge'].get('rRNA_genomes', {}).keys():
-                if species not in self.variables['species'].keys():
+            for species in self.variables['knowledge'].get('rRNA_genomes', {}):
+                if species not in self.variables['species']:
                     self.variables['species'][species] = {}
 
                 self.variables['species'][species]['rRNA_genome'] = \
                     self.variables['knowledge']['rRNA_genomes'][species]
 
-        if 'knowledge' in self.variables.keys():
+        if 'knowledge' in self.variables:
             del self.variables['knowledge']
-
+        
+        if 'species' not in self.variables:
+            self.variables['species'] = {}
 
         self.dump()
 
@@ -1067,7 +1081,7 @@ class ProjectDF:
 
 
     def __set_variable(self, ix, variable_name, variable_value, keep_old=False):
-        variable_name_pl = self.config.main_variable_sg2pl[variable_name]
+        variable_name_pl = self.config.main_variables_sg2pl[variable_name]
         self.config.assert_main_variable(variable_name_pl)
         self.config.assert_variable(variable_name_pl, variable_value)
         
@@ -1077,7 +1091,7 @@ class ProjectDF:
         self.df.at[ix, 'run_mode'] = list(set(i_run_mode))
 
     def __remove_variable(self, ix, variable_name, variable_value):
-        variable_name_pl = self.config.main_variable_sg2pl[variable_name]
+        variable_name_pl = self.config.main_variables_sg2pl[variable_name]
         self.config.assert_main_variable(variable_name_pl)
         self.config.assert_variable(variable_name_pl, variable_value)
 
@@ -1092,7 +1106,7 @@ class ProjectDF:
 
         self.__assert_projects_samples_exist(projects, samples)
 
-        variable_name_pl = self.config.main_variable_sg2pl[variable_name]
+        variable_name_pl = self.config.main_variables_sg2pl[variable_name]
         self.config.assert_main_variable(variable_name_pl)
 
         # of only one provided use that, if both use intersection
@@ -1105,7 +1119,6 @@ class ProjectDF:
         else:
             ix = self.df.query(
                 'project_id in @project_id_list and sample_id in @sample_id_list').index
-            'project_id in @projects or sample_id in @samples').index
 
         if isinstance(variable_value, list):
             for var in variable_value:

@@ -50,25 +50,20 @@ adapters:
     smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'
     optical_primer: 'GAATCACGATACGTACACCA'
 
-knowledge:
-    barcode_flavor:
-        dropseq:
-            cell: "r1[8:20][::-1]"
-            UMI: "r1[0:8]"
-            bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
-        slideseq_14bc:
-            cell: "r1[0:14]"
-            UMI: "r1[14:23]"
-            bam_tags: "CR:{cell},XC:{cell},XM:{UMI},RG:{assigned}"
-        slideseq_15bc:
-            cell: "r1[0:14]"
-            UMI: "r1[15:23]"
-            bam_tags: "CR:{cell},XC:{cell},XM:{UMI},RG:{assigned}"
-        drop_noUMI:
-            cell: "r1[0:12][::-1]"
-            UMI: "r2[0:8]"
-            bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
-        visium:
-            cell: "r1[0:16]"
-            UMI: "r1[16:28]"
-            bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+barcode_flavors:
+    dropseq:
+        cell: "r1[0:12]"
+        UMI: "r1[12:20]"
+        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+    slideseq_14bc:
+        cell: "r1[0:14]"
+        UMI: "r1[14:23]"
+        bam_tags: "CR:{cell},XC:{cell},XM:{UMI},RG:{assigned}"
+    slideseq_15bc:
+        cell: "r1[0:14]"
+        UMI: "r1[15:23]"
+        bam_tags: "CR:{cell},XC:{cell},XM:{UMI},RG:{assigned}"
+    visium:
+        cell: "r1[0:16]"
+        UMI: "r1[16:28]"
+        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"

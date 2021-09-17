@@ -68,9 +68,8 @@ def spacemake_init(args):
             snakemake.snakemake(snakefile, cores = 1, config=snakemake_config)
 
         for key, value in species_info.items():
-            cf.add_species_info(key, value['genome'], value['annotation'])
-    # save
-    cf.dump()
+            cf.add_variable('species', key, genome=value['genome'],
+                    annotation=value['annotation'])
 
     # copy visium_puck_barcode_file
     dest_visium_path = 'puck_data/visium_barcode_positions.csv'
@@ -78,13 +77,16 @@ def spacemake_init(args):
     copyfile(os.path.join(os.path.dirname(__file__), 'data/visium_barcode_positions.csv'),
         dest_visium_path)
 
+    # save
+    cf.dump()
+
 
 def spacemake_run(args):
     print(args)
     if not os.path.isfile(config_path):
         msg = "spacemake has not been initalised yet.\n"
         msg += "please run `spacemake init` to start a new project"
-        return 0
+        return 2
 
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), 'snakemake/main.smk')
@@ -147,8 +149,6 @@ parsers['run'].set_defaults(func=spacemake_run)
 ## spacemake_config args
 if os.path.isfile(config_path):
     cf = ConfigFile(config_path)
-    # ensures backward compatibility
-    cf.correct()
     # save config file
     cf.dump()
     parsers['config'] = cf.get_subparsers(subparsers)
