@@ -534,7 +534,7 @@ rule create_mesh_spatial_dge:
         adata = sc.read(input[0])
         adata = create_meshed_adata(adata,
             width_um = float(params['puck_data']['width_um']),
-            bead_diameter_um = float(params['puck_data']['bead_diameter_um']),
+            bead_diameter_um = float(params['puck_data']['spot_diameter_um']),
             spot_diameter_um = float(wildcards.spot_diameter_um),
             spot_distance_um = float(wildcards.spot_distance_um))
         adata.write(output[0])
