@@ -33,6 +33,19 @@ class UnrecognisedConfigVariable(SpacemakeError):
 
         return msg
 
+class EmptyConfigVariableError(SpacemakeError):
+    def __init__(self, variable_name):
+        self.variable_name = variable_name
+
+    def __str__(self):
+        msg = super().__str__()
+        msg += f'cannot set {self.variable_name} to emtpy list, or None\n'
+        msg += 'this probably happened as you tried to remove a'
+        msg += f' {self.variable_name}, and as a result the sample would not have'
+        msg += f' any {self.variable_name} available'
+
+        return msg
+
 class ConfigVariableNotFoundError(ConfigVariableError):
     def __str__(self):
         msg = super().__str__()

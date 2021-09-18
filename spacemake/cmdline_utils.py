@@ -78,16 +78,22 @@ class ConfigFile:
             # correct variables to ensure backward compatibility
             self.correct() 
             
-            for main_variable in self.main_variables_pl2sg.keys():
+            # check which variables do not exist, if they dont, 
+            # copy them from initial config
+            for main_variable in self.main_variables_pl2sg:
                 # update new main_variables
                 if main_variable not in self.variables:
                     self.variables[main_variable] = initial_config.variables[main_variable]
 
-            vars_with_default = ['run_modes', 'pucks']
+            # deduce variables which have 'default' value. this is to ensure spacemake
+            # always runs w/o errors downstream: ie when barcode flavor, run_mode or puck
+            # is set to default
+            vars_with_default = [key for key, value in initial_config.variables.items()
+                if 'default' in value]
 
             for var_with_default in vars_with_default:
                 default_val = initial_config.variables[var_with_default]['default']
-                if 'default' not in self.variables[var_with_default].keys():
+                if 'default' not in self.variables[var_with_default]:
                     self.variables[var_with_default]['default'] = default_val
                 else:
                     # update default run mode with missing values
@@ -111,7 +117,7 @@ class ConfigFile:
 
     def correct(self):
         # ensures backward compatibility
-        if 'pucks' not in self.variables.keys() and 'pucks' in self.variables['puck_data']:
+        if 'pucks' not in self.variables and 'pucks' in self.variables['puck_data']:
             self.variables['pucks'] = self.variables['puck_data']['pucks']
             del self.variables['puck_data']['pucks']
 
@@ -151,9 +157,6 @@ class ConfigFile:
         if 'species' not in self.variables:
             self.variables['species'] = {}
 
-        self.dump()
-
-
     def dump(self):
         with open(self.file_path, 'w') as fo:
             fo.write(yaml.dump(self.variables))
@@ -175,26 +178,28 @@ class ConfigFile:
 
         print(msg)
 
-    def variable_exists(self, variable, name):
-        return name in self.variables[variable].keys()
+    def variable_exists(self, variable_name, variable_key):
+        return variable_key in self.variables[variable_name]
 
-    def assert_variable(self, variable, name):
-        if not self.variable_exists(variable, name):
-            raise ConfigVariableNotFoundError(variable, name)
+    def assert_variable(self, variable_name, variable_key):
+        self.assert_main_variable(variable_name)
+        if not isinstance(variable_key, list):
+            variable_key = [variable_key]
 
-    def delete_variable(self, variable, name):
-        if not self.variable_exists(variable, name):
-            if variable in ['run_modes', 'pucks', 'barcode_flavors']:
-                # drop the last s
-                variable = variable[:-1]
+        for key in variable_key:
+            if not self.variable_exists(variable_name, key):
+                variable_name_sg = self.main_variables_pl2sg[variable_name]
+                raise ConfigVariableNotFoundError(variable_name_sg,
+                        key)
 
-            raise ConfigVariableNotFoundError(variable, name)
-        else:
-            variable_data = self.variables[variable][name]
+    def delete_variable(self, variable_name, variable_key):
+        self.assert_variable(variable_name, variable_key)
 
-            del self.variables[variable][name]
+        variable_data = self.variables[variable_name][variable_key]
 
-            return variable_data
+        del self.variables[variable_name][variable_key]
+
+        return variable_data
 
     def __process_run_mode_args(self, **kwargs):
         # typeset boolean values of run_mode
@@ -1039,75 +1044,11 @@ class ProjectDF:
 
         return parser
 
-    def __set_species(self, species, project_id_list, sample_id_list):
+    def get_ix_from_project_sample_list(self,
+        project_id_list = [], sample_id_list = []):
         # raise error if both lists are empty
         if project_id_list == [] and sample_id_list == []:
             raise NoProjectSampleProvidedError()
-
-        self.__assert_projects_samples_exist(project_id_list, sample_id_list)
-
-        ix = self.df.query(
-            'project_id in @projects or sample_id in @samples').index
-
-        if self.config.variable_exists('species', species):
-            self.df.loc[ix, 'species'] = species
-
-            return ix.to_list()
-        else:
-            raise ConfigVariableNotFoundError('species', species)
-
-    def set_species_cmdline(self, args):
-        projects = args['project_id_list']
-        samples = args['sample_id_list']
-        species = args['species_name']
-
-        msg = ''
-
-        try:
-            set_indices = self.__set_species(species, projects, samples)
-
-            msg += f'Setting species: {species} for the'
-            msg += f' following (project_id, sample_id) samples:\n'
-            msg += f'{set_indices}\n'
-            msg += LINE_SEPARATOR
-            msg += 'SUCCESS: species set successfully.\n'
-
-            self.dump()
-        except (NoProjectSampleProvidedError, ConfigVariableNotFoundError,
-                ProjectSampleNotFoundError) as e:
-            msg += str(e)
-        finally:
-            print(msg)
-
-
-    def __set_variable(self, ix, variable_name, variable_value, keep_old=False):
-        variable_name_pl = self.config.main_variables_sg2pl[variable_name]
-        self.config.assert_main_variable(variable_name_pl)
-        self.config.assert_variable(variable_name_pl, variable_value)
-        
-        # add to current variable
-        i_variable = self.df.at[ix, 'run_mode']
-        i_run_mode.append(run_mode)
-        self.df.at[ix, 'run_mode'] = list(set(i_run_mode))
-
-    def __remove_variable(self, ix, variable_name, variable_value):
-        variable_name_pl = self.config.main_variables_sg2pl[variable_name]
-        self.config.assert_main_variable(variable_name_pl)
-        self.config.assert_variable(variable_name_pl, variable_value)
-
-        new_variable = [rm for rm in self.df.at[ix, 'run_mode'] if rm != run_mode]
-        self.df.at[ix, 'run_mode'] = i_run_mode
-
-    def __set_remove_variable(self, variable_name, variable_value,
-            action, project_id_list = [], sample_id_list = [], keep_old = False):
-        # raise error if both lists are empty
-        if project_id_list == [] and sample_id_list == []:
-            raise NoProjectSampleProvidedError()
-
-        self.__assert_projects_samples_exist(projects, samples)
-
-        variable_name_pl = self.config.main_variables_sg2pl[variable_name]
-        self.config.assert_main_variable(variable_name_pl)
 
         # of only one provided use that, if both use intersection
         if project_id_list == []:
@@ -1115,31 +1056,86 @@ class ProjectDF:
                 'sample_id in @sample_id_list').index
         elif sample_id_list == []:
             ix = self.df.query(
-                'sample_id in @project_id_list').index
+                'project_id in @project_id_list').index
         else:
             ix = self.df.query(
                 'project_id in @project_id_list and sample_id in @sample_id_list').index
 
-        if isinstance(variable_value, list):
-            for var in variable_value:
+        return ix
+
+    def __set_variable(self, ix, variable_name, variable_key, keep_old=False):
+        variable_name_pl = self.config.main_variables_sg2pl[variable_name]
+        self.config.assert_main_variable(variable_name_pl)
+        self.config.assert_variable(variable_name_pl, variable_key)
+        
+        # get current value
+        i_variable = self.df.at[ix, variable_name]
+
+        # if list, we either append or not
+        if isinstance(i_variable, list):
+            if keep_old:
+                # keep the old list as well
+                i_variable = list(set(i_variable + variable_key))
+            else:
+                i_variable = list(set(variable_key))
+
+        # if we do not keep the old, simply set
+        else:
+            i_variable = variable_key
+
+        if i_variable == [] or i_variable is None:
+            raise EmptyConfigVariableError(variable_name)
+
+        self.df.at[ix, variable_name] = i_variable
+
+
+    def __remove_variable(self, ix, variable_name, variable_key):
+        variable_name_pl = self.config.main_variables_sg2pl[variable_name]
+        self.config.assert_main_variable(variable_name_pl)
+        self.config.assert_variable(variable_name_pl, variable_key)
+
+        if not isinstance(variable_key, list):
+            raise ValueError('variable_key has to be a list')
+
+        i_variable = self.df.at[ix, variable_name]
+
+        i_variable = [val for val in i_variable if val not in variable_key]
+        if i_variable == [] or i_variable is None:
+            raise EmptyConfigVariableError(variable_name)
+
+        self.df.at[ix, variable_name] = i_variable
+
+    def __set_remove_variable(self, variable_name, variable_key,
+            action, project_id_list = [], sample_id_list = [], keep_old = False):
+        self.__assert_projects_samples_exist(project_id_list, sample_id_list)
+
+        variable_name_pl = self.config.main_variables_sg2pl[variable_name]
+        self.config.assert_main_variable(variable_name_pl)
+
+        ix = self.get_ix_from_project_sample_list(
+            project_id_list = project_id_list,
+            sample_id_list = sample_id_list)
+
+        if isinstance(variable_key, list):
+            for var in variable_key:
                 self.config.assert_variable(variable_name_pl, var)
         else:
-            self.config.assert_variable(variable_name_pl, variable_value)
+            self.config.assert_variable(variable_name_pl, variable_key)
         
         for i, row in self.df.loc[ix, :].iterrows():
             # add/remove variable. if it already exists dont do anything
             if action == 'set':
-                self.__set_variable(i, variable_name, variable_value, keep_old)
+                self.__set_variable(i, variable_name, variable_key, keep_old)
             elif action == 'remove':
-                self.__remove_run_mode(i, run_mode)
+                self.__remove_variable(i, variable_name, variable_key)
 
         return ix.to_list()
 
-    def set_remove_run_mode_cmdline(self, args):
-        projects = args['project_id_list']
-        samples = args['sample_id_list']
-        run_modes = args['run_mode']
+    def set_remove_variable_cmdline(self, args):
+        variable_name = args['variable']
         action = args['action']
+        variable_key = args[variable_name]
+
 
         if action == 'set':
             succ_msg = 'set'
@@ -1151,19 +1147,53 @@ class ProjectDF:
         msg =''
 
         try:
-            set_indices = self.__set_remove_run_mode(run_modes, action, projects, samples)
-             
-            msg += f'{action_msg} {run_modes} for the following (project_id, sample_id)'
+            set_indices = self.__set_remove_variable(
+                variable_name = variable_name,
+                variable_key = variable_key,
+                action = action,
+                project_id_list = args['project_id_list'],
+                sample_id_list = args['sample_id_list'],
+                keep_old = args.get('keep_old', False))
+
+            msg += f'{action_msg} {variable_name}={variable_key} for '
+            msg += f'the following (project_id, sample_id)'
             msg += f' samples:\n{set_indices}\n'
             msg += LINE_SEPARATOR
-            msg += f'SUCCESS: run mode: {run_modes} {succ_msg} succesfully.\n'
+            msg += f'SUCCESS: {variable_name}={variable_key} {succ_msg} succesfully.\n'
 
             self.dump()
         except SpacemakeError as e:
-
             msg += str(e)
         finally:
             print(msg)
+
+    def __set_remove_variable_subparsers(self, parent_parser, 
+        variable_name, allow_multiple=False):
+        if allow_multiple:
+            nargs = '+'
+        else:
+            nargs=None
+
+        def get_action_parser(action):
+            action_parser = parent_parser.add_parser(f'{action}_{variable_name}',
+                parents=[self.__get_project_sample_lists_parser()],
+                description = f'{action} {variable_name}',
+                help = f'{action} {variable_name}')
+            action_parser.add_argument(f'--{variable_name}',
+                type = str, required=True,
+                nargs = nargs)
+            action_parser.set_defaults(
+                func=self.set_remove_variable_cmdline, variable=variable_name,
+                action = action)
+
+            return action_parser
+
+        set_parser = get_action_parser('set')
+
+        if allow_multiple:
+            set_parser.add_argument('--keep_old', action='store_true')
+
+            remove_parser = get_action_parser('remove')
 
     def list_projects_cmdline(self, args):
         projects = args['project_id_list']
@@ -1199,50 +1229,6 @@ class ProjectDF:
             if sample not in self.df.index.get_level_values('sample_id'):
                 raise ProjectSampleNotFoundError('sample_id', sample)
         
-
-    def __set_barcode_flavor(self, barcode_flavor,
-            project_id_list = [], sample_id_list = []):
-        # raise error if both lists are empty
-        if project_id_list == [] and sample_id_list == []:
-            raise NoProjectSampleProvidedError()
-
-        self.__assert_projects_samples_exist(project_id_list, sample_id_list)
-
-        if self.config.variable_exists('barcode_flavors', barcode_flavor):
-            ix = self.df.query(
-                'project_id in @project_id_list or sample_id in @sample_id_list').index
-
-            if ix is None:
-                raise NoProjectSampleProvidedError()
-
-            self.df.loc[ix, 'barcode_flavor'] = barcode_flavor
-
-            return ix.to_list()
-        else:
-            raise ConfigVariableNotFoundError('barcode_flavor', barcode_flavor)
-
-    def set_barcode_flavor_cmdline(self, args):
-        barcode_flavor = args['barcode_flavor']
-        
-        msg = ''
-
-        try:
-            set_indices = self.__set_barcode_flavor(**args)
-
-            msg += f'Setting barcode flavor: {barcode_flavor} for the'
-            msg += f' following (project_id, sample_id) samples:\n'
-            msg += f'{set_indices}\n'
-            msg += LINE_SEPARATOR
-            msg += 'SUCCESS: barcode_flavor set successfully.\n'
-            
-            self.dump()
-
-        except (ConfigVariableNotFoundError, NoProjectSampleProvidedError,
-            ProjectSampleNotFoundError) as e:
-            msg += str(e)
-        finally:
-            print(msg)
-
     def merge_samples(self,
         merged_project_id,
         merged_sample_id,
@@ -1250,21 +1236,12 @@ class ProjectDF:
         sample_id_list = [],
         **kwargs
     ):
-        if project_id_list == [] and sample_id_list == []:
-            raise NoProjectSampleProvidedError()
-
         # check if projects and samples with these IDs exist
         self.__assert_projects_samples_exist(project_id_list, sample_id_list)
 
-        if project_id_list == []:
-            ix = self.df.query(
-                'sample_id in @sample_id_list').index
-        elif sample_id_list == []:
-            ix = self.df.query(
-                'sample_id in @project_id_list').index
-        else:
-            ix = self.df.query(
-                'project_id in @project_id_list and sample_id in @sample_id_list').index
+        ix = self.get_ix_from_project_sample_list(
+            project_id_list = project_id_list,
+            sample_id_list = sample_id_list)
 
         consistent_variables = ['species', 'barcode_flavor', 'puck']
 
@@ -1447,5 +1424,17 @@ class ProjectDF:
             nargs='*')
         list_projects.set_defaults(func=self.list_projects_cmdline,
             always_show=always_show)
+
+        self.__set_remove_variable_subparsers(projects_subparser, 
+            'species', allow_multiple=False)
+
+        self.__set_remove_variable_subparsers(projects_subparser, 
+            'run_mode', allow_multiple=True)
+        
+        self.__set_remove_variable_subparsers(projects_subparser, 
+            'puck', allow_multiple=False)
+        
+        self.__set_remove_variable_subparsers(projects_subparser, 
+            'barcode_flavor', allow_multiple=False)
         
         return parser

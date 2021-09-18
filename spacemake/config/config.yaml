@@ -51,7 +51,7 @@ adapters:
     optical_primer: 'GAATCACGATACGTACACCA'
 
 barcode_flavors:
-    dropseq:
+    default:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
         bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
