@@ -23,8 +23,8 @@ adata.raw = adata
 # identify highly variable genes if we have any observations
 nrow, ncol = adata.shape
 
-# require at least 1000 genes expressed in the sample
-if nrow > 1 and ncol >= 1000:
+# require at least 1000 genes expressed in the sample and at least 100 cells
+if nrow > 100 and ncol >= 1000:
     print('starting analysis')
     try:
         sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000)

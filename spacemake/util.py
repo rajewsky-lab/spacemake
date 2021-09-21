@@ -96,37 +96,63 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
 
         barcodes = first_line[1:]
         ncol = len(barcodes)
+
+        # create an intermediate matrix, which will contain 1000 rows
+        # and cell_number columns. we will parse the dge file and fill
+        # this matrix line by line. Like this we create gene_number/1000 number
+        # of CSR (compressed sparse row) matrices which we join at the end
         M = np.zeros((1000, ncol))
 
+        # read DGE line by line
+        # first row: contains CELL BARCODEs
+        # each next row contains one gene name, and the counts of that gene
         for line in dge:
             vals = line.strip().split('\t')
             # first element contains the gene name
+            # append gene name to gene_names
             gene_names.append(vals[0])
             vals = vals[1:]
+
+            # store counts as np.array
             vals = np.array(vals, dtype=np.int64)
 
+            # update the 1000xcell_number matrix 
             M[ix] = vals
 
             if ix % 1000 == 999:
+                # if we reached the end of M, make it sparse and append to other
+                # already read matrices
                 mix = mix + 1
                 matrices.append(csr_matrix(M))
                 ix = 0
+
+                # reset M
                 M = np.zeros((1000, ncol))
             else:
                 ix = ix + 1
 
-        # get the leftovers
+        # get the leftovers: these are the overhang lines, when gene_number is
+        # not divisible by 1000
         M = M[:ix]
         matrices.append(csr_matrix(M))
 
         # sparse expression matrix
         X = vstack(matrices, format='csr')
         
-        adata = anndata.AnnData(X.T, obs = pd.DataFrame(index=barcodes), var = pd.DataFrame(index=gene_names))
+        # create anndata object, but we get the transpose of X, so matrix will
+        # be in CSC format
+        adata = anndata.AnnData(X.T,
+                obs = pd.DataFrame(index=barcodes),
+                var = pd.DataFrame(index=gene_names))
 
+        # name the index
         adata.obs.index.name = 'cell_bc'
 
+        # attach metrics such as: total_counts, pct_mt_counts, etc
+        # also attach n_genes, and calculate pcr
         adata = calculate_adata_metrics(adata, dge_summary_path)
+
+        # calculate per shannon_entropy and string_compression per bead
         adata = calculate_shannon_entropy_scompression(adata)
 
         return adata
@@ -261,8 +287,7 @@ def create_meshed_adata(adata,
     import anndata
 
     from sklearn.metrics.pairwise import euclidean_distances
-    from scipy.sparse import csr_matrix
-    from scipy.sparse import vstack
+    from scipy.sparse import csr_matrix, csc_matrix, vstack
 
     coords = adata.obsm['spatial']
 
@@ -344,7 +369,7 @@ def create_meshed_adata(adata,
 
     joined_coordinates = mesh_px[np.unique(new_ilocs)]
 
-    adata_out = anndata.AnnData(joined_C_sumed,
+    adata_out = anndata.AnnData(csc_matrix(joined_C_sumed), 
         obs = pd.DataFrame({'x_pos': joined_coordinates[:, 0],
                             'y_pos': joined_coordinates[:, 1]}),
         var = adata.var)

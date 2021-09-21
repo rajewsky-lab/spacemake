@@ -39,10 +39,13 @@ class EmptyConfigVariableError(SpacemakeError):
 
     def __str__(self):
         msg = super().__str__()
-        msg += f'cannot set {self.variable_name} to emtpy list, or None\n'
-        msg += 'this probably happened as you tried to remove a'
-        msg += f' {self.variable_name}, and as a result the sample would not have'
-        msg += f' any {self.variable_name} available'
+        msg += f'cannot remove, or set {self.variable_name} to emtpy list, or None\n'
+        msg += 'this ERROR could happen in two cases: \n'
+        msg += f'1) you tried to remove a {self.variable_name}, '
+        msg += f'and as a result the sample would not have'
+        msg += f' any {self.variable_name} available.\n'
+        msg += f'2) you tried to remove the `default` value of'
+        msg += f' {self.variable_name} from the configuration.\n'
 
         return msg
 

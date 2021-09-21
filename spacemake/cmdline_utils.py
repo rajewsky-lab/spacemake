@@ -18,7 +18,7 @@ def assert_file(file_path, default_value='none', extension='all'):
     if file_path == default_value:
         # file doesn't exist but has the default value,
         # so we do not need to assert anything
-        return 0
+        return False
 
     # check if file exists, raise error if not
     if not os.path.isfile(file_path):
@@ -29,7 +29,8 @@ def assert_file(file_path, default_value='none', extension='all'):
     if not file_path.endswith(extension) and extension != 'all':
         raise FileWrongExtensionError(file_path, extension)
 
-    return 0
+    # return true if file exists and every test was good
+    return True
 
 def str2bool(var):
     if isinstance(var, bool):
@@ -53,6 +54,65 @@ def set_dict_variable(dictionary, path, new_val):
         return dictionary
     else:
         raise ValueError(f'path cant be an empty list')
+
+class ConfigMainVariable:
+    def __init__(self, name, **kwargs):
+        self.name = name
+        self.variables = {}
+
+        # loop over kwargs
+        for variable_key, variable in kwargs.items():
+            if variable_key not in self.variable_types:
+                raise UnrecognisedConfigVariable(f'{variable_key}',
+                    list(self.variable_types.keys()))
+            elif self.variable_types[variable_key] == 'int_list':
+                self.variables[variable_key] = [
+                    int(x) for x in kwargs[variable_key]
+                ]
+            else:
+                new_type = self.variable_types[variable_key]
+                self.variables[variable_key] = new_type(kwargs[variable_key])
+
+    def __str__(self):
+        class_name = self.__class__.__name__
+        return f'{class_name}: {self.name}. variables: {self.variables}'
+
+    def update(self, other):
+        self.variables.update(other.variables)
+
+
+class RunMode(ConfigMainVariable):
+    variable_types = {
+        'parent_run_mode': str,
+        'n_beads': int,
+        'umi_cutoff': 'int_list',
+        'clean_dge': bool,
+        'plot_bead_size': float,
+        'detect_tissue': bool,
+        'polyA_adapter_trimming': bool,
+        'count_mm_reads': bool,
+        'count_intronic_reads': bool,
+        'mesh_data': bool,
+        'mesh_spot_diameter_um': float,
+        'mesh_spot_distance_um': float
+    }
+
+    def has_parent(self):
+        return 'parent_run_mode' in self.variables
+
+    @property
+    def parent_name(self):
+        if self.has_parent():
+            return self.variables['parent_run_mode']
+        else:
+            return None
+
+class Puck(ConfigMainVariable):
+    variable_types = {
+        'barcodes': str,
+        'spot_diameter_um': float,
+        'width_um': float
+    }
 
 class ConfigFile:
     initial_config_path = os.path.join(os.path.dirname(__file__),
@@ -88,10 +148,10 @@ class ConfigFile:
             # deduce variables which have 'default' value. this is to ensure spacemake
             # always runs w/o errors downstream: ie when barcode flavor, run_mode or puck
             # is set to default
-            vars_with_default = [key for key, value in initial_config.variables.items()
+            self.vars_with_default = [key for key, value in initial_config.variables.items()
                 if 'default' in value]
 
-            for var_with_default in vars_with_default:
+            for var_with_default in self.vars_with_default:
                 default_val = initial_config.variables[var_with_default]['default']
                 if 'default' not in self.variables[var_with_default]:
                     self.variables[var_with_default]['default'] = default_val
@@ -194,6 +254,9 @@ class ConfigFile:
 
     def delete_variable(self, variable_name, variable_key):
         self.assert_variable(variable_name, variable_key)
+
+        if variable_name in self.vars_with_default and variable_key == 'default':
+            raise EmptyConfigVariableError(variable_name)
 
         variable_data = self.variables[variable_name][variable_key]
 
@@ -313,7 +376,24 @@ class ConfigFile:
             raise ConfigVariableNotFoundError(variable, name)
         else:
             return self.variables[variable][name]
-        
+
+    def get_run_mode(self, name):
+        # first load the default values
+        rm = RunMode('default',
+            **self.get_variable('run_modes', 'default'))
+
+        # update the default first
+        rm.update(RunMode(name,
+            **self.get_variable('run_modes', name)))
+
+        if rm.has_parent():
+            rm.update(self.get_run_mode(rm.parent_name))
+        else:
+            return rm
+
+    def get_puck(self, name):
+        return Puck(name, **self.get_variable('pucks', name))
+
     def add_update_delete_variable_cmdline(self, args):
         # set the name and delete from dictionary
         name = args['name']
@@ -585,7 +665,7 @@ class ProjectDF:
         "barcode_flavor": "default",
         "is_merged":False,
         "merged_from":[],
-        "puck":"default"}
+        "puck":"none"}
     
     def __init__(
         self,
@@ -684,20 +764,28 @@ class ProjectDF:
         puck_has_barcodes = False
 
         if puck != self.project_df_default_values['puck']:
-            if 'barcodes' in self.config.get_puck(puck):
+            if 'barcodes' in self.config.get_variable('pucks', puck):
                 puck_type_has_barcodes = True
         
-        if puck_barcode_file != 'none' or puck_type_has_barcodes:
+        if puck_barcode_file != 'none' or puck_has_barcodes:
             return True
         else:
             return False
 
-    def get_puck(self, project_id, sample_id):
-        puck = self.get_metadata('puck',
+    def get_puck_variables(self, project_id, sample_id, return_none=False):
+        puck_name = self.get_metadata('puck',
             project_id = project_id,
             sample_id = sample_id)
 
-        return self.config.get_variable('pucks', name=puck)
+        try:
+            puck = self.config.get_puck(puck_name)
+            print(puck)
+            return puck.variables
+        except ConfigVariableNotFoundError as e:
+            if not return_none:
+                raise
+            else:
+                return None
 
     def get_metadata(self, field, sample_id=None, project_id=None, **kwargs):
         df = self.df
@@ -793,7 +881,7 @@ class ProjectDF:
             default_value=self.project_df_default_values['R2'],
             extension = '.fastq.gz')
 
-        assert_file(
+        is_spatial = assert_file(
             kwargs.get('puck_barcode_file',
                         self.project_df_default_values['puck_barcode_file']),
             default_value=self.project_df_default_values['puck_barcode_file'])
@@ -813,6 +901,10 @@ class ProjectDF:
                 if not self.config.variable_exists(cv_plural, kwargs[cv_singular]):
                     raise ConfigVariableNotFoundError(cv_singular,
                             kwargs[cv_singular])
+
+        # if sample is spatial, and puck not provided, assign 'default'
+        if is_spatial and 'puck' not in kwargs:
+            kwargs['puck'] = 'default'
 
         if self.sample_exists(project_id, sample_id):
             new_project = self.df.loc[ix].copy()
@@ -857,7 +949,6 @@ class ProjectDF:
         config = yaml.load(open(projects_yaml_file),
                 Loader=yaml.FullLoader)
         demux_projects = config.get('projects', None)
-        barcode_flavors = config.get('barcode_flavor', None)
 
         if demux_projects is not None:
             # if we have projects in the config file
@@ -868,14 +959,6 @@ class ProjectDF:
         # add additional samples from config.yaml, which have already been demultiplexed.
         for project in config['additional_projects']:
             self.__add_update_sample(**project)
-
-        for barcode_flavor, to_set in barcode_flavors.items():
-            projects = to_set.get('projects', [])
-            samples = to_set.get('samples', [])
-
-            print(projects, samples)
-            self.set_barcode_flavor(barcode_flavor, projects, samples)
-
 
     def __get_project_sample_parser(self):
         parser = argparse.ArgumentParser(

@@ -229,7 +229,7 @@ def get_output_files(pattern, projects = [], samples = [],
 
     for index, row in df.iterrows():
         for run_mode in row['run_mode']:
-            run_mode_variables = get_run_mode_variables(run_mode)
+            run_mode_variables = project_df.config.get_run_mode(run_mode).variables
             out_files = out_files + expand(pattern,
                 project = index[0],
                 sample = index[1],
@@ -287,8 +287,8 @@ rule all:
     input:
         #get_final_output_files(fastqc_pattern, skip_merged = True, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
-        get_output_files(automated_report),
-        get_output_files(qc_sheet)
+        get_output_files(automated_report)
+        #get_output_files(qc_sheet)
 
 #####################
 # DOWNSAMPLE MODULE # 
@@ -527,14 +527,14 @@ rule create_mesh_spatial_dge:
         dge_spatial_mesh,
         dge_spatial_mesh_obs
     params:
-        puck_data = lambda wildcards: project_df.get_puck(
+        puck_data = lambda wildcards: project_df.get_puck_variables(
             project_id = wildcards.project,
             sample_id = wildcards.sample)
     run:
         adata = sc.read(input[0])
         adata = create_meshed_adata(adata,
-            width_um = float(params['puck_data']['width_um']),
-            bead_diameter_um = float(params['puck_data']['spot_diameter_um']),
+            width_um = params['puck_data']['width_um'],
+            bead_diameter_um = params['puck_data']['spot_diameter_um'],
             spot_diameter_um = float(wildcards.spot_diameter_um),
             spot_distance_um = float(wildcards.spot_distance_um))
         adata.write(output[0])
@@ -565,7 +565,8 @@ rule run_automated_analysis:
     output:
         automated_analysis_result_file
     params:
-        run_mode_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode)
+        run_mode_variables = lambda wildcards:
+            project_df.config.get_run_mode(wildcards.run_mode).variables
     script:
         'scripts/automated_analysis.py'
 
@@ -584,7 +585,11 @@ rule create_automated_report:
     output:
         automated_report
     params:
-        run_mode_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode),
+        run_mode_variables = lambda wildcards:
+            project_df.config.get_run_mode(wildcards.run_mode).variables,
+        puck_variables = lambda wildcards:
+            project_df.get_puck_variables(wildcards.project, wildcards.sample,
+                return_none=True),
         r_shared_scripts= repo_dir + '/scripts/shared_functions.R'
     script:
         'scripts/automated_analysis_create_report.Rmd'

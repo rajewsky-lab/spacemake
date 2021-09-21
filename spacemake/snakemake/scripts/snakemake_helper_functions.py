@@ -1,4 +1,4 @@
-from spacemake.errors import BarcodeFlavorNotFoundError, SpeciesNotFoundError
+from spacemake.errors import *
 
 # barcode flavor parsing and query functions
 class dotdict(dict):
@@ -25,7 +25,7 @@ def parse_barcode_flavors(
     parses and gathers the settings for barcode flavors
     """
     preprocess_settings = {}
-    for flavor, flavor_settings in config["knowledge"]['barcode_flavor'].items():
+    for flavor, flavor_settings in config['barcode_flavors'].items():
         # for each flavor, also retrieve the configuration
         # first make a copy of the default values
         d = dict(bc_default_settings)
@@ -52,7 +52,7 @@ def get_bc_preprocess_settings(wildcards):
     flavor = project_df.get_metadata('barcode_flavor', project_id = wildcards.project,
             sample_id = wildcards.sample)
     if flavor not in bc_flavor_data.preprocess_settings:
-        raise BarcodeFlavorNotFoundError(flavor)
+        raise Exception(flavor)
 
     settings = bc_flavor_data.preprocess_settings[flavor]
 
@@ -105,16 +105,9 @@ def get_species_genome_annotation(wildcards):
     else:
         species = wildcards.species
 
-    if 'annotations' not in config['knowledge'].keys() or \
-            'genomes' not in config['knowledge'].keys() or \
-            species not in config['knowledge']['annotations'].keys() or \
-            species not in config['knowledge']['genomes'].keys():
-        raise SpeciesNotFoundError(species)
-
-    files = {
-        "annotation": config["knowledge"]["annotations"][species],
-        "genome": config["knowledge"]["genomes"][species]
-    }
+     
+    files = project_df.config.get_variable('species', name=species)
+    
     return files
 
 def get_star_index(wildcards):
@@ -126,47 +119,21 @@ def get_star_index(wildcards):
     return {'index': expand(star_index, species = species)[0]}
 
 def get_rRNA_genome(wildcards):
-    return [config['knowledge']['rRNA_genomes'][wildcards.species]]
+    files = project_df.config.get_variable('species', name=species)
+
+    return [files['rRNA_genome']]
 
 def get_bt2_rRNA_index(wildcards):
     species = project_df.get_metadata(
         "species", project_id=wildcards.project, sample_id=wildcards.sample
     )
 
-    if 'rRNA_genomes' in config['knowledge']:
-        if species in config['knowledge']['rRNA_genomes']:
-            return {'index': expand(bt2_rRNA_index_dir, species = species)[0]}
+    files = project_df.config.get_variable('species', name=species)
+
+    if 'rRNA_genomes' in files:
+        return {'index': expand(bt2_rRNA_index_dir, species = species)[0]}
     
     return []
-
-def get_run_mode_variables(run_mode):
-    # return the run mode variables
-    # first set the default, for each
-    # then update each if there is no default
-    # load the default
-    run_mode_variables = dict(config['run_modes']['default'])
-
-    # first update the default with parent
-    if 'parent_run_mode' in config['run_modes'][run_mode].keys():
-        parent_run_mode = config['run_modes'][run_mode]['parent_run_mode']
-        run_mode_variables.update(config['run_modes'][parent_run_mode])
-
-    run_mode_variables.update(config['run_modes'][run_mode])
-
-    # set the right types
-    run_mode_variables['n_beads'] = int(run_mode_variables['n_beads'])
-    run_mode_variables['umi_cutoff'] = [int(x) for x  in run_mode_variables['umi_cutoff']]
-    run_mode_variables['clean_dge'] = bool(run_mode_variables['clean_dge'])
-    run_mode_variables['plot_bead_size'] = float(run_mode_variables['plot_bead_size'])
-    run_mode_variables['detect_tissue'] = bool(run_mode_variables['detect_tissue'])
-    run_mode_variables['polyA_adapter_trimming'] = bool(run_mode_variables['polyA_adapter_trimming'])
-    run_mode_variables['count_mm_reads'] = bool(run_mode_variables['count_mm_reads'])
-    run_mode_variables['count_intronic_reads'] = bool(run_mode_variables['count_intronic_reads'])
-    run_mode_variables['mesh_data'] = bool(run_mode_variables['mesh_data'])
-    run_mode_variables['mesh_spot_diameter'] = int(run_mode_variables['mesh_spot_diameter'])
-    run_mode_variables['mesh_spot_distance'] = int(run_mode_variables['mesh_spot_distance'])
-
-    return run_mode_variables
 
 def get_run_modes_from_sample(project_id, sample_id):
     run_mode_names = project_df.get_metadata('run_mode', project_id=project_id, sample_id=sample_id)
@@ -174,7 +141,8 @@ def get_run_modes_from_sample(project_id, sample_id):
     run_modes = {}
 
     for run_mode in run_mode_names:
-        run_modes[run_mode] = get_run_mode_variables(run_mode)
+        run_modes[run_mode] = project_df.config.get_run_mode(run_mode)\
+            .variables
 
     return run_modes
 
@@ -249,13 +217,6 @@ def get_ribo_depletion_log(wildcards):
     else:
         return [ribo_depletion_log]
 
-def get_bt2_index(wildcards):
-    species = project_df.get_metadata(
-        "species", project_id=wildcards.project, sample_id=wildcards.sample
-    )
-
-    return config["knowledge"]["indices"][species]["bt2"]
-
 def get_top_barcodes(wildcards):
     if wildcards.n_beads == 'spatial':
         return {"top_barcodes": spatial_barcodes}
@@ -269,7 +230,7 @@ def get_dge_from_run_mode(
         sample_id,
         run_mode
     ):
-    run_mode_variables = get_run_mode_variables(run_mode)
+    run_mode_variables = project_df.config.get_run_mode(run_mode).variables
     
     dge_type = '.exon'
     dge_cleaned = ''
@@ -312,8 +273,8 @@ def get_dge_from_run_mode(
             polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
             n_beads = run_mode_variables['n_beads'],
-            spot_diameter_um = run_mode_variables['mesh_spot_diameter'],
-            spot_distance_um = run_mode_variables['mesh_spot_distance'])
+            spot_diameter_um = run_mode_variables['mesh_spot_diameter_um'],
+            spot_distance_um = run_mode_variables['mesh_spot_distance_um'])
 
     dge_out_summary_file = expand(dge_out_summary_pattern,
             project = project_id,
@@ -322,8 +283,8 @@ def get_dge_from_run_mode(
             dge_cleaned = dge_cleaned,
             polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
-            spot_diameter_um = run_mode_variables['mesh_spot_diameter'],
-            spot_distance_um = run_mode_variables['mesh_spot_distance'],
+            spot_diameter_um = run_mode_variables['mesh_spot_diameter_um'],
+            spot_distance_um = run_mode_variables['mesh_spot_distance_um'],
             n_beads = run_mode_variables['n_beads'])
 
     return {'dge_summary': dge_out_summary_file,
@@ -378,7 +339,7 @@ def get_bam_tag_names(project_id, sample_id):
     barcode_flavor = project_df.get_metadata('barcode_flavor', project_id = project_id,
             sample_id = sample_id)
 
-    bam_tags = config["knowledge"]["barcode_flavor"][barcode_flavor]["bam_tags"]
+    bam_tags = config["barcode_flavors"][barcode_flavor]["bam_tags"]
 
     tag_names = {}
 
@@ -392,18 +353,18 @@ def get_bam_tag_names(project_id, sample_id):
 def get_puck_file(wildcards):
     if not project_df.is_spatial(project_id = wildcards.project,\
             sample_id = wildcards.sample):
-        raise Exception(f'Sample {wildcards.sample_id} is no spatial')
+        return []
 
     puck_barcode_file = project_df.get_metadata('puck_barcode_file',
             project_id = wildcards.project,
             sample_id = wildcards.sample)
 
-    puck_type = project_df.get_metadata('puck_type',
+    puck = project_df.get_metadata('puck',
         project_id = wildcards.project,
         sample_id = wildcards.sample)
 
     if puck_barcode_file == "none":
-        return {'barcode_file' :config['puck_data']['pucks'][puck_type]['barcodes']}
+        return {'barcode_file' :config['pucks'][puck]['barcodes']}
     else:
         return {"barcode_file": puck_barcode_file}
 

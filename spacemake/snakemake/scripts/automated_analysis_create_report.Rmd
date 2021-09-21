@@ -34,6 +34,7 @@ cpalette <- list('orange' = '#D55E00', 'blue' = '#0072B2', 'green' = '#009E73', 
 clrs = c('umis'=cpalette$light_orange, 'genes' = cpalette$light_blue,
          'reads'=cpalette$green, 'pcr'=cpalette$pink, 'pct_counts_mt'= 'black')
 
+write_rds(snakemake, '/scratch/home/tsztank/spacemake.rds')
 source(snakemake@params$r_shared_scripts)
 ```
 
@@ -145,11 +146,12 @@ if (barcode_file){
         obs_df %>%
             filter(res == 'leiden_1') %>%
             arrange(total_counts) %>%
-            mutate(total_counts = ifelse(total_counts > 1000, 1000, total_counts)) %>%
+            #mutate(total_counts = ifelse(total_counts > 1000, 1000, total_counts)) %>%
             ggplot(aes(x_pos, y_pos, color = total_counts)) +
-                geom_point(size = as.numeric(snakemake@params$downstream_variables$plot_bead_size))+
+                #geom_point(size = as.numeric(snakemake@params$downstream_variables$plot_bead_size))+
+                geom_point(size = 3) +
                 coord_fixed()+
-                scale_color_viridis_c(option =  "magma", limits = c(0, 1100),  breaks = c(100, 300, 500, 700, 900)) +
+                #scale_color_viridis_c(option =  "magma", limits = c(0, 1100),  breaks = c(100, 300, 500, 700, 900)) +
                 #scale_color_viridis_c(option =  "magma", limits = c(0, 70000),  breaks = c(10000, 20000, 30000, 40000, 50000, 60000)) +
                 guides(color = guide_colorbar(barheight = 15)) + 
                 labs(color='UMI count', y='', x='') + 
@@ -251,7 +253,8 @@ for (i in obs_df %$% res %>% unique){
 
     umap_plot <- dat %>%
         ggplot(aes(umap_0, umap_1, color = cluster)) +
-            geom_point(size=as.numeric(snakemake@params$downstream_variables$plot_bead_size, alpha=0.9)) +
+            #geom_point(size=as.numeric(snakemake@params$downstream_variables$plot_bead_size, alpha=0.9)) +
+            geom_point(size = 3) +
             guides(colour = guide_legend(override.aes = list(size=3)))+
             coord_fixed() +
             theme(axis.text = element_blank(),
@@ -268,7 +271,8 @@ for (i in obs_df %$% res %>% unique){
             filter(res == i) %>%
             dplyr::select(cell_bc, x_pos, y_pos, cluster) %>%
             ggplot(aes(x_pos, y_pos, color = cluster)) +
-                geom_point(size=as.numeric(snakemake@params$downstream_variables$plot_bead_size, alpha=0.9)) +
+                #geom_point(size=as.numeric(snakemake@params$downstream_variables$plot_bead_size, alpha=0.9)) +
+                geom_point(size = 3) +
                 guides(colour = guide_legend(override.aes = list(size=3)))+
                 labs(y = '', x='physical coordinates') +
                 coord_fixed()+
