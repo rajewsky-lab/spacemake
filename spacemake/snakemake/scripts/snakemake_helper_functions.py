@@ -55,6 +55,7 @@ def get_bc_preprocess_settings(wildcards):
         raise Exception(flavor)
 
     settings = bc_flavor_data.preprocess_settings[flavor]
+    print(settings)
 
     return settings
 

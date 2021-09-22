@@ -127,16 +127,17 @@ class SampleAlreadyExistsError(SpacemakeError):
 
         return msg
 
-class InconsistentVariablesDuringMerge(SpacemakeError):
-    def __init__(self, variable_name, ix):
-        self.variable_name = variable_name
+class InconsistentVariablesDuringMerge(ConfigVariableError):
+    def __init__(self, ix, **kwargs):
+        super().__init__(**kwargs)
         self.ix = ix
 
     def __str__(self):
         msg = super().__str__()
-        msg += f'the samples that you trying to merge have different '
-        msg += f'{self.variable_name}.\n'
-        msg += f'samples: {self.ix}.\n'
+        msg += f'\nthe samples that you trying to merge have different '
+        msg += f'{self.variable_name} values.\n\ninconsistent values:'
+        msg += f' {self.variable_value}\n'
+        msg += f'samples: {self.ix}.\n\n'
         msg += 'You can only merge samples which have the same '
         msg += f'{self.variable_name}, or if there is an overlap.\n'
 

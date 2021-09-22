@@ -15,9 +15,10 @@ import numpy as np
 import math
 import scanpy as sc
 
-from spacemake.util import dge_to_sparse_adata, attach_barcode_file,\
-    create_meshed_adata, parse_barcode_file
-from spacemake.cmdline_utils import ProjectDF, ConfigFile
+from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
+    parse_barcode_file
+from spacemake.spatial import create_meshed_adata
+from spacemake.cmdline import ProjectDF, ConfigFile
 
 ################
 # Shell prefix #
@@ -386,7 +387,7 @@ rule reverse_first_mate:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
     threads: 4
     shell:
-        "python {spacemake_dir}/preprocess.py "
+        "python {spacemake_dir}/preprocess/_cmdline.py "
         "--sample={wildcards.sample} "
         "--read1={input.R1} "
         "--read2={input.R2} "

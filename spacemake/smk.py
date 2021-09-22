@@ -6,7 +6,7 @@ import argparse
 import yaml
 
 from shutil import copyfile
-from spacemake.cmdline_utils import ProjectDF, ConfigFile
+from spacemake.cmdline import ProjectDF, ConfigFile
 
 config_path = 'config.yaml'
 project_df = 'project_df.csv'
