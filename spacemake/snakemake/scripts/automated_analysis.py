@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
-from spacemake.util import detect_tissue
+from spacemake.spatial import detect_tissue
 
 # expect fitlered .h5ad dge, with spatial coords attached, tissue detected
 adata = sc.read_h5ad(snakemake.input[0])

@@ -590,7 +590,9 @@ rule create_automated_report:
             project_df.config.get_run_mode(wildcards.run_mode).variables,
         puck_variables = lambda wildcards:
             project_df.get_puck_variables(wildcards.project, wildcards.sample,
-                return_none=True),
+                return_empty=True),
+        is_spatial = lambda wildcards:
+            project_df.is_spatial(wildcards.project, wildcards.sample),
         r_shared_scripts= repo_dir + '/scripts/shared_functions.R'
     script:
         'scripts/automated_analysis_create_report.Rmd'

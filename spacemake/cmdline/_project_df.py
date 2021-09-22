@@ -116,42 +116,30 @@ class ProjectDF:
 
         return out_dict
 
-    def is_spatial(self, sample_id, project_id):
+    def is_spatial(self, project_id ,sample_id):
         puck_barcode_file = self.get_metadata('puck_barcode_file',
-            sample_id = sample_id,
-            project_id = project_id)
-
-        puck = self.get_metadata('puck',
             project_id = project_id,
             sample_id = sample_id)
 
-        puck_has_barcodes = False
-
-        if puck != self.project_df_default_values['puck']:
-            if 'barcodes' in self.config.get_variable('pucks', puck):
-                puck_type_has_barcodes = True
-        
-        if puck_barcode_file != 'none' or puck_has_barcodes:
-            return True
-        else:
-            return False
-
-    def get_puck_variables(self, project_id, sample_id, return_none=False):
         puck_name = self.get_metadata('puck',
             project_id = project_id,
             sample_id = sample_id)
 
-        try:
-            puck = self.config.get_puck(puck_name)
-            print(puck)
-            return puck.variables
-        except ConfigVariableNotFoundError as e:
-            if not return_none:
-                raise
-            else:
-                return None
+        puck = self.config.get_puck(puck_name, return_empty=True)
+        
+        if puck_barcode_file != 'none' or puck.has_barcodes:
+            return True
+        else:
+            return False
 
-    def get_metadata(self, field, sample_id=None, project_id=None, **kwargs):
+    def get_puck_variables(self, project_id, sample_id, return_empty=False):
+        puck_name = self.get_metadata('puck',
+            project_id = project_id,
+            sample_id = sample_id)
+
+        return self.config.get_puck(puck_name, return_empty=return_empty).variables
+
+    def get_metadata(self, field, project_id=None, sample_id=None, **kwargs):
         df = self.df
         if sample_id is not None:
             df = df.query('sample_id == @sample_id')

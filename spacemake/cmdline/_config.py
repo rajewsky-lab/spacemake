@@ -61,9 +61,13 @@ class RunMode(ConfigMainVariable):
 class Puck(ConfigMainVariable):
     variable_types = {
         'barcodes': str,
-        'spot_diameter_um': float,
-        'width_um': float
+        'spot_diameter_um': int,
+        'width_um': int
     }
+
+    @property
+    def has_barcodes(self):
+        return 'barcodes' in self.variables
 
 class ConfigFile:
     initial_config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
@@ -342,8 +346,14 @@ class ConfigFile:
         else:
             return rm
 
-    def get_puck(self, name):
-        return Puck(name, **self.get_variable('pucks', name))
+    def get_puck(self, name, return_empty=False):
+        try:
+            return Puck(name, **self.get_variable('pucks', name))
+        except ConfigVariableNotFoundError as e:
+            if not return_empty:
+                raise
+            else:
+                return Puck(name)
 
     def add_update_delete_variable_cmdline(self, args):
         # set the name and delete from dictionary
