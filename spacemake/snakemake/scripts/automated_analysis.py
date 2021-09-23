@@ -57,21 +57,24 @@ if nrow > 100 and ncol >= 1000:
         sc.tl.umap(adata)   
     except TypeError:
         pass
-    
+
     # find out the clusters
     # restrict to max 20 clusters
-    resolution = [1]
+    resolution = [0.4, 0.6, 0.8, 1.0, 1.2]
 
     print('clustering')
     
     for res in resolution:
-        res_key = 'leiden_' + str(res)
-        
-        sc.tl.leiden(adata, resolution = res, key_added = res_key)
-        
-        # finding marker genes
-        print(f'ranking genes for resolution {res}')
-        sc.tl.rank_genes_groups(adata, res_key, method='t-test', key_added = 'rank_genes_groups_' + res_key, pts=True,
-            use_raw = False)
+        try:
+            res_key = 'leiden_' + str(res)
+            
+            sc.tl.leiden(adata, resolution = res, key_added = res_key)
+            
+            # finding marker genes
+            print(f'ranking genes for resolution {res}')
+            sc.tl.rank_genes_groups(adata, res_key, method='t-test', key_added = 'rank_genes_groups_' + res_key, pts=True,
+                use_raw = False)
+        except ZeroDivisionError as e:
+            pass
 
 adata.write(snakemake.output[0])

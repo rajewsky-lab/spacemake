@@ -24,7 +24,7 @@ adata_complete = any([key in adata.uns.keys() for key in uns_keys])
 if not adata_complete:
     pd.DataFrame().to_csv(snakemake.output['cluster_markers'])
 else:
-    resolution = [1]
+    resolution = [0.4, 0.6, 0.8, 1.0, 1.2]
     
     top_10_marker_dfs = []
     
