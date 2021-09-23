@@ -288,8 +288,8 @@ rule all:
     input:
         #get_final_output_files(fastqc_pattern, skip_merged = True, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
-        get_output_files(automated_report)
-        #get_output_files(qc_sheet)
+        get_output_files(automated_report),
+        get_output_files(qc_sheet)
 
 #####################
 # DOWNSAMPLE MODULE # 

@@ -193,11 +193,25 @@ def create_meshed_adata(adata,
     # rename index
     adata_out.obs.index.name = 'cell_bc'
 
-    # summarise and attach n_reads, calculate metrics (incl. pcr)
-    n_reads = adata.obs.n_reads.to_numpy()[original_ilocs]
-    joined_n_reads = np.array([sum(n_reads[ix_array[n]]) for n in range(len(ix_array))])
+    def summarise_adata_obs_column(adata, column, summary_fun=sum):
+        vals_to_join = adata.obs[column].to_numpy()[original_ilocs]
+        vals_joined = np.array(
+            [summary_fun(vals_to_join[ix_array[n].astype(int)])
+                for n in range(len(ix_array))])
+        return vals_joined
+    print(adata)
 
-    adata_out = calculate_adata_metrics(adata_out, n_reads = joined_n_reads)
+    # summarise and attach n_reads, calculate metrics (incl. pcr)
+    adata_out = calculate_adata_metrics(adata_out,
+        # provide the n_reads as a parameter
+        n_reads = summarise_adata_obs_column(adata, 'n_reads'))
+
     adata_out.obs['n_joined'] = [len(x) for x in ix_array]
+
+    from statistics import mean
+
+    for column in ['exact_entropy', 'theoretical_entropy', 'exact_compression',\
+        'theoretical_compression']:
+        adata_out.obs[column] = summarise_adata_obs_column(adata, column, mean)
 
     return adata_out
