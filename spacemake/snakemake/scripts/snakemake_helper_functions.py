@@ -378,3 +378,12 @@ def get_automated_analysis_dge_input(wildcards):
         project_id = wildcards.project,
         sample_id = wildcards.sample,
         run_mode = wildcards.run_mode)['dge']]
+
+def get_novosparc_if_spatial(wildcards):
+    if project_df.is_spatial(project_id = wildcards.project,\
+            sample_id = wildcards.sample):
+        return []
+    
+    else:
+        return {'novosparc_obs_df': novosparc_obs_df,
+                'novosparc_var_df': novosparc_var_df}

@@ -50,6 +50,7 @@ readStarLog <- function(log_file){
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
 #snakemake <- read_rds()
+#write_rds(snakemake, )
 ```
 
 ```{r read_sample_information_tables, echo = F}
@@ -209,7 +210,8 @@ Each of the QC plots we show on a per run mode basis, to see if there are any do
 dge_summary <- tibble(run_mode = run_mode_names,
                       obs_df = snakemake@input[paste0(run_mode, '.dge_summary')]) %>%
     unnest(obs_df) %>%
-    mutate(dat = map(obs_df, ~ read_csv(., col_types='c'))) %>%
+    mutate(dat = map(obs_df, ~ read_csv(.) %>%
+        mutate(cell_bc = as.character(cell_bc)))) %>%
     unnest(dat) %>%
     select(-obs_df) %>%
     rename(pcr = reads_per_counts,
@@ -400,7 +402,7 @@ plot_nucl_freq <- function(dge_s){
 }
 
 for (run_mode_in in unique(normal_run_mode_names)){
-    cat (paste0('\n\n ##### ', run_mode, '\n\n'))
+    cat (paste0('\n\n ##### ', run_mode_in, '\n\n'))
     dge_summary %>%
         filter(run_mode == run_mode_in) %>%
         plot_nucl_freq() %>%

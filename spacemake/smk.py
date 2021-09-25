@@ -6,7 +6,8 @@ import argparse
 import yaml
 
 from shutil import copyfile
-from spacemake.cmdline import ProjectDF, ConfigFile
+from spacemake.project_df import ProjectDF
+from spacemake.config import ConfigFile
 
 config_path = 'config.yaml'
 project_df = 'project_df.csv'
@@ -18,7 +19,7 @@ def spacemake_init(args):
         print(f"{msg}")
         return 0
     initial_config = os.path.join(os.path.dirname(__file__),
-            'config/config.yaml')
+            'data/config/config.yaml')
 
     # initialise config file
     cf = ConfigFile(initial_config)
@@ -29,7 +30,7 @@ def spacemake_init(args):
 
     if args['download_species']:
         species_data_config_file = os.path.join(os.path.dirname(__file__),
-                'config/species_data_url.yaml')
+                'data/config/species_data_url.yaml')
         species_data_config = yaml.load(open(species_data_config_file),
                         Loader=yaml.FullLoader)
         
@@ -82,7 +83,6 @@ def spacemake_init(args):
 
 
 def spacemake_run(args):
-    print(args)
     if not os.path.isfile(config_path):
         msg = "spacemake has not been initalised yet.\n"
         msg += "please run `spacemake init` to start a new project"
@@ -106,43 +106,40 @@ def spacemake_run(args):
 # -h (help) functionality if no parameters are provided,
 # rather than printing an error.
 
-parsers = {
-    'main': argparse.ArgumentParser(
+main_parser= argparse.ArgumentParser(
         allow_abbrev=False,
         description='spacemake: bioinformatic pipeline for processing and analysis of spatial-transcriptomics data')
-}
 
-subparsers = parsers['main'].add_subparsers(help='sub-command help', dest='main')
+subparsers = main_parser.add_subparsers(help='sub-command help', dest='subcommand')
 
 ##################
 # SPACEMAKE INIT #
 ##################
-parsers['init'] = subparsers.add_parser('init', help = 'initialise spacemake: create config files, download genomes and annotations')
-parsers['init'].add_argument('--root_dir', default='',
+parser_init = subparsers.add_parser('init', help = 'initialise spacemake: create config files, download genomes and annotations')
+parser_init.add_argument('--root_dir', default='',
     help = 'where to output the results of the spacemake run. defaults to .')
-parsers['init'].add_argument('--temp_dir', default='/tmp',
+parser_init.add_argument('--temp_dir', default='/tmp',
     help='temporary directory used when running spacemake. defaults to /tmp')
-parsers['init'].add_argument('--download_species', default=False,
+parser_init.add_argument('--download_species', default=False,
     help='if set, upon initialisation, spacemake will download the mouse and human genome and index', action='store_true')
-parsers['init'].add_argument('--dropseq_tools',
+parser_init.add_argument('--dropseq_tools',
     help='absolute path to dropseq_tools directory', required=True)
-parsers['init'].add_argument('--picard_tools',
+parser_init.add_argument('--picard_tools',
     help='absolute path to `picard.jar` file', required=True)
-parsers['init'].set_defaults(func=spacemake_init)
+parser_init.set_defaults(func=spacemake_init)
 
 #################
 # SPACEMAKE RUN #
 #################
-parsers['run'] = subparsers.add_parser('run', help = 'run spacemake')
-parsers['run'].add_argument('--cores',
+parser_run = subparsers.add_parser('run', help = 'run spacemake')
+parser_run.add_argument('--cores',
     default=1,
     type=int,
     help = 'number of cores to be used in total')
-parsers['run'].add_argument('--dryrun', '-n', action='store_true', help = 'invokes a dry snakemake run, printing only commands')
-parsers['run'].add_argument('--rerun-incomplete', '--ri', action='store_true', help = 'forces snakemake to rerun incompletely generated files')
-parsers['run'].add_argument('--keep-going', action='store_true', help='if a job fails, keep executing independent jobs')
-parsers['run'].set_defaults(func=spacemake_run)
-
+parser_run.add_argument('--dryrun', '-n', action='store_true', help = 'invokes a dry snakemake run, printing only commands')
+parser_run.add_argument('--rerun-incomplete', '--ri', action='store_true', help = 'forces snakemake to rerun incompletely generated files')
+parser_run.add_argument('--keep-going', action='store_true', help='if a job fails, keep executing independent jobs')
+parser_run.set_defaults(func=spacemake_run)
 ####################
 # SPACEMAKE CONFIG #
 ####################
@@ -151,34 +148,43 @@ if os.path.isfile(config_path):
     cf = ConfigFile(config_path)
     # save config file
     cf.dump()
-    parsers['config'] = cf.get_subparsers(subparsers)
+    parser_config = cf.get_subparsers(subparsers)
 
 ####################
 # SPACEMAKE SAMPLE #
 ####################
+from spacemake.project_df import setup_project_parser
+
 if os.path.isfile(config_path):
     pdf = ProjectDF(project_df, cf)
-    parsers['projects'] = pdf.get_subparsers(subparsers)
+    parser_projects = setup_project_parser(pdf, subparsers)
 
 def cmdline():
-    args = parsers['main'].parse_args()
+    args = main_parser.parse_args()
+
+    parser_dict = {
+        'init': parser_init,
+        'config': parser_config,
+        'projects': parser_projects,
+        'run': parser_run}
 
     # get the function to be run
     if 'func' in args:
         func = args.func
     # else print help
     else:
-        if args.main is not None:
-            parsers[args.main].print_help()
+        if args.subcommand is not None:
+            print(args.subcommand)
+            parser_dict[args.subcommand].print_help()
         else:
-            parsers['main'].print_help()
+            parser_dict['main'].print_help()
         return 0
         
     # get the args and delete the func key, get only set values
     args = {key: value for key, value in vars(args).items() if value is not None}
     args.pop('func', None)
     # pop also main, 
-    args.pop('main', None)
+    args.pop('subcommand', None)
 
     func(args)
 

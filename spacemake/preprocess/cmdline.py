@@ -4,7 +4,7 @@ __author__ = ["Marvin Jens"]
 __license__ = "MIT"
 __email__ = ["marvin.jens@mdc-berlin.de"]
 
-from spacemake.preprocess._fastq import parse_args, setup_logging,\
+from spacemake.preprocess.fastq import parse_args, setup_logging,\
     main_combinatorial, main_dropseq
 
 from spacemake.parallel import ExceptionLogging

@@ -3,8 +3,8 @@ import yaml
 import argparse
 import re
 
-from ..errors import *
-from ._util import str2bool, assert_file, bool_in_str, LINE_SEPARATOR
+from spacemake.errors import *
+from spacemake.util import str2bool, assert_file, bool_in_str, LINE_SEPARATOR
 
 class ConfigMainVariable:
     def __init__(self, name, **kwargs):
@@ -70,8 +70,8 @@ class Puck(ConfigMainVariable):
         return 'barcodes' in self.variables
 
 class ConfigFile:
-    initial_config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-        'config/config.yaml') 
+    initial_config_path = os.path.join(os.path.dirname(__file__),
+        'data/config/config.yaml') 
 
     main_variables_pl2sg = {
         'pucks':'puck',
@@ -81,6 +81,13 @@ class ConfigFile:
     }
 
     main_variables_sg2pl = {value: key for key, value in main_variables_pl2sg.items()}
+
+    main_variable_sg2type = {
+        'puck': str,
+        'barcode_flavor': str,
+        'run_mode': 'str_list',
+        'species': str
+    }
 
     def __init__(self, file_path):
         self.file_path = file_path

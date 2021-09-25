@@ -17,8 +17,9 @@ import scanpy as sc
 
 from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
     parse_barcode_file
-from spacemake.spatial import create_meshed_adata
-from spacemake.cmdline import ProjectDF, ConfigFile
+from spacemake.spatial import create_meshed_adata, run_novosparc
+from spacemake.project_df import ProjectDF
+from spacemake.config import ConfigFile
 
 ################
 # Shell prefix #
@@ -177,6 +178,12 @@ automated_analysis_processed_data_files = {
 # prepend automated_result_root
 automated_analysis_processed_data_files = {key: automated_analysis_root + value for key, value in automated_analysis_processed_data_files.items()}
 
+# novosparc
+novosparc_root = automated_analysis_root + '/novosparc'
+novosparc_h5ad = novosparc_root + '/novosparc.h5ad'
+novosparc_obs_df = novosparc_root + '/novosparc_obs_df.csv'
+novosparc_var_df = novosparc_root + '/novosparc_var_df.csv'
+
 # in silico repo depletion
 ribo_depletion_log = complete_data_root + '/ribo_depletion_log.txt'
 parsed_ribo_depletion_log = complete_data_root + '/parsed_ribo_depletion_log.txt'
@@ -289,6 +296,7 @@ rule all:
         #get_final_output_files(fastqc_pattern, skip_merged = True, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
         get_output_files(automated_report),
+        get_output_files(novosparc_h5ad),
         get_output_files(qc_sheet)
 
 #####################
@@ -532,6 +540,7 @@ rule create_mesh_spatial_dge:
             project_id = wildcards.project,
             sample_id = wildcards.sample)
     run:
+        #with logging() as L:
         adata = sc.read(input[0])
         adata = create_meshed_adata(adata,
             width_um = params['puck_data']['width_um'],
@@ -571,6 +580,22 @@ rule run_automated_analysis:
     script:
         'scripts/automated_analysis.py'
 
+rule run_novosparc_analysis:
+    input:
+        automated_analysis_result_file
+    output:
+        novosparc_h5ad,
+        novosparc_obs_df,
+        novosparc_var_df
+    threads: 4
+    run:
+        adata = sc.read(input[0])
+        adata = run_novosparc(adata)
+
+        adata.write(output[0])
+        adata.obs.to_csv(output[1])
+        adata.var.to_csv(output[2])
+
 rule create_automated_analysis_processed_data_files:
     input:
         automated_analysis_result_file
@@ -582,6 +607,7 @@ rule create_automated_analysis_processed_data_files:
 rule create_automated_report:
     input:
         #star_log=star_log_file,
+        unpack(get_novosparc_if_spatial),
         **automated_analysis_processed_data_files
     output:
         automated_report
