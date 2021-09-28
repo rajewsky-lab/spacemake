@@ -61,7 +61,7 @@ class RunMode(ConfigMainVariable):
 class Puck(ConfigMainVariable):
     variable_types = {
         'barcodes': str,
-        'spot_diameter_um': int,
+        'spot_diameter_um': float,
         'width_um': int
     }
 
@@ -350,8 +350,8 @@ class ConfigFile:
 
         if rm.has_parent():
             rm.update(self.get_run_mode(rm.parent_name))
-        else:
-            return rm
+
+        return rm
 
     def get_puck(self, name, return_empty=False):
         try:

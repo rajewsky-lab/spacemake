@@ -237,6 +237,7 @@ def get_output_files(pattern, projects = [], samples = [],
 
     for index, row in df.iterrows():
         for run_mode in row['run_mode']:
+            print(run_mode)
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
             out_files = out_files + expand(pattern,
                 project = index[0],
@@ -296,7 +297,7 @@ rule all:
         #get_final_output_files(fastqc_pattern, skip_merged = True, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
         get_output_files(automated_report),
-        get_output_files(novosparc_h5ad),
+        #get_output_files(novosparc_h5ad),
         get_output_files(qc_sheet)
 
 #####################
@@ -395,7 +396,7 @@ rule reverse_first_mate:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
     threads: 4
     shell:
-        "python {spacemake_dir}/preprocess/_cmdline.py "
+        "python {spacemake_dir}/preprocess/cmdline.py "
         "--sample={wildcards.sample} "
         "--read1={input.R1} "
         "--read2={input.R2} "
@@ -562,6 +563,11 @@ rule create_qc_sheet:
     params:
         sample_info = lambda wildcards: project_df.get_sample_info(
             wildcards.project, wildcards.sample),
+        puck_variables = lambda wildcards:
+            project_df.get_puck_variables(wildcards.project, wildcards.sample,
+                return_empty=True),
+        is_spatial = lambda wildcards:
+            project_df.is_spatial(wildcards.project, wildcards.sample),
         run_modes = lambda wildcards: get_run_modes_from_sample(
             wildcards.project, wildcards.sample)
     output:

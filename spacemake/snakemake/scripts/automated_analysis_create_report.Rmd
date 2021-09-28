@@ -145,9 +145,9 @@ filter_quant <- quantile(obs_df$total_counts, 0.9, na.rm=T)
 limits <- c(0, quantile(obs_df$total_counts, 0.91, na.rm=T))
 
 if (is_spatial){
-    puck_bead_size <- ifelse(snakemake@params$run_mode_variables$mesh_data,
+    puck_bead_size <- max(1, ifelse(snakemake@params$run_mode_variables$mesh_data,
         snakemake@params$run_mode_variables$mesh_spot_diameter_um / 40,
-        snakemake@params$puck_variables$spot_diameter_um / 40)
+        snakemake@params$puck_variables$spot_diameter_um / 40))
     
     res_colnames <- obs_df$res %>%
         unique
