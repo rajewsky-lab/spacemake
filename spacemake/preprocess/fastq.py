@@ -378,7 +378,7 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag):
                 dT = t2 - t0
                 rate = n_rec / dT
                 logger.info(
-                    "processed {0} reads in {1:.0f} seconds (average {2:.3f} reads/second).".format(
+                    "processed {0} reads in {1:.0f} seconds (average {2:.0f} reads/second).".format(
                         n_rec, dT, rate
                     )
                 )
@@ -396,7 +396,7 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag):
 
         dT = time.time() - t0
         logger.info(
-            "finished processing {0} reads in {1:.0f} seconds (average {2:.3f} reads/second)".format(
+            "finished processing {0} reads in {1:.0f} seconds (average {2:.0f} reads/second)".format(
                 n_rec, dT, n_rec / dT
             )
         )
@@ -1063,29 +1063,3 @@ def parse_args():
     args = parser.parse_args()
 
     return args
-
-
-def cmdline():
-    with ExceptionLogging("main"):
-        args = parse_args()
-        NO_CALL = args.na
-        setup_logging(args)
-
-        if args.out_format == "bam" and not args.read2:
-            raise ValueError("bam output format requires --read2 parameter")
-
-        if ("bc1" in args.cell and not args.bc1_ref) or (
-            "bc2" in args.cell and not args.bc2_ref
-        ):
-            raise ValueError(
-                "bc1/2 are referenced in --cell or --cell-raw, but no reference barcodes are specified via --bc{{1,2}}-ref"
-            )
-
-        if args.bc1_ref or args.bc2_ref:
-            main_combinatorial(args)
-        else:
-            main_dropseq(args)
-
-
-if __name__ == "__main__":
-    cmdline()

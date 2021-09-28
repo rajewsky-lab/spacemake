@@ -13,9 +13,13 @@ import os
 import pandas as pd
 import numpy as np
 import math
+import scanpy as sc
 
-from spacemake.util import dge_to_sparse
-from spacemake.cmdline_utils import ProjectDF
+from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
+    parse_barcode_file
+from spacemake.spatial import create_meshed_adata, run_novosparc
+from spacemake.project_df import ProjectDF
+from spacemake.config import ConfigFile
 
 ################
 # Shell prefix #
@@ -40,7 +44,7 @@ config['puck_data']['root'] = config['microscopy_out']
 project_dir = os.path.join(config['root_dir'], 'projects/{project}')
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
-project_df = ProjectDF(config['project_df'])
+project_df = ProjectDF(config['project_df'], ConfigFile('config.yaml'))
 
 #################
 # DIRECTORY STR #
@@ -129,15 +133,23 @@ strand_info = split_reads_strand_type
 top_barcodes_suffix = '{polyA_adapter_trimmed}.{n_beads}_beads.txt'
 top_barcodes = complete_data_root + '/topBarcodes' + top_barcodes_suffix
 top_barcodes_clean = complete_data_root + '/topBarcodesClean' + top_barcodes_suffix
+spatial_barcodes = complete_data_root + '/spatialBarcodes.txt'
 
 # united dgu
 dge_root = complete_data_root + '/dge'
 dge_out_prefix = dge_root + '/dge'
-dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads'
-dge_out = dge_out_prefix + dge_out_suffix + '.txt.gz'
-dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.h5ad'
+dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}'
+dge_out = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.txt.gz'
+dge_out_summary = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.summary.txt'
+dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.h5ad'
+dge_out_h5ad_obs = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.obs.csv'
+dge_spatial = dge_out_prefix + dge_out_suffix + '.spatial_beads.h5ad'
+dge_spatial_obs = dge_out_prefix + dge_out_suffix + '.spatial_beads.obs.csv'
+dge_spatial_mesh_suffix = '.spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}'
+dge_spatial_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_mesh_suffix
+dge_spatial_mesh = dge_spatial_mesh_prefix + '.h5ad'
+dge_spatial_mesh_obs = dge_spatial_mesh_prefix + '.obs.csv'
 
-dge_out_summary = dge_out_prefix + dge_out_suffix + '.summary.txt'
 dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all']
 
 # kmer stats per position
@@ -155,7 +167,6 @@ paired_end_mapping_stats = paired_end_prefix + '{sample}_paired_end_mapping_stat
 automated_analysis_root = complete_data_root + '/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}'
 automated_report = automated_analysis_root + '/{sample}_{puck}_illumina_automated_report.html'
 
-spatial_dge = automated_analysis_root + '/preprocessed_spatial_dge.h5ad'
 automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
 
 automated_analysis_processed_data_files = {
@@ -166,6 +177,12 @@ automated_analysis_processed_data_files = {
 
 # prepend automated_result_root
 automated_analysis_processed_data_files = {key: automated_analysis_root + value for key, value in automated_analysis_processed_data_files.items()}
+
+# novosparc
+novosparc_root = automated_analysis_root + '/novosparc'
+novosparc_h5ad = novosparc_root + '/novosparc.h5ad'
+novosparc_obs_df = novosparc_root + '/novosparc_obs_df.csv'
+novosparc_var_df = novosparc_root + '/novosparc_var_df.csv'
 
 # in silico repo depletion
 ribo_depletion_log = complete_data_root + '/ribo_depletion_log.txt'
@@ -186,15 +203,14 @@ tagged_polyA_adapter_trimmed_bam = complete_data_root + '/unaligned_bc_tagged.po
 tagged_bam_pattern = complete_data_root + '/unaligned_bc_tagged{polyA_adapter_trimmed}.bam'
 
 # mapped reads
-mapped_reads_qname_sorted = complete_data_root + '/star{polyA_adapter_trimmed}.Aligned.out.bam'
-star_log_file = complete_data_root + '/star{polyA_adapter_trimmed}.Log.final.out'
 star_prefix  = complete_data_root + '/star{polyA_adapter_trimmed}.'
+star_log_file = star_prefix + 'Log.final.out'
 
 # final bam file
-final_bam = complete_data_root + '/final{polyA_adapter_trimmed}.bam'
+final_bam_suffix = '/final{polyA_adapter_trimmed}'
+final_bam = complete_data_root + final_bam_suffix + '.bam'
 bam_mm_included_pipe_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam'
 final_bam_mm_included_pipe = complete_data_root + '/final' + bam_mm_included_pipe_suffix
-final_bam_pattern = complete_data_root + '/final{polyA_adapter_trimmed}{mm_included}.bam'
 
 # index settings
 star_index = 'species_data/{species}/star_index'
@@ -221,7 +237,8 @@ def get_output_files(pattern, projects = [], samples = [],
 
     for index, row in df.iterrows():
         for run_mode in row['run_mode']:
-            run_mode_variables = get_run_mode_variables(run_mode)
+            print(run_mode)
+            run_mode_variables = project_df.config.get_run_mode(run_mode).variables
             out_files = out_files + expand(pattern,
                 project = index[0],
                 sample = index[1],
@@ -268,7 +285,9 @@ wildcard_constraints:
     pacbio_ext = 'fq|fastq',
     polyA_adapter_trimmed = '|.polyA_adapter_trimmed',
     mm_included = '|.mm_included',
-    n_beads = '[0-9]+'
+    n_beads = '[0-9]+|spatial',
+    spot_diameter_um = '[0-9]+',
+    spot_distance_um = '[0-9]+'
 
 #############
 # Main rule #
@@ -278,6 +297,7 @@ rule all:
         #get_final_output_files(fastqc_pattern, skip_merged = True, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
         get_output_files(automated_report),
+        #get_output_files(novosparc_h5ad),
         get_output_files(qc_sheet)
 
 #####################
@@ -376,7 +396,7 @@ rule reverse_first_mate:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
     threads: 4
     shell:
-        "python {spacemake_dir}/preprocess.py "
+        "python {spacemake_dir}/preprocess/cmdline.py "
         "--sample={wildcards.sample} "
         "--read1={input.R1} "
         "--read2={input.R2} "
@@ -419,7 +439,7 @@ rule run_fastqc:
 rule get_barcode_readcounts:
     # this rule takes the final.bam file (output of the dropseq pipeline) and creates a barcode read count file
     input:
-        final_bam
+        unpack(get_final_bam)
     output:
         barcode_readcounts
     params:
@@ -450,12 +470,22 @@ rule clean_top_barcodes:
     script:
         'scripts/clean_top_barcodes.py'
 
+rule create_spatial_barcodes:
+    input:
+        unpack(get_puck_file)
+    output:
+        temp(spatial_barcodes)
+    run:
+        bc = parse_barcode_file(input[0])
+        bc['cell_bc'] = bc.index
+        bc[['cell_bc']].to_csv(output[0], header=False, index=False)
+
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
     # topBarcodesClean.txt file or just the regular topBarcodes.txt
     input:
         unpack(get_top_barcodes),
-        unpack(get_mapped_final_bam)
+        unpack(get_dge_input_bam)
     output:
         dge=dge_out,
         dge_summary=dge_out_summary
@@ -485,11 +515,41 @@ rule create_dge:
         """
 
 rule create_h5ad_dge:
-    input: dge_out
-    output: dge_out_h5ad
+    input:
+        unpack(get_puck_file),
+        dge_txt = dge_out,
+        dge_summary_txt = dge_out_summary
+    # output here will either be n_beads=number, n_beads=spatial
+    output: dge_out_h5ad, dge_out_h5ad_obs
     run:
-        adata = dge_to_sparse(input[0])
+        adata = dge_to_sparse_adata(
+            input['dge_txt'],
+            input['dge_summary_txt'])
+        if 'barcode_file' in input.keys() and wildcards.n_beads == 'spatial':
+            adata = attach_barcode_file(adata, input['barcode_file'])
         adata.write(output[0])
+        adata.obs.to_csv(output[1])
+
+rule create_mesh_spatial_dge:
+    input:
+        dge_spatial
+    output:
+        dge_spatial_mesh,
+        dge_spatial_mesh_obs
+    params:
+        puck_data = lambda wildcards: project_df.get_puck_variables(
+            project_id = wildcards.project,
+            sample_id = wildcards.sample)
+    run:
+        #with logging() as L:
+        adata = sc.read(input[0])
+        adata = create_meshed_adata(adata,
+            width_um = params['puck_data']['width_um'],
+            bead_diameter_um = params['puck_data']['spot_diameter_um'],
+            spot_diameter_um = float(wildcards.spot_diameter_um),
+            spot_distance_um = float(wildcards.spot_distance_um))
+        adata.write(output[0])
+        adata.obs.to_csv(output[1])
 
 rule parse_ribo_log:
     input: unpack(get_ribo_depletion_log)
@@ -498,13 +558,16 @@ rule parse_ribo_log:
 
 rule create_qc_sheet:
     input:
-        unpack(get_dge_type),
         unpack(get_qc_sheet_input_files),
-        unpack(get_puck_file),
         ribo_log=parsed_ribo_depletion_log
     params:
         sample_info = lambda wildcards: project_df.get_sample_info(
             wildcards.project, wildcards.sample),
+        puck_variables = lambda wildcards:
+            project_df.get_puck_variables(wildcards.project, wildcards.sample,
+                return_empty=True),
+        is_spatial = lambda wildcards:
+            project_df.is_spatial(wildcards.project, wildcards.sample),
         run_modes = lambda wildcards: get_run_modes_from_sample(
             wildcards.project, wildcards.sample)
     output:
@@ -512,29 +575,32 @@ rule create_qc_sheet:
     script:
         "scripts/qc_sequencing_create_sheet.Rmd"
 
-
-rule create_spatial_dge:
-    input:
-        unpack(get_puck_file),
-        dge=lambda wildcards: get_dge_from_run_mode(
-            wildcards.project,
-            wildcards.sample,
-            wildcards.run_mode,
-            dge_out_pattern = dge_out_h5ad)['dge']
-    output:
-        spatial_dge
-    params:
-        downstream_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode)
-    script:
-        "scripts/create_spatial_dge.py"
-
 rule run_automated_analysis:
     input:
-        spatial_dge
+        unpack(get_automated_analysis_dge_input)
     output:
         automated_analysis_result_file
+    params:
+        run_mode_variables = lambda wildcards:
+            project_df.config.get_run_mode(wildcards.run_mode).variables
     script:
         'scripts/automated_analysis.py'
+
+rule run_novosparc_analysis:
+    input:
+        automated_analysis_result_file
+    output:
+        novosparc_h5ad,
+        novosparc_obs_df,
+        novosparc_var_df
+    threads: 4
+    run:
+        adata = sc.read(input[0])
+        adata = run_novosparc(adata)
+
+        adata.write(output[0])
+        adata.obs.to_csv(output[1])
+        adata.var.to_csv(output[2])
 
 rule create_automated_analysis_processed_data_files:
     input:
@@ -547,18 +613,25 @@ rule create_automated_analysis_processed_data_files:
 rule create_automated_report:
     input:
         #star_log=star_log_file,
+        unpack(get_novosparc_if_spatial),
         **automated_analysis_processed_data_files
     output:
         automated_report
     params:
-        downstream_variables = lambda wildcards: get_run_mode_variables(wildcards.run_mode),
+        run_mode_variables = lambda wildcards:
+            project_df.config.get_run_mode(wildcards.run_mode).variables,
+        puck_variables = lambda wildcards:
+            project_df.get_puck_variables(wildcards.project, wildcards.sample,
+                return_empty=True),
+        is_spatial = lambda wildcards:
+            project_df.is_spatial(wildcards.project, wildcards.sample),
         r_shared_scripts= repo_dir + '/scripts/shared_functions.R'
     script:
         'scripts/automated_analysis_create_report.Rmd'
 
 rule split_final_bam:
     input:
-        final_bam
+        unpack(get_final_bam)
     output:
         temp(split_reads_sam_files),
         split_reads_read_type,
@@ -601,7 +674,7 @@ rule create_rRNA_index:
 rule map_to_rRNA:
     input:
         unpack(get_bt2_rRNA_index),
-        unpack(get_rRNA_reads_input)
+        reads=raw_reads_mate_2
     output:
         ribo_depletion_log
     params:

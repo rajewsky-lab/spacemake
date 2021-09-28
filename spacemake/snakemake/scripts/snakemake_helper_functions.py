@@ -1,4 +1,4 @@
-from spacemake.errors import BarcodeFlavorNotFoundError, SpeciesNotFoundError
+from spacemake.errors import *
 
 # barcode flavor parsing and query functions
 class dotdict(dict):
@@ -25,7 +25,7 @@ def parse_barcode_flavors(
     parses and gathers the settings for barcode flavors
     """
     preprocess_settings = {}
-    for flavor, flavor_settings in config["knowledge"]['barcode_flavor'].items():
+    for flavor, flavor_settings in config['barcode_flavors'].items():
         # for each flavor, also retrieve the configuration
         # first make a copy of the default values
         d = dict(bc_default_settings)
@@ -52,9 +52,10 @@ def get_bc_preprocess_settings(wildcards):
     flavor = project_df.get_metadata('barcode_flavor', project_id = wildcards.project,
             sample_id = wildcards.sample)
     if flavor not in bc_flavor_data.preprocess_settings:
-        raise BarcodeFlavorNotFoundError(flavor)
+        raise Exception(flavor)
 
     settings = bc_flavor_data.preprocess_settings[flavor]
+    print(settings)
 
     return settings
 
@@ -70,14 +71,29 @@ def get_star_input_bam(wildcards):
     if wildcards.polyA_adapter_trimmed == '.polyA_adapter_trimmed':
         return {'reads': tagged_polyA_adapter_trimmed_bam}
     else:
-        return {'reads': get_unaligned_bc_tagged_bam(wildcards)['tagged_bam']}
+        return {'reads': tagged_bam}
 
-def get_mapped_final_bam(wildcards):
-    if wildcards.mm_included == '.mm_included':
-        return {'reads': final_bam_mm_included_pipe}
+def get_final_bam(wildcards):
+    is_merged = project_df.get_metadata('is_merged',
+        project_id = wildcards.project,
+        sample_id = wildcards.sample)
+
+    if is_merged:
+        return [final_merged_bam]
     else:
-        return {'reads': final_bam}
+        return [final_bam]
 
+def get_dge_input_bam(wildcards):
+    is_merged = project_df.get_metadata('is_merged',
+        project_id = wildcards.project,
+        sample_id = wildcards.sample)
+
+    if wildcards.mm_included == '.mm_included':
+        out = {'reads': final_bam_mm_included_pipe}
+    else:
+        out = {'reads': get_final_bam(wildcards)}
+
+    return out
 
 def get_species_genome_annotation(wildcards):
     # This function will return 2 things required by STAR:
@@ -90,16 +106,9 @@ def get_species_genome_annotation(wildcards):
     else:
         species = wildcards.species
 
-    if 'annotations' not in config['knowledge'].keys() or \
-            'genomes' not in config['knowledge'].keys() or \
-            species not in config['knowledge']['annotations'].keys() or \
-            species not in config['knowledge']['genomes'].keys():
-        raise SpeciesNotFoundError(species)
-
-    files = {
-        "annotation": config["knowledge"]["annotations"][species],
-        "genome": config["knowledge"]["genomes"][species]
-    }
+     
+    files = project_df.config.get_variable('species', name=species)
+    
     return files
 
 def get_star_index(wildcards):
@@ -111,44 +120,21 @@ def get_star_index(wildcards):
     return {'index': expand(star_index, species = species)[0]}
 
 def get_rRNA_genome(wildcards):
-    return [config['knowledge']['rRNA_genomes'][wildcards.species]]
+    files = project_df.config.get_variable('species', name=species)
+
+    return [files['rRNA_genome']]
 
 def get_bt2_rRNA_index(wildcards):
     species = project_df.get_metadata(
         "species", project_id=wildcards.project, sample_id=wildcards.sample
     )
 
-    if 'rRNA_genomes' in config['knowledge']:
-        if species in config['knowledge']['rRNA_genomes']:
-            return {'index': expand(bt2_rRNA_index_dir, species = species)[0]}
+    files = project_df.config.get_variable('species', name=species)
+
+    if 'rRNA_genomes' in files:
+        return {'index': expand(bt2_rRNA_index_dir, species = species)[0]}
     
     return []
-
-def get_run_mode_variables(run_mode):
-    # return the run mode variables
-    # first set the default, for each
-    # then update each if there is no default
-    # load the default
-    run_mode_variables = dict(config['run_modes']['default'])
-
-    # first update the default with parent
-    if 'parent_run_mode' in config['run_modes'][run_mode].keys():
-        parent_run_mode = config['run_modes'][run_mode]['parent_run_mode']
-        run_mode_variables.update(config['run_modes'][parent_run_mode])
-
-    run_mode_variables.update(config['run_modes'][run_mode])
-
-    # set the right types
-    run_mode_variables['n_beads'] = int(run_mode_variables['n_beads'])
-    run_mode_variables['umi_cutoff'] = [int(x) for x  in run_mode_variables['umi_cutoff']]
-    run_mode_variables['clean_dge'] = bool(run_mode_variables['clean_dge'])
-    run_mode_variables['plot_bead_size'] = float(run_mode_variables['plot_bead_size'])
-    run_mode_variables['detect_tissue'] = bool(run_mode_variables['detect_tissue'])
-    run_mode_variables['polyA_adapter_trimming'] = bool(run_mode_variables['polyA_adapter_trimming'])
-    run_mode_variables['count_mm_reads'] = bool(run_mode_variables['count_mm_reads'])
-    run_mode_variables['count_intronic_reads'] = bool(run_mode_variables['count_intronic_reads'])
-
-    return run_mode_variables
 
 def get_run_modes_from_sample(project_id, sample_id):
     run_mode_names = project_df.get_metadata('run_mode', project_id=project_id, sample_id=sample_id)
@@ -156,7 +142,8 @@ def get_run_modes_from_sample(project_id, sample_id):
     run_modes = {}
 
     for run_mode in run_mode_names:
-        run_modes[run_mode] = get_run_mode_variables(run_mode)
+        run_modes[run_mode] = project_df.config.get_run_mode(run_mode)\
+            .variables
 
     return run_modes
 
@@ -184,59 +171,42 @@ def get_dge_extra_params(wildcards):
 
     return extra_params
 
-def get_files_to_merge(project_id, sample_id, pattern):
+def get_files_to_merge(pattern, project, sample, **kwargs):
     # recursive function to find all files to merge. a merged sample can be merged
     # from merged samples. to avoid cyclic dependencies, here we look for all files
     # which are the dependencies of the underlying samples
     is_merged = project_df.get_metadata('is_merged',
-        project_id = project_id,
-        sample_id = sample_id)
+        project_id = project,
+        sample_id = sample)
 
     files = []
 
     if not is_merged:
-        files = expand(pattern, sample=sample_id, project=project_id)
+        files = expand(pattern, sample=sample, project=project, **kwargs)
     else:
         merge_ix = project_df.get_metadata('merged_from',
-            sample_id = sample_id,
-            project_id = project_id)
+            sample_id = sample,
+            project_id = project)
 
         for (p, s) in merge_ix:
-            files = files + get_files_to_merge(project_id = p, sample_id = s, pattern = pattern)
+            files = files + get_files_to_merge(project = p, sample = s, pattern = pattern, **kwargs)
 
     return list(set(files))
 
 def get_files_to_merge_snakemake(pattern):
     # inner function to be returned
     def get_merged_pattern(wildcards):
-        merge_ix = project_df.get_metadata('merged_from',
-            sample_id = wildcards.sample,
-            project_id = wildcards.project)
+        kwargs = {}
+        
+        # konvert wildcards to dict
+        for key, value in wildcards.items():
+            kwargs[key] = value
 
-        files = get_files_to_merge(
-            project_id = wildcards.project,
-            sample_id = wildcards.sample,
-            pattern = pattern)
+        files = get_files_to_merge(pattern = pattern, **kwargs)
         
         return files
 
     return get_merged_pattern
-
-def get_unaligned_bc_tagged_bam(wildcards):
-    is_merged = project_df.get_metadata('is_merged',
-        sample_id = wildcards.sample,
-        project_id = wildcards.project)
-
-    if is_merged:
-        files = {'tagged_bam': expand(merged_bam,
-                   project = wildcards.project,
-                   sample = wildcards.sample)[0]}
-    else:
-        files = {'tagged_bam': expand(merged_bam,
-                   project = wildcards.project,
-                   sample = wildcards.sample)[0]}
-
-    return files
 
 def get_ribo_depletion_log(wildcards):
     is_merged = project_df.get_metadata('is_merged',
@@ -248,24 +218,9 @@ def get_ribo_depletion_log(wildcards):
     else:
         return [ribo_depletion_log]
 
-def get_rRNA_reads_input(wildcards):
-    is_merged = project_df.get_metadata('is_merged',
-        sample_id = wildcards.sample,
-        project_id = wildcards.project)
-
-    if is_merged:
-        return {'reads': merged_raw_reads_mate_2}
-    else:
-        return {'reads': raw_reads_mate_2}
-
-def get_bt2_index(wildcards):
-    species = project_df.get_metadata(
-        "species", project_id=wildcards.project, sample_id=wildcards.sample
-    )
-
-    return config["knowledge"]["indices"][species]["bt2"]
-
 def get_top_barcodes(wildcards):
+    if wildcards.n_beads == 'spatial':
+        return {"top_barcodes": spatial_barcodes}
     if wildcards.dge_cleaned == "":
         return {"top_barcodes": top_barcodes}
     else:
@@ -274,12 +229,9 @@ def get_top_barcodes(wildcards):
 def get_dge_from_run_mode(
         project_id,
         sample_id,
-        run_mode,
-        dge_out_pattern = dge_out,
-        dge_out_summary_pattern = dge_out_summary,
-        **kwargs
+        run_mode
     ):
-    run_mode_variables = get_run_mode_variables(run_mode)
+    run_mode_variables = project_df.config.get_run_mode(run_mode).variables
     
     dge_type = '.exon'
     dge_cleaned = ''
@@ -298,6 +250,21 @@ def get_dge_from_run_mode(
     if run_mode_variables['clean_dge']:
         dge_cleaned = '.cleaned'
 
+    # select which pattern
+    # if sample is not spatial, we simply select the normal, umi_filtered
+    # dge, with the top_n barcodes
+    # otherwise, if sample is spatial, either we return he whole dge, containing
+    # all beads, or the a meshgrid
+    if not project_df.is_spatial(project_id = project_id,\
+            sample_id = sample_id):
+        dge_out_pattern = dge_out_h5ad
+        dge_out_summary_pattern = dge_out_h5ad_obs
+    elif run_mode_variables['mesh_data']:
+        dge_out_pattern = dge_spatial_mesh
+        dge_out_summary_pattern = dge_spatial_mesh_obs
+    else:
+        dge_out_pattern = dge_spatial
+        dge_out_summary_pattern = dge_spatial_obs
 
     dge_out_file = expand(dge_out_pattern,
             project = project_id,
@@ -307,7 +274,8 @@ def get_dge_from_run_mode(
             polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
             n_beads = run_mode_variables['n_beads'],
-            **kwargs)[0]
+            spot_diameter_um = run_mode_variables['mesh_spot_diameter_um'],
+            spot_distance_um = run_mode_variables['mesh_spot_distance_um'])
 
     dge_out_summary_file = expand(dge_out_summary_pattern,
             project = project_id,
@@ -316,50 +284,25 @@ def get_dge_from_run_mode(
             dge_cleaned = dge_cleaned,
             polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
-            n_beads = run_mode_variables['n_beads'],
-            **kwargs)[0]
+            spot_diameter_um = run_mode_variables['mesh_spot_diameter_um'],
+            spot_distance_um = run_mode_variables['mesh_spot_distance_um'],
+            n_beads = run_mode_variables['n_beads'])
 
     return {'dge_summary': dge_out_summary_file,
             'dge': dge_out_file}
 
 
-def get_dges_from_project_sample(
-        project_id,
-        sample_id,
-        dge_out_pattern = dge_out,
-        dge_out_summary_pattern = dge_out_summary,
-        **kwargs
-    ):
-    run_modes = get_run_modes_from_sample(project_id, sample_id).keys()
-    dges = {}
-
-    for run_mode in run_modes:
-        run_mode_dge = get_dge_from_run_mode(project_id, sample_id, run_mode,
-            dge_out_pattern, dge_out_summary_pattern, **kwargs)
-
-        dges[f'{run_mode}.dge'] = run_mode_dge['dge']
-        dges[f'{run_mode}.dge_summary'] = run_mode_dge['dge_summary']
-
-    return dges
-
-
-def get_dge_type(wildcards):
-    # expects wildcards to have either a run_mode set, in which case
-    # returns one dge+summary pair
-    # or project_id and sample_id set and then return all dges
-    # associated to this sample (to the run modes of it)
-    wildcards_keys = wildcards.keys()
-    if 'run_mode' in wildcards_keys:
-        return get_dge_from_run_mode(wildcards.project, wildcards.sample,
-                wildcards.run_mode)
-    elif 'project' in wildcards_keys and 'sample' in wildcards_keys:
-        return get_dges_from_project_sample(project_id = wildcards.project,
-            sample_id = wildcards.sample)
-
 def get_qc_sheet_input_files(wildcards):
     # returns star_log, reads_type_out, strand_info
     # first checks the run modes, and returns either polyA_adapter_trimmed, untrimmed
     # or both
+    project_id = wildcards.project
+    sample_id = wildcards.sample
+
+    is_merged = project_df.get_metadata('is_merged',
+        project_id = wildcards.project,
+        sample_id = wildcards.sample)
+
     run_modes = get_run_modes_from_sample(wildcards.project, wildcards.sample)
 
     is_polyA_adapter_trimmed = set([x['polyA_adapter_trimming'] for x in run_modes.values()])
@@ -376,16 +319,28 @@ def get_qc_sheet_input_files(wildcards):
                   'project': wildcards.project,
                   'polyA_adapter_trimmed': polyA_adapter_trimmed_wildcard}
 
-    return {
-        'star_log': expand(star_log_file, **extra_args),
+    if is_merged:
+        star_log_pattern = merged_star_log_file
+    else:
+        star_log_pattern = star_log_file
+
+    to_return = {
+        'star_log': expand(star_log_pattern, **extra_args),
         'reads_type_out': expand(reads_type_out, **extra_args),
         'strand_info': expand(strand_info, **extra_args)}
+
+    for run_mode in run_modes:
+        run_mode_dge = get_dge_from_run_mode(project_id, sample_id, run_mode)
+
+        to_return[f'{run_mode}.dge_summary'] = run_mode_dge['dge_summary']
+
+    return to_return
 
 def get_bam_tag_names(project_id, sample_id):
     barcode_flavor = project_df.get_metadata('barcode_flavor', project_id = project_id,
             sample_id = sample_id)
 
-    bam_tags = config["knowledge"]["barcode_flavor"][barcode_flavor]["bam_tags"]
+    bam_tags = config["barcode_flavors"][barcode_flavor]["bam_tags"]
 
     tag_names = {}
 
@@ -397,11 +352,38 @@ def get_bam_tag_names(project_id, sample_id):
     return tag_names
 
 def get_puck_file(wildcards):
+    if not project_df.is_spatial(project_id = wildcards.project,\
+            sample_id = wildcards.sample):
+        return []
+
     puck_barcode_file = project_df.get_metadata('puck_barcode_file',
             project_id = wildcards.project,
             sample_id = wildcards.sample)
 
+    puck = project_df.get_metadata('puck',
+        project_id = wildcards.project,
+        sample_id = wildcards.sample)
+
     if puck_barcode_file == "none":
-        return []
+        return {'barcode_file' :config['pucks'][puck]['barcodes']}
     else:
         return {"barcode_file": puck_barcode_file}
+
+def get_automated_analysis_dge_input(wildcards):
+    # there are three options:
+    # 1) no spatial dge
+    # 2) spatial dge, no mesh
+    # 3) spatial dge with a mesh
+    return [get_dge_from_run_mode(
+        project_id = wildcards.project,
+        sample_id = wildcards.sample,
+        run_mode = wildcards.run_mode)['dge']]
+
+def get_novosparc_if_spatial(wildcards):
+    if project_df.is_spatial(project_id = wildcards.project,\
+            sample_id = wildcards.sample):
+        return []
+    
+    else:
+        return {'novosparc_obs_df': novosparc_obs_df,
+                'novosparc_var_df': novosparc_var_df}

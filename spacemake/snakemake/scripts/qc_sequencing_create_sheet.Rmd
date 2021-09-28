@@ -4,7 +4,9 @@ output:
     toc: true
     self_contained: yes
     toc_depth: 4
-version: 0.2.0
+    theme: flatly
+    highlight: tango
+version: 0.3.0
 author: Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos
 email: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc.berlin.de
 license: GPL
@@ -13,6 +15,7 @@ license: GPL
 ```{r knitr_options, include=FALSE, cache=FALSE}
 knitr::opts_chunk$set(
   autodep = TRUE,
+  cache=T,
   message = FALSE,
   warning = FALSE,
   comment = NA
@@ -49,7 +52,8 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
-#write_rds(snakemake, '')
+#snakemake <- read_rds('/scratch/home/tsztank/spacemake_qc.rds')
+#write_rds(snakemake, '/scratch/home/tsztank/spacemake_qc.rds')
 ```
 
 ```{r read_sample_information_tables, echo = F}
@@ -61,6 +65,22 @@ run_mode_settings <- bind_rows(snakemake@params$run_mode) %>%
 
 run_mode_names <- run_mode_settings[-1] %>% names
 run_mode_n <- length(run_mode_names)
+normal_run_mode_names <- run_mode_settings %>%
+    gather('run_mode','val', -variable_name) %>%
+    unnest(val) %>%
+    filter(variable_name == 'mesh_data',
+           val == 0) %$%
+    run_mode
+
+
+
+
+meshed_run_mode_names <- run_mode_settings %>%
+    gather('run_mode','val', -variable_name) %>%
+    unnest(val) %>%
+    filter(variable_name == 'mesh_data',
+           val == 1) %$%
+    run_mode
 
 sample_info <- bind_rows(snakemake@params$sample_info) %>%
     select(species, sequencing_date, investigator, experiment,
@@ -192,17 +212,18 @@ Each of the QC plots we show on a per run mode basis, to see if there are any do
 
 #### 'Knee'-plot
 
-```{r knee_plot, echo = F, fig.height=4, fig.width = 4*run_mode_n}
+```{r knee_plot, echo = F, fig.height=4*run_mode_n}
 dge_summary <- tibble(run_mode = run_mode_names,
-                      dge_summary_file = snakemake@input[paste0(run_mode, '.dge_summary')]) %>%
-    unnest(dge_summary_file) %>%
-    mutate(dat = map(dge_summary_file, ~ read_table2(.,
-                                                     skip=7,
-                                                     col_names = c('cell_bc', 'reads',
-                                                                   'umis', 'genes')))) %>%
+                      obs_df = snakemake@input[paste0(run_mode, '.dge_summary')]) %>%
+    unnest(obs_df) %>%
+    mutate(dat = map(obs_df, ~ read_csv(.) %>%
+        mutate(cell_bc = as.character(cell_bc)))) %>%
     unnest(dat) %>%
-    select(-dge_summary_file) %>%
-    mutate(pcr = reads/ umis) %>%
+    select(-obs_df) %>%
+    rename(pcr = reads_per_counts,
+           umis = total_counts,
+           genes = n_genes_by_counts,
+           reads = n_reads) %>%
     group_by(run_mode)
 
 
@@ -216,7 +237,7 @@ read_counts %>%
         geom_line() +
         ggtitle(paste0('Knee-plot, top  beads')) +
         labs(x='Beads sorted by number of reads', y='Cummulative sum of reads') +
-        facet_wrap(~run_mode)
+        facet_wrap(~run_mode, ncol = 1)
 ```
 
 #### Umi-cutoff plots
@@ -224,10 +245,7 @@ read_counts %>%
 ```{r create_umi_cutoffs, echo = F, fig.width = 10, fig.height=5}
 umi_cutoffs <- seq(10, 20000, 10)
 
-cell_bc_len = nchar((dge_summary %$% cell_bc)[1])
-
 dge_summary <- dge_summary %>%
-    filter(nchar(cell_bc) == cell_bc_len) %>%
     group_by(run_mode) %>%
     mutate(reads_cumsum = cumsum(reads)) %>%
     mutate(quartile = cut(reads_cumsum,
@@ -349,29 +367,29 @@ For each run mode we plot the nucleotide distribution per quartile.
 
 **You can pick the run\_mode to be shown from the dropdown list**
 
-```{r prepare_nucl_freq, echo = F}
-nucls <- dge_summary %$%
-    cell_bc %>% strsplit("")
-
-nucls <- dge_summary %>%
-    select(cell_bc, quartile, run_mode) %>%
-    bind_cols(tibble(nucl=nucls)) %>%
-    unnest(nucl) %>%
-    # group by run_mode and cell_bc, so each nt is on the correct pos
-    group_by(run_mode, cell_bc) %>%
-    mutate(pos = paste0('pos_', 100+1:n())) %>%
-    group_by(run_mode, pos, nucl, quartile) %>%
-    summarise(nucl_count = n()) %>%
-    ungroup() %>%
-    tidyr::complete(run_mode, pos, nucl, quartile, fill=list(nucl_count=0))
-
-```
+**Only not-meshed run\_mode(s) are shown**
 
 ```{r plot_nucl_freq, results='asis', fig.width=10, fig.height = 5, echo=F}
-plot_nucl_freq <- function(run_mode_in){
-    lbl_df <- dge_summary %>%
+plot_nucl_freq <- function(dge_s){
+    cell_bc_len <- nchar((dge_s %$% cell_bc)[1])
+
+    nucls <- dge_s %$%
+        cell_bc %>% strsplit("")
+
+    nucls <- dge_s %>%
+        select(cell_bc, quartile, run_mode) %>%
+        bind_cols(tibble(nucl=nucls)) %>%
+        unnest(nucl) %>%
+        # group by run_mode and cell_bc, so each nt is on the correct pos
+        group_by(run_mode, cell_bc) %>%
+        mutate(pos = paste0('pos_', 100+1:n())) %>%
+        group_by(run_mode, pos, nucl, quartile) %>%
+        summarise(nucl_count = n()) %>%
         ungroup() %>%
-        filter(run_mode == run_mode_in) %>%
+        tidyr::complete(run_mode, pos, nucl, quartile, fill=list(nucl_count=0))
+
+    lbl_df <- dge_s %>%
+        ungroup() %>%
         group_by(quartile) %>%
         summarise(lbl = n()) %>%
         mutate(lbl = paste0(quartile, ' (n=', lbl, ')'))
@@ -380,7 +398,6 @@ plot_nucl_freq <- function(run_mode_in){
     names(lbls) <- lbl_df$quartile
 
     nucls %>%
-        filter(run_mode == run_mode_in) %>%
         ggplot(aes(pos, nucl_count, fill = nucl)) +
             geom_bar(stat='identity', position='dodge') +
             scale_fill_manual(values=nucl_clrs) +
@@ -392,54 +409,22 @@ plot_nucl_freq <- function(run_mode_in){
             theme(text = element_text(size =18 ))
 }
 
-for (run_mode in unique(dge_summary$run_mode)){
-    cat (paste0('\n\n ##### ', run_mode, '\n\n'))
-
-    print(plot_nucl_freq(run_mode))
+for (run_mode_in in unique(normal_run_mode_names)){
+    cat (paste0('\n\n ##### ', run_mode_in, '\n\n'))
+    dge_summary %>%
+        filter(run_mode == run_mode_in) %>%
+        plot_nucl_freq() %>%
+        print()
 }
-
 ```
 
 #### Shannon entropy and string compression {.tabset .tabset-dropdown}
-
-```{r calc_shannon, echo = F}
-calc_shannon_entropy <- function(barcode){
-    counts <- strsplit(barcode, '')[[1]] %>% table
-    len <- nchar(barcode) 
-
-    (-1*sum(counts/len * log2(counts/len)))
-}
-
-calc_string_compression <- function(barcode){
-    barcode_vector <- strsplit(barcode, '')[[1]]
-    res <- rle(barcode_vector)
-    compressed_barcode <- paste(res$values, res$lengths, collapse='', sep='')
-
-    return(nchar(compressed_barcode))
-}
-
-theoretical <- c()
-    
-for(i in seq(1, dge_summary %>% nrow, 1)){
-    theoretical[i] = paste(sample(c('A', 'C', 'T', 'G'), cell_bc_len, T), collapse='')
-}
-
-dge_summary <- dge_summary %>%
-    add_column(theoretical_entropy = map(theoretical, ~ calc_shannon_entropy(.))) %>%
-    mutate(exact_entropy = map(cell_bc, ~ calc_shannon_entropy(.))) %>%
-    unnest(exact_entropy) %>%
-    unnest(theoretical_entropy) %>%
-    add_column(theoretical_string_compression = map(theoretical, ~ calc_string_compression(.))) %>%
-    mutate(exact_string_compression = map(cell_bc, ~calc_string_compression(.))) %>%
-    unnest(exact_string_compression) %>%
-    unnest(theoretical_string_compression)
-```
 
 ```{r plot_shannon, echo = F, fig.height=5, fig.width=10, results='asis'}
 plot_shannon_scompression <- function(run_mode_in){
     dat <- dge_summary %>%
         filter(run_mode == run_mode_in) %>%
-        dplyr::select(-reads, -umis, -genes, -pcr, -quartile) %>%
+        select(cell_bc, run_mode, ends_with('compression') | ends_with('entropy')) %>%
         gather('observation', 'value', -cell_bc, -run_mode) %>%
         # replace first _ with |, so we can separate later
         mutate(observation = str_replace(observation, '_', ' '),
@@ -456,7 +441,7 @@ plot_shannon_scompression <- function(run_mode_in){
             theme(legend.position = c(0.1, 0.8), text = element_text(size=18, face='plain'))
 
     pl2 <- dat %>%
-        filter(observation == 'string_compression') %>%
+        filter(observation == 'compression') %>%
         ggplot(aes(value, fill = type)) +
             geom_histogram(bins=30, color='black', position='dodge') +
             scale_fill_manual(values=c(cpalette$grey, cpalette$orange)) +
@@ -474,6 +459,107 @@ for (run_mode in unique(dge_summary$run_mode)){
     cat (paste0('\n\n ##### ', run_mode, '\n\n'))
 
     print(plot_shannon_scompression(run_mode))
+}
+```
+
+```{r prepare_spatial, echo =F}
+# barcode file attached at the python level
+is_spatial <- snakemake@params$is_spatial
+```
+
+```{r spatial_header, eval=is_spatial, echo=F, results='asis'}
+cat('### Spatial QC {.tabset}\n\n')
+```
+
+```{r prepare_spatial_data, eval=is_spatial, echo =F}
+plot_bead_size <- run_mode_settings %>%
+    filter(variable_name != 'umi_cutoff') %>%
+    gather('run_mode', 'variable_value', -variable_name) %>%
+    unnest(variable_value) %>%
+    add_row(variable_name = 'spot_diameter_um', run_mode = run_mode_names,
+            variable_value = snakemake@params$puck_variables$spot_diameter_um) %>%
+    spread(variable_name, variable_value) %>%
+    mutate(plot_bead_size = max(ifelse(mesh_data, mesh_spot_diameter_um / 40,
+                              spot_diameter_um / 40), 1)) %>%
+    select(run_mode, plot_bead_size)
+
+plot_spatial_qc <- function(variable, run_mode_in, ttl='', cut_dist=T){
+    spatial_qc_dat <- dge_summary %>%
+        ungroup() %>%
+        filter(run_mode == run_mode_in) %>%
+        select(x_pos, y_pos, matches(variable)) %>%
+        rename(val = variable)
+
+    spatial_qc_dat <- spatial_qc_dat %>%
+        mutate(qnt = quantile(val, 0.9, na.rm=T)) %>%
+        arrange(val)
+
+    if(cut_dist){
+    spatial_qc_dat <- spatial_qc_dat %>%
+        mutate(val = ifelse(val > qnt, qnt, val))
+    }
+
+    limits <- c(0, quantile(spatial_qc_dat$val, 0.91, na.rm=T))
+
+    pl <- spatial_qc_dat %>%
+        ggplot(aes(x_pos, y_pos, color = val)) +
+            geom_point(size=filter(plot_bead_size, run_mode == run_mode_in)$plot_bead_size) + 
+            coord_fixed()+
+            guides(color = guide_colorbar(barheight = 15)) + 
+            labs(color=ttl) + 
+            theme(panel.background = element_rect(fill = 'gray45'), 
+                plot.background = element_rect(fill='gray45'),
+                 legend.spacing = unit(0.1, 'cm'),
+                axis.line = element_line(color = 'white'),
+                axis.ticks = element_blank(), axis.text=element_blank(), text = element_text(color='white', size=18))
+    if(cut_dist){
+        pl <- pl +
+            scale_color_viridis_c(option =  "magma", limits = limits)
+    } else {
+        pl <- pl + 
+            scale_color_viridis_c(option =  "magma") 
+    }
+
+    return(pl)
+}
+
+qc_vars <- c('n_joined', 'reads', 'genes', 'umis', 'pcr',
+               'pct_counts_mt', 'exact_entropy',
+               'exact_compression')
+
+qc_var_info <- dge_summary %>%
+    ungroup() %>%
+    select(-cell_bc, -x_pos, -y_pos, -total_counts_mt, -run_mode,
+           -theoretical_entropy, -theoretical_compression, -quartile) %>%
+    unique() %>%
+    colnames() %>%
+    tibble(qc_vars = .) %>%
+    inner_join(tibble(qc_vars = qc_vars,
+               ttl = c('# beads joined',
+                       '# of reads',
+                       '# of genes',
+                       '# of umis',
+                       'umis / reads',
+                       '% mt counts',
+                       'entropy',
+                       'compression'),
+               cut_dist = c(F, T, T, T, T, T, F, F)),
+               by='qc_vars') %>%
+    mutate(qc_vars = factor(qc_vars, levels= qc_vars)) %>%
+    mutate(ttl = paste0(ttl, '\nper spatial unit'))
+```
+
+```{r plot_per_run_mode, echo =F, results='asis', fig.width=7, fig.height=6}
+for (run_mode_name in run_mode_names){
+    cat(paste0('#### ', run_mode_name, '\n\n'))
+
+    for (qc_var in qc_vars){
+        print(plot_spatial_qc(
+                  qc_var, run_mode,
+                  ttl = filter(qc_var_info, qc_vars == qc_var)$ttl,
+                  cut_dist = filter(qc_var_info, qc_vars == qc_var)$cut_dist))
+
+    }
 }
 ```
 

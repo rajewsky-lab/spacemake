@@ -26,7 +26,7 @@ library(magrittr)
 library(kableExtra)
 library(cowplot)
 
-theme_set(theme_cowplot(12))
+theme_set(theme_cowplot(18))
 
 cpalette <- list('orange' = '#D55E00', 'blue' = '#0072B2', 'green' = '#009E73', 'black' = '#000000', 'yellow' = '#F0E442', 
 				 'grey' = '#999999', 'light_orange' = "#E69F00", 'light_blue' = "#56B4E9")
@@ -54,7 +54,7 @@ parameter_stats <- parameter_stats %>%
           c('# genes in data', nrow(var_df)),
           c('# of beads in data', nrow(obs_df)),
           c('median UMI', median(obs_df$total_counts)),
-          c('median genes', median(obs_df$n_genes)))
+          c('median genes', median(obs_df$n_genes_by_counts)))
 
 parameter_stats %>%
     kbl(col.names=NULL) %>%
@@ -71,9 +71,9 @@ cat('This dataset has 0 beads passing the filters')
 
 ```{r plot_histogram_of_metrics, echo = F, fig.width=10, eval=!data_empty}
 pl1 <- obs_df %>%
-    select(cell_bc, total_counts, n_genes) %>%
+    select(cell_bc, total_counts, n_genes_by_counts) %>%
     dplyr::rename(umis=total_counts,
-                  genes=n_genes) %>%
+                  genes=n_genes_by_counts) %>%
     gather('obs', 'value', -cell_bc) %>%
     ggplot(aes(value, fill=obs)) +
         geom_histogram(bins=100) +
@@ -116,7 +116,7 @@ if ('cluster' %in% colnames(obs_df)){
 }
 
 fig_height=6
-fig_width=6
+fig_width=7
 ```
 
 ```{r incompleteness_warning, eval=!data_complete, echo=F, results='asis'}
@@ -131,7 +131,7 @@ cat('### UMAP plots using different resolutions {.tabset}\n\n')
 ```
 
 
-```{r plot_umi_umap, eval=data_complete, echo=F}
+```{r plot_umi_umap, eval=data_complete, echo=F, fig.height=fig_height, fig.width=fig_width}
 obs_df <- obs_df %>%
     mutate(cluster = factor(cluster)) %>%
     mutate(log1p_total_counts = log2(1+total_counts))
@@ -139,23 +139,35 @@ obs_df <- obs_df %>%
 obs_colnames <- colnames(obs_df)
 
 # barcode file attached at the python level
-barcode_file <- 'x_pos' %in% obs_colnames && 'y_pos' %in% obs_colnames
+is_spatial <- snakemake@params$is_spatial
 
-if (barcode_file){
-        obs_df %>%
-            filter(res == 'leiden_1') %>%
-            arrange(total_counts) %>%
-            mutate(total_counts = ifelse(total_counts > 1000, 1000, total_counts)) %>%
-            ggplot(aes(x_pos, y_pos, color = total_counts)) +
-                geom_point(size = as.numeric(snakemake@params$downstream_variables$plot_bead_size))+
-                coord_fixed()+
-                scale_color_viridis_c(option =  "magma", limits = c(0, 1100),  breaks = c(100, 300, 500, 700, 900)) +
-                #scale_color_viridis_c(option =  "magma", limits = c(0, 70000),  breaks = c(10000, 20000, 30000, 40000, 50000, 60000)) +
-                guides(color = guide_colorbar(barheight = 15)) + 
-                labs(color='UMI count', y='', x='') + 
-                theme(panel.background = element_rect(fill = 'gray90'),
-                    axis.text = element_blank(), axis.ticks = element_blank())
-    }
+filter_quant <- quantile(obs_df$total_counts, 0.9, na.rm=T)
+limits <- c(0, quantile(obs_df$total_counts, 0.91, na.rm=T))
+
+if (is_spatial){
+    puck_bead_size <- max(1, ifelse(snakemake@params$run_mode_variables$mesh_data,
+        snakemake@params$run_mode_variables$mesh_spot_diameter_um / 40,
+        snakemake@params$puck_variables$spot_diameter_um / 40))
+    
+    res_colnames <- obs_df$res %>%
+        unique
+
+    obs_df %>%
+        filter(res == res_colnames[1]) %>%
+        arrange(total_counts) %>%
+        mutate(total_counts = ifelse(total_counts > filter_quant, filter_quant, total_counts)) %>%
+        ggplot(aes(x_pos, y_pos, color = total_counts)) +
+            geom_point(size=puck_bead_size) + 
+            coord_fixed()+
+            scale_color_viridis_c(option =  "magma", limits = limits) +
+            guides(color = guide_colorbar(barheight = 15)) + 
+            labs(color='UMI count') + 
+            theme(panel.background = element_rect(fill = 'gray45'), 
+                plot.background = element_rect(fill='gray45'),
+                 legend.spacing = unit(0.1, 'cm'),
+                axis.line = element_line(color = 'white'),
+                axis.ticks = element_blank(), axis.text=element_blank(), text = element_text(color='white', size=18))
+}
 
 # gene plotting function
 plot_genes <- function(genes){
@@ -184,7 +196,7 @@ plot_genes <- function(genes){
             scale_color_viridis_c(option = "inferno", direction=-1) +
             labs(color='UMI count')
 
-    if(barcode_file){
+    if(is_spatial){
         pl2 <- gene_expr %>%
             dplyr::select(gene, x_pos, y_pos, expr) %>%
             mutate(type = 'physical coordinates') %>%
@@ -251,7 +263,7 @@ for (i in obs_df %$% res %>% unique){
 
     umap_plot <- dat %>%
         ggplot(aes(umap_0, umap_1, color = cluster)) +
-            geom_point(size=as.numeric(snakemake@params$downstream_variables$plot_bead_size, alpha=0.9)) +
+            geom_point() +
             guides(colour = guide_legend(override.aes = list(size=3)))+
             coord_fixed() +
             theme(axis.text = element_blank(),
@@ -263,21 +275,19 @@ for (i in obs_df %$% res %>% unique){
         umap_plot <- umap_plot + scale_color_manual(values=cluster_clrs)
     }
 
-    if (barcode_file) {
+    if (is_spatial) {
         physical_plot <- obs_df %>%
             filter(res == i) %>%
             dplyr::select(cell_bc, x_pos, y_pos, cluster) %>%
             ggplot(aes(x_pos, y_pos, color = cluster)) +
-                geom_point(size=as.numeric(snakemake@params$downstream_variables$plot_bead_size, alpha=0.9)) +
+                geom_point(size=puck_bead_size) +
                 guides(colour = guide_legend(override.aes = list(size=3)))+
-                labs(y = '', x='physical coordinates') +
                 coord_fixed()+
                 theme(panel.background = element_rect(fill = 'gray45'), 
                     plot.background = element_rect(fill='gray45'),
                     legend.spacing = unit(0.1, 'cm'),
                     axis.line = element_line(color = 'white'),
-                    axis.ticks = element_blank(), axis.text=element_blank(),
-                    text = element_text(color='white'))
+                    axis.ticks = element_blank(), axis.text=element_blank(), text = element_text(color='white'))
             if(n_clusters< 35){
                 physical_plot <- physical_plot + scale_color_manual(values=cluster_clrs)
             }

@@ -2,8 +2,20 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
+from spacemake.spatial import detect_tissue
+
 # expect fitlered .h5ad dge, with spatial coords attached, tissue detected
 adata = sc.read_h5ad(snakemake.input[0])
+umi_cutoff = int(snakemake.wildcards['umi_cutoff'])
+
+# filter_umi or detect tissue
+# if data spatial and detect_tissue=True
+if 'spatial' in adata.obsm.keys() and snakemake.params['run_mode_variables']['detect_tissue']:
+    adata = detect_tissue(adata, umi_cutoff)
+    print('tissue detection')
+else:
+    print(f'filtering by umi cutoff: {umi_cutoff}')
+    adata = adata[adata.obs.total_counts > umi_cutoff, :]
 
 # save the raw counts
 adata.raw = adata
@@ -11,8 +23,8 @@ adata.raw = adata
 # identify highly variable genes if we have any observations
 nrow, ncol = adata.shape
 
-# require at least 1000 genes expressed in the sample
-if nrow > 1 and ncol >= 1000:
+# require at least 1000 genes expressed in the sample and at least 100 cells
+if nrow > 100 and ncol >= 1000:
     print('starting analysis')
     try:
         sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=2000)
@@ -45,21 +57,24 @@ if nrow > 1 and ncol >= 1000:
         sc.tl.umap(adata)   
     except TypeError:
         pass
-    
+
     # find out the clusters
     # restrict to max 20 clusters
-    resolution = [0.6, 0.8, 1, 1.2]
+    resolution = [0.4, 0.6, 0.8, 1.0, 1.2]
 
     print('clustering')
     
     for res in resolution:
-        res_key = 'leiden_' + str(res)
-        
-        sc.tl.leiden(adata, resolution = res, key_added = res_key)
-        
-        # finding marker genes
-        print(f'ranking genes for resolution {res}')
-        sc.tl.rank_genes_groups(adata, res_key, method='t-test', key_added = 'rank_genes_groups_' + res_key, pts=True,
-            use_raw = False)
+        try:
+            res_key = 'leiden_' + str(res)
+            
+            sc.tl.leiden(adata, resolution = res, key_added = res_key)
+            
+            # finding marker genes
+            print(f'ranking genes for resolution {res}')
+            sc.tl.rank_genes_groups(adata, res_key, method='t-test', key_added = 'rank_genes_groups_' + res_key, pts=True,
+                use_raw = False)
+        except ZeroDivisionError as e:
+            pass
 
 adata.write(snakemake.output[0])
