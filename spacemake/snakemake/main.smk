@@ -35,6 +35,7 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 # Global vars #
 ###############
 temp_dir = config['temp_dir']
+tmp_dir = temp_dir
 repo_dir = os.path.dirname(workflow.snakefile)
 spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
 # create puck_data root directory from pattern
@@ -101,7 +102,6 @@ picard_tools = config['external_bin']['picard_tools']
 dropseq_tools = config['external_bin']['dropseq_tools']
 
 reports_dir = complete_data_root + '/reports'
-tmp_dir = complete_data_root + '/tmp'
 smart_adapter = config['adapters']['smart']
 
 ###
