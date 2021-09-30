@@ -242,11 +242,11 @@ def plot_histograms(df, fname, parts=["bead_start", "OP1", "pT"], n_total=1):
     )
 
     n_parts = len(parts)
-    fig, axes = plt.subplots(3, n_parts, figsize=(2 + n_parts * 3, 6))
+    fig, axes = plt.subplots(4, n_parts, figsize=(2 + n_parts * 3, 8))
     # axes = np.array(axes)
     # first row: start coordinates, second row end coordinates, third row score distributions
     colors = plt.get_cmap("tab10")(np.arange(len(parts)))
-    for ax_row, attr in zip(axes, ["start", "end", "score"]):
+    for ax_row, attr in zip(axes, ["start", "end", "score", "len"]):
         for part, ax, color in zip(parts, ax_row, colors):
             # ax.set_yscale("log")
             ctrl_x, ctrl_y = obs_to_arrays(
@@ -259,33 +259,37 @@ def plot_histograms(df, fname, parts=["bead_start", "OP1", "pT"], n_total=1):
             )
             print(df_sig)
             sig_x, sig_y = obs_to_arrays(df_sig)
-            # sns.barplot(
-            #     x="value",
-            #     y="freq",
-            #     hue="signature",
-            #     data=df.query(f"oligo == '{part}' and attr == '{attr}'"),
-            #     ax=ax,
-            # )
-            ax.plot(
-                ctrl_x,
-                ctrl_y.cumsum() / n_total,
-                "--",
-                color=color,
-                label=f"all",
-            )
+
+            if attr == "len":
+                ys = sig_y / n_total
+                yc = ctrl_y / n_total
+            else:
+                ys = sig_y.cumsum() / n_total
+                yc = ctrl_y.cumsum() / n_total
+
             ax.plot(
                 sig_x,
-                sig_y.cumsum() / n_total,
+                ys,
                 "-",
                 color=color,
                 label=f"intact",
+            )
+            ax.plot(
+                ctrl_x,
+                yc,
+                "--",
+                color=color,
+                label=f"all",
             )
             if attr == "start":
                 ax.set_title(part)
             ax.legend(frameon=False)
             ax.set_xlabel(f"match {attr}")
-            ax.set_ylabel("cumulative rel. frequency")
-            ax.set_ylim(0, 1)
+            if attr != "len":
+                ax.set_ylabel("cumulative rel. frequency")
+                ax.set_ylim(0, 1)
+            else:
+                ax.sey_ylabel("rel. frequency")
             if attr in ["start", "end"]:
                 ax.set_xlim(0, max_x)
 
