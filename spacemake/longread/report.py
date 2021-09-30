@@ -7,7 +7,16 @@ import matplotlib.pyplot as plt
 
 
 def donut_plot(
-    ax, labels, counts, sa=10, explode=None, colors=None, w=0.5, radius=1, label_inside=False, **kw
+    ax,
+    labels,
+    counts,
+    sa=10,
+    explode=None,
+    colors=None,
+    w=0.5,
+    radius=1,
+    label_inside=False,
+    **kw,
 ):
     wedges, texts = ax.pie(
         counts,
@@ -225,6 +234,13 @@ def obs_to_arrays(df):
 def plot_histograms(df, fname, parts=["bead_start", "OP1", "pT"], n_total=1):
     import seaborn as sns
 
+    all_ends = df.query("attr == 'end'")["value"]
+    max_x = int((np.percentile(all_ends, 95) + 1) / 100) * 100
+
+    print(
+        f"position 95th percentile would be {np.percentile(all_ends, 95)} -> max_x={max_x}"
+    )
+
     n_parts = len(parts)
     fig, axes = plt.subplots(3, n_parts, figsize=(2 + n_parts * 3, 6))
     # axes = np.array(axes)
@@ -271,7 +287,7 @@ def plot_histograms(df, fname, parts=["bead_start", "OP1", "pT"], n_total=1):
             ax.set_ylabel("cumulative rel. frequency")
             ax.set_ylim(0, 1)
             if attr in ["start", "end"]:
-                ax.set_xlim(0, 250)
+                ax.set_xlim(0, max_x)
 
     fig.tight_layout()
     fig.savefig(fname)
