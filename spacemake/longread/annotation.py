@@ -14,9 +14,12 @@ class AnnotatedSequences:
         sample_name,
         blocks,
         min_score=0,
+        orient_by="bead_start",
     ):
         self.sample_name = sample_name
         self.logger = logging.getLogger("AnnotatedSequences")
+        self.orient_by = orient_by
+        self.orient_by_RC = orient_by + "_RC"
         self.raw_sequences = self.load_raw_sequences(fastq_path)
         self.ann_db = self.load_annotation(ann_path, min_score)
         # self.ann_db = self.cleanup_overlaps(self.ann_db)
@@ -58,9 +61,9 @@ class AnnotatedSequences:
             rc_start = 0
             fw_start = 0
             for n in names:
-                if n == "bead_start":
+                if n == self.orient_by:
                     fw_start += 1
-                elif n == "bead_start_RC":
+                elif n == self.orient_by_RC:
                     rc_start += 1
 
             if (fw_start < rc_start) or (
@@ -141,6 +144,51 @@ class AnnotatedSequences:
             rev_comp(read_seq[cDNA_start:cDNA_end]),
         )
 
+    def extract_between(
+        self,
+        qname,
+        after="bead_start",
+        before="polyT",
+        srange=(0, np.inf),
+        min_L=0,
+        max_L=np.inf,
+    ):
+        """
+        Useful for extracting barcodes and potentially also cDNA (TODO: unify).
+        Looks for matches to <after> and <before> within the <range> interval of the
+        oriented long read. Then excises the intervening sequence,
+        if min_L <= length <= max_L .
+        """
+
+        read_seq = self.raw_sequences[qname]
+        names, starts, ends, _ = self.ann_db[qname]
+
+        extracted = ""
+        s = None
+        e = None
+        if len(names) > 1:
+            # iterate over consecutive pairs of detected oligo
+            # matches and their start & end coordinates
+            for (n1, s1, e1), (n2, s2, e2) in zip(
+                zip(names[:-1], starts[:-1], ends[:-1]),
+                zip(names[1:], starts[1:], ends[1:]),
+            ):
+
+                if s1 > srange[1] or e2 < srange[0]:
+                    # outside the area we are scanning
+                    continue
+
+                if (n1 == after) and (n2 == before):
+                    L = s2 - e1
+                    if min_L <= L <= max_L:
+                        s = e1
+                        e = s2
+                        extracted = read_seq[e1:s2]
+
+                        break
+
+        return extracted, (s, e)
+
     def query_dimensions(self, qsig, substring=False):
         qnames = []
         L = []
@@ -208,11 +256,12 @@ class AnnotatedSequences:
         #
         return f"# qname={qname} oligo_matches={names} match_scores={scores}\n{seq}\n{''.join(buf)}"
 
-    def completeness(self, sig_intact):
+    def completeness(self, sig_intact, polyT="polyT"):
         partial = []
         complete = ",".join(sig_intact)
         for i in range(len(sig_intact)):
             partial.append(",".join(sig_intact[: i + 1]))
+            print("partial append:", partial[-1])
 
         partial = partial[::-1]
 
@@ -222,6 +271,8 @@ class AnnotatedSequences:
         suffixes = defaultdict(int)
 
         n = 0
+        pT = f",{polyT}"
+        # print(f"name of polyT oligo is '{polyT}' so scanning fot '{pT}'")
         for sig in self.signatures.values():
             n += 1
             sig_str = ",".join(sig)
@@ -230,11 +281,10 @@ class AnnotatedSequences:
                 # the first match is maximal. After that
                 # we stop
                 if p in sig_str:  #  and not (p + "_RC" in sig_str)
-                    # print(f"{n} {p} {partial_counts[p]}")
                     partial_counts[p] += 1
-                    if p.endswith(",pT"):
+                    if pT in p:
                         # pT is part of the complete signature
-                        pT_counts[p.rsplit(",pT")[0]] += 1
+                        pT_counts[p.rsplit(pT)[0]] += 1
 
                     assert partial_counts[p] <= n
 
@@ -247,7 +297,7 @@ class AnnotatedSequences:
                             left_context[0][:-1]
                         ] += 1  # [:-1] omits the trailing ','
                         if len(right_context) > 1:
-                            if right_context[1].startswith(",pT"):
+                            if right_context[1].startswith(pT):
                                 pT_counts[p] += 1
                             suffixes[
                                 right_context[1][1:]

@@ -46,6 +46,7 @@ def ann_main(args):
 
     sample_name = detect_sample(args)
     blocks = util.load_oligos(args.blocks)
+    sig_intact = tuple(args.intact_bead.split(","))
 
     annotation = ann.AnnotatedSequences(
         args.fname,
@@ -53,6 +54,7 @@ def ann_main(args):
         sample_name,
         blocks,
         min_score=args.min_score,
+        orient_by=sig_intact[0],
     )
     n_total = len(annotation.raw_sequences)
     logging.info(f"total number of reads in {args.fname} ({sample_name}) is {n_total}")
@@ -60,12 +62,13 @@ def ann_main(args):
     sig_counts = annotation.count_signatures()
     df_sig = util.count_dict_to_df(sig_counts, kind="signatures", n_total=n_total)
 
-    sig_intact = tuple(args.intact_bead.split(","))
-    partial_counts, prefixes, suffixes, pT_counts = annotation.completeness(sig_intact)
-    # print("completeness analysis")
-    # print(partial_counts)
-    # print(prefixes)
-    # print(suffixes)
+    partial_counts, prefixes, suffixes, pT_counts = annotation.completeness(
+        sig_intact, polyT=args.polyT
+    )
+    print("completeness analysis")
+    print(partial_counts)
+    print(prefixes)
+    print(suffixes)
     partial_counts_simple, _ = util.count_dict_collapse_misc(
         partial_counts, sig_intact=sig_intact, total=n_total, misc_thresh=0.00001
     )
@@ -96,6 +99,7 @@ def ann_main(args):
     for part, starts, ends, scores in zip(sig_intact, qstarts.T, qends.T, qscores.T):
         starts_hist = sorted(Counter(starts).items())
         ends_hist = sorted(Counter(ends).items())
+        lens_hist = sorted(Counter(ends - starts).items())
         scores_hist = sorted(Counter(scores).items())
 
         for x, f in starts_hist:
@@ -103,6 +107,9 @@ def ann_main(args):
 
         for x, f in ends_hist:
             data.append((args.intact_bead, part, "end", x, f))
+
+        for x, f in lens_hist:
+            data.append((args.intact_bead, part, "len", x, f))
 
         for x, f in scores_hist:
             data.append((args.intact_bead, part, "score", x, f))
@@ -151,7 +158,7 @@ def ann_main(args):
 
 
 def rep_main(args):
-    logger = logging.getLogger("pb_annotate.report")
+    logger = logging.getLogger("longread.report")
     logger.info(f"generating reports from '{args.fname}'")
     sample_name = detect_sample(args)
     fname = os.path.join(util.ensure_path(args.stats_out), f"{sample_name}.stats.tsv")
@@ -162,7 +169,12 @@ def rep_main(args):
     print(
         "summed up counts in sig_counts dict", np.array(list(sig_counts.values())).sum()
     )
-    ov_counts = util.count_dict_split(sig_counts, "bead_start", "bead-related")
+    bead_related = args.bead_related
+    if bead_related is None:
+        sig_intact = tuple(args.intact_bead.split(","))
+        bead_related = sig_intact[0]
+
+    ov_counts = util.count_dict_split(sig_counts, bead_related, "bead-related")
     n_total = ov_counts["n_total"]
     del ov_counts["n_total"]
     print(
@@ -203,7 +215,9 @@ def rep_main(args):
     df = pd.read_csv(fname, sep="\t", comment="#").fillna("other")
     print(df)
     fname = os.path.join(util.ensure_path(args.report_out), f"{sample_name}.hists.pdf")
-    report.plot_histograms(df, fname, n_total=n_total)
+    report.plot_histograms(
+        df, fname, n_total=n_total, parts=args.intact_bead.split(",")
+    )
 
 
 def main_edits(args):
@@ -336,17 +350,19 @@ def prepare_parser():
     # import pb
     # import overview as ov
 
-    parser = argparse.ArgumentParser(prog="pb_annotate")
+    parser = argparse.ArgumentParser(prog="longread")
     parser.add_argument("fname", help="file with pacbio reads (FASTQ or BAM format)")
-    parser.add_argument("--sample", help="sample name", default=None)
     parser.add_argument(
-        "--aln-cache", help="alignment cache folder", default="./cache/"
+        "--sample", help="sample name (default=autodetect from fname)", default=None
     )
+    # parser.add_argument(
+    #     "--aln-cache", help="alignment cache folder", default="./cache/"
+    # )
     parser.add_argument(
-        "--blocks", default="blocks.fa", help="FASTA file with known oligo sequences"
+        "--blocks",
+        default="",
+        help="FASTA file with known oligo sequences (default=built-in)",
     )
-    # TODO: change default to empty which should then load a default set inside the package
-
     parser.add_argument(
         "--cache",
         default="./cache/",
@@ -372,16 +388,17 @@ def prepare_parser():
     parser.add_argument(
         "--debug", default=False, action="store_true", help="activate debug output"
     )
-    # parser.add_argument(
-    #     "--bead-primer",
-    #     default="SMART",
-    #     help="name of oligo that corresponds to bead primer handle (default=SMART)",
-    # )
     parser.add_argument(
         "--intact-bead",
         default="bead_start,OP1,pT",
         help="sequence of oligos that correspond to intact bead sequence in correct order",
     )
+    parser.add_argument(
+        "--bead-related",
+        default=None,
+        help="name of oligo-block that is specific to the capture oligo. default=first element of --intact-bead",
+    )
+
     parser.add_argument(
         "--stats-out",
         help="path to store statistics (pandas dataframes)",
@@ -391,6 +408,7 @@ def prepare_parser():
         "--report-out", help="path to render graphical reports in", default="./reports/"
     )
 
+    ## sub-parser setup ##
     subparsers = parser.add_subparsers(help="sub-command help")
     aln_parser = subparsers.add_parser(
         "align", help="align PacBio reads against oligos"
@@ -403,6 +421,11 @@ def prepare_parser():
         "--examples-out",
         help="path to store annotated example read sequences",
         default="./examples/",
+    )
+    ann_parser.add_argument(
+        "--polyT",
+        help="name of oligo-block that matches polyT (default='polyT')",
+        default="polyT",
     )
 
     rep_parser = subparsers.add_parser("report", help="create PDF/PNG reports")
