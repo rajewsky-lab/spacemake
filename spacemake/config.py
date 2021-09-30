@@ -49,7 +49,10 @@ class RunMode(ConfigMainVariable):
     }
 
     def has_parent(self):
-        return 'parent_run_mode' in self.variables
+        if 'parent_run_mode' in self.variables.keys():
+            return True
+        else:
+            return False
 
     @property
     def parent_name(self):
@@ -308,7 +311,7 @@ class ConfigFile:
     def add_variable(self, variable, name, **kwargs):
         if not self.variable_exists(variable, name):
             values = self.__process_variable_args(variable, **kwargs)
-            self.variables[variable][name] = kwargs
+            self.variables[variable][name] = values
         else:
             if variable in ['run_modes', 'pucks', 'barcode_flavors']:
                 # drop the last s
@@ -341,15 +344,20 @@ class ConfigFile:
 
     def get_run_mode(self, name):
         # first load the default values
-        rm = RunMode('default',
+        rm = RunMode(name,
+            **self.get_variable('run_modes', name))
+
+        default_rm = RunMode('default',
             **self.get_variable('run_modes', 'default'))
 
-        # update the default first
-        rm.update(RunMode(name,
-            **self.get_variable('run_modes', name)))
-
         if rm.has_parent():
-            rm.update(self.get_run_mode(rm.parent_name))
+            parent_rm = self.get_run_mode(rm.parent_name)
+            parent_rm.update(rm)
+            rm = parent_rm
+
+        # update with self
+        default_rm.update(rm)
+        rm = default_rm
 
         return rm
 
@@ -392,7 +400,7 @@ class ConfigFile:
         msg += LINE_SEPARATOR
 
         try:
-            var_variables = func(variable=variable, name=name, **args)
+            var_variables = func(variable, name, **args)
 
             msg += f'SUCCESS: {variable}={name} {succ_msg} successfully.\n'
             msg += LINE_SEPARATOR

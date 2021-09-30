@@ -55,7 +55,6 @@ def get_bc_preprocess_settings(wildcards):
         raise Exception(flavor)
 
     settings = bc_flavor_data.preprocess_settings[flavor]
-    print(settings)
 
     return settings
 
@@ -84,14 +83,17 @@ def get_final_bam(wildcards):
         return [final_bam]
 
 def get_dge_input_bam(wildcards):
-    is_merged = project_df.get_metadata('is_merged',
-        project_id = wildcards.project,
-        sample_id = wildcards.sample)
+    if wildcards.data_root_type == 'complete_data':
+        final_bam_pipe = final_bam_mm_included_pipe
+        final_bam = get_final_bam(wildcards)
+    elif wildcards.data_root_type == 'downsampled_data':
+        final_bam_pipe = downsampled_bam_mm_included_pipe
+        final_bam = downsampled_bam
 
     if wildcards.mm_included == '.mm_included':
-        out = {'reads': final_bam_mm_included_pipe}
+        out = {'reads': final_bam_pipe}
     else:
-        out = {'reads': get_final_bam(wildcards)}
+        out = {'reads': final_bam}
 
     return out
 
@@ -229,7 +231,9 @@ def get_top_barcodes(wildcards):
 def get_dge_from_run_mode(
         project_id,
         sample_id,
-        run_mode
+        run_mode,
+        data_root_type,
+        downsampling_percentage
     ):
     run_mode_variables = project_df.config.get_run_mode(run_mode).variables
     
@@ -275,7 +279,9 @@ def get_dge_from_run_mode(
             mm_included = mm_included,
             n_beads = run_mode_variables['n_beads'],
             spot_diameter_um = run_mode_variables['mesh_spot_diameter_um'],
-            spot_distance_um = run_mode_variables['mesh_spot_distance_um'])
+            spot_distance_um = run_mode_variables['mesh_spot_distance_um'],
+            data_root_type = data_root_type,
+            downsampling_percentage = downsampling_percentage)
 
     dge_out_summary_file = expand(dge_out_summary_pattern,
             project = project_id,
@@ -286,7 +292,9 @@ def get_dge_from_run_mode(
             mm_included = mm_included,
             spot_diameter_um = run_mode_variables['mesh_spot_diameter_um'],
             spot_distance_um = run_mode_variables['mesh_spot_distance_um'],
-            n_beads = run_mode_variables['n_beads'])
+            n_beads = run_mode_variables['n_beads'],
+            data_root_type = data_root_type,
+            downsampling_percentage = downsampling_percentage)
 
     return {'dge_summary': dge_out_summary_file,
             'dge': dge_out_file}
@@ -330,7 +338,9 @@ def get_qc_sheet_input_files(wildcards):
         'strand_info': expand(strand_info, **extra_args)}
 
     for run_mode in run_modes:
-        run_mode_dge = get_dge_from_run_mode(project_id, sample_id, run_mode)
+        run_mode_dge = get_dge_from_run_mode(project_id, sample_id, run_mode,
+            data_root_type = wildcards.data_root_type,
+            downsampling_percentage = wildcards.downsampling_percentage)
 
         to_return[f'{run_mode}.dge_summary'] = run_mode_dge['dge_summary']
 
@@ -364,7 +374,7 @@ def get_puck_file(wildcards):
         project_id = wildcards.project,
         sample_id = wildcards.sample)
 
-    if puck_barcode_file == "none":
+    if puck_barcode_file is None:
         return {'barcode_file' :config['pucks'][puck]['barcodes']}
     else:
         return {"barcode_file": puck_barcode_file}
@@ -377,7 +387,9 @@ def get_automated_analysis_dge_input(wildcards):
     return [get_dge_from_run_mode(
         project_id = wildcards.project,
         sample_id = wildcards.sample,
-        run_mode = wildcards.run_mode)['dge']]
+        run_mode = wildcards.run_mode,
+        data_root_type=wildcards.data_root_type,
+        downsampling_percentage=wildcards.downsampling_percentage)['dge']]
 
 def get_novosparc_if_spatial(wildcards):
     if project_df.is_spatial(project_id = wildcards.project,\

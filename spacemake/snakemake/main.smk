@@ -65,6 +65,9 @@ sample_read_metrics_db = reports_root + '/sample_read_metrics_db.tsv'
 
 illumina_root = project_dir + '/processed_data/{sample}/illumina'
 complete_data_root = illumina_root + '/complete_data'
+data_root = illumina_root + '/{data_root_type}{downsampling_percentage}'
+downsampled_data_prefix = illumina_root + '/downsampled_data'
+downsampled_data_root = downsampled_data_prefix + '{downsampling_percentage}'
 
 ##############
 # Demux vars #
@@ -123,7 +126,7 @@ split_reads_read_type = split_reads_root + 'read_type_num.txt'
 # post dropseq and QC #
 #######################
 
-qc_sheet = complete_data_root +'/qc_sheet_{sample}_{puck}.html'
+qc_sheet = data_root +'/qc_sheet_{sample}_{puck}.html'
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = '{polyA_adapter_trimmed}.txt.gz'
 barcode_readcounts = complete_data_root + '/out_readcounts' + barcode_readcounts_suffix
@@ -135,8 +138,8 @@ top_barcodes = complete_data_root + '/topBarcodes' + top_barcodes_suffix
 top_barcodes_clean = complete_data_root + '/topBarcodesClean' + top_barcodes_suffix
 spatial_barcodes = complete_data_root + '/spatialBarcodes.txt'
 
-# united dgu
-dge_root = complete_data_root + '/dge'
+# dge creation
+dge_root = data_root + '/dge'
 dge_out_prefix = dge_root + '/dge'
 dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}'
 dge_out = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.txt.gz'
@@ -164,7 +167,7 @@ paired_end_log = paired_end_prefix + '{sample}_paired_end.log'
 paired_end_mapping_stats = paired_end_prefix + '{sample}_paired_end_mapping_stats.txt'
 
 # automated analysis
-automated_analysis_root = complete_data_root + '/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}'
+automated_analysis_root = data_root + '/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}'
 automated_report = automated_analysis_root + '/{sample}_{puck}_illumina_automated_report.html'
 
 automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
@@ -212,6 +215,11 @@ final_bam = complete_data_root + final_bam_suffix + '.bam'
 bam_mm_included_pipe_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam'
 final_bam_mm_included_pipe = complete_data_root + '/final' + bam_mm_included_pipe_suffix
 
+# downsampled bam
+downsampled_bam = downsampled_data_root + '/final_downsampled{polyA_adapter_trimmed}.bam'
+downsampled_bam_mm_included_pipe = downsampled_data_root + '/final_downsampled' + bam_mm_included_pipe_suffix
+downsample_saturation_analysis = downsampled_data_prefix + '/{project}_{sample}_saturation_analysis.html'
+
 # index settings
 star_index = 'species_data/{species}/star_index'
 bt2_rRNA_index_dir = 'species_data/{species}/bt2_rRNA_index'
@@ -220,24 +228,19 @@ bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'
 ################################
 # Final output file generation #
 ################################
-def get_output_files(pattern, projects = [], samples = [],
-                            skip_projects = [], skip_samples = [], **kwargs):
+def get_output_files(pattern, projects = [], samples = [], **kwargs):
     out_files = []
     df = project_df.df
 
-    if samples or projects:
-        # one of the lists is not empty
-        df = df.query('sample_id in @samples or project_id in @projects')
+    if projects != [] or samples != []:
+        ix = project_df.get_ix_from_project_sample_list(
+            project_id_list = projects,
+            sample_id_list = samples)
 
-    if skip_samples:
-        df = df.query('sample_id not in @skip_samples')
-
-    if skip_projects is not None:
-        df = df.query('project_id not in @skip_projects')
+        df = df.loc[ix]
 
     for index, row in df.iterrows():
         for run_mode in row['run_mode']:
-            print(run_mode)
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
             out_files = out_files + expand(pattern,
                 project = index[0],
@@ -287,26 +290,30 @@ wildcard_constraints:
     mm_included = '|.mm_included',
     n_beads = '[0-9]+|spatial',
     spot_diameter_um = '[0-9]+',
-    spot_distance_um = '[0-9]+'
+    spot_distance_um = '[0-9]+',
+    data_root_type = 'complete_data|downsampled_data',
+    downsampling_percentage = '\/[0-9]+|'
 
 #############
 # Main rule #
 #############
 rule all:
     input:
-        #get_final_output_files(fastqc_pattern, skip_merged = True, ext = fastqc_ext, mate = [1,2]),
         # this will also create the clean dge
-        get_output_files(automated_report),
+        get_output_files(automated_report, data_root_type = 'complete_data',
+            downsampling_percentage=''),
         #get_output_files(novosparc_h5ad),
-        get_output_files(qc_sheet)
+        get_output_files(qc_sheet, data_root_type = 'complete_data',
+            downsampling_percentage='')
 
-#####################
-# DOWNSAMPLE MODULE # 
-#####################
-
-#rule downsample:
-#    input:
- #       get_output_files(downsample_saturation_analysis, projects = config['downsample']['projects'], samples = config['downsample']['samples'])
+##############
+# DOWNSAMPLE #
+##############
+rule downsample:
+    input:
+        get_output_files(downsample_saturation_analysis,
+            samples = config['samples'],
+            projects = config['projects'])
 
 #################
 # MERGE SAMPLES #
@@ -363,7 +370,11 @@ def get_reads(wildcards):
     ###
     # R1 and R2 for demultiplexed reads will return none
     ### 
-    return([project_df.get_metadata('R'+ wildcards.mate, sample_id = wildcards.sample, project_id = wildcards.project)])
+    reads = project_df.get_metadata('R'+ wildcards.mate, sample_id = wildcards.sample, project_id = wildcards.project) 
+    if reads is None:
+        return ['none']
+    else:
+        return [reads]
 
 rule link_raw_reads:
     input:
@@ -613,7 +624,7 @@ rule create_automated_analysis_processed_data_files:
 rule create_automated_report:
     input:
         #star_log=star_log_file,
-        unpack(get_novosparc_if_spatial),
+        #unpack(get_novosparc_if_spatial),
         **automated_analysis_processed_data_files
     output:
         automated_report

@@ -9,7 +9,7 @@ import logging
 
 from spacemake.errors import *
 from spacemake.config import ConfigFile
-from spacemake.util import message_aggregation, assert_file, LINE_SEPARATOR
+from spacemake.util import message_aggregation, assert_file
 
 logger_name = 'spacemake.project_df'
 
@@ -248,12 +248,12 @@ def setup_project_parser(pdf, attach_to):
     for main_var_sg, main_var_type in ConfigFile.main_variable_sg2type.items():
         allow_multiple = False
         if isinstance(main_var_type, str) and main_var_type.endswith('_list'):
-            allow_muptiple = True
+            allow_multiple = True
 
         get_set_remove_variable_subparsers(subparsers, 
             variable_name = main_var_sg,
             func=lambda args: set_remove_variable_cmdline(pdf, args),
-            allow_multiple=False)
+            allow_multiple=allow_multiple)
 
     return parser
 
@@ -290,7 +290,6 @@ def set_remove_variable_cmdline(pdf, args):
     variable_name = args['variable']
     action = args['action']
     variable_key = args[variable_name]
-
 
     pdf.set_remove_variable(
         variable_name = variable_name,
@@ -360,7 +359,8 @@ class ProjectDF:
         if os.path.isfile(file_path):
             df = pd.read_csv(file_path,
                 index_col=['project_id', 'sample_id'],
-                converters={'run_mode': eval, 'merged_from': eval})
+                converters={'run_mode': eval, 'merged_from': eval},
+                na_values = ['None', 'none'])
             project_list = []
 
             # update with new columns, if they exist.
@@ -448,7 +448,7 @@ class ProjectDF:
 
         puck = self.config.get_puck(puck_name, return_empty=True)
         
-        if puck_barcode_file != 'none' or puck.has_barcodes:
+        if puck_barcode_file is not None or puck.has_barcodes:
             return True
         else:
             return False
