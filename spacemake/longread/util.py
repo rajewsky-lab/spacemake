@@ -4,7 +4,11 @@ from collections import OrderedDict, defaultdict
 from spacemake.util import rev_comp, fasta_chunks, ensure_path, read_fq
 
 
-def load_oligos(fname="blocks_combv2.fa"):
+def load_oligos(fname=""):
+    if not fname:
+        base = os.path.dirname(__file__)
+        fname = os.path.join(base, "../data/oligo_blocks.fa")
+
     blocks = OrderedDict()
     for fa_id, seq in fasta_chunks(open(fname)):
         blocks[fa_id] = seq
