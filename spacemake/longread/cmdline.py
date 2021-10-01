@@ -191,7 +191,7 @@ def rep_main(args):
         ov_counts, "overview counts", misc_thresh=0.01, total=sig_counts["n_total"]
     )
     bead_simple, _ = util.count_dict_out(
-        bead_counts, "bead counts", misc_thresh=0.01, total=ov_counts["bead-related"]
+        bead_counts, "bead counts", misc_thresh=0.0, total=ov_counts["bead-related"]
     )
     del ov_simple["n_total"]
 
@@ -262,7 +262,7 @@ def main_edits(args):
     df = pd.DataFrame(
         data, columns=["oligo", "seq", "nmatch", "pos", "fmatch", "ed_dict"]
     )
-    print(df)
+    # print(df)
     df.to_csv(
         os.path.join(args.stats_out, f"{sample_name}.oligo_edits.tsv"),
         sep="\t",
@@ -272,6 +272,7 @@ def main_edits(args):
     report.plot_edits(
         df,
         os.path.join(args.report_out, f"{sample_name}.oligo_edits.pdf"),
+        parts=sig_intact,
     )
 
 

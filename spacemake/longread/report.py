@@ -155,74 +155,74 @@ def plot_results(
     plt.savefig(fname)
 
 
-def plot_histograms(
-    classes, fname="measures.pdf", prefix=("bead_start", "optical_primer", "oligo_dT")
-):
-    n_prefix = len(prefix)
-    keys = [k for k in classes.keys() if k[:n_prefix] == prefix]
-    frag_lengths = []
-    starts = []
-    ends = []
-    for k in keys:
-        rep = classes[k]
-        frag_lengths.extend(rep.frag_lengths)
-        # print(k, rep.name, rep.starts)
-        starts.append(np.array([s[:n_prefix] for s in rep.starts]))
-        ends.append(np.array([e[:n_prefix] for e in rep.ends]))
+# def plot_histograms(
+#     classes, fname="measures.pdf", prefix=("bead_start", "optical_primer", "oligo_dT")
+# ):
+#     n_prefix = len(prefix)
+#     keys = [k for k in classes.keys() if k[:n_prefix] == prefix]
+#     frag_lengths = []
+#     starts = []
+#     ends = []
+#     for k in keys:
+#         rep = classes[k]
+#         frag_lengths.extend(rep.frag_lengths)
+#         # print(k, rep.name, rep.starts)
+#         starts.append(np.array([s[:n_prefix] for s in rep.starts]))
+#         ends.append(np.array([e[:n_prefix] for e in rep.ends]))
 
-    frag_lengths = np.array(frag_lengths)
-    starts = np.concatenate(starts)
-    ends = np.concatenate(ends)
-    lengths = ends - starts
-    dists = starts[:, 1:] - ends[:, :-1]
-    features = rep.key[:n_prefix]
+#     frag_lengths = np.array(frag_lengths)
+#     starts = np.concatenate(starts)
+#     ends = np.concatenate(ends)
+#     lengths = ends - starts
+#     dists = starts[:, 1:] - ends[:, :-1]
+#     features = rep.key[:n_prefix]
 
-    # print("starts", starts)
-    # print("ends", ends)
-    # print("dists", dists)
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, figsize=(6, 9))
-    y = np.bincount(frag_lengths).cumsum()
-    x = np.arange(len(y))
-    ax1.plot(x, y, ".-")
-    ax1.set_xlabel("fragment length")
-    ax1.set_ylabel("count")
+#     # print("starts", starts)
+#     # print("ends", ends)
+#     # print("dists", dists)
+#     fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, figsize=(6, 9))
+#     y = np.bincount(frag_lengths).cumsum()
+#     x = np.arange(len(y))
+#     ax1.plot(x, y, ".-")
+#     ax1.set_xlabel("fragment length")
+#     ax1.set_ylabel("count")
 
-    for fs, f in zip(starts.T, features):
-        y = np.bincount(fs).cumsum()
-        x = np.arange(len(y))
-        ax2.plot(x, y, ".-", label=f)
+#     for fs, f in zip(starts.T, features):
+#         y = np.bincount(fs).cumsum()
+#         x = np.arange(len(y))
+#         ax2.plot(x, y, ".-", label=f)
 
-    ax2.legend(ncol=n_prefix)
-    ax2.set_xlabel("start position")
-    ax2.set_ylabel("cumulative count")
+#     ax2.legend(ncol=n_prefix)
+#     ax2.set_xlabel("start position")
+#     ax2.set_ylabel("cumulative count")
 
-    xmax = 0
-    for fl, f in zip(lengths.T, features):
-        xmax = max(xmax, np.percentile(fl, 95))
-        y = np.bincount(fl).cumsum()
-        x = np.arange(len(y))
-        ax3.plot(x, y, ".-", label=f)
+#     xmax = 0
+#     for fl, f in zip(lengths.T, features):
+#         xmax = max(xmax, np.percentile(fl, 95))
+#         y = np.bincount(fl).cumsum()
+#         x = np.arange(len(y))
+#         ax3.plot(x, y, ".-", label=f)
 
-    ax3.set_xlim(-1, xmax)
-    ax3.legend(ncol=n_prefix)
-    ax3.set_xlabel("oligo match length")
-    ax3.set_ylabel("cumulative count")
+#     ax3.set_xlim(-1, xmax)
+#     ax3.legend(ncol=n_prefix)
+#     ax3.set_xlabel("oligo match length")
+#     ax3.set_ylabel("cumulative count")
 
-    # print(dists)
-    xmax = 0
-    for fd, f1, f2 in zip(dists.T, features[:-1], features[1:]):
-        xmax = max(xmax, np.percentile(fd, 95))
-        y = np.bincount(fd).cumsum()
-        x = np.arange(len(y))
-        ax4.plot(x, y, ".-", label=f"{f1}-{f2}")
+#     # print(dists)
+#     xmax = 0
+#     for fd, f1, f2 in zip(dists.T, features[:-1], features[1:]):
+#         xmax = max(xmax, np.percentile(fd, 95))
+#         y = np.bincount(fd).cumsum()
+#         x = np.arange(len(y))
+#         ax4.plot(x, y, ".-", label=f"{f1}-{f2}")
 
-    ax4.set_xlim(-1, xmax)
-    ax4.legend(ncol=n_prefix)
-    ax4.set_xlabel("match distance")
-    ax4.set_ylabel("cumulative count")
+#     ax4.set_xlim(-1, xmax)
+#     ax4.legend(ncol=n_prefix)
+#     ax4.set_xlabel("match distance")
+#     ax4.set_ylabel("cumulative count")
 
-    fig.tight_layout()
-    fig.savefig(fname)
+#     fig.tight_layout()
+#     fig.savefig(fname)
 
 
 def obs_to_arrays(df):
@@ -323,20 +323,26 @@ def plot_edits_heatmap(ax, oname, oseq, edits, nmatch=1):
 
 def plot_edits(df, fname, parts=["bead_start", "OP1", "pT"]):
     n_parts = len(parts)
-    fig, axes = plt.subplots(n_parts, 2, figsize=(8, 1 + n_parts * 2.5))
+    fig, axes = plt.subplots(n_parts, 2, figsize=(10, 1 + n_parts * 2))
     colors = plt.get_cmap("tab10")(np.arange(len(parts)))
     for part, (ax1, ax2), color in zip(parts, axes, colors):
         dfp = df.query(f"oligo == '{part}'")
-        print(dfp["pos"], dfp["fmatch"])
+        # print(dfp["pos"], dfp["fmatch"])
         ax1.step(dfp["pos"].values, dfp["fmatch"].values, where="mid", lw=2)
         ax1.set_xlabel(f"{part} pos. [nt]")
         ax1.set_ylabel("match frequency")
         #
-        plot_edits_heatmap(
-            ax2, part, dfp["seq"].iloc[0], dfp["ed_dict"], nmatch=df["nmatch"].iloc[0]
-        )
-        # ax2.title.set_text(f"{region} n={len(qnames)}")
-        ax2.set_xlabel(f"{part} sequence")
+        if len(dfp["seq"]):
+            plot_edits_heatmap(
+                ax2,
+                part,
+                dfp["seq"].iloc[0],
+                dfp["ed_dict"],
+                nmatch=df["nmatch"].iloc[0],
+            )
+            # ax2.title.set_text(f"{region} n={len(qnames)}")
+            ax2.set_xlabel(f"{part} sequence")
+        ax1.set_ylim(0, 1)
 
     fig.tight_layout()
     fig.savefig(fname)
