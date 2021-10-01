@@ -305,7 +305,7 @@ class AnnotatedSequences:
 
 
 def align_stats(ann, oseq, qmatches, pad=1):
-    import cache
+    import spacemake.longread.cache as cache
     from Bio import pairwise2
 
     n = 0
