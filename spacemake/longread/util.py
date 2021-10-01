@@ -158,9 +158,6 @@ def digest_signatures(
         else:
             descr = f"only_{','.join(sorted(found_set))}"
 
-        if descr == "only_OP1":
-            print(f"found={sorted(found_set)} missing={sorted(missing)} -> {descr}")
-
         return descr
 
     def bead_relation(parts):
