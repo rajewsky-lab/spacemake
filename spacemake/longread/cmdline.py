@@ -166,6 +166,9 @@ def rep_main(args):
     print(df)
     sig_counts = util.count_dict_from_df(df, "signatures")
     # print(sig_counts)
+    util.count_dict_out(
+        sig_counts, "signatures", misc_thresh=0.05, total=sig_counts["n_total"]
+    )
     print(
         "summed up counts in sig_counts dict", np.array(list(sig_counts.values())).sum()
     )
@@ -174,26 +177,35 @@ def rep_main(args):
         sig_intact = tuple(args.intact_bead.split(","))
         bead_related = sig_intact[0]
 
-    ov_counts = util.count_dict_split(sig_counts, bead_related, "bead-related")
-    n_total = ov_counts["n_total"]
-    del ov_counts["n_total"]
+    n_total = sig_counts["n_total"]
+    print(f"oligo name flagging 'bead-related' signature: {bead_related}")
+
+    ov_counts, bead_counts = util.digest_signatures(
+        sig_counts,
+        bead_related,
+        args.intact_bead,
+        # prefixes=args.prefixes,
+        # suffixes=args.suffixes,
+    )
+    ov_simple, _ = util.count_dict_out(
+        ov_counts, "overview counts", misc_thresh=0.01, total=sig_counts["n_total"]
+    )
+    bead_simple, _ = util.count_dict_out(
+        bead_counts, "bead counts", misc_thresh=0.01, total=ov_counts["bead-related"]
+    )
+    del ov_simple["n_total"]
+
     print(
         "summed up counts after splitting and dropping n_total",
-        np.array(list(ov_counts.values())).sum(),
+        np.array(list(ov_simple.values())).sum(),
     )
     print(f"n_total={n_total}")
-    util.count_dict_out(ov_counts, "signature counts", total=n_total, misc_thresh=0.01)
-    ov_counts, ov_frac = util.count_dict_collapse_misc(ov_counts, total=n_total)
 
-    ov_items = sorted(ov_counts.items(), key=lambda x: -x[1])
+    ov_items = sorted(ov_simple.items(), key=lambda x: -x[1])
     ov_labels = [x[0] for x in ov_items]
     ov_counts = [x[1] for x in ov_items]
 
-    bead_counts = util.count_dict_from_df(df, "bead_complete")
-    del bead_counts["n_total"]
-    del bead_counts["other"]
-    print(bead_counts)
-    bead_items = sorted(bead_counts.items(), key=lambda x: -x[1])
+    bead_items = sorted(bead_simple.items(), key=lambda x: -x[1])
 
     bead_labels = [x[0] for x in bead_items]
     bead_counts = [x[1] for x in bead_items]
