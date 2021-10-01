@@ -58,16 +58,12 @@ class AnnotatedSequences:
         for qname, (names, starts, ends, scores) in self.ann_db.items():
             seq = self.raw_sequences[qname]
             L = len(seq)
-            rc_start = 0
-            fw_start = 0
-            for n in names:
-                if n == self.orient_by:
-                    fw_start += 1
-                elif n == self.orient_by_RC:
-                    rc_start += 1
+            lnames = list(names)
+            fw_start = lnames.count(self.orient_by)
+            rc_start = lnames.count(self.orient_by_RC)
 
             if (fw_start < rc_start) or (
-                (fw_start + rc_start == 0) and names[0].endswith("_RC")
+                (fw_start == rc_start) and names[0].endswith("_RC")
             ):
                 # reverse complement the whole thing
                 names = tuple([(n + "_RC").replace("_RC_RC", "") for n in names[::-1]])
@@ -98,6 +94,7 @@ class AnnotatedSequences:
                     yield qname, ofs, ofs + lq
             else:
                 # demand *exact* identity for a match
+                # print(f"sig='{sig}' qsig='{qsig}'")
                 if sig == qsig:
                     yield qname, 0, lq
 
