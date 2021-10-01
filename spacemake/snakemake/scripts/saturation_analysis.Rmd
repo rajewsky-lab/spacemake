@@ -11,7 +11,7 @@ license: GPL
 
 ```{r knitr_options, include=FALSE, cache=FALSE}
 knitr::opts_chunk$set(
-  cache = F,
+  cache = T,
   autodep = TRUE,
   message = FALSE,
   warning = FALSE,
@@ -27,11 +27,9 @@ library(knitr)
 library(grid)
 library(gtable)
 library(kableExtra)
+library(pals)
 
 theme_set(theme_cowplot(18))
-
-#write_rds(snakemake, '/data/local/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/fig_3_slideseq_saturation.rds')
-snakemake <- read_rds('/data/local/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/fig_3_slideseq_saturation.rds')
 ```
 
 ```{r functions, echo = F}
@@ -47,63 +45,6 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
-
-shift_legend <- function(p){
-
-  # check if p is a valid object
-  if(!"gtable" %in% class(p)){
-    if("ggplot" %in% class(p)){
-      gp <- ggplotGrob(p) # convert to grob
-    } else {
-      message("This is neither a ggplot object nor a grob generated from ggplotGrob. Returning original plot.")
-      return(p)
-    }
-  } else {
-    gp <- p
-  }
-
-  # check for unfilled facet panels
-  facet.panels <- grep("^panel", gp[["layout"]][["name"]])
-  empty.facet.panels <- sapply(facet.panels, function(i) "zeroGrob" %in% class(gp[["grobs"]][[i]]))
-  empty.facet.panels <- facet.panels[empty.facet.panels]
-  if(length(empty.facet.panels) == 0){
-    message("There are no unfilled facet panels to shift legend into. Returning original plot.")
-    return(p)
-  }
-
-  # establish extent of unfilled facet panels (including any axis cells in between)
-  empty.facet.panels <- gp[["layout"]][empty.facet.panels, ]
-  empty.facet.panels <- list(min(empty.facet.panels[["t"]]), min(empty.facet.panels[["l"]]),
-                             max(empty.facet.panels[["b"]]), max(empty.facet.panels[["r"]]))
-  names(empty.facet.panels) <- c("t", "l", "b", "r")
-
-  # extract legend & copy over to location of unfilled facet panels
-  guide.grob <- which(gp[["layout"]][["name"]] == "guide-box")
-  if(length(guide.grob) == 0){
-    message("There is no legend present. Returning original plot.")
-    return(p)
-  }
-  gp <- gtable_add_grob(x = gp,
-                        grobs = gp[["grobs"]][[guide.grob]],
-                        t = empty.facet.panels[["t"]],
-                        l = empty.facet.panels[["l"]],
-                        b = empty.facet.panels[["b"]],
-                        r = empty.facet.panels[["r"]],
-                        name = "new-guide-box")
-
-  # squash the original guide box's row / column (whichever applicable)
-  # & empty its cell
-  guide.grob <- gp[["layout"]][guide.grob, ]
-  if(guide.grob[["l"]] == guide.grob[["r"]]){
-    gp <- gtable_squash_cols(gp, cols = guide.grob[["l"]])
-  }
-  if(guide.grob[["t"]] == guide.grob[["b"]]){
-    gp <- gtable_squash_rows(gp, rows = guide.grob[["t"]])
-  }
-  gp <- gtable_remove_grobs(gp, "guide-box")
-
-  return(gp)
-}
 ```
 
 ```{r load_run_info, echo = F}
@@ -129,7 +70,7 @@ sample_info <- bind_rows(snakemake@params$sample_info) %>%
 ```
 
 
-#### Run information
+## Run information
 
 ```{r print_sample_info, echo = F}
 sample_info %>%
@@ -142,7 +83,7 @@ saturation analysis v.0.1.1, generated on `r format(Sys.time(), '%d/%B/%Y')`
 
 contact: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc-berlin.de
 
-#### Downstream stats
+## Downstream stats
 
 ```{r parse_metadata, echo = F, val = F, eval = F}
 metadata <- readStarLog(snakemake@input$star_log) %>%
@@ -166,7 +107,7 @@ metadata <- readStarLog(snakemake@input$star_log) %>%
 metadata
 ```
 
-#### Saturation analysis
+## Saturation analysis
 
 In order to know whether we would gain more from sequencing deeper, we downsampled the data (the final.bam file) to contain 10%, 20%... 90% reads, and then we created the DigitalExpression matrix (as in the normal dropseq pipeline).
 
@@ -176,28 +117,21 @@ Results of this are plotted below.
 
 ```{r read_summaries, echo = F}
 downsampled_summaries <- snakemake@input[startsWith(names(snakemake@input), 'downsample')]
-downsampled_summaries <- downsampled_summaries[endsWith(names(downsampled_summaries), 'dge_summary')]
 
 dge_data <- tibble(name = names(downsampled_summaries),
     filename = unlist(downsampled_summaries)) %>%
-    separate(name, into = c('name', NA), sep='[.]') %>%
-    # replace the first two occurrences of _ with a dot
-    # later we separate by this
-    mutate(name = str_replace(name, '_', '.')) %>%
-    mutate(name = str_replace(name, '_', '.')) %>%
-    separate(name, into = c(NA, 'percentage', 'run_mode'), sep='[.]') %>%
-    mutate(content = map(filename, 
-                      ~ read_table(., skip=6))) %>%
+    separate(name, into = c(NA, 'run_mode', 'percentage'), sep='[.]') %>%
+    mutate(content = map(filename, ~ read_csv(.) %>%
+                         mutate(cell_bc = as.character(cell_bc)))) %>%
     unnest(content) %>%
     select(-filename) %>%
-    mutate(pcr = NUM_GENIC_READS / NUM_TRANSCRIPTS) %>%
-    rename(umis = NUM_TRANSCRIPTS,
-        genes = NUM_GENES,
-        reads = NUM_GENIC_READS)
+    rename(umis = total_counts,
+        genes = n_genes_by_counts,
+        reads = n_reads) %>%
+    mutate(pcr = reads / umis)
 ```
-#### Plot distribution of observations
 
-```{r plot_distributions_of_observations, echo =F, fig.width=9}
+```{r define_plotting_functions, echo =F }
 cPalette = list('grey'= "#999999", 'light_orange'="#E69F00",
          'light_blue'="#56B4E9", 'green' = "#009E73",
          'yellow' = "#F0E442", 'blue'= "#0072B2", 'orange'="#D55E00",
@@ -207,13 +141,12 @@ clrs = c('umis'=cPalette$light_orange, 'pcr' = cPalette$light_blue, 'reads'=cPal
          'genes'=cPalette$pink, 'n_beads'= 'black')
 
 median_clrs = clrs
-names(median_clrs) = paste0('median_', names(clrs))
-clrs = c(clrs, median_clrs)
+names(median_clrs) = c(paste0('median_', names(clrs[-5])), names(clrs[5]))
 
-plot_observations <- function(metric, log_scale = T){
+plot_observations <- function(metric, run_mode_in, log_scale = T){
     pl <- dge_data %>%
-        filter(run_mode == 'slideseq') %>%
-        select(CELL_BARCODE, percentage, pcr, umis, reads, run_mode) %>%
+        filter(run_mode == run_mode_in) %>%
+        select(cell_bc, percentage, pcr, umis, reads, run_mode) %>%
         gather('obs', 'val', umis, pcr, reads) %>%
         filter(obs == metric) %>%
         mutate(percentage = as.integer(percentage)) %>%
@@ -235,111 +168,95 @@ plot_observations <- function(metric, log_scale = T){
     return(pl)
 }
 
-plot_observations('umis')
-plot_observations('reads')
-plot_observations('pcr', log_scale=F)
-```
+plot_deciled_data <- function(run_mode_in) {
+    decile_dat <- dge_data %>%
+        filter(run_mode == run_mode_in) %>%
+        group_by(percentage) %>%
+        mutate(cumsum_reads = cumsum(reads),
+               decile_limit = sum(reads)/10,
+               # put beads into deciles by number of reads
+               decile = floor(cumsum_reads / decile_limit) + 1) %>%
+        # get top 10 deciles, 11 is an artifact of rounding, last beads
+        filter(decile < 11) %>%
+        group_by(percentage, decile) %>%
+        summarise(median_reads = median(reads),
+                  median_genes = median(genes),
+                  median_pcr = median(pcr),
+                  median_umis = median(umis),
+                  n_beads = n()) %>%
+        gather('observation', 'value', median_reads:n_beads) %>%
+        mutate(decile = factor(decile), 
+               percentage = as.integer(percentage),
+               observation = factor(observation, levels = c(
+                          'median_reads', 
+                          'median_umis', 
+                          'median_genes',
+                          'median_pcr', 'n_beads')))
 
-##### we bin the data into percentalise by reads per bead
+    pl <- decile_dat %>%
+        ggplot(aes(percentage, value, color= decile, fill = decile)) +
+            geom_smooth(formula = y~log(x), size = 0.6, se=F) +
+            geom_point(size=2,  color = 'black', pch=21) + 
+            scale_x_continuous(breaks=seq(0, 100, 10)) +
+            scale_fill_manual(values=parula(10)) + 
+            scale_color_manual(values=parula(10)) + 
+            facet_wrap(~observation, scales = 'free_y', ncol=3) +
+            labs(y='', x='downsampling percentage') +
+            guides(colour = guide_legend(nrow=2, byrow=T, override.aes = list(size=5)))
 
-```{r plot_by_deciles, echo = F, fig.height=7, fig.width=7}
-decile_dat <- dge_data %>%
-    group_by(percentage, run_mode) %>%
-    mutate(cumsum_reads = cumsum(reads),
-           decile_limit = sum(reads)/10,
-           # put beads into deciles by number of reads
-           decile = floor(cumsum_reads / decile_limit) + 1) %>%
-    # get top 10 deciles, 11 is an artifact of rounding, last beads
-    filter(decile < 11) %>%
-    group_by(percentage, decile, run_mode) %>%
-    summarise(median_reads = median(reads),
-              median_genes = median(genes),
-              median_pcr = median(pcr),
-              median_umis = median(umis),
-              n_beads = n()) %>%
-    gather('observation', 'value', median_reads:n_beads) %>%
-    mutate(decile = factor(decile), 
-           percentage = as.integer(percentage),
-           observation = factor(observation, levels = c(
-                      'median_reads', 
-                      'median_umis', 
-                      'median_genes',
-                      'median_pcr', 'n_beads')))
+    return(pl)
+}
 
-decile_dat %>%
-    ggplot(aes(percentage, value, color= decile, fill = decile)) +
-        geom_smooth(formula = y~log(x), size = 0.6) +
-        geom_point(size=2,  color = 'black', pch=21) + 
-        scale_x_continuous(breaks=seq(0, 100, 10)) +
-        facet_wrap(run_mode~observation, scales = 'free_y', ncol=2) +
-        labs(y='', x='downsampling percentage')
-```
-
-```{r plot_observations, echo = F}
-plot_data <- function(umi_cutoff=1){
-    dge_data %>%
-        filter(umis > umi_cutoff) %>%
-        group_by(percentage, run_mode) %>%
+plot_data <- function(run_mode_in, umi_cutoff=c(1, 100, 200)){
+    tibble(umi_cutoff = umi_cutoff,
+                  dat = map(umi_cutoff, ~ filter(dge_data, umis > .))) %>%
+        unnest(dat) %>%
+        filter(run_mode == run_mode_in) %>%
+        group_by(percentage, umi_cutoff) %>%
         summarise(median_reads = median(reads),
                   median_umis = median(umis),
                   median_genes = median(genes),
                   median_pcr = median(pcr),
                   n_beads = n()) %>%
-    gather('observation', 'value', median_reads:n_beads) %>% 
-    as_tibble() %>%
-    mutate(percentage = as.integer(percentage),
-           observation = factor(observation, levels = c(
-                      'median_reads', 
-                      'median_umis', 
-                      'median_genes',
-                      'median_pcr', 'n_beads'))) %>%
-    ggplot(aes(percentage, value, color = observation, fill=observation)) +
-        scale_color_manual(values=clrs) +
-        scale_fill_manual(values=clrs) +
-        geom_smooth(formula = y~log(x), size = 0.6) +
+        gather('observation', 'value', median_reads:n_beads) %>% 
+        as_tibble() %>%
+        mutate(percentage = as.integer(percentage),
+               observation = factor(observation, levels = c(
+                          'median_reads', 
+                          'median_umis', 
+                          'median_genes',
+                          'median_pcr', 'n_beads'))) %>%
+    mutate(umi_cutoff = factor(umi_cutoff)) %>%
+    ggplot(aes(percentage, value, color = observation, fill=observation, linetype=umi_cutoff)) +
+        scale_color_manual(values=median_clrs) +
+        scale_fill_manual(values=median_clrs) +
+        geom_smooth(formula = y~log(x), size = 0.6,se=F) +
         geom_point(size=2, color = 'black', pch=21) + 
         scale_x_continuous(breaks=seq(0, 100, 10)) +
-        facet_wrap(run_mode~observation, scales = 'free', ncol=3) +
-        labs(y='', x='downsampling percentage', color='', fill='') +
-        theme(strip.background=element_blank(), strip.text.x=element_blank()) +
-        guides(colour = guide_legend(override.aes = list(size=5))) +
-        ggtitle('Median values of downsampled data')
+        facet_wrap(~observation, scales = 'free', ncol=3) +
+        labs(y='', x='downsampling percentage', color='', fill='', linetype='') +
+        theme(strip.background=element_blank(), strip.text.x=element_blank(), legend.position='bottom') +
+        guides(colour = guide_legend(nrow=2, byrow=T, override.aes = list(size=3)))
 }
 ```
-\newpage
 
-##### With UMI cutoff 1
 
-```{r plot_umi_1, echo = F, fig.height = 5, fig.width = 10}
-grid.draw(shift_legend(plot_data(1)))
+## Plots per run\_mode {.tabset}
+
+```{r plot_distributions_of_observations, echo =F, fig.width=12,fig.height=7,results='asis'}
+run_mode_names <- dge_data %$% 
+    run_mode %>% unique()
+    
+for (run_mode_in in run_mode_names){
+    umi_cutoff <- snakemake@params$run_modes[[run_mode_in]]$umi_cutoff
+    cat(paste0('\n\n### ', run_mode_in, '\n\n'))
+    print(plot_observations('umis', run_mode_in))
+    print(plot_observations('reads', run_mode_in))
+    print(plot_observations('pcr', run_mode_in, log_scale=F))
+
+    print(plot_deciled_data(run_mode_in))
+
+    print(plot_data(run_mode_in, umi_cutoff = c(1, umi_cutoff)))
+}
 ```
 
-\newpage
-
-##### With UMI cutoff 10
-
-```{r plot_umi_10, echo = F, fig.height = 5, fig.width = 10, fig.align='center'}
-grid.draw(shift_legend(plot_data(10)))
-```
-
-\newpage
-
-##### With UMI cutoff 50
-
-```{r plot_umi_50, echo = F, fig.height = 5, fig.width = 10, fig.align='center'}
-grid.draw(shift_legend(plot_data(50)))
-```
-
-\newpage
-
-##### With UMI cutoff 100
-
-```{r plot_umi_100, echo = F, fig.height = 5, fig.width = 10, fig.align='center'}
-grid.draw(shift_legend(plot_data(100)))
-```
-
-##### With UMI cutoff 500
-
-```{r plot_umi_500, echo = F, fig.height = 5, fig.width = 10, fig.align='center'}
-grid.draw(shift_legend(plot_data(500)))
-```

@@ -540,6 +540,7 @@ class ProjectDF:
         """
         adds or updates a sample with a given project_id and sample_id
         """
+        print(kwargs)
         ix = (project_id, sample_id)
         sample_exists = self.sample_exists(*ix)
 
@@ -569,17 +570,9 @@ class ProjectDF:
                     ' first two or the second two')
 
         # assert files first
-        assert_file(
-            kwargs.get('R1',
-                       self.project_df_default_values['R1']),
-            default_value=self.project_df_default_values['R1'],
-            extension = '.fastq.gz')
+        assert_file(R1, default_value = None, extension = '.fastq.gz')
 
-        assert_file(
-            kwargs.get('R2',
-                       self.project_df_default_values['R2']),
-            default_value=self.project_df_default_values['R2'],
-            extension = '.fastq.gz')
+        assert_file(R2, default_value = None, extension = '.fastq.gz')
 
         is_spatial = assert_file(
             kwargs.get('puck_barcode_file',

@@ -56,7 +56,7 @@ def get_saturation_analysis_input(wildcards):
 
             files[f'downsampled_dge_summary.{run_mode}.{ratio}'] = dge_summary
 
-        files[f'downsample_dge_summary.{run_mode}.100'] = get_dge_from_run_mode(
+        files[f'downsampled_dge_summary.{run_mode}.100'] = get_dge_from_run_mode(
             project_id = wildcards.project,
             sample_id = wildcards.sample,
             run_mode = run_mode,
@@ -71,7 +71,7 @@ rule create_saturation_analysis:
     output:
         downsample_saturation_analysis
     params:
-        sample_info = lambda wildcards: get_sample_info(
+        sample_info = lambda wildcards: project_df.get_sample_info(
             wildcards.project, wildcards.sample),
         run_modes = lambda wildcards: get_run_modes_from_sample(
             wildcards.project, wildcards.sample)
