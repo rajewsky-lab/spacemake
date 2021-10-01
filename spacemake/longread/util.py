@@ -121,3 +121,76 @@ def count_dict_from_df(df, kind):
     keys = df["name"]
     values = df["count"]
     return dict(zip(keys, values))
+
+
+def digest_signatures(
+    sig_counts,
+    bead_related="bead_start",
+    complete_signature="P5,bead_start,OP1,polyT,N70X",
+    prefixes=[
+        "P5",
+    ],
+    suffixes=[
+        "N70X",
+    ],
+):
+    bead_counts = defaultdict(int)
+    ov_counts = defaultdict(int)
+    n_bead_related = 0
+
+    complete = complete_signature.split(",")
+    while complete[0] in prefixes:
+        complete.pop(0)
+
+    while complete[-1] in suffixes:
+        complete.pop()
+
+    # print(f"complete={complete}")
+    complete_set = set(complete)
+
+    def describe(found):
+        found_set = set(found)
+        missing = complete_set - found_set
+        if not missing:
+            descr = "complete"
+        elif len(missing) < len(found_set):
+            descr = f"missing_{','.join(sorted(missing))}"
+        else:
+            descr = f"only_{','.join(sorted(found_set))}"
+
+        if descr == "only_OP1":
+            print(f"found={sorted(found_set)} missing={sorted(missing)} -> {descr}")
+
+        return descr
+
+    def bead_relation(parts):
+        search = list(complete)
+        found = []
+        at = 0
+
+        try:
+            i = parts.index(search[0])  # look for first part, e.g. bead_start
+        except ValueError:
+            i = 0
+
+        for part in parts[i:]:
+            # find co-linear matches,
+            # ignore extra inserted segments
+            # (for now)
+            if part in search[at:]:
+                found.append(part)
+                at = search.index(part)
+
+        return describe(found)
+
+    for sig, count in sig_counts.items():
+        parts = sig.split(",")
+        if bead_related in parts:
+            br = bead_relation(parts)
+            bead_counts[br] += count
+            n_bead_related += count
+        else:
+            ov_counts[sig] = count
+
+    ov_counts["bead-related"] = n_bead_related
+    return ov_counts, bead_counts
