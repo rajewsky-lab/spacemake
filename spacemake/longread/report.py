@@ -289,7 +289,7 @@ def plot_histograms(df, fname, parts=["bead_start", "OP1", "pT"], n_total=1):
                 ax.set_ylabel("cumulative rel. frequency")
                 ax.set_ylim(0, 1)
             else:
-                ax.sey_ylabel("rel. frequency")
+                ax.set_ylabel("rel. frequency")
             if attr in ["start", "end"]:
                 ax.set_xlim(0, max_x)
 
