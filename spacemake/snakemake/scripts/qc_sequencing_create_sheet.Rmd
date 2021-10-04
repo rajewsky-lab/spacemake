@@ -52,7 +52,7 @@ readStarLog <- function(log_file){
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
 #snakemake <- read_rds('/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/slideseq_qc.rds')
-#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/visium_qc.rds')
+#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_qc.rds')
 ```
 
 ```{r read_sample_information_tables, echo = F}
@@ -79,8 +79,7 @@ meshed_run_mode_names <- run_mode_settings %>%
     run_mode
 
 sample_info <- bind_rows(snakemake@params$sample_info) %>%
-    select(species, sequencing_date, investigator, experiment,
-           puck_barcode_file) %>%
+    select(species, sequencing_date, investigator, experiment) %>%
     unique %>%
     gather('info_name', 'value') %>%
     add_row(info_name = 'project_id',
@@ -114,7 +113,6 @@ nucl_clrs = c('A'='#F5C900',
 
 ```{r show_sample_info, echo = F}
 sample_info %>%
-    filter(info_name != 'puck_barcode_file') %>%
     kbl(col.names=NULL) %>%
     kable_classic_2(full_width=F, position='left')
 ```
@@ -488,6 +486,25 @@ plot_bead_size <- run_mode_settings %>%
                               spot_diameter_um / 40), def_plot_bead_size)) %>%
     select(run_mode, plot_bead_size)
 
+x_limits <- dge_summary$x_pos %>% {c(min(.), max(.))}
+y_limits <- dge_summary$y_pos %>% {c(min(.), max(.))}
+
+ratio <- (x_limits[2] - x_limits[1] ) / (y_limits[2] - y_limits[1])
+
+mm_dist <- max(1000, round(snakemake@params$puck_variables$width_um / 3, digits =-3))
+mm_diff <- mm_dist / 1000
+
+x_mm_breaks <- seq(0, snakemake@params$puck_variables$width_um, mm_dist)
+x_mm_breaks <- paste0(x_mm_breaks * mm_diff / mm_dist, 'mm')
+y_mm_breaks <- seq(0, snakemake@params$puck_variables$width_um / ratio, mm_dist)
+y_mm_breaks <- paste0(y_mm_breaks * mm_diff / mm_dist, 'mm')
+
+px_to_mm <- (x_limits[2] - x_limits[1]) / snakemake@params$puck_variables$width_um * mm_dist
+
+x_breaks <- seq(x_limits[1], x_limits[2], px_to_mm)
+y_breaks <- seq(y_limits[1], y_limits[2], px_to_mm)
+
+
 plot_spatial_qc <- function(variable, dat_in, plot_bead_size=0.1, ttl='', cut_dist=T){
     spatial_qc_dat <- dat_in %>%
         mutate(qnt = quantile(val, 0.9, na.rm=T)) %>%
@@ -503,14 +520,15 @@ plot_spatial_qc <- function(variable, dat_in, plot_bead_size=0.1, ttl='', cut_di
     pl <- spatial_qc_dat %>%
         ggplot(aes(x_pos, y_pos, color = val)) +
             geom_point(size=plot_bead_size) + 
+            scale_x_continuous(labels = x_mm_breaks, breaks = x_breaks) +
+            scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks) +
             coord_fixed()+
             guides(color = guide_colorbar(barheight = 15)) + 
-            labs(color=ttl) + 
+            labs(color=ttl, x='', y='') + 
             theme(panel.background = element_rect(fill = 'gray95'), 
-                plot.background = element_rect(fill='gray95'),
                  legend.spacing = unit(0.1, 'cm'),
                 axis.line = element_line(color = 'black'),
-                axis.ticks = element_blank(), axis.text=element_blank(), text = element_text(color='black', size=18))
+                text = element_text(color='black', size=18))
     if(cut_dist){
         pl <- pl +
             scale_color_viridis_c(option =  "magma", limits = limits)
@@ -549,7 +567,7 @@ qc_var_info <- dge_summary %>%
 ```
 
 
-```{r plot_per_run_mode, echo =F, results='asis', fig.width=7, fig.height=6}
+```{r plot_per_run_mode, echo =F, results='asis', fig.width=7, fig.height=6, eval=is_spatial}
 for (run_mode_name in run_mode_names){
     cat(paste0('\n\n#### ', run_mode_name, '\n\n'))
 

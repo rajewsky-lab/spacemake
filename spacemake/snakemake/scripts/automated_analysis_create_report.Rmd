@@ -34,6 +34,7 @@ cpalette <- list('orange' = '#D55E00', 'blue' = '#0072B2', 'green' = '#009E73', 
 clrs = c('umis'=cpalette$light_orange, 'genes' = cpalette$light_blue,
          'reads'=cpalette$green, 'pcr'=cpalette$pink, 'pct_counts_mt'= 'black')
 
+#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_automated_analysis.rds')
 source(snakemake@params$r_shared_scripts)
 ```
 
@@ -153,6 +154,24 @@ filter_quant <- quantile(obs_df$total_counts, 0.9, na.rm=T)
 limits <- c(0, quantile(obs_df$total_counts, 0.91, na.rm=T))
 
 if (is_spatial){
+    x_limits <- obs_df$x_pos %>% {c(min(.), max(.))}
+    y_limits <- obs_df$y_pos %>% {c(min(.), max(.))}
+
+    ratio <- (x_limits[2] - x_limits[1] ) / (y_limits[2] - y_limits[1])
+
+    mm_dist <- max(1000, round(snakemake@params$puck_variables$width_um / 3, digits =-3))
+    mm_diff <- mm_dist / 1000
+
+    x_mm_breaks <- seq(0, snakemake@params$puck_variables$width_um, mm_dist)
+    x_mm_breaks <- paste0(x_mm_breaks * mm_diff / mm_dist, 'mm')
+    y_mm_breaks <- seq(0, snakemake@params$puck_variables$width_um / ratio, mm_dist)
+    y_mm_breaks <- paste0(y_mm_breaks * mm_diff / mm_dist, 'mm')
+
+    px_to_mm <- (x_limits[2] - x_limits[1]) / snakemake@params$puck_variables$width_um * mm_dist
+
+    x_breaks <- seq(x_limits[1], x_limits[2], px_to_mm)
+    y_breaks <- seq(y_limits[1], y_limits[2], px_to_mm)
+
     puck_bead_size <- max(def_plot_bead_size, ifelse(snakemake@params$run_mode_variables$mesh_data,
         snakemake@params$run_mode_variables$mesh_spot_diameter_um / 40,
         snakemake@params$puck_variables$spot_diameter_um / 40))
@@ -167,14 +186,15 @@ if (is_spatial){
         ggplot(aes(x_pos, y_pos, color = total_counts)) +
             geom_point(size=puck_bead_size) + 
             coord_fixed()+
+            scale_x_continuous(labels = x_mm_breaks, breaks = x_breaks) +
+            scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks) +
             scale_color_viridis_c(option =  "magma", limits = limits) +
             guides(color = guide_colorbar(barheight = 15)) + 
-            labs(color='UMI count') + 
+            labs(color='UMI count', x='', y='') + 
             theme(panel.background = element_rect(fill = 'gray95'), 
-                plot.background = element_rect(fill='gray95'),
                  legend.spacing = unit(0.1, 'cm'),
                 axis.line = element_line(color = 'black'),
-                axis.ticks = element_blank(), axis.text=element_blank(), text = element_text(color='black', size=18))
+                text = element_text(color='black', size=18))
 }
 
 # gene plotting function
@@ -222,7 +242,7 @@ plot_genes <- function(genes){
 }
 ```
 
-```{r plot_clusters_umap_puck, echo =F, fig.height=fig_height, fig.width=fig_width, eval=data_complete, results='asis'}
+```{r plot_clusters_umap_puck, echo =F, fig.height=7, fig.width=6, eval=data_complete, results='asis'}
 library(pals)
 
 cluster_clrs <- unname(glasbey())
@@ -258,11 +278,14 @@ for (i in obs_df %$% res %>% unique){
                 geom_point(size=puck_bead_size) +
                 guides(colour = guide_legend(override.aes = list(size=3)))+
                 coord_fixed()+
+                labs(x='', y='') +
+                scale_x_continuous(labels = x_mm_breaks, breaks = x_breaks) +
+                scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks) +
                 theme(panel.background = element_rect(fill = 'gray95'), 
-                    plot.background = element_rect(fill='gray95'),
-                legend.spacing = unit(0.1, 'cm'),
+                    legend.position='none',
+                    legend.spacing = unit(0.1, 'cm'),
                     axis.line = element_line(color = 'black'),
-                    axis.ticks = element_blank(), axis.text=element_blank(), text = element_text(color='black'))
+                    text = element_text(color='black'))
             if(n_clusters< length(cluster_clrs)){
                 physical_plot <- physical_plot + scale_color_manual(values=cluster_clrs)
             }

@@ -626,6 +626,8 @@ rule create_automated_report:
         #star_log=star_log_file,
         #unpack(get_novosparc_if_spatial),
         **automated_analysis_processed_data_files
+    # spawn at most 4 automated analyses
+    threads: max(workflow.cores / 8, 1)
     output:
         automated_report
     params:

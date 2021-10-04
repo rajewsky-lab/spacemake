@@ -57,8 +57,7 @@ run_mode_settings <- bind_rows(snakemake@params$run_mode) %>%
 run_mode_names <- run_mode_settings[-1] %>% names
 
 sample_info <- bind_rows(snakemake@params$sample_info) %>%
-    select(species, sequencing_date, investigator, experiment,
-           puck_barcode_file) %>%
+    select(species, sequencing_date, investigator, experiment) %>%
     unique %>%
     gather('info_name', 'value') %>%
     add_row(info_name = 'project_id',
@@ -74,7 +73,6 @@ sample_info <- bind_rows(snakemake@params$sample_info) %>%
 
 ```{r print_sample_info, echo = F}
 sample_info %>%
-    filter(info_name != 'puck_barcode_file') %>%
     kbl(col.names=NULL) %>%
     kable_classic_2(full_width=F, position='left')
 ```
@@ -143,7 +141,7 @@ clrs = c('umis'=cPalette$light_orange, 'pcr' = cPalette$light_blue, 'reads'=cPal
 median_clrs = clrs
 names(median_clrs) = c(paste0('median_', names(clrs[-5])), names(clrs[5]))
 
-plot_observations <- function(metric, run_mode_in, log_scale = T){
+plot_observations <- function(metric, run_mode_in, log_scale = T, ttl=''){
     pl <- dge_data %>%
         filter(run_mode == run_mode_in) %>%
         select(cell_bc, percentage, pcr, umis, reads, run_mode) %>%
@@ -158,8 +156,11 @@ plot_observations <- function(metric, run_mode_in, log_scale = T){
             geom_density() +
             facet_grid(percentage~run_mode, scales = 'free_y') +
             scale_fill_manual(values = clrs) +
-            labs(x='') +
-            theme(legend.position='none', axis.ticks.y = element_blank(), axis.text.y = element_blank())
+            labs(x=ttl) +
+            theme(legend.position='none', strip.background.x=element_blank(),
+                  strip.text.x = element_blank(), strip.background.y = element_blank(),
+                  strip.text.y = element_text(angle=0),
+                  axis.ticks.y = element_blank(), axis.text.y = element_blank())
     if (log_scale){
         pl <- pl +
             scale_x_log10()+
@@ -197,12 +198,13 @@ plot_deciled_data <- function(run_mode_in) {
         ggplot(aes(percentage, value, color= decile, fill = decile)) +
             geom_smooth(formula = y~log(x), size = 0.6, se=F) +
             geom_point(size=2,  color = 'black', pch=21) + 
-            scale_x_continuous(breaks=seq(0, 100, 10)) +
+            scale_x_continuous(breaks=seq(0, 100, 20)) +
             scale_fill_manual(values=parula(10)) + 
             scale_color_manual(values=parula(10)) + 
-            facet_wrap(~observation, scales = 'free_y', ncol=3) +
+            facet_wrap(~observation, scales = 'free', ncol=2) +
             labs(y='', x='downsampling percentage') +
-            guides(colour = guide_legend(nrow=2, byrow=T, override.aes = list(size=5)))
+            guides(fill = guide_legend(nrow=3, byrow=T, override.aes = list(size=3))) +
+            theme(legend.position = 'bottom', strip.background = element_blank())
 
     return(pl)
 }
@@ -232,31 +234,45 @@ plot_data <- function(run_mode_in, umi_cutoff=c(1, 100, 200)){
         scale_fill_manual(values=median_clrs) +
         geom_smooth(formula = y~log(x), size = 0.6,se=F) +
         geom_point(size=2, color = 'black', pch=21) + 
-        scale_x_continuous(breaks=seq(0, 100, 10)) +
-        facet_wrap(~observation, scales = 'free', ncol=3) +
+        scale_x_continuous(breaks=seq(0, 100, 20)) +
+        facet_wrap(~observation, scales = 'free', ncol=2) +
         labs(y='', x='downsampling percentage', color='', fill='', linetype='') +
-        theme(strip.background=element_blank(), strip.text.x=element_blank(), legend.position='bottom') +
-        guides(colour = guide_legend(nrow=2, byrow=T, override.aes = list(size=3)))
+        theme(strip.background=element_blank(), legend.position='bottom',
+              legend.key.width=unit(1.2, 'cm')) +
+        guides(colour = guide_legend(nrow=3, byrow=T, override.aes = list(size=3)),
+               linetype = guide_legend(nrow=3, byrow=T, override.aes = list(size=2)))
 }
 ```
 
 
-## Plots per run\_mode {.tabset}
+## Histograms per run\_mode {.tabset}
 
-```{r plot_distributions_of_observations, echo =F, fig.width=12,fig.height=7,results='asis'}
+```{r plot_histogram_of_observations, echo =F, fig.width=7,fig.height=4,results='asis'}
 run_mode_names <- dge_data %$% 
     run_mode %>% unique()
     
 for (run_mode_in in run_mode_names){
     umi_cutoff <- snakemake@params$run_modes[[run_mode_in]]$umi_cutoff
     cat(paste0('\n\n### ', run_mode_in, '\n\n'))
-    print(plot_observations('umis', run_mode_in))
-    print(plot_observations('reads', run_mode_in))
-    print(plot_observations('pcr', run_mode_in, log_scale=F))
+    print(plot_observations('umis', run_mode_in, ttl='# of UMIs per spot'))
+    print(plot_observations('reads', run_mode_in, ttl='# of reads per spot'))
+    print(plot_observations('pcr', run_mode_in, log_scale=F, ttl='reads / UMI per spot'))
+
+}
+```
+
+## Median plots per run\_mode {.tabset}
+
+```{r plot_median_values_of, echo =F, fig.width=7,fig.height=7,results='asis'}
+run_mode_names <- dge_data %$% 
+    run_mode %>% unique()
+    
+for (run_mode_in in run_mode_names){
+    umi_cutoff <- snakemake@params$run_modes[[run_mode_in]]$umi_cutoff
+    cat(paste0('\n\n### ', run_mode_in, '\n\n'))
 
     print(plot_deciled_data(run_mode_in))
 
     print(plot_data(run_mode_in, umi_cutoff = c(1, umi_cutoff)))
 }
 ```
-
