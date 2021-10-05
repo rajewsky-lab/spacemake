@@ -38,12 +38,12 @@ class RunMode(ConfigMainVariable):
         'n_beads': int,
         'umi_cutoff': 'int_list',
         'clean_dge': bool,
-        'plot_bead_size': float,
         'detect_tissue': bool,
         'polyA_adapter_trimming': bool,
         'count_mm_reads': bool,
         'count_intronic_reads': bool,
         'mesh_data': bool,
+        'mesh_type': str,
         'mesh_spot_diameter_um': int,
         'mesh_spot_distance_um': int
     }
@@ -181,6 +181,14 @@ class ConfigFile:
         
         if 'species' not in self.variables:
             self.variables['species'] = {}
+
+        for run_mode_name, run_mode_variables in self.variables['run_modes'].items():
+            variables = run_mode_variables.copy()
+            for var in run_mode_variables:
+                if not var in RunMode.variable_types:
+                    del variables[var]
+
+            self.variables['run_modes'][run_mode_name] = variables
 
     def dump(self):
         with open(self.file_path, 'w') as fo:
@@ -473,7 +481,7 @@ class ConfigFile:
 
     def __get_run_mode_parser(self, required=True):
         parser = argparse.ArgumentParser(
-                allow_abbrev=False,
+                allow_abbrev=False, formatter_class = argparse.RawTextHelpFormatter,
                 description='add/update run_mode parent parser',
                 add_help = False)
         parser.add_argument('--name', type=str,
@@ -503,10 +511,6 @@ class ConfigFile:
                         'parameter is set, contiguous islands within umi_cutoff passing beads will '+\
                         'also be included in the analysis')
         parser.add_argument(
-                '--plot_bead_size',
-                help='The bead size to be used when plotting the beads in 2D, during the '+\
-                        'automated report generation. Defaults to 1.', type=float)
-        parser.add_argument(
                 '--polyA_adapter_trimming',
                 required=False,
                 choices=bool_in_str,
@@ -531,6 +535,14 @@ class ConfigFile:
                 'meshgrid will be created, where each new spot will have diameter'+
                 ' of --mesh_spot_diameter_um micron diameter and the spots will ' +
                 'be spaced --mesh_spot_distance_um microns apart')
+        parser.add_argument('--mesh_type', required=False,
+            choices=['circle', 'hexagon'], type = str,
+            help = 'circle: circles with diameter of --mesh_spot_diameter_um will be placed' +
+                    ' in a hex grid, where he distance between any two circles will be ' +
+                    '--mesh_spot_distance_um\n' +
+                    'hexagon: a mesh of touching hexagons will be created, with their ' +
+                    'centers being --mesh_spot_distance_um apart. This will cover all ' +
+                    'the data without any holes')
         parser.add_argument('--mesh_spot_diameter_um',
             type=float, required=False,
             help='diameter of mesh spot, in microns. to create a visium-style '+

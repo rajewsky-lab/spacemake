@@ -29,6 +29,7 @@ def get_run_parser():
     parser.add_argument('--rerun-incomplete', '--ri', action='store_true', help = 'forces snakemake to rerun incompletely generated files')
     parser.add_argument('--keep-going', action='store_true', help='if a job fails, keep executing independent jobs')
     parser.add_argument('--printshellcmds', '-p', action='store_true', help='print shell commands for each rule, if exist')
+    parser.add_argument('--touch', '-t', action='store_true', help = 'rather than running the rules, just touch each file')
 
     return parser
 
@@ -159,7 +160,7 @@ def spacemake_run(args):
     # run snakemake
     snakemake.snakemake(snakefile, configfiles=[config_path],
         cores = args['cores'], dryrun=args['dryrun'],
-        targets=targets,
+        targets=targets, touch=args['touch'],
         force_incomplete=args['rerun_incomplete'],
         keepgoing=args['keep_going'], printshellcmds = args['printshellcmds'],
         config={'project_df': project_df, 'samples': samples,
@@ -179,6 +180,11 @@ main_parser= argparse.ArgumentParser(
         description='spacemake: bioinformatic pipeline for processing and analysis of spatial-transcriptomics data')
 
 subparsers = main_parser.add_subparsers(help='sub-command help', dest='subcommand')
+
+parser_run = None
+parser_projects = None
+parser_config = None
+parser_init = None
 
 ##################
 # SPACEMAKE INIT #
@@ -200,9 +206,6 @@ if os.path.isfile(config_path):
 ############################
 from spacemake.project_df import setup_project_parser
 
-parser_run = None
-parser_projects = None
-
 if os.path.isfile(config_path):
     pdf = ProjectDF(project_df, cf)
     parser_projects = setup_project_parser(pdf, subparsers)
@@ -219,7 +222,8 @@ def cmdline():
         'init': parser_init,
         'config': parser_config,
         'projects': parser_projects,
-        'run': parser_run}
+        'run': parser_run,
+        'main': main_parser}
 
     # get the function to be run
     if 'func' in args:

@@ -22,19 +22,18 @@ run_modes:
         n_beads: 100000
         umi_cutoff: [100, 300]
         clean_dge: True
-        plot_bead_size: 0.1
         detect_tissue: False
         polyA_adapter_trimming: True
         count_intronic_reads: True
         count_mm_reads: True
         mesh_data: False
+        mesh_type: 'circle'
         mesh_spot_diameter_um: 55
         mesh_spot_distance_um: 100
     visium:
         n_beads: 10000
         umi_cutoff: [1000]
         clean_dge: False
-        plot_bead_size: 1
         detect_tissue: True
         polyA_adapter_trimming: False
         count_intronic_reads: False
@@ -43,7 +42,6 @@ run_modes:
         expected_n_beads: 100000
         umi_cutoff: [50]
         clean_dge: False
-        plot_bead_size: 0.1
         detect_tissue: False
 
 adapters:

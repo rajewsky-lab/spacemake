@@ -34,8 +34,7 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 ###############
 # Global vars #
 ###############
-temp_dir = config['temp_dir']
-tmp_dir = temp_dir
+global_tmp = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
 spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
 # create puck_data root directory from pattern
@@ -208,6 +207,7 @@ tagged_bam_pattern = complete_data_root + '/unaligned_bc_tagged{polyA_adapter_tr
 # mapped reads
 star_prefix  = complete_data_root + '/star{polyA_adapter_trimmed}.'
 star_log_file = star_prefix + 'Log.final.out'
+star_tmp_dir = star_prefix + 'tmp'
 
 # final bam file
 final_bam_suffix = '/final{polyA_adapter_trimmed}'
@@ -290,7 +290,7 @@ wildcard_constraints:
     mm_included = '|.mm_included',
     n_beads = '[0-9]+|spatial',
     spot_diameter_um = '[0-9]+',
-    spot_distance_um = '[0-9]+',
+    spot_distance_um = '[0-9]+|hexagon',
     data_root_type = 'complete_data|downsampled_data',
     downsampling_percentage = '\/[0-9]+|'
 
@@ -521,7 +521,7 @@ rule create_dge:
         CELL_BC_FILE={input.top_barcodes} \
         CELL_BARCODE_TAG={params.cell_barcode_tag} \
         MOLECULAR_BARCODE_TAG={params.umi_tag} \
-        TMP_DIR={temp_dir} \
+        TMP_DIR={global_tmp} \
         {params.dge_extra_params}
         """
 

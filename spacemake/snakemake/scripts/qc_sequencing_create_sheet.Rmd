@@ -14,6 +14,7 @@ license: GPL
 
 ```{r knitr_options, include=FALSE, cache=FALSE}
 knitr::opts_chunk$set(
+  cache=T,
   autodep = TRUE,
   message = FALSE,
   warning = FALSE,
@@ -206,7 +207,7 @@ Each of the QC plots we show on a per run mode basis, to see if there are any do
 
 #### 'Knee'-plot
 
-```{r knee_plot, echo = F, fig.height=4*run_mode_n}
+```{r knee_plot, echo = F, fig.height=5}
 dge_summary <- tibble(run_mode = run_mode_names,
                       obs_df = snakemake@input[paste0(run_mode, '.dge_summary')]) %>%
     unnest(obs_df) %>%
@@ -227,11 +228,9 @@ read_counts <- dge_summary %>%
            ix = 1:n())
 
 read_counts %>%
-    ggplot(aes(ix, reads_cumsum)) +
+    ggplot(aes(ix, reads_cumsum, linetype=run_mode)) +
         geom_line() +
-        ggtitle(paste0('Knee-plot, top  beads')) +
-        labs(x='Beads sorted by number of reads', y='Cummulative sum of reads') +
-        facet_wrap(~run_mode, ncol = 1)
+        labs(x='Beads sorted by number of reads', y='Cummulative sum of reads')
 ```
 
 #### Umi-cutoff plots
@@ -266,7 +265,12 @@ umi_cutoff_data <- tibble(umi_cutoffs = umi_cutoffs) %>%
 
 
 ```{r plot_umi_cutoff_plot, echo = F, fig.height=7.5, fig.width=12}
+metric_names <- list('umis' = 'UMIs', 'genes' = 'genes', 'pcr' = 'UMIs/reads',
+                     'reads'='reads')
 umi_cutoff_plot <- function(metric, y_log_transform = F, legend_pos='none'){
+    y_label <- strsplit(metric, '_')
+    y_label <- paste0(y_label[[1]][1], ' ', metric_names[[y_label[[1]][2]]])
+
     pl <- umi_cutoff_data %>%
         gather('obs', 'value', -umi_cutoffs, -run_mode) %>%
         filter(obs == metric) %>%
@@ -279,8 +283,8 @@ umi_cutoff_plot <- function(metric, y_log_transform = F, legend_pos='none'){
                   legend.title = element_blank(), legend.margin = margin(t=0.5, b=0.5,l=0.5,
                                                                          r=0.5, unit = 'cm'),
                   legend.spacing = unit(0, 'cm'), plot.margin = unit(c(1,1,1,1), "lines")) +
-            labs(color='', linetype='', y=paste0(metric, '\nper spot'), x='minimum umi value per spot') +
-            guides(linetype = guide_legend(override.aes = list(size = 1)),
+            labs(color='', linetype='', y=paste0(metric, '\nper spot'), x='minimum UMI per spot') +
+            guides(linetype = guide_legend(override.aes = list(size = 1), ncol=2),
                    color = guide_legend(override.aes = list(size = 2)))
 
     if (y_log_transform){
