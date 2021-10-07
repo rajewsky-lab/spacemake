@@ -1,8 +1,12 @@
 import os
+import logging
 from more_itertools import grouper
 from collections import OrderedDict, defaultdict
 import numpy as np
 from spacemake.util import rev_comp, fasta_chunks, ensure_path, read_fq
+
+
+logger = logging.getLogger("spacemake.longread.util")
 
 
 def load_oligos(fname=""):
@@ -15,6 +19,7 @@ def load_oligos(fname=""):
         blocks[fa_id] = seq
         blocks[fa_id + "_RC"] = rev_comp(seq)
 
+    logger.info(f"load_oligos(): loaded {len(blocks)} sequences from '{fname}'")
     return blocks
 
 
