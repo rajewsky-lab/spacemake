@@ -41,34 +41,39 @@ def aln_main(args):
 
 
 def ann_main(args):
+    logger = logging.getLogger("longread.cmd.annotation")
     sample_name = detect_sample(args)
     blocks = util.load_oligos(args.blocks)
-    sig_intact = tuple(args.intact_bead.split(","))
 
+    sig_intact = args.intact_bead.split(",")
+    sig_core, sig_core_order = util.process_intact_signature(args.intact_bead)
+
+    logger.info(f"analyzing {sample_name} for intact signature {sig_intact}")
     annotation = ann.AnnotatedSequences(
         args.fname,
         os.path.join(args.annotation_out, f"{sample_name}.annotation.tsv"),
         sample_name,
         blocks,
         min_score=args.min_score,
-        orient_by=sig_intact[0],
+        orient_by=sig_core[0],
     )
     n_total = len(annotation.raw_sequences)
     logging.info(f"total number of reads in {args.fname} ({sample_name}) is {n_total}")
 
     sig_counts = annotation.count_signatures()
-    df_sig = util.count_dict_to_df(sig_counts, kind="signatures", n_total=n_total)
+    util.count_dict_out(sig_counts, "common signatures", total=n_total)
+
+    df_sig = util.count_dict_to_df(sig_counts, "signatures", n_total=n_total)
 
     partial_counts, prefixes, suffixes, pT_counts = annotation.completeness(
-        sig_intact, polyT=args.polyT
+        sig_core, polyT=args.polyT
     )
-    print("completeness analysis")
-    print(partial_counts)
-    print(prefixes)
-    print(suffixes)
+
     partial_counts_simple, _ = util.count_dict_collapse_misc(
         partial_counts, sig_intact=sig_intact, total=n_total, misc_thresh=0.00001
     )
+    util.count_dict_out(partial_counts_simple, "completeness", total=n_total)
+
     df_comp = util.count_dict_to_df(
         partial_counts_simple, kind="bead_complete", n_total=n_total
     ).sort_values("name")
@@ -81,19 +86,19 @@ def ann_main(args):
     df.to_csv(fname, sep="\t", index=False)
 
     # TODO: prefix/suffix counts add up to > 100%. Needs fix
-    print(util.count_dict_out(pT_counts, "polyT after", total=n_total))
-    print(util.count_dict_out(prefixes, "prefixes", total=n_total))
-    print(util.count_dict_out(suffixes, "suffixes", total=n_total))
+    util.count_dict_out(pT_counts, "polyT after", total=n_total)
+    util.count_dict_out(prefixes, "prefixes", total=n_total)
+    util.count_dict_out(suffixes, "suffixes", total=n_total)
 
     # Gather statistics about the parts that make up intact oligos
     qintact, qL, qstarts, qends, qscores = annotation.query_dimensions(
-        sig_intact, substring=True
+        sig_core, substring=True
     )
-    print(qstarts.shape, qintact.shape, qL.shape)
+    # print(qstarts.shape, qintact.shape, qL.shape)
     from collections import Counter
 
     data = []
-    for part, starts, ends, scores in zip(sig_intact, qstarts.T, qends.T, qscores.T):
+    for part, starts, ends, scores in zip(sig_core, qstarts.T, qends.T, qscores.T):
         starts_hist = sorted(Counter(starts).items())
         ends_hist = sorted(Counter(ends).items())
         lens_hist = sorted(Counter(ends - starts).items())
@@ -118,6 +123,7 @@ def ann_main(args):
         qnames, starts, ends, scores, qL = annotation.query_oligo_occurrences(part)
         starts_hist = sorted(Counter(starts).items())
         ends_hist = sorted(Counter(ends).items())
+        lens_hist = sorted(Counter(ends - starts).items())
         scores_hist = sorted(Counter(scores).items())
 
         for x, f in starts_hist:
@@ -125,6 +131,9 @@ def ann_main(args):
 
         for x, f in ends_hist:
             data.append(("anywhere", part, "end", x, f))
+
+        for x, f in lens_hist:
+            data.append(("anywhere", part, "len", x, f))
 
         for x, f in scores_hist:
             data.append(("anywhere", part, "score", x, f))
