@@ -124,6 +124,20 @@ def count_dict_from_df(df, kind):
     return dict(zip(keys, values))
 
 
+def process_intact_signature(complete_signature, prefixes=["P5"], suffixes=["N70X"]):
+    complete = complete_signature.split(",")
+    while complete[0] in prefixes:
+        complete.pop(0)
+
+    while complete[-1] in suffixes:
+        complete.pop()
+
+    complete_order = dict(x[::-1] for x in enumerate(complete))
+    # print(f"complete={complete}")
+
+    return tuple(complete), complete_order
+
+
 def digest_signatures(
     sig_counts,
     bead_related="bead_start",
@@ -139,17 +153,10 @@ def digest_signatures(
     ov_counts = defaultdict(int)
     n_bead_related = 0
 
-    complete = complete_signature.split(",")
-    while complete[0] in prefixes:
-        complete.pop(0)
-
-    while complete[-1] in suffixes:
-        complete.pop()
-
-    complete_order = dict(x[::-1] for x in enumerate(complete))
-    # print(f"complete={complete}")
+    complete, complete_order = process_intact_signature(
+        complete_signature, prefixes, suffixes
+    )
     complete_set = set(complete)
-
     found_part_counts = defaultdict(int)
 
     def describe(found_set):
