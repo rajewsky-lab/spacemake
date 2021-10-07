@@ -6,6 +6,29 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
+def multi_row_barplots(dfs, row_labels, samples, attr, color_dict={}):
+    import spacemake.longread.util as util
+
+    fig, axes = plt.subplots(len(row_labels), sharex=True, sharey=True, figsize=(10, 8))
+    for df, part, ax in zip(dfs, row_labels, axes):
+        x, y = util.gather_data_from_overview(df, samples, attr)
+        c = [color_dict[s] for s in samples]
+        ax.bar(x, y, color=c)
+        ax.set_ylabel(part)
+        ax.set_xticks(x)
+        ax.set_xticklabels(samples, rotation=45, horizontalalignment="right")
+
+        for _x, _y in zip(x, y):
+            ax.text(
+                _x,
+                0.5,
+                f"{_y:.2f}",
+                horizontalalignment="center",
+                verticalalignment="center",
+            )
+    return fig, axes
+
+
 def donut_plot(
     ax,
     labels,
@@ -47,8 +70,8 @@ def donut_plot(
 
             # draw text inside the wedge
             ax.text(
-                x * 0.65,  # * radius,
-                y * 0.65,  # * radius,
+                x * (radius - w / 2),  # * radius,
+                y * (radius - w / 2),  # * radius,
                 label,
                 horizontalalignment="center",
                 verticalalignment="center",
@@ -58,7 +81,7 @@ def donut_plot(
                 ax.annotate(
                     labels[i],
                     xy=(x, y),
-                    xytext=((radius + 0.1) * np.sign(x), y * 1.1),
+                    xytext=((radius + 0.15) * np.sign(x), y * 1.1),
                     horizontalalignment=horizontalalignment,
                     **kw,
                 )
@@ -96,15 +119,17 @@ def plot_results(
     donut_counts,
     bead_normed_labels,
     bead_normed_counts,
-    fname,
+    found_part_counts,
+    all_parts=["bead_start", "polyT"],
+    fname="donuts.pdf",
     suptitle="",
 ):
 
-    fig, (ax0, ax1, ax2) = plt.subplots(
-        1, 3, figsize=(22, 6), subplot_kw=dict(aspect="equal")
-    )
+    fig, [(ax1, ax2), (ax0, ax3)] = plt.subplots(2, 2, figsize=(12, 8))
+    n_total = sig_counts["n_total"]
+
     if suptitle:
-        fig.suptitle(suptitle)
+        fig.suptitle(f"{suptitle} (n_reads={n_total})")
 
     ax0.set_title("top 10 read signatures")
     ax0.set_xscale("log")
@@ -127,12 +152,14 @@ def plot_results(
     # ax0.set_ylim(0, y_pos.max())
 
     ax1.set_title("library overview")
+    ax1.set_aspect("equal")
     ex, colors = make_colors_explode(
         donut_labels, cmap="GnBu", hilight="bead-related", hicolor="lawngreen"
     )
     donut_plot(ax1, donut_labels, donut_counts, sa=40, explode=ex, colors=colors)
 
     ax2.set_title("bead completeness")
+    ax2.set_aspect("equal")
     ex, colors = make_colors_explode(
         bead_normed_labels,
         cmap="YlOrRd",
@@ -144,6 +171,31 @@ def plot_results(
         ax2, bead_normed_labels, bead_normed_counts, sa=30, explode=ex, colors=colors
     )
     # fig.tight_layout()
+
+    # estimate synthesis completion rates based on co-linear detection
+    # of the constitutive parts of the capture oligos
+    ax3.set_title("synthesis rates")
+    rates = []
+
+    n0 = n_total
+    x = range(1, len(all_parts) + 1)
+    for i in x:
+        key = tuple(all_parts[:i])
+        # print(found_part_counts)
+        print(key, found_part_counts[key], n0, rates)
+        rates.append(found_part_counts[key] / float(n0))
+        # print(i, rates)
+        n0 = found_part_counts[key]
+
+    ax3.spines["right"].set_visible(False)
+    ax3.spines["top"].set_visible(False)
+    ax3.barh(x, rates[::-1])
+    ax3.set_yticks(x)
+    ax3.set_yticklabels([all_parts[i - 1] for i in x[::-1]])
+    ax3.set_xlabel("synthesis completion")
+    ax3.set_xticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    ax3.set_xlim(0, 1)
+
     fig.subplots_adjust(
         top=0.942, bottom=0.16, left=0.125, right=0.813, hspace=0.167, wspace=0.2
     )
@@ -153,6 +205,8 @@ def plot_results(
     logger.info(f"saving donut-charts with annotation breakdown to '{fname}'")
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.savefig(fname)
+
+    return rates
 
 
 # def plot_histograms(

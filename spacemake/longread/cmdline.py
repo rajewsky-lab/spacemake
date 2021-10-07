@@ -180,7 +180,7 @@ def rep_main(args):
     n_total = sig_counts["n_total"]
     print(f"oligo name flagging 'bead-related' signature: {bead_related}")
 
-    ov_counts, bead_counts = util.digest_signatures(
+    ov_counts, bead_counts, found_part_counts, core_signature = util.digest_signatures(
         sig_counts,
         bead_related,
         args.intact_bead,
@@ -193,6 +193,11 @@ def rep_main(args):
     bead_simple, _ = util.count_dict_out(
         bead_counts, "bead counts", misc_thresh=0.0, total=ov_counts["bead-related"]
     )
+    print("found_part_counts")
+    for k, v in found_part_counts.items():
+        print(k, v)
+
+    print("=" * 30)
     del ov_simple["n_total"]
 
     print(
@@ -211,21 +216,29 @@ def rep_main(args):
     bead_counts = [x[1] for x in bead_items]
 
     fname = os.path.join(util.ensure_path(args.report_out), f"{sample_name}.donuts.pdf")
-    report.plot_results(
+    syn_rates = report.plot_results(
         sig_counts,
         ov_labels,
         ov_counts,
         bead_labels,
         bead_counts,
+        found_part_counts,
+        all_parts=core_signature,
         fname=fname,
         suptitle=sample_name,
     )
+    # print(core_signature)
+    # print(syn_rates)
+    fname = os.path.join(util.ensure_path(args.stats_out), f"{sample_name}.synth.tsv")
+    df = pd.DataFrame(dict(segment=core_signature, rate=syn_rates))
+    df["sample"] = sample_name
+    print(df)
+    df.to_csv(fname, sep="\t")
 
     fname = os.path.join(
         util.ensure_path(args.stats_out), f"{sample_name}.intact_parts.tsv"
     )
     df = pd.read_csv(fname, sep="\t", comment="#").fillna("other")
-    print(df)
     fname = os.path.join(util.ensure_path(args.report_out), f"{sample_name}.hists.pdf")
     report.plot_histograms(
         df, fname, n_total=n_total, parts=args.intact_bead.split(",")
@@ -359,14 +372,98 @@ def main_extract(args):
             print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
 
 
+def load_tables_overview(sample_fnames, pattern):
+    dfs = []
+    for fname in sample_fnames:
+        sample_name = os.path.splitext(os.path.basename(fname))[0]
+        df = pd.read_csv(
+            pattern.format(sample_name=sample_name),
+            sep="\t",
+        )
+        df["sample"] = sample_name
+        dfs.append(df)
+
+    df = pd.concat(dfs)
+    samples = sorted(df["sample"].drop_duplicates())
+
+    return df, samples
+
+
+class SampleDB:
+    def __init__(self, intact={}, color={}, label={}, prio={}):
+        self.intact = intact
+        self.color = color
+        self.label = label
+        self.prio = prio
+
+    @classmethod
+    def from_YAML(cls, fname="samples.yaml"):
+        import yaml
+
+        groups = yaml.load(open(fname), Loader=yaml.SafeLoader)
+        print(groups)
+        grp = groups["groups"]
+        default = grp[groups["default"]]
+        print("default THING", default)
+
+        intact_lkup = defaultdict(lambda: default["intact_bead"])
+        color_lkup = defaultdict(lambda: default["color"])
+        label_lkup = defaultdict(lambda: default["label"])
+        prio_lkup = defaultdict(lambda: default["prio"])
+        for name, d in groups["groups"].items():
+            print(f"name={name} d={d}")
+            for sample in d["samples"]:
+                intact_lkup[sample] = d["intact_bead"]
+                color_lkup[sample] = d["color"]
+                label_lkup[sample] = d["label"]
+                prio_lkup[sample] = d["prio"]
+
+        print(color_lkup)
+        print("DEFAULT COLOR", color_lkup["TEST"])
+        return cls(intact_lkup, color_lkup, label_lkup, prio_lkup)
+
+    def sort_samples(self, samples):
+        return sorted(samples, key=lambda x: (self.prio.get(x, np.inf), x))
+
+
+def synthesis_rates_overview(args):
+    df, samples = load_tables_overview(
+        args.overview_samples, os.path.join(args.stats_out, "{sample_name}.synth.tsv")
+    )
+    df["segment"] = df["segment"].apply(lambda x: x.replace("_2s", ""))
+
+    db = SampleDB.from_YAML("samples.yaml")
+    samples = db.sort_samples(samples)
+
+    row_labels = ["bead_start", "OP1", "OP2", "OP3", "polyT"]
+    dfs = [df.query(f"segment == '{part}'") for part in row_labels]
+
+    fig, axes = report.multi_row_barplots(
+        dfs, row_labels, samples, "rate", color_dict=db.color
+    )
+    fig.suptitle("apparent synthesis rates")
+
+    fig.tight_layout()
+    fig.savefig("overview_syn_rates.pdf")
+    return df
+
+
+def main_overview(args):
+    return synthesis_rates_overview(args)
+
+
 def prepare_parser():
     # import pb
     # import overview as ov
 
     parser = argparse.ArgumentParser(prog="longread")
-    parser.add_argument("fname", help="file with pacbio reads (FASTQ or BAM format)")
     parser.add_argument(
-        "--sample", help="sample name (default=autodetect from fname)", default=None
+        "fname", default=None, help="file with pacbio reads (FASTQ or BAM format)"
+    )
+    parser.add_argument(
+        "--sample",
+        help="sample name (default=autodetect from fname)",
+        default=None,
     )
     # parser.add_argument(
     #     "--aln-cache", help="alignment cache folder", default="./cache/"
@@ -506,12 +603,20 @@ def prepare_parser():
         help="path to text file with known barcodes (e.g. from Illumina)",
     )
 
+    ov_parser = subparsers.add_parser(
+        "overview", help="make overview plots across samples"
+    )
+    ov_parser.add_argument(
+        "overview_samples", nargs="+", help="sample names to aggregate"
+    )
+
     parser.set_defaults(func=lambda args: parser.print_help())
     aln_parser.set_defaults(func=aln_main)
     ann_parser.set_defaults(func=ann_main)
     rep_parser.set_defaults(func=rep_main)
     ed_parser.set_defaults(func=main_edits)
     xt_parser.set_defaults(func=main_extract)
+    ov_parser.set_defaults(func=main_overview)
 
     return parser
 
@@ -523,4 +628,4 @@ def cmdline():
 
     parser = prepare_parser()
     args = parser.parse_args()
-    args.func(args)
+    res = args.func(args)

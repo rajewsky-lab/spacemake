@@ -1,6 +1,7 @@
 import os
 from more_itertools import grouper
 from collections import OrderedDict, defaultdict
+import numpy as np
 from spacemake.util import rev_comp, fasta_chunks, ensure_path, read_fq
 
 
@@ -145,11 +146,13 @@ def digest_signatures(
     while complete[-1] in suffixes:
         complete.pop()
 
+    complete_order = dict(x[::-1] for x in enumerate(complete))
     # print(f"complete={complete}")
     complete_set = set(complete)
 
-    def describe(found):
-        found_set = set(found)
+    found_part_counts = defaultdict(int)
+
+    def describe(found_set):
         missing = complete_set - found_set
         if not missing:
             descr = "complete"
@@ -162,7 +165,6 @@ def digest_signatures(
 
     def bead_relation(parts):
         search = list(complete)
-        found = []
         at = 0
 
         try:
@@ -170,6 +172,7 @@ def digest_signatures(
         except ValueError:
             i = 0
 
+        found = []
         for part in parts[i:]:
             # find co-linear matches,
             # ignore extra inserted segments
@@ -178,16 +181,34 @@ def digest_signatures(
                 found.append(part)
                 at = search.index(part)
 
-        return describe(found)
+        found_set = set(found)
+        found_tup = tuple(sorted(found_set, key=lambda x: complete_order[x]))
+
+        return describe(found_set), found_tup
 
     for sig, count in sig_counts.items():
         parts = sig.split(",")
         if bead_related in parts:
-            br = bead_relation(parts)
+            br, found_tup = bead_relation(parts)
             bead_counts[br] += count
             n_bead_related += count
+
+            for i in range(1, len(found_tup) + 1):
+                found_part_counts[found_tup[:i]] += count
         else:
             ov_counts[sig] = count
 
     ov_counts["bead-related"] = n_bead_related
-    return ov_counts, bead_counts
+    return ov_counts, bead_counts, found_part_counts, complete
+
+
+def gather_data_from_overview(df, samples, attr, na=np.nan):
+    # print(df)
+    # maybe not the most elegant, but doesn't crash on missing values.
+    # TODO: look at pivot for a cleaner implementation
+    x = np.arange(len(samples))
+    # print(attr, samples)
+    raw = [df.query(f"sample == '{s}'")[attr].values for s in samples]
+    y = [r[0] if len(r) else na for r in raw]
+
+    return x, y
