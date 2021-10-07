@@ -3,7 +3,6 @@ __license__ = "MIT"
 __email__ = ["marvin.jens@mdc-berlin.de"]
 
 import os
-import sys
 import argparse
 import logging
 import pandas as pd
@@ -28,7 +27,7 @@ def aln_main(args):
     sample_name = detect_sample(args)
     blocks = util.load_oligos(args.blocks)
 
-    cache.fill_caches_parallel(
+    cache.fill_caches(
         args.fname, sample_name, blocks, path=args.cache, n_proc=args.parallel
     )
     df = cache.annotate(args.fname, sample_name, blocks, path=args.cache)
@@ -42,8 +41,6 @@ def aln_main(args):
 
 
 def ann_main(args):
-    from collections import defaultdict
-
     sample_name = detect_sample(args)
     blocks = util.load_oligos(args.blocks)
     sig_intact = tuple(args.intact_bead.split(","))
@@ -152,9 +149,6 @@ def ann_main(args):
         for signame, sigcount in sorted(sig_counts.items(), key=lambda x: -x[1]):
             qname, _, _ = next(annotation.filter_signatures(tuple(signame.split(","))))
             eo.write(f"# {signame} n={sigcount}\n{annotation.fmt(qname)}\n")
-
-
-# setup_aln_parser(aln_parser)
 
 
 def rep_main(args):
@@ -290,8 +284,6 @@ def main_edits(args):
 
 
 def main_extract(args):
-    from spacemake.util import rev_comp
-
     sample_name = detect_sample(args)
     blocks = util.load_oligos(args.blocks)
 
@@ -358,7 +350,7 @@ def main_extract(args):
                 qname, after_oligo=args.cDNA_after, distal=args.distal
             )
             bc = barcodes[qname]
-            if not bc in known:
+            if bc not in known:
                 bc = bc.lower()
             n += 1
             seq = annotation.raw_sequences[qname]
@@ -628,4 +620,4 @@ def cmdline():
 
     parser = prepare_parser()
     args = parser.parse_args()
-    res = args.func(args)
+    return args.func(args)

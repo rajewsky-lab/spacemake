@@ -192,26 +192,7 @@ def align_one_oligo(oligo_name, oligo_seq, sample_name, fastq_path, n_proc=None)
     return sample_name, oligo_name, n
 
 
-# def fill_caches_parallel(
-#     fastq_path, sample_name, oligo_dict, path="./cache/", n_proc=None
-# ):
-#     """
-#     Utility function to fill the shelves by running alignments of different oligos in parallel
-#     """
-#     import multiprocessing as mp
-
-#     pool = mp.Pool(n_proc)
-#     todo = [
-#         (oligo_name, oligo_seq, sample_name, fastq_path)
-#         for oligo_name, oligo_seq in sorted(oligo_dict.items())
-#     ]
-#     for sample_name, oligo_name, n_reads in pool.starmap(
-#         align_one_oligo, todo, chunksize=1
-#     ):
-#         print(f"{sample_name}: aligned {n_reads} against {oligo_name}")
-
-
-def fill_caches_parallel(
+def fill_caches(
     fastq_path, sample_name, oligo_dict, path="./cache/", n_proc=None
 ):
     """
@@ -228,11 +209,6 @@ def fill_caches_parallel(
 
 def annotate(fastq_path, sample_name, oligo_dict, path="./cache/"):
     multi = MultiAlignments(sample_name, oligo_dict, path=path)
-    # for o in oligo_dict.keys():
-    #     if o.endswith("_RC"):
-    #         continue
-    #     aln_caches[o] = cache.CachedAlignments(sample, o, blocks[o])
-
     data = []
     for name, seq, qual in read_fq(fastq_path):
         for start, end, label, score in multi.annotate(name, seq):
