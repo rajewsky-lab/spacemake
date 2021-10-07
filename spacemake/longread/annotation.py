@@ -113,14 +113,9 @@ class AnnotatedSequences:
         qstr = ",".join(qsig)
         lq = len(qsig)
         for qname, sig in self.signatures.items():
-            # print(sig)
+            sstr = sig2str(sig)
             if substring:
                 # demand match somewhere in signature (substring)
-                sstr = sig2str(sig)  # ",".join(sig)
-                # if "OP3_RC" in sig:
-                #     print(sig)
-                #     print(sstr)
-
                 i = sstr.find(qstr)
                 if i > -1:
                     ofs = sstr[:i].count(",")
@@ -130,7 +125,7 @@ class AnnotatedSequences:
             else:
                 # demand *exact* identity for a match
                 # print(f"sig='{sig}' qsig='{qsig}'")
-                if sig == qsig:
+                if sstr == qstr:
                     nmatch += 1
                     yield qname, 0, lq
 
@@ -143,10 +138,6 @@ class AnnotatedSequences:
         for sig in self.signatures.values():
             sstr = sig2str(sig)
             sig_counts[sstr] += 1
-            # if "OP3_RC" in sig:
-            #     print(sig)
-            #     print(sstr)
-            #     print(sig_counts[sstr])
 
         return sig_counts
 
