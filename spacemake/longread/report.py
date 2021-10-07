@@ -183,7 +183,7 @@ def plot_results(
         key = tuple(all_parts[:i])
         # print(found_part_counts)
         print(key, found_part_counts[key], n0, rates)
-        rates.append(found_part_counts[key] / float(n0))
+        rates.append(found_part_counts[key] / float(max(1, n0)))
         # print(i, rates)
         n0 = found_part_counts[key]
 
