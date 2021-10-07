@@ -6,6 +6,28 @@ from spacemake.util import read_fq
 from collections import defaultdict
 
 
+def sig2str(sig):
+    """
+    basically merge oligo block names with ',' but contract homopolymeric repeats by
+    adding a '+' suffix instead of repeating the thing over and over
+    """
+    if not len(sig):
+        return ""
+
+    parts = [sig[0]]
+    poly_runs = set()
+    for s in sig[1:]:
+        if s != parts[-1]:
+            parts.append(s)
+        else:
+            poly_runs.add(len(parts) - 1)
+
+    for i in poly_runs:
+        parts[i] += "+"
+
+    return ",".join(parts)
+
+
 class AnnotatedSequences:
     def __init__(
         self,
@@ -21,8 +43,14 @@ class AnnotatedSequences:
         self.orient_by = orient_by
         self.orient_by_RC = orient_by + "_RC"
         self.raw_sequences = self.load_raw_sequences(fastq_path)
-        self.ann_db = self.load_annotation(ann_path, min_score)
+        self.oligo_blocks = blocks
+        self.min_oligo_scores = {}
+        for name, seq in blocks.items():
+            self.min_oligo_scores[name] = (2 * len(seq)) * min_score
+
+        self.ann_db = self.load_annotation(ann_path)
         # self.ann_db = self.cleanup_overlaps(self.ann_db)
+
         self.signatures = self.extract_signatures_and_orient()
 
     def load_raw_sequences(self, fastq_path):
@@ -35,12 +63,13 @@ class AnnotatedSequences:
 
         return raw_sequences
 
-    def load_annotation(self, ann_path, min_score=0):
+    def load_annotation(self, ann_path):
         self.logger.info(
             f"loading oligo annotation for {self.sample_name} from {ann_path}"
         )
         df = pd.read_csv(ann_path, sep="\t")
-        df = df.query(f"score > {min_score}")
+        df["min_score"] = df["oligo"].apply(lambda x: self.min_oligo_scores.get(x, 22))
+        df = df.query(f"score > min_score")
         qdata = {}
         for qname, grp in df.groupby("qname"):
             qdata[qname] = (
@@ -87,7 +116,11 @@ class AnnotatedSequences:
             # print(sig)
             if substring:
                 # demand match somewhere in signature (substring)
-                sstr = ",".join(sig)
+                sstr = sig2str(sig)  # ",".join(sig)
+                # if "OP3_RC" in sig:
+                #     print(sig)
+                #     print(sstr)
+
                 i = sstr.find(qstr)
                 if i > -1:
                     ofs = sstr[:i].count(",")
@@ -102,13 +135,18 @@ class AnnotatedSequences:
                     yield qname, 0, lq
 
         self.logger.info(
-            f"filter_signatures(qstr, substring={substring}) -> {nmatch} ({100*nmatch/len(self.signatures):.2f}%) hits"
+            f"filter_signatures({qstr}, substring={substring}) -> {nmatch} ({100*nmatch/len(self.signatures):.2f}%) hits"
         )
 
     def count_signatures(self):
         sig_counts = defaultdict(int)
         for sig in self.signatures.values():
-            sig_counts[",".join(sig)] += 1
+            sstr = sig2str(sig)
+            sig_counts[sstr] += 1
+            # if "OP3_RC" in sig:
+            #     print(sig)
+            #     print(sstr)
+            #     print(sig_counts[sstr])
 
         return sig_counts
 
