@@ -156,8 +156,13 @@ def ann_main(args):
     eo_fname = util.ensure_path(os.path.join(args.examples_out, f"{sample_name}.txt"))
     with open(eo_fname, "wt") as eo:
         for signame, sigcount in sorted(sig_counts.items(), key=lambda x: -x[1]):
-            qname, _, _ = next(annotation.filter_signatures(tuple(signame.split(","))))
-            eo.write(f"# {signame} n={sigcount}\n{annotation.fmt(qname)}\n")
+            try:
+                qname, _, _ = next(
+                    annotation.filter_signatures(tuple(signame.split(",")))
+                )
+                eo.write(f"# {signame} n={sigcount}\n{annotation.fmt(qname)}\n")
+            except StopIteration:
+                logger.warning(f"unable to find any reads with signature {signame}")
 
 
 def rep_main(args):
@@ -492,9 +497,9 @@ def prepare_parser():
     )
     parser.add_argument(
         "--min-score",
-        default=24.0,
+        default=0.6,
         type=float,
-        help="minimal match alignment score to consider a match for annotation",
+        help="minimal match alignment score to consider a match for annotation, relative to its size (default=0.6)",
     )
     parser.add_argument(
         "--debug", default=False, action="store_true", help="activate debug output"
