@@ -80,6 +80,7 @@ class AnnotatedSequences:
 
     def filter_signatures(self, qsig, substring=False):
         # print(f"qsig={qsig}")
+        nmatch = 0
         qstr = ",".join(qsig)
         lq = len(qsig)
         for qname, sig in self.signatures.items():
@@ -91,12 +92,18 @@ class AnnotatedSequences:
                 if i > -1:
                     ofs = sstr[:i].count(",")
                     # print(qstr, sstr)
+                    nmatch += 1
                     yield qname, ofs, ofs + lq
             else:
                 # demand *exact* identity for a match
                 # print(f"sig='{sig}' qsig='{qsig}'")
                 if sig == qsig:
+                    nmatch += 1
                     yield qname, 0, lq
+
+        self.logger.info(
+            f"filter_signatures(qstr, substring={substring}) -> {nmatch} ({100*nmatch/len(self.signatures):.2f}%) hits"
+        )
 
     def count_signatures(self):
         sig_counts = defaultdict(int)
@@ -258,7 +265,7 @@ class AnnotatedSequences:
         complete = ",".join(sig_intact)
         for i in range(len(sig_intact)):
             partial.append(",".join(sig_intact[: i + 1]))
-            print("partial append:", partial[-1])
+            # print("partial append:", partial[-1])
 
         partial = partial[::-1]
 
