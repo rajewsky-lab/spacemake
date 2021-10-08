@@ -3,6 +3,7 @@ output:
   html_document:
     toc: true
     self_contained: yes
+    toc_float: true
     toc_depth: 4
     theme: flatly
     highlight: tango
@@ -52,7 +53,7 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
-#snakemake <- read_rds('/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/slideseq_qc.rds')
+#snakemake <- read_rds('slideseq_qc.rds')
 #write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_qc.rds')
 ```
 
@@ -108,9 +109,9 @@ nucl_clrs = c('A'='#F5C900',
               'N'='#999999')
 ```
 
-### Overview {.tabset}
+## Overview {.tabset}
 
-#### Sample info
+### Sample info
 
 ```{r show_sample_info, echo = F}
 sample_info %>%
@@ -118,7 +119,7 @@ sample_info %>%
     kable_classic_2(full_width=F, position='left')
 ```
 
-#### Run modes
+### Run modes
 
 This sample was processed using the following run modes, and run mode variables
 
@@ -184,7 +185,7 @@ read_stats <- tibble(star_logs = snakemake@input$star_log,
 map_types = colnames(select(read_stats, -metric))
 ```
 
-#### Mapping statistics
+### Mapping statistics
 
 The sample was mapped using `r map_types` reads. The mapping statistics are shown here for each method:
 
@@ -201,13 +202,15 @@ read_stats %>%
 ```
 
 
-### QC plots {.tabset}
+## QC plots
 
 Each of the QC plots we show on a per run mode basis, to see if there are any downstream differences based on the run mode variable settings.
 
-#### 'Knee'-plot
+### 'Knee'-plot {.tabset}
 
-```{r knee_plot, echo = F, fig.height=5}
+Below we plot a so called 'Knee-plot': on the y-axis is the Cummulative sum of reads, on the x-axis are the bead barcodes sorted by number of reads. For single-cell samples, this plot tells you roughly how many beads are in the sample.
+
+```{r knee_plot, echo = F, fig.height=4, fig.width=7, results='asis'}
 dge_summary <- tibble(run_mode = run_mode_names,
                       obs_df = snakemake@input[paste0(run_mode, '.dge_summary')]) %>%
     unnest(obs_df) %>%
@@ -227,13 +230,21 @@ read_counts <- dge_summary %>%
     mutate(reads_cumsum = cumsum(reads),
            ix = 1:n())
 
-read_counts %>%
-    ggplot(aes(ix, reads_cumsum, linetype=run_mode)) +
-        geom_line() +
-        labs(x='Beads sorted by number of reads', y='Cummulative sum of reads')
+for (run_mode_in in unique(dge_summary$run_mode)){
+    cat (paste0('\n\n #### ', run_mode_in, '\n\n'))
+
+    pl_knee <- read_counts %>%
+        filter(run_mode == run_mode_in) %>%
+        ggplot(aes(ix, reads_cumsum)) +
+            geom_line() +
+            labs(x='Beads sorted by number of reads', y='Cummulative\nsum of reads')
+
+    print(pl_knee)
+    cat('\n\n')
+}
 ```
 
-#### Umi-cutoff plots
+### Umi-cutoff plots
 
 ```{r create_umi_cutoffs, echo = F, fig.width = 10, fig.height=5}
 umi_cutoffs <- seq(10, 20000, 10)
@@ -283,7 +294,7 @@ umi_cutoff_plot <- function(metric, y_log_transform = F, legend_pos='none'){
                   legend.title = element_blank(), legend.margin = margin(t=0.5, b=0.5,l=0.5,
                                                                          r=0.5, unit = 'cm'),
                   legend.spacing = unit(0, 'cm'), plot.margin = unit(c(1,1,1,1), "lines")) +
-            labs(color='', linetype='', y=paste0(metric, '\nper spot'), x='minimum UMI per spot') +
+            labs(color='', linetype='', y=paste0(y_label, '\nper spatial unit'), x='minimum UMI') +
             guides(linetype = guide_legend(override.aes = list(size = 1), ncol=2),
                    color = guide_legend(override.aes = list(size = 2)))
 
@@ -311,11 +322,11 @@ plot_grid(pl1, pl2, pl3,
         align='vh', hjust=-1, labels="", nrow=3)
 ```
 
-#### Histogram of metrics over beads
+### Histogram of metrics over beads {.tabset}
 
 Next we show mertics such as number of UMIs, genes, reads and pcr per physical spot. We further distinguish between each run mode, showing one histogram for each. 
 
-```{r plot_n_reads_bead_hist, echo = F, fig.width=12, fig.height=5*run_mode_n, dpi=200}
+```{r plot_n_reads_bead_hist, echo = F, fig.width=12.5, fig.height=5, dpi=200, results='asis'}
 to_plot <- dge_summary %>%
     gather('obs', 'val', -cell_bc, -quartile, -run_mode)
 
@@ -326,16 +337,19 @@ min_difference <- to_plot %>% group_by(obs) %>%
     summarise(min_difference = min(difference)) %$%
     min_difference
 
-metric_plot <- function(metric, legend_pos='none'){
-    pl <- to_plot %>%
-        filter(obs == metric) %>%
-        ggplot(aes(x = val, fill=obs)) +
+metric_plot <- function(run_mode_in, metric, legend_pos='none'){
+    y_label <- metric_names[[metric]]
+    to_plot <- to_plot %>%
+        filter(obs == metric)
+
+    pl <-  to_plot %>%
+       filter(run_mode == run_mode_in) %>% 
+       ggplot(aes(x = val, fill=obs)) +
             geom_histogram(bins=100) +
             scale_x_log10() +
             scale_fill_manual(values=clrs) +
-            facet_wrap(~run_mode, scales='free_y', ncol=1) +
-            labs(x=paste0('# of ', metric, ' per spot'), y='# of spots') +
-            theme(legend.position = legend_pos)
+            labs(fill='', x=paste0('# of ', y_label), y='# of spatial\nunits') +
+            theme(legend.position = legend_pos, strip.background=element_rect(fill='white'))
 
     if(min_difference > 1){
         pl <- pl + 
@@ -344,20 +358,22 @@ metric_plot <- function(metric, legend_pos='none'){
 
     return(pl)
 }
-pl1 = metric_plot('reads')
-pl2 = metric_plot('pcr')
-pl3 = metric_plot('genes', 'bottom')
-pl4 = metric_plot('umis')
+for (run_mode in unique(dge_summary$run_mode)){
+    cat (paste0('\n\n #### ', run_mode, '\n\n'))
 
-plt_legend <- get_legend(pl3)
+    pl1 = metric_plot(run_mode, 'reads')
+    pl2 = metric_plot(run_mode, 'pcr')
+    pl3 = metric_plot(run_mode, 'genes')
+    pl4 = metric_plot(run_mode, 'umis')
 
-pl_metrics <- plot_grid(pl1, pl2, pl3 + theme(legend.position='none'),
-                        pl4, align='vh', hjust=-1, labels="", nrow=2)
+    print(plot_grid(pl1, pl2, pl3,
+            pl4, align='vh', hjust=-1, labels="", nrow=2))
 
-plot_grid(pl_metrics, plt_legend, ncol=1, rel_heights = c(1, .1))
+    cat('\n\n')
+}
 ```
 
-#### Nucleotide distribution per beads {.tabset .tabset-dropdown}
+### Nucleotide distribution per beads {.tabset}
 
 Next we bin the data based on reads into quartile. For each run\_mode the data is divided into 4 beads, by reads. This means, that the first bin will contain beads which account 25% of the reads, the second will contain beads which account for the second 25% of reads and so on. 
 
@@ -403,12 +419,12 @@ plot_nucl_freq <- function(dge_s){
             facet_wrap(~quartile, ncol=2, scales='free_y',
                        labeller=as_labeller(lbls)) +
             labs(x='nucleotide position in the barcode',
-                 y='nucletide count')+
+                 y='nucleotide count')+
             theme(text = element_text(size =18 ))
 }
 
 for (run_mode_in in unique(normal_run_mode_names)){
-    cat (paste0('\n\n ##### ', run_mode_in, '\n\n'))
+    cat (paste0('\n\n #### ', run_mode_in, '\n\n'))
     dge_summary %>%
         filter(run_mode == run_mode_in) %>%
         plot_nucl_freq() %>%
@@ -416,7 +432,7 @@ for (run_mode_in in unique(normal_run_mode_names)){
 }
 ```
 
-#### Shannon entropy and string compression {.tabset .tabset-dropdown}
+### Shannon entropy and string compression {.tabset}
 
 ```{r plot_shannon, echo = F, fig.height=5, fig.width=10, results='asis'}
 plot_shannon_scompression <- function(run_mode_in){
@@ -454,7 +470,7 @@ plot_shannon_scompression <- function(run_mode_in){
 }
 
 for (run_mode in unique(dge_summary$run_mode)){
-    cat (paste0('\n\n ##### ', run_mode, '\n\n'))
+    cat (paste0('\n\n #### ', run_mode, '\n\n'))
 
     print(plot_shannon_scompression(run_mode))
 }
@@ -466,7 +482,7 @@ is_spatial <- snakemake@params$is_spatial
 ```
 
 ```{r spatial_header, eval=is_spatial, echo=F, results='asis'}
-cat('### Spatial QC {.tabset}\n\n')
+cat('## Spatial QC {.tabset}\n\n')
 ```
 
 ```{r prepare_spatial_data, eval=is_spatial, echo =F}
@@ -573,7 +589,7 @@ qc_var_info <- dge_summary %>%
 
 ```{r plot_per_run_mode, echo =F, results='asis', fig.width=7, fig.height=6, eval=is_spatial}
 for (run_mode_name in run_mode_names){
-    cat(paste0('\n\n#### ', run_mode_name, '\n\n'))
+    cat(paste0('\n\n### ', run_mode_name, '\n\n'))
 
     for (qc_var in qc_var_info$qc_vars){
         pbs = filter(plot_bead_size, run_mode == run_mode_name)$plot_bead_size

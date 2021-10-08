@@ -93,7 +93,8 @@ def create_meshed_adata(adata,
         width_um,
         spot_diameter_um = 55,
         spot_distance_um = 100,
-        bead_diameter_um = 10
+        bead_diameter_um = 10,
+        mesh_type = 'circle'
     ):
     import pandas as pd
     import scanpy as sc
@@ -102,6 +103,13 @@ def create_meshed_adata(adata,
 
     from sklearn.metrics.pairwise import euclidean_distances
     from scipy.sparse import csr_matrix, csc_matrix, vstack
+
+    if not mesh_type in ['circle', 'hexagon']:
+        raise ValueError(f'unrecognised mesh type {mesh_type}')
+
+    if mesh_type == 'hexagon': 
+        spot_diameter_um = np.sqrt(3) * spot_diameter_um
+        spot_distance_um = spot_diameter_um
 
     coords = adata.obsm['spatial']
 
@@ -166,9 +174,25 @@ def create_meshed_adata(adata,
 
     distance_M = euclidean_distances(mesh_px, coords)
 
-    # new_ilocs contains the indices of the columns of the sparse matrix to be created
-    # original_ilocs contains the column location of the original adata.X (csr_matrix)
-    new_ilocs, original_ilocs = np.nonzero(distance_M < max_distance_px)
+    if mesh_type == 'circle':
+        # circle mesh type: we create spots in a hexagonal mesh
+        # example: the diameter of one visium spot is 55um. if we take any bead, which center
+        # falls into that, assuming that a bead is 10um, we would in fact take all beads
+        # within 65um diameter. for this reason, the max distance should be 45um/2 between
+        # visium spot center and other beads
+        max_distance_px = (spot_diameter_um - bead_diameter_um)/um_by_px/2
+        # new_ilocs contains the indices of the columns of the sparse matrix to be created
+        # original_ilocs contains the column location of the original adata.X (csr_matrix)
+        new_ilocs, original_ilocs = np.nonzero(distance_M < max_distance_px)
+    elif mesh_type == 'hexagon':
+        # we simply create a hex mesh, without holes. for each spot we find the hexagon
+        # it belings to
+        new_ilocs = np.argmin(distance_M, axis=0)
+        original_ilocs = np.arange(new_ilocs.shape[0])
+        # we need to sort the new ilocs so that they are in increasing order
+        sorted_ix = np.argsort(new_ilocs)
+        new_ilocs = new_ilocs[sorted_ix]
+        original_ilocs = original_ilocs[sorted_ix]
 
     joined_C = adata.X[original_ilocs]
 
@@ -226,14 +250,15 @@ def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000):
 
     from scipy.sparse import issparse, csc_matrix
 
-    dataset = dataset[dataset.obs.total_counts, :]
-
     gene_names = dataset.var.index.tolist()
 
     num_cells, num_genes = dataset.shape
 
     if num_cells > num_input_cells:
         sc.pp.subsample(dataset, n_obs = num_input_cells)
+
+    if num_cells < num_spatial_locations:
+        num_spatial_locations = num_cells
 
     is_var_gene = dataset.var['highly_variable']
     # select only 100 genes
@@ -265,6 +290,8 @@ def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000):
         csc_matrix(tissue.sdge.T),
         var = pd.DataFrame(index=gene_names))
 
+    dataset_reconst.obsm['spatial'] = locations_circle
+
     # copy of a yet-to-be-pushed novosparc function
     def quantify_clusters_spatially(tissue, cluster_key='clusters'):
         """Maps the annotated clusters obtained from the scRNA-seq analysis onto
@@ -279,5 +306,10 @@ def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000):
         clusters = tissue.dataset.obs[cluster_key].to_numpy().flatten()
         return np.array([np.argmax(np.array([np.median(np.array(tissue.gw[:, location][np.argwhere(clusters == cluster).flatten()]))
                                              for cluster in np.unique(clusters)])) for location in range(len(tissue.locations))])
+    
+    for res_key in dataset.obs.columns[dataset.obs.columns.str.startswith('leiden_')]:
+        dataset_reconst.obs[res_key] = quantify_clusters_spatially(tissue, res_key)
+
+    return dataset_reconst
 
 

@@ -27,6 +27,7 @@ else:
     res_keys = adata.obs.columns[adata.obs.columns.str.startswith('leiden_')]
     
     top_10_marker_dfs = []
+    nhood_enrichment_dfs = []
     
     for res_key in res_keys:
         rank_key = 'rank_genes_groups_' + res_key
@@ -55,8 +56,26 @@ else:
         df.reset_index(inplace=True)
          
         top_10_marker_dfs.append(df)
+
+        if snakemake.params['is_spatial']:
+        # get nhood data
+            df = pd.DataFrame(adata.uns[f'{res_key}_nhood_enrichment']['zscore'])
+            df = pd.melt(df.reset_index(), id_vars='index')\
+                .rename(columns={'index': 'cluster_a',
+                                 'variable': 'cluster_b',
+                                 'value': 'zscore'})
+            df['resolution'] = res_key.split('_')[1]
+
+            nhood_enrichment_dfs.append(df)
         
     pd.concat(top_10_marker_dfs).to_csv(snakemake.output['cluster_markers'], index=False, sep = '\t')
+
+    if snakemake.params['is_spatial']:
+        pd.concat(nhood_enrichment_dfs).to_csv(snakemake.output['nhood_enrichment'], index=False, sep='\t')
+    else:
+        # output empty csv file
+        pd.DataFrame().to_csv(snakemake.output['nhood_enrichment'])
+
 
 ###############
 # SAVE OBS DF #

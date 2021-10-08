@@ -45,6 +45,8 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
+
+#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_saturation_analysis.rds')
 ```
 
 ```{r load_run_info, echo = F}

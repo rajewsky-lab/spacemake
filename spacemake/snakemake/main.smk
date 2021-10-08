@@ -136,6 +136,7 @@ top_barcodes_suffix = '{polyA_adapter_trimmed}.{n_beads}_beads.txt'
 top_barcodes = complete_data_root + '/topBarcodes' + top_barcodes_suffix
 top_barcodes_clean = complete_data_root + '/topBarcodesClean' + top_barcodes_suffix
 spatial_barcodes = complete_data_root + '/spatialBarcodes.txt'
+parsed_spatial_barcodes = complete_data_root + '/spatial_barcodes.csv'
 
 # dge creation
 dge_root = data_root + '/dge'
@@ -173,6 +174,7 @@ automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
 
 automated_analysis_processed_data_files = {
     'cluster_markers': '/top10_cluster_markers.csv',
+    'nhood_enrichment': '/nhood_enrichment.tsv',
     'obs_df': '/obs_df.tsv',
     'var_df': '/var_df.tsv'
     }
@@ -485,11 +487,13 @@ rule create_spatial_barcodes:
     input:
         unpack(get_puck_file)
     output:
-        temp(spatial_barcodes)
+        temp(spatial_barcodes),
+        parsed_spatial_barcodes
     run:
         bc = parse_barcode_file(input[0])
         bc['cell_bc'] = bc.index
         bc[['cell_bc']].to_csv(output[0], header=False, index=False)
+        bc.to_csv(output[1], index=False)
 
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
@@ -552,13 +556,20 @@ rule create_mesh_spatial_dge:
             project_id = wildcards.project,
             sample_id = wildcards.sample)
     run:
-        #with logging() as L:
         adata = sc.read(input[0])
+        if wildcards.spot_distance_um == 'hexagon':
+            mesh_type = 'hexagon'
+            # if hexagon, this will be ignored
+            spot_distance_um = 10.0
+        else:
+            mesh_type = 'circle'
+            spot_distance = float(wildcards.spot_distance_um)
         adata = create_meshed_adata(adata,
             width_um = params['puck_data']['width_um'],
             bead_diameter_um = params['puck_data']['spot_diameter_um'],
             spot_diameter_um = float(wildcards.spot_diameter_um),
-            spot_distance_um = float(wildcards.spot_distance_um))
+            spot_distance_um = spot_distance_um,
+            mesh_type = mesh_type)
         adata.write(output[0])
         adata.obs.to_csv(output[1])
 
@@ -592,6 +603,8 @@ rule run_automated_analysis:
     output:
         automated_analysis_result_file
     params:
+        is_spatial = lambda wildcards:
+            project_df.is_spatial(wildcards.project, wildcards.sample),
         run_mode_variables = lambda wildcards:
             project_df.config.get_run_mode(wildcards.run_mode).variables
     script:
@@ -618,6 +631,9 @@ rule create_automated_analysis_processed_data_files:
         automated_analysis_result_file
     output:
         **automated_analysis_processed_data_files
+    params:
+        is_spatial = lambda wildcards:
+            project_df.is_spatial(wildcards.project, wildcards.sample),
     script:
         'scripts/automated_analysis_create_processed_data_files.py'
         
@@ -625,7 +641,8 @@ rule create_automated_report:
     input:
         #star_log=star_log_file,
         #unpack(get_novosparc_if_spatial),
-        **automated_analysis_processed_data_files
+        unpack(get_parsed_puck_file),
+        **automated_analysis_processed_data_files,
     # spawn at most 4 automated analyses
     threads: max(workflow.cores / 8, 1)
     output:

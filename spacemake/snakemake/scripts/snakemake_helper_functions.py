@@ -228,6 +228,13 @@ def get_top_barcodes(wildcards):
     else:
         return {'top_barcodes': top_barcodes_clean}
 
+def get_parsed_puck_file(wildcards):
+    is_spatial = project_df.is_spatial(project_id = wildcards.project,\
+            sample_id = wildcards.sample)
+
+    if is_spatial: return {'puck_file': parsed_spatial_barcodes}
+    else: return []
+
 def get_dge_from_run_mode(
         project_id,
         sample_id,
@@ -254,13 +261,21 @@ def get_dge_from_run_mode(
     if run_mode_variables['clean_dge']:
         dge_cleaned = '.cleaned'
 
+    if run_mode_variables['mesh_type'] == 'hexagon':
+        spot_diameter_um = run_mode_variables['mesh_spot_diameter_um']
+        spot_distance_um = 'hexagon'
+    elif run_mode_variables['mesh_type'] == 'circle':
+        spot_diameter_um = run_mode_variables['mesh_spot_diameter_um']
+        spot_distance_um = run_mode_variables['mesh_spot_distance_um']
+
+    is_spatial = project_df.is_spatial(project_id = project_id,\
+            sample_id = sample_id)
     # select which pattern
     # if sample is not spatial, we simply select the normal, umi_filtered
     # dge, with the top_n barcodes
     # otherwise, if sample is spatial, either we return he whole dge, containing
     # all beads, or the a meshgrid
-    if not project_df.is_spatial(project_id = project_id,\
-            sample_id = sample_id):
+    if not is_spatial:
         dge_out_pattern = dge_out_h5ad
         dge_out_summary_pattern = dge_out_h5ad_obs
     elif run_mode_variables['mesh_data']:
@@ -278,8 +293,8 @@ def get_dge_from_run_mode(
             polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
             n_beads = run_mode_variables['n_beads'],
-            spot_diameter_um = run_mode_variables['mesh_spot_diameter_um'],
-            spot_distance_um = run_mode_variables['mesh_spot_distance_um'],
+            spot_diameter_um = spot_diameter_um,
+            spot_distance_um = spot_distance_um,
             data_root_type = data_root_type,
             downsampling_percentage = downsampling_percentage)
 
@@ -290,15 +305,30 @@ def get_dge_from_run_mode(
             dge_cleaned = dge_cleaned,
             polyA_adapter_trimmed = polyA_adapter_trimmed,
             mm_included = mm_included,
-            spot_diameter_um = run_mode_variables['mesh_spot_diameter_um'],
-            spot_distance_um = run_mode_variables['mesh_spot_distance_um'],
+            spot_diameter_um = spot_diameter_um,
+            spot_distance_um = spot_distance_um,
             n_beads = run_mode_variables['n_beads'],
             data_root_type = data_root_type,
             downsampling_percentage = downsampling_percentage)
+    out_files_pattern = {
+        'dge_summary': dge_out_summary_pattern,
+        'dge': dge_out_pattern}
 
-    return {'dge_summary': dge_out_summary_file,
-            'dge': dge_out_file}
+    out_files = {key: expand(pattern,
+            project = project_id,
+            sample = sample_id,
+            dge_type = dge_type,
+            dge_cleaned = dge_cleaned,
+            polyA_adapter_trimmed = polyA_adapter_trimmed,
+            mm_included = mm_included,
+            spot_diameter_um = spot_diameter_um,
+            spot_distance_um = spot_distance_um,
+            n_beads = run_mode_variables['n_beads'],
+            data_root_type = data_root_type,
+            downsampling_percentage = downsampling_percentage) for key, pattern in
+            out_files_pattern.items()}
 
+    return out_files
 
 def get_qc_sheet_input_files(wildcards):
     # returns star_log, reads_type_out, strand_info
