@@ -135,11 +135,45 @@ class AnnotatedSequences:
 
     def count_signatures(self):
         sig_counts = defaultdict(int)
+        concat = 0
+        reprimed = 0
         for sig in self.signatures.values():
             sstr = sig2str(sig)
             sig_counts[sstr] += 1
+            if "+" in sstr:
+                concat += 1
+            if len(sig) > 1:
+                first = sig[0]
+                last = sig[-1]
+                if (first + "_RC").replace("_RC_RC", "") == last:
+                    reprimed += 1
 
-        return sig_counts
+        return sig_counts, concat, reprimed
+
+    def count_concatenations(self):
+        concat = defaultdict(int)
+        n_occ = 0
+        for sig in self.signatures.values():
+            sstr = sig2str(sig)
+            nc = sstr.count("+")
+            if nc:
+                n_occ += nc
+                for part in sstr.split(","):
+                    if part.endswith("+"):
+                        concat[part] += 1
+
+        return concat, n_occ
+
+    def count_repriming(self):
+        reprimed = defaultdict(int)
+        for sig in self.signatures.values():
+            first = sig[0]
+            last = sig[-1]
+            first_rc = (first + "_RC").replace("_RC_RC", "")
+            if first_rc == last:
+                reprimed[first.replace("_RC", "")] += 1
+
+        return reprimed
 
     def extract_cDNA(self, qname, after_oligo="bead_start", distal=150):
         """

@@ -16,7 +16,7 @@ from collections import defaultdict
 
 def detect_sample(args):
     if args.sample is None:
-        sample_name = os.path.splitext(os.path.basename(args.fname))[0]
+        sample_name, _ = os.path.splitext(os.path.basename(args.fname))
         logging.info(f"auto-detected sample_name={sample_name}")
     else:
         sample_name = args.sample
@@ -60,10 +60,23 @@ def ann_main(args):
     n_total = len(annotation.raw_sequences)
     logging.info(f"total number of reads in {args.fname} ({sample_name}) is {n_total}")
 
-    sig_counts = annotation.count_signatures()
+    sig_counts, n_concat, n_reprimed = annotation.count_signatures()
     util.count_dict_out(sig_counts, "common signatures", total=n_total)
-
+    print(
+        f"n_concat={n_concat} ({100.0 * n_concat/n_total:.2f}%) "
+        f"n_reprimed={n_reprimed} ({100.0 * n_reprimed/n_total:.2f}%)"
+    )
     df_sig = util.count_dict_to_df(sig_counts, "signatures", n_total=n_total)
+
+    concat_counts, n_occurrences = annotation.count_concatenations()
+    util.count_dict_out(concat_counts, "concatenations", total=n_occurrences)
+    df_concat = util.count_dict_to_df(
+        concat_counts, "concatenations", n_total=n_occurrences
+    )
+
+    reprimed_counts = annotation.count_repriming()
+    util.count_dict_out(reprimed_counts, "repriming", total=n_total)
+    df_reprimed = util.count_dict_to_df(reprimed_counts, "repriming", n_total=n_total)
 
     partial_counts, prefixes, suffixes, pT_counts = annotation.completeness(
         sig_core, polyT=args.polyT
@@ -82,7 +95,7 @@ def ann_main(args):
 
     fname = os.path.join(util.ensure_path(args.stats_out), f"{sample_name}.stats.tsv")
     logging.info(f"storing annotation signature counts as DataFrame '{fname}'")
-    df = pd.concat([df_sig, df_comp, df_pT])
+    df = pd.concat([df_sig, df_concat, df_reprimed, df_comp, df_pT])
     df.to_csv(fname, sep="\t", index=False)
 
     # TODO: prefix/suffix counts add up to > 100%. Needs fix
