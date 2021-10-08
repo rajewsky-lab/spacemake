@@ -34,13 +34,15 @@ cpalette <- list('orange' = '#D55E00', 'blue' = '#0072B2', 'green' = '#009E73', 
 clrs = c('umis'=cpalette$light_orange, 'genes' = cpalette$light_blue,
          'reads'=cpalette$green, 'pcr'=cpalette$pink, 'pct_counts_mt'= 'black')
 
+#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_automated_analysis.rds')
+#snakemake <- read_rds('visium_automated_analysis.rds')
 source(snakemake@params$r_shared_scripts)
 ```
 
 ```{r read_data, echo = F}
-obs_df <- read_table2(snakemake@input$obs_df) %>%
+obs_df <- read_table(snakemake@input$obs_df) %>%
     mutate(pct_counts_mt = as.double(pct_counts_mt))
-var_df <- read_table2(snakemake@input$var_df)
+var_df <- read_table(snakemake@input$var_df)
 
 n_beads = nrow(obs_df)
 data_empty <- n_beads == 0
@@ -48,19 +50,20 @@ data_empty <- n_beads == 0
 
 ### Overview
 
-```{r create_overview_table, echo = F, eval = F}
-parameter_stats <- parameter_stats %>%
-    rbind(c('UMI filter', snakemake@wildcards$umi_cutoff),
+```{r create_overview_table, echo = F}
+puck_width_um <- snakemake@params$puck_variables$width_um
+parameter_stats <- rbind(c('UMI filter', snakemake@wildcards$umi_cutoff),
           c('# genes in data', nrow(var_df)),
-          c('# of beads in data', nrow(obs_df)),
+          c('# of spots in data', obs_df %>% select(cell_bc) %>% unique %>% nrow),
           c('median UMI', median(obs_df$total_counts)),
-          c('median genes', median(obs_df$n_genes_by_counts)))
+          c('median genes', median(obs_df$n_genes_by_counts)),
+          c('puck width (um)', puck_width_um))
 
 parameter_stats %>%
     kbl(col.names=NULL) %>%
     kable_classic_2(full_width=F) %>%
-    pack_rows('Sample info', 1, 7) %>%
-    pack_rows('Data info', 8, 12)
+    #pack_rows('Sample info', 1, 7) %>%
+    pack_rows('Data info', 1, 5)
 ```
 
 ### Histogram of metrics over beads
@@ -136,121 +139,96 @@ obs_df <- obs_df %>%
     mutate(cluster = factor(cluster)) %>%
     mutate(log1p_total_counts = log2(1+total_counts))
 
+n_cells <- obs_df %>%
+    select(cell_bc) %>%
+    unique %>%
+    nrow()
+
+def_plot_bead_size <- ifelse(n_cells > 5000, 0.5, 1)
+def_plot_bead_size <- ifelse(n_cells > 10000, 0.1, def_plot_bead_size)
+
 obs_colnames <- colnames(obs_df)
 
 # barcode file attached at the python level
 is_spatial <- snakemake@params$is_spatial
+is_hexagonal <- snakemake@params$run_mode_variables$mesh_type == 'hexagon' & snakemake@params$run_mode_variables$mesh_data
 
 filter_quant <- quantile(obs_df$total_counts, 0.9, na.rm=T)
 limits <- c(0, quantile(obs_df$total_counts, 0.91, na.rm=T))
 
 if (is_spatial){
-    puck_bead_size <- max(1, ifelse(snakemake@params$run_mode_variables$mesh_data,
-        snakemake@params$run_mode_variables$mesh_spot_diameter_um / 40,
-        snakemake@params$puck_variables$spot_diameter_um / 40))
+
+    # calculate breaks and limits for the puck
+    puck_file <- read_csv(snakemake@input$puck_file)
+    x_limits <- puck_file$x_pos %>% {c(min(.), max(.))}
+    y_limits <- puck_file$y_pos %>% {c(min(.), max(.))}
+
+    ratio <- (x_limits[2] - x_limits[1] ) / (y_limits[2] - y_limits[1])
+
+    scale_factor <- ifelse(puck_width_um < 3000, 2, 3)
+    mm_dist <- max(10^scale_factor, round(puck_width_um/3, digits =-scale_factor))
+    mm_diff <- mm_dist / 1000
+
+    x_mm_breaks <- seq(0, puck_width_um, mm_dist)
+    x_mm_breaks <- paste0(x_mm_breaks * mm_diff / mm_dist, 'mm')
+    y_mm_breaks <- seq(0, puck_width_um / ratio, mm_dist)
+    y_mm_breaks <- paste0(y_mm_breaks * mm_diff / mm_dist, 'mm')
+
+    px_to_um <- (x_limits[2] - x_limits[1]) / snakemake@params$puck_variables$width_um
+
+    x_breaks <- seq(x_limits[1], x_limits[2], px_to_um * mm_dist)
+    y_breaks <- seq(y_limits[1], y_limits[2], px_to_um * mm_dist)
+
+    puck_bead_size <- max(def_plot_bead_size, ifelse(snakemake@params$run_mode_variables$mesh_data,
+        snakemake@params$run_mode_variables$mesh_spot_diameter_um / 50,
+        snakemake@params$puck_variables$spot_diameter_um / 50))
     
     res_colnames <- obs_df$res %>%
         unique
 
-    obs_df %>%
+    umi_pl <- obs_df %>%
         filter(res == res_colnames[1]) %>%
         arrange(total_counts) %>%
-        mutate(total_counts = ifelse(total_counts > filter_quant, filter_quant, total_counts)) %>%
-        ggplot(aes(x_pos, y_pos, color = total_counts)) +
-            geom_point(size=puck_bead_size) + 
-            coord_fixed()+
-            scale_color_viridis_c(option =  "magma", limits = limits) +
-            guides(color = guide_colorbar(barheight = 15)) + 
-            labs(color='UMI count') + 
-            theme(panel.background = element_rect(fill = 'gray45'), 
-                plot.background = element_rect(fill='gray45'),
-                 legend.spacing = unit(0.1, 'cm'),
-                axis.line = element_line(color = 'white'),
-                axis.ticks = element_blank(), axis.text=element_blank(), text = element_text(color='white', size=18))
-}
+        mutate(total_counts = ifelse(total_counts > filter_quant, filter_quant, total_counts))
 
-# gene plotting function
-plot_genes <- function(genes){
-    gene_expr <- expr_df %>%
-        filter(gene %in% genes)
+    if(is_hexagonal){
+        umi_pl <- umi_pl %>%
+            ggplot(aes(x=x_pos, y=y_pos, fill = total_counts, group=1)) +
+                geom_hex(stat='identity', color='gray95') +
+                coord_fixed()+
+                scale_x_continuous(labels = x_mm_breaks, breaks = x_breaks, limits=x_limits) +
+                scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks, limits=y_limits) +
+                scale_fill_viridis_c(option =  "magma", limits = limits) +
+                guides(fill = guide_colorbar(barheight = 15)) + 
+                labs(fill='UMI count', x='', y='')
 
-    gene_expr <- obs_df %>%
-        filter(res == 'leiden_0.2') %>%
-        left_join(gene_expr, by = 'cell_bc') %>%
-        # fill empty values
-        # first spread the genes, so each gene is a column
-        # then create long df and replace NA with 0
-        spread(gene, expr) %>%
-        gather('gene', 'expr', all_of(genes)) %>%
-        replace_na(list(expr = 0)) %>%
-        arrange(expr)
-
-    pl1 <- gene_expr %>%
-        dplyr::select(gene, umap_0, umap_1, expr) %>%
-        rename(x_pos = umap_0, y_pos = umap_1) %>%
-        mutate(type = 'umap coordinates') %>%
-        ggplot(aes(x_pos, y_pos, color = expr)) +
-            geom_point(size=0.1) +
-            coord_fixed() +
-            facet_grid(type~gene) +
-            scale_color_viridis_c(option = "inferno", direction=-1) +
-            labs(color='UMI count')
-
-    if(is_spatial){
-        pl2 <- gene_expr %>%
-            dplyr::select(gene, x_pos, y_pos, expr) %>%
-            mutate(type = 'physical coordinates') %>%
-            ggplot(aes(x_pos, y_pos, color = expr)) +
-                geom_point(size=0.1) +
-                coord_fixed() +
-                facet_grid(type~gene) +
-                scale_color_viridis_c(option = "inferno", direction=-1) +
-                labs(color='UMI count')
-
-        print(plot_grid(pl1, pl2, ncol=1))
-    } else{
-        print(pl1)
     }
+    else{
+        umi_pl <- umi_pl %>%
+            ggplot(aes(x_pos, y_pos, color = total_counts)) +
+                geom_point(size=puck_bead_size) + 
+                coord_fixed()+
+                scale_x_continuous(labels = x_mm_breaks, breaks = x_breaks, limits=x_limits) +
+                scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks, limits=y_limits) +
+                scale_color_viridis_c(option =  "magma", limits = limits) +
+                guides(color = guide_colorbar(barheight = 15)) + 
+                labs(color='UMI count', x='', y='')
+    }
+    umi_pl <- umi_pl + 
+        theme(panel.background = element_rect(fill = 'gray95'), 
+            plot.background = element_rect(fill='gray95'),
+             legend.spacing = unit(0.1, 'cm'),
+            axis.line = element_line(color = 'black'),
+            text = element_text(color='black', size=18))
+    umi_pl
 }
+
 ```
 
 ```{r plot_clusters_umap_puck, echo =F, fig.height=fig_height, fig.width=fig_width, eval=data_complete, results='asis'}
-cluster_clrs <- c('#ff8011',
-                  '#2179b5',
-                  '#9466be',
-                  '#2b9f2b',
-                  '#8c554a',
-                  '#e479c3',
-                  "#FF410D",
-                  "#6EE2FF",
-                  "#F7C530",
-                  "#95CC5E",
-                  "#D0DFE6",
-                  "#F79D1E",
-                  "#748AA6",
-                  '#0DFFB7',
-                  '#FFC9AD',
-                  '#C4BC12',
-                  '#935CFF',
-                  '#FFFFFF',
-                  '#E6DBCF',
-                  '#99846B',
-                  '#F711F7',
-                  '#7AF736',
-                  '#4F5EF7',
-                  '#F75D1E',
-                  '#F71118',
-                  '#059DF7',
-                  '#7611F7',
-                  '#05F7CF',
-                  '#1EF7D3',
-                  '#F436F7',
-                  '#F7363C',
-                  '#2AABF7',
-                  '#7F2DFA',
-                  '#FAF32C',
-                  '#FAA46A')
+library(pals)
 
+cluster_clrs <- unname(glasbey())
 
 top10_marker_table <- read_table2(snakemake@input$cluster_markers)
 
@@ -263,7 +241,7 @@ for (i in obs_df %$% res %>% unique){
 
     umap_plot <- dat %>%
         ggplot(aes(umap_0, umap_1, color = cluster)) +
-            geom_point() +
+            geom_point(size=def_plot_bead_size) +
             guides(colour = guide_legend(override.aes = list(size=3)))+
             coord_fixed() +
             theme(axis.text = element_blank(),
@@ -271,26 +249,49 @@ for (i in obs_df %$% res %>% unique){
                 axis.ticks = element_blank(), axis.line = element_line(color='white'))
 
     n_clusters <- length(unique(dat$cluster))
-    if(n_clusters< 35){
+    if(n_clusters< length(cluster_clrs)){
         umap_plot <- umap_plot + scale_color_manual(values=cluster_clrs)
     }
 
     if (is_spatial) {
         physical_plot <- obs_df %>%
             filter(res == i) %>%
-            dplyr::select(cell_bc, x_pos, y_pos, cluster) %>%
+            dplyr::select(cell_bc, x_pos, y_pos, cluster)
+
+        if(is_hexagonal){
+            physical_plot <- physical_plot %>%
+            ggplot(aes(x_pos, y_pos, fill = cluster)) +
+                geom_hex(stat='identity', color='gray95') +
+                guides(fill = guide_legend(override.aes = list(size=3), ncol=2))+
+                coord_fixed()+
+                labs(x='', y='') +
+                scale_x_continuous(labels = x_mm_breaks, breaks = x_breaks, limits=x_limits) +
+                scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks, limits=y_limits)
+            if(n_clusters< length(cluster_clrs)){
+                physical_plot <- physical_plot + scale_fill_manual(values=cluster_clrs)
+            }
+        } else{
+            physical_plot <- physical_plot %>%
             ggplot(aes(x_pos, y_pos, color = cluster)) +
                 geom_point(size=puck_bead_size) +
-                guides(colour = guide_legend(override.aes = list(size=3)))+
+                guides(colour = guide_legend(override.aes = list(size=3), ncol=2))+
                 coord_fixed()+
-                theme(panel.background = element_rect(fill = 'gray45'), 
-                    plot.background = element_rect(fill='gray45'),
-                    legend.spacing = unit(0.1, 'cm'),
-                    axis.line = element_line(color = 'white'),
-                    axis.ticks = element_blank(), axis.text=element_blank(), text = element_text(color='white'))
-            if(n_clusters< 35){
+                labs(x='', y='') +
+                scale_x_continuous(labels = x_mm_breaks, breaks = x_breaks, limits=x_limits) +
+                scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks, limits=y_limits)
+            if(n_clusters< length(cluster_clrs)){
                 physical_plot <- physical_plot + scale_color_manual(values=cluster_clrs)
             }
+
+        }
+        physical_plot <- physical_plot +
+            theme(panel.background = element_rect(fill = 'gray95'),
+                legend.spacing = unit(0.1, 'cm'),
+                axis.line = element_line(color = 'black'),
+                legend.position='none',
+                plot.subtitle=element_text(size=18),
+                text = element_text(color='black')) +
+            ggtitle('', subtitle=paste0('resolution = ', res))
 
         print(umap_plot)
         print(physical_plot)
@@ -299,3 +300,36 @@ for (i in obs_df %$% res %>% unique){
     }
 }
 ```
+
+### Neighborhood enrichment
+
+```{r plot_nhood_enrichment, echo =F, eval=is_spatial}
+nhood_dat <- read_table(snakemake@input$nhood_enrichment)
+
+for (i in obs_df %$% res %>% unique){
+    res <- as.double(strsplit(i, '_')[[1]][2])
+    dat <- nhood_dat %>%
+        filter(resolution == res) %>%
+        mutate(a = as.character(1000 + cluster_a),
+               b = as.character(1000 + cluster_b))
+
+    labs <- dat %>%
+        select(cluster_a, cluster_b, a, b) %>%
+        filter(cluster_a %% 5 == 0, cluster_b %% 5 == 0)
+
+    pl <- dat %>%
+        ggplot(aes(a, b, fill=zscore)) +
+            geom_tile(color='white') + 
+            scale_fill_viridis_c(option='inferno', limits = c(-50, 100)) +
+        guides(fill = guide_colorbar(barheight = 12)) + 
+        scale_x_discrete(labels = labs$cluster_a, breaks=labs$a) +
+        scale_y_discrete(labels = labs$cluster_b, breaks=labs$b) +
+        coord_fixed() +
+        labs(fill='neighborhood\nenrichment\nscore', x='cluster identity', y='cluster identity') +
+        ggtitle('', subtitle=paste0('resolution = ', res))+
+        coord_equal()+
+        theme(plot.subtitle=element_text(size=18))
+    print(pl)
+}
+```
+

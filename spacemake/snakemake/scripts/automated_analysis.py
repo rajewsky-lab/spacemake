@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import squidpy as sq
 
 from spacemake.spatial import detect_tissue
 
@@ -63,7 +64,11 @@ if nrow > 100 and ncol >= 1000:
     resolution = [0.4, 0.6, 0.8, 1.0, 1.2]
 
     print('clustering')
-    
+
+
+    if snakemake.params['is_spatial']:
+        sq.gr.spatial_neighbors(adata, coord_type="generic")
+
     for res in resolution:
         try:
             res_key = 'leiden_' + str(res)
@@ -74,7 +79,12 @@ if nrow > 100 and ncol >= 1000:
             print(f'ranking genes for resolution {res}')
             sc.tl.rank_genes_groups(adata, res_key, method='t-test', key_added = 'rank_genes_groups_' + res_key, pts=True,
                 use_raw = False)
+            if snakemake.params['is_spatial']:
+                # calculate nhood enrichment from squidpy
+                sq.gr.nhood_enrichment(adata, cluster_key=res_key)
         except ZeroDivisionError as e:
             pass
+
+
 
 adata.write(snakemake.output[0])

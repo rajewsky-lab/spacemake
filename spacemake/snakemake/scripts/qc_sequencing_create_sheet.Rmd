@@ -3,6 +3,7 @@ output:
   html_document:
     toc: true
     self_contained: yes
+    toc_float: true
     toc_depth: 4
     theme: flatly
     highlight: tango
@@ -14,8 +15,8 @@ license: GPL
 
 ```{r knitr_options, include=FALSE, cache=FALSE}
 knitr::opts_chunk$set(
-  autodep = TRUE,
   cache=T,
+  autodep = TRUE,
   message = FALSE,
   warning = FALSE,
   comment = NA
@@ -52,8 +53,8 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
-#snakemake <- read_rds('/scratch/home/tsztank/spacemake_qc.rds')
-#write_rds(snakemake, '/scratch/home/tsztank/spacemake_qc.rds')
+#snakemake <- read_rds('slideseq_qc.rds')
+#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_qc.rds')
 ```
 
 ```{r read_sample_information_tables, echo = F}
@@ -67,24 +68,20 @@ run_mode_names <- run_mode_settings[-1] %>% names
 run_mode_n <- length(run_mode_names)
 normal_run_mode_names <- run_mode_settings %>%
     gather('run_mode','val', -variable_name) %>%
+    filter(variable_name == 'mesh_data') %>%
     unnest(val) %>%
-    filter(variable_name == 'mesh_data',
-           val == 0) %$%
+    filter(val == 0) %$%
     run_mode
-
-
-
 
 meshed_run_mode_names <- run_mode_settings %>%
     gather('run_mode','val', -variable_name) %>%
+    filter(variable_name == 'mesh_data') %>%
     unnest(val) %>%
-    filter(variable_name == 'mesh_data',
-           val == 1) %$%
+    filter(val == 1) %$%
     run_mode
 
 sample_info <- bind_rows(snakemake@params$sample_info) %>%
-    select(species, sequencing_date, investigator, experiment,
-           puck_barcode_file) %>%
+    select(species, sequencing_date, investigator, experiment) %>%
     unique %>%
     gather('info_name', 'value') %>%
     add_row(info_name = 'project_id',
@@ -112,18 +109,17 @@ nucl_clrs = c('A'='#F5C900',
               'N'='#999999')
 ```
 
-### Overview {.tabset}
+## Overview {.tabset}
 
-#### Sample info
+### Sample info
 
 ```{r show_sample_info, echo = F}
 sample_info %>%
-    filter(info_name != 'puck_barcode_file') %>%
     kbl(col.names=NULL) %>%
     kable_classic_2(full_width=F, position='left')
 ```
 
-#### Run modes
+### Run modes
 
 This sample was processed using the following run modes, and run mode variables
 
@@ -189,7 +185,7 @@ read_stats <- tibble(star_logs = snakemake@input$star_log,
 map_types = colnames(select(read_stats, -metric))
 ```
 
-#### Mapping statistics
+### Mapping statistics
 
 The sample was mapped using `r map_types` reads. The mapping statistics are shown here for each method:
 
@@ -206,13 +202,15 @@ read_stats %>%
 ```
 
 
-### QC plots {.tabset}
+## QC plots
 
 Each of the QC plots we show on a per run mode basis, to see if there are any downstream differences based on the run mode variable settings.
 
-#### 'Knee'-plot
+### 'Knee'-plot {.tabset}
 
-```{r knee_plot, echo = F, fig.height=4*run_mode_n}
+Below we plot a so called 'Knee-plot': on the y-axis is the Cummulative sum of reads, on the x-axis are the bead barcodes sorted by number of reads. For single-cell samples, this plot tells you roughly how many beads are in the sample.
+
+```{r knee_plot, echo = F, fig.height=4, fig.width=7, results='asis'}
 dge_summary <- tibble(run_mode = run_mode_names,
                       obs_df = snakemake@input[paste0(run_mode, '.dge_summary')]) %>%
     unnest(obs_df) %>%
@@ -232,15 +230,21 @@ read_counts <- dge_summary %>%
     mutate(reads_cumsum = cumsum(reads),
            ix = 1:n())
 
-read_counts %>%
-    ggplot(aes(ix, reads_cumsum)) +
-        geom_line() +
-        ggtitle(paste0('Knee-plot, top  beads')) +
-        labs(x='Beads sorted by number of reads', y='Cummulative sum of reads') +
-        facet_wrap(~run_mode, ncol = 1)
+for (run_mode_in in unique(dge_summary$run_mode)){
+    cat (paste0('\n\n #### ', run_mode_in, '\n\n'))
+
+    pl_knee <- read_counts %>%
+        filter(run_mode == run_mode_in) %>%
+        ggplot(aes(ix, reads_cumsum)) +
+            geom_line() +
+            labs(x='Beads sorted by number of reads', y='Cummulative\nsum of reads')
+
+    print(pl_knee)
+    cat('\n\n')
+}
 ```
 
-#### Umi-cutoff plots
+### Umi-cutoff plots
 
 ```{r create_umi_cutoffs, echo = F, fig.width = 10, fig.height=5}
 umi_cutoffs <- seq(10, 20000, 10)
@@ -272,7 +276,12 @@ umi_cutoff_data <- tibble(umi_cutoffs = umi_cutoffs) %>%
 
 
 ```{r plot_umi_cutoff_plot, echo = F, fig.height=7.5, fig.width=12}
+metric_names <- list('umis' = 'UMIs', 'genes' = 'genes', 'pcr' = 'UMIs/reads',
+                     'reads'='reads')
 umi_cutoff_plot <- function(metric, y_log_transform = F, legend_pos='none'){
+    y_label <- strsplit(metric, '_')
+    y_label <- paste0(y_label[[1]][1], ' ', metric_names[[y_label[[1]][2]]])
+
     pl <- umi_cutoff_data %>%
         gather('obs', 'value', -umi_cutoffs, -run_mode) %>%
         filter(obs == metric) %>%
@@ -285,8 +294,8 @@ umi_cutoff_plot <- function(metric, y_log_transform = F, legend_pos='none'){
                   legend.title = element_blank(), legend.margin = margin(t=0.5, b=0.5,l=0.5,
                                                                          r=0.5, unit = 'cm'),
                   legend.spacing = unit(0, 'cm'), plot.margin = unit(c(1,1,1,1), "lines")) +
-            labs(color='', linetype='', y=paste0(metric, '\nper spot'), x='minimum umi value per spot') +
-            guides(linetype = guide_legend(override.aes = list(size = 1)),
+            labs(color='', linetype='', y=paste0(y_label, '\nper spatial unit'), x='minimum UMI') +
+            guides(linetype = guide_legend(override.aes = list(size = 1), ncol=2),
                    color = guide_legend(override.aes = list(size = 2)))
 
     if (y_log_transform){
@@ -313,11 +322,11 @@ plot_grid(pl1, pl2, pl3,
         align='vh', hjust=-1, labels="", nrow=3)
 ```
 
-#### Histogram of metrics over beads
+### Histogram of metrics over beads {.tabset}
 
 Next we show mertics such as number of UMIs, genes, reads and pcr per physical spot. We further distinguish between each run mode, showing one histogram for each. 
 
-```{r plot_n_reads_bead_hist, echo = F, fig.width=12, fig.height=5*run_mode_n, dpi=200}
+```{r plot_n_reads_bead_hist, echo = F, fig.width=12.5, fig.height=5, dpi=200, results='asis'}
 to_plot <- dge_summary %>%
     gather('obs', 'val', -cell_bc, -quartile, -run_mode)
 
@@ -328,16 +337,19 @@ min_difference <- to_plot %>% group_by(obs) %>%
     summarise(min_difference = min(difference)) %$%
     min_difference
 
-metric_plot <- function(metric, legend_pos='none'){
-    pl <- to_plot %>%
-        filter(obs == metric) %>%
-        ggplot(aes(x = val, fill=obs)) +
+metric_plot <- function(run_mode_in, metric, legend_pos='none'){
+    y_label <- metric_names[[metric]]
+    to_plot <- to_plot %>%
+        filter(obs == metric)
+
+    pl <-  to_plot %>%
+       filter(run_mode == run_mode_in) %>% 
+       ggplot(aes(x = val, fill=obs)) +
             geom_histogram(bins=100) +
             scale_x_log10() +
             scale_fill_manual(values=clrs) +
-            facet_wrap(~run_mode, scales='free_y', ncol=1) +
-            labs(x=paste0('# of ', metric, ' per spot'), y='# of spots') +
-            theme(legend.position = legend_pos)
+            labs(fill='', x=paste0('# of ', y_label), y='# of spatial\nunits') +
+            theme(legend.position = legend_pos, strip.background=element_rect(fill='white'))
 
     if(min_difference > 1){
         pl <- pl + 
@@ -346,20 +358,22 @@ metric_plot <- function(metric, legend_pos='none'){
 
     return(pl)
 }
-pl1 = metric_plot('reads')
-pl2 = metric_plot('pcr')
-pl3 = metric_plot('genes', 'bottom')
-pl4 = metric_plot('umis')
+for (run_mode in unique(dge_summary$run_mode)){
+    cat (paste0('\n\n #### ', run_mode, '\n\n'))
 
-plt_legend <- get_legend(pl3)
+    pl1 = metric_plot(run_mode, 'reads')
+    pl2 = metric_plot(run_mode, 'pcr')
+    pl3 = metric_plot(run_mode, 'genes')
+    pl4 = metric_plot(run_mode, 'umis')
 
-pl_metrics <- plot_grid(pl1, pl2, pl3 + theme(legend.position='none'),
-                        pl4, align='vh', hjust=-1, labels="", nrow=2)
+    print(plot_grid(pl1, pl2, pl3,
+            pl4, align='vh', hjust=-1, labels="", nrow=2))
 
-plot_grid(pl_metrics, plt_legend, ncol=1, rel_heights = c(1, .1))
+    cat('\n\n')
+}
 ```
 
-#### Nucleotide distribution per beads {.tabset .tabset-dropdown}
+### Nucleotide distribution per beads {.tabset}
 
 Next we bin the data based on reads into quartile. For each run\_mode the data is divided into 4 beads, by reads. This means, that the first bin will contain beads which account 25% of the reads, the second will contain beads which account for the second 25% of reads and so on. 
 
@@ -405,12 +419,12 @@ plot_nucl_freq <- function(dge_s){
             facet_wrap(~quartile, ncol=2, scales='free_y',
                        labeller=as_labeller(lbls)) +
             labs(x='nucleotide position in the barcode',
-                 y='nucletide count')+
+                 y='nucleotide count')+
             theme(text = element_text(size =18 ))
 }
 
 for (run_mode_in in unique(normal_run_mode_names)){
-    cat (paste0('\n\n ##### ', run_mode_in, '\n\n'))
+    cat (paste0('\n\n #### ', run_mode_in, '\n\n'))
     dge_summary %>%
         filter(run_mode == run_mode_in) %>%
         plot_nucl_freq() %>%
@@ -418,7 +432,7 @@ for (run_mode_in in unique(normal_run_mode_names)){
 }
 ```
 
-#### Shannon entropy and string compression {.tabset .tabset-dropdown}
+### Shannon entropy and string compression {.tabset}
 
 ```{r plot_shannon, echo = F, fig.height=5, fig.width=10, results='asis'}
 plot_shannon_scompression <- function(run_mode_in){
@@ -456,7 +470,7 @@ plot_shannon_scompression <- function(run_mode_in){
 }
 
 for (run_mode in unique(dge_summary$run_mode)){
-    cat (paste0('\n\n ##### ', run_mode, '\n\n'))
+    cat (paste0('\n\n #### ', run_mode, '\n\n'))
 
     print(plot_shannon_scompression(run_mode))
 }
@@ -468,29 +482,51 @@ is_spatial <- snakemake@params$is_spatial
 ```
 
 ```{r spatial_header, eval=is_spatial, echo=F, results='asis'}
-cat('### Spatial QC {.tabset}\n\n')
+cat('## Spatial QC {.tabset}\n\n')
 ```
 
 ```{r prepare_spatial_data, eval=is_spatial, echo =F}
+run_mode_info <- dge_summary %>%
+    select(run_mode) %>%
+    summarise(n_cells=n()) %>%
+    mutate(def_plot_bead_size = ifelse(n_cells > 5000, 0.5, 1)) %>%
+    mutate(def_plot_bead_size = ifelse(n_cells > 10000, 0.1, def_plot_bead_size))
+
 plot_bead_size <- run_mode_settings %>%
-    filter(variable_name != 'umi_cutoff') %>%
+    filter(variable_name %in% c('mesh_data', 'mesh_spot_diameter_um')) %>%
     gather('run_mode', 'variable_value', -variable_name) %>%
     unnest(variable_value) %>%
     add_row(variable_name = 'spot_diameter_um', run_mode = run_mode_names,
             variable_value = snakemake@params$puck_variables$spot_diameter_um) %>%
     spread(variable_name, variable_value) %>%
+    inner_join(run_mode_info, by='run_mode') %>%
+    mutate(mesh_data = as.logical(mesh_data)) %>%
+    group_by(run_mode) %>%
     mutate(plot_bead_size = max(ifelse(mesh_data, mesh_spot_diameter_um / 40,
-                              spot_diameter_um / 40), 1)) %>%
+                              spot_diameter_um / 40), def_plot_bead_size)) %>%
     select(run_mode, plot_bead_size)
 
-plot_spatial_qc <- function(variable, run_mode_in, ttl='', cut_dist=T){
-    spatial_qc_dat <- dge_summary %>%
-        ungroup() %>%
-        filter(run_mode == run_mode_in) %>%
-        select(x_pos, y_pos, matches(variable)) %>%
-        rename(val = variable)
+x_limits <- dge_summary$x_pos %>% {c(min(.), max(.))}
+y_limits <- dge_summary$y_pos %>% {c(min(.), max(.))}
 
-    spatial_qc_dat <- spatial_qc_dat %>%
+ratio <- (x_limits[2] - x_limits[1] ) / (y_limits[2] - y_limits[1])
+
+mm_dist <- max(1000, round(snakemake@params$puck_variables$width_um / 3, digits =-3))
+mm_diff <- mm_dist / 1000
+
+x_mm_breaks <- seq(0, snakemake@params$puck_variables$width_um, mm_dist)
+x_mm_breaks <- paste0(x_mm_breaks * mm_diff / mm_dist, 'mm')
+y_mm_breaks <- seq(0, snakemake@params$puck_variables$width_um / ratio, mm_dist)
+y_mm_breaks <- paste0(y_mm_breaks * mm_diff / mm_dist, 'mm')
+
+px_to_mm <- (x_limits[2] - x_limits[1]) / snakemake@params$puck_variables$width_um * mm_dist
+
+x_breaks <- seq(x_limits[1], x_limits[2], px_to_mm)
+y_breaks <- seq(y_limits[1], y_limits[2], px_to_mm)
+
+
+plot_spatial_qc <- function(variable, dat_in, plot_bead_size=0.1, ttl='', cut_dist=T){
+    spatial_qc_dat <- dat_in %>%
         mutate(qnt = quantile(val, 0.9, na.rm=T)) %>%
         arrange(val)
 
@@ -503,15 +539,16 @@ plot_spatial_qc <- function(variable, run_mode_in, ttl='', cut_dist=T){
 
     pl <- spatial_qc_dat %>%
         ggplot(aes(x_pos, y_pos, color = val)) +
-            geom_point(size=filter(plot_bead_size, run_mode == run_mode_in)$plot_bead_size) + 
+            geom_point(size=plot_bead_size) + 
+            scale_x_continuous(labels = x_mm_breaks, breaks = x_breaks) +
+            scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks) +
             coord_fixed()+
             guides(color = guide_colorbar(barheight = 15)) + 
-            labs(color=ttl) + 
-            theme(panel.background = element_rect(fill = 'gray45'), 
-                plot.background = element_rect(fill='gray45'),
+            labs(color=ttl, x='', y='') + 
+            theme(panel.background = element_rect(fill = 'gray95'), 
                  legend.spacing = unit(0.1, 'cm'),
-                axis.line = element_line(color = 'white'),
-                axis.ticks = element_blank(), axis.text=element_blank(), text = element_text(color='white', size=18))
+                axis.line = element_line(color = 'black'),
+                text = element_text(color='black', size=18))
     if(cut_dist){
         pl <- pl +
             scale_color_viridis_c(option =  "magma", limits = limits)
@@ -549,15 +586,26 @@ qc_var_info <- dge_summary %>%
     mutate(ttl = paste0(ttl, '\nper spatial unit'))
 ```
 
-```{r plot_per_run_mode, echo =F, results='asis', fig.width=7, fig.height=6}
-for (run_mode_name in run_mode_names){
-    cat(paste0('#### ', run_mode_name, '\n\n'))
 
-    for (qc_var in qc_vars){
+```{r plot_per_run_mode, echo =F, results='asis', fig.width=7, fig.height=6, eval=is_spatial}
+for (run_mode_name in run_mode_names){
+    cat(paste0('\n\n### ', run_mode_name, '\n\n'))
+
+    for (qc_var in qc_var_info$qc_vars){
+        pbs = filter(plot_bead_size, run_mode == run_mode_name)$plot_bead_size
+        dat_in = dge_summary %>%
+            filter(run_mode == run_mode_name) %>%
+            ungroup() %>%
+            select(x_pos, y_pos, matches(qc_var)) %>%
+            rename(val = qc_var) %>%
+            filter(!is.na(val))
+
+        if (qc_var %in% colnames(dge_summary) & nrow(dat_in) > 0){
         print(plot_spatial_qc(
-                  qc_var, run_mode,
+                  qc_var, dat_in, plot_bead_size = pbs,
                   ttl = filter(qc_var_info, qc_vars == qc_var)$ttl,
                   cut_dist = filter(qc_var_info, qc_vars == qc_var)$cut_dist))
+        }
 
     }
 }

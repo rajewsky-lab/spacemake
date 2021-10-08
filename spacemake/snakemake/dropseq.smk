@@ -73,7 +73,7 @@ rule map_reads_final_bam:
         final_bam=final_bam
     threads: 8
     params:
-        tmp_dir = tmp_dir,
+        tmp_dir = star_tmp_dir,
         star_prefix = star_prefix
     shell:
         """

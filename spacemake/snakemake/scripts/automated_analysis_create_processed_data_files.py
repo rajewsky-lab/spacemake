@@ -24,26 +24,20 @@ adata_complete = any([key in adata.uns.keys() for key in uns_keys])
 if not adata_complete:
     pd.DataFrame().to_csv(snakemake.output['cluster_markers'])
 else:
-    resolution = [0.4, 0.6, 0.8, 1.0, 1.2]
+    res_keys = adata.obs.columns[adata.obs.columns.str.startswith('leiden_')]
     
     top_10_marker_dfs = []
+    nhood_enrichment_dfs = []
     
-    for res in resolution:
-        res_key = 'leiden_' + str(res)
-        rank_key = 'rank_genes_grops_' + res_key
-        
-        if res_key not in adata.obs.columns or rank_key not in adata.uns.keys():
-            sc.tl.leiden(adata, resolution = res, key_added = res_key)
-            sc.tl.rank_genes_groups(adata, res_key, method='t-test',
-                    key_added = rank_key, pts=True,
-                    use_raw = False)
+    for res_key in res_keys:
+        rank_key = 'rank_genes_groups_' + res_key
         
         df = pd.DataFrame(adata.uns[rank_key]['names'])\
-                .head(10).melt(var_name = 'cluster', value_name = 'gene')
+                .melt(var_name = 'cluster', value_name = 'gene')
         
         for key in ['logfoldchanges', 'pvals', 'pvals_adj']:
             df_key = pd.DataFrame(adata.uns[rank_key][key])\
-                .head(10).melt(var_name = 'cluster', value_name = key)
+                .melt(var_name = 'cluster', value_name = key)
             df[key] = df_key[key]
             # set the index to gene-cluster pair
             
@@ -58,12 +52,30 @@ else:
             
             df[key] = df2.loc[df.index].value
              
-        df['resolution'] = res
+        df['resolution'] = res_key.split('_')[1]
         df.reset_index(inplace=True)
          
         top_10_marker_dfs.append(df)
+
+        if snakemake.params['is_spatial']:
+        # get nhood data
+            df = pd.DataFrame(adata.uns[f'{res_key}_nhood_enrichment']['zscore'])
+            df = pd.melt(df.reset_index(), id_vars='index')\
+                .rename(columns={'index': 'cluster_a',
+                                 'variable': 'cluster_b',
+                                 'value': 'zscore'})
+            df['resolution'] = res_key.split('_')[1]
+
+            nhood_enrichment_dfs.append(df)
         
     pd.concat(top_10_marker_dfs).to_csv(snakemake.output['cluster_markers'], index=False, sep = '\t')
+
+    if snakemake.params['is_spatial']:
+        pd.concat(nhood_enrichment_dfs).to_csv(snakemake.output['nhood_enrichment'], index=False, sep='\t')
+    else:
+        # output empty csv file
+        pd.DataFrame().to_csv(snakemake.output['nhood_enrichment'])
+
 
 ###############
 # SAVE OBS DF #
