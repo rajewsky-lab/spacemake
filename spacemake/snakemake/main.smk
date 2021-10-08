@@ -287,7 +287,7 @@ wildcard_constraints:
     project='(?!merged_).+',
     dge_cleaned='|.cleaned',
     dge_type = '|'.join(dge_types),
-    pacbio_ext = 'fq|fastq',
+    pacbio_ext = 'fq|fastq|bam',
     polyA_adapter_trimmed = '|.polyA_adapter_trimmed',
     mm_included = '|.mm_included',
     n_beads = '[0-9]+|spatial',
