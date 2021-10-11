@@ -551,7 +551,14 @@ class ProjectDF:
         for key, value in kwargs.items():
             df = df.loc[df.loc[:, key] == value]
 
-        return df[field].to_list()[0]
+        # print(f"query: field={field} proj={project_id} samp={sample_id} kw={kwargs}")
+        # print(df[field].to_list())
+        dl = df[field].to_list()
+        if len(dl):
+            return dl[0]
+        else:
+            return ""
+        # return df[field].to_list()[0]
 
     def dump(self):
         self.df.to_csv(self.file_path)
