@@ -30,6 +30,7 @@ pb_edits = pb_report_dir + "{sample}.oligo_edits.pdf"
 # )
 
 PB_RAW_FILES = {}
+PB_SIGNATURE = {}
 def get_longread_output():
     """
     This function is called from main.smk at least once 
@@ -54,6 +55,7 @@ def get_longread_output():
                     sample=index[1],
                 )
                 PB_RAW_FILES[index[1]] = row.longreads
+                PB_SIGNATURE[index[1]] = row.longread_signature
 
     print("PACBIO OUTPUT FILES", out_files)
     return out_files
@@ -65,6 +67,7 @@ def get_args(wc):
     --stats-out={pb_stats_dir} \
     --report-out={pb_report_dir} \
     --sample={wc.sample} \
+    --signature={PB_SIGNATURE[wc.sample]} \
     """.format(sample=wc.sample, project=wc.project)
     return args
 

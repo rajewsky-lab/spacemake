@@ -22,7 +22,7 @@ def detect_sample(args):
     return sample_name.replace(".stats", "")
 
 
-class SampleDB:
+class SignatureDB:
     def __init__(self, intact={}, related={}, color={}, label={}, prio={}):
         self.intact = intact
         self.related = related
@@ -38,7 +38,7 @@ class SampleDB:
         logger.info(f"reading longread signature definitions from '{fname}'")
 
         groups = yaml.load(open(fname), Loader=yaml.SafeLoader)
-        grp = groups["groups"]
+        grp = groups["signatures"]
         default = grp[groups["default"]]
         # print("default THING", default)
 
@@ -47,33 +47,34 @@ class SampleDB:
         color_lkup = defaultdict(lambda: default["color"])
         label_lkup = defaultdict(lambda: default["label"])
         prio_lkup = defaultdict(lambda: default["prio"])
-        for name, d in groups["groups"].items():
+        for name, d in groups["signatures"].items():
             # print(f"name={name} d={d}")
-            for sample in d["samples"]:
-                intact_lkup[sample] = d["intact_bead"]
-                brelated_lkup[sample] = d["bead_related"]
-                color_lkup[sample] = d["color"]
-                label_lkup[sample] = d["label"]
-                prio_lkup[sample] = d["prio"]
+            intact_lkup[name] = d["intact_bead"]
+            brelated_lkup[name] = d["bead_related"]
+            color_lkup[name] = d["color"]
+            label_lkup[name] = d["label"]
+            prio_lkup[name] = d["prio"]
 
         # print(color_lkup)
         # print("DEFAULT COLOR", color_lkup["TEST"])
         logger.info(
-            f"found {len(intact_lkup)} signature definitions. default={default}"
+            f"found {len(intact_lkup)} signature definitions: {sorted(intact_lkup.keys())}."
         )
         return cls(intact_lkup, brelated_lkup, color_lkup, label_lkup, prio_lkup)
 
-    def sort_samples(self, samples):
-        return sorted(samples, key=lambda x: (self.prio.get(x, np.inf), x))
+    def sort_samples(self, samples, signatures):
+        return sorted(
+            zip(samples, signatures), key=lambda x: (self.prio.get(x[1], np.inf), x[0])
+        )
 
 
-def get_samples_db(args):
+def get_signature_db(args):
     if os.access(args.config, os.R_OK):
         cfg = args.config
     else:
         cfg = os.path.join(os.path.dirname(__file__), "../data/config/longread.yaml")
 
-    return SampleDB.from_YAML(cfg)
+    return SignatureDB.from_YAML(cfg)
 
 
 def setup_namespace(args):
@@ -82,15 +83,15 @@ def setup_namespace(args):
     sample = detect_sample(args)
     d["sample_name"] = sample
 
-    db = get_samples_db(args)
-    d["sample_db"] = db
+    db = get_signature_db(args)
+    d["signature_db"] = db
 
-    intact_bead = db.intact[sample]
+    intact_bead = db.intact[args.signature]
     d["intact_bead"] = intact_bead
     d["sig_intact"] = intact_bead.split(",")
     d["sig_core"], d["sig_core_order"] = util.process_intact_signature(intact_bead)
 
-    d["bead_related"] = db.related[sample]
+    d["bead_related"] = db.related[args.signature]
     # bead_related = args.bead_related
     # if bead_related is None:
     #     sig_intact = tuple(args.intact_bead.split(","))
@@ -540,6 +541,11 @@ def prepare_parser():
         "--config",
         help="YAML describing expected longread signature (default=./longread.yaml if detected or built-in)",
         default="longread.yaml",
+    )
+    parser.add_argument(
+        "--signature",
+        help="expected long read signature (e.g. dropseq, noUMI, withUMI,...)",
+        default=None,
     )
     parser.add_argument(
         "--blocks",
