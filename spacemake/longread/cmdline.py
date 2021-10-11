@@ -1,5 +1,4 @@
 __author__ = ["Marvin Jens"]
-__license__ = "MIT"
 __email__ = ["marvin.jens@mdc-berlin.de"]
 
 import os
@@ -23,17 +22,104 @@ def detect_sample(args):
     return sample_name.replace(".stats", "")
 
 
+class SampleDB:
+    def __init__(self, intact={}, related={}, color={}, label={}, prio={}):
+        self.intact = intact
+        self.related = related
+        self.color = color
+        self.label = label
+        self.prio = prio
+
+    @classmethod
+    def from_YAML(cls, fname="samples.yaml"):
+        import yaml
+
+        logger = logging.getLogger("spacemake.longread.SampleDB.from_YAML")
+        logger.info(f"reading longread signature definitions from '{fname}'")
+
+        groups = yaml.load(open(fname), Loader=yaml.SafeLoader)
+        grp = groups["groups"]
+        default = grp[groups["default"]]
+        # print("default THING", default)
+
+        intact_lkup = defaultdict(lambda: default["intact_bead"])
+        brelated_lkup = defaultdict(lambda: default["bead_related"])
+        color_lkup = defaultdict(lambda: default["color"])
+        label_lkup = defaultdict(lambda: default["label"])
+        prio_lkup = defaultdict(lambda: default["prio"])
+        for name, d in groups["groups"].items():
+            # print(f"name={name} d={d}")
+            for sample in d["samples"]:
+                intact_lkup[sample] = d["intact_bead"]
+                brelated_lkup[sample] = d["bead_related"]
+                color_lkup[sample] = d["color"]
+                label_lkup[sample] = d["label"]
+                prio_lkup[sample] = d["prio"]
+
+        # print(color_lkup)
+        # print("DEFAULT COLOR", color_lkup["TEST"])
+        logger.info(
+            f"found {len(intact_lkup)} signature definitions. default={default}"
+        )
+        return cls(intact_lkup, brelated_lkup, color_lkup, label_lkup, prio_lkup)
+
+    def sort_samples(self, samples):
+        return sorted(samples, key=lambda x: (self.prio.get(x, np.inf), x))
+
+
+def get_samples_db(args):
+    if os.access(args.config, os.R_OK):
+        cfg = args.config
+    else:
+        cfg = os.path.join(os.path.dirname(__file__), "../data/config/longread.yaml")
+
+    return SampleDB.from_YAML(cfg)
+
+
+def setup_namespace(args):
+    "perform initialization code common to more than one sub-command"
+    d = vars(args)
+    sample = detect_sample(args)
+    d["sample_name"] = sample
+
+    db = get_samples_db(args)
+    d["sample_db"] = db
+
+    intact_bead = db.intact[sample]
+    d["intact_bead"] = intact_bead
+    d["sig_intact"] = intact_bead.split(",")
+    d["sig_core"], d["sig_core_order"] = util.process_intact_signature(intact_bead)
+
+    d["bead_related"] = db.related[sample]
+    # bead_related = args.bead_related
+    # if bead_related is None:
+    #     sig_intact = tuple(args.intact_bead.split(","))
+    #     bead_related = sig_intact[0]
+
+    d["logger"] = logging.getLogger(f"spacemake.longread.cmd.{args.subcmd}")
+    d["blocks"] = util.load_oligos(args.blocks)
+
+    from types import SimpleNamespace
+
+    return SimpleNamespace(**d)
+
+
 def aln_main(args):
-    sample_name = detect_sample(args)
-    blocks = util.load_oligos(args.blocks)
+    args = setup_namespace(args)
 
     cache.fill_caches(
-        args.fname, sample_name, blocks, path=args.cache, n_proc=args.parallel
+        args.fname,
+        args.sample_name,
+        args.blocks,
+        path=util.ensure_path(args.cache),
+        n_proc=args.parallel,
     )
-    df = cache.annotate(args.fname, sample_name, blocks, path=args.cache)
+    df = cache.annotate(
+        args.fname, args.sample_name, args.blocks, path=util.ensure_path(args.cache)
+    )
     df.to_csv(
         os.path.join(
-            util.ensure_path(args.annotation_out), f"{sample_name}.annotation.tsv"
+            util.ensure_path(args.annotation_out), f"{args.sample_name}.annotation.tsv"
         ),
         sep="\t",
         index=False,
@@ -41,24 +127,22 @@ def aln_main(args):
 
 
 def ann_main(args):
-    logger = logging.getLogger("longread.cmd.annotation")
-    sample_name = detect_sample(args)
-    blocks = util.load_oligos(args.blocks)
-
-    sig_intact = args.intact_bead.split(",")
-    sig_core, sig_core_order = util.process_intact_signature(args.intact_bead)
-
-    logger.info(f"analyzing {sample_name} for intact signature {sig_intact}")
+    args = setup_namespace(args)
+    args.logger.info(
+        f"analyzing {args.sample_name} for intact signature {args.sig_intact}"
+    )
     annotation = ann.AnnotatedSequences(
         args.fname,
-        os.path.join(args.annotation_out, f"{sample_name}.annotation.tsv"),
-        sample_name,
-        blocks,
+        os.path.join(args.annotation_out, f"{args.sample_name}.annotation.tsv"),
+        args.sample_name,
+        args.blocks,
         min_score=args.min_score,
-        orient_by=sig_core[0],
+        orient_by=args.bead_related,
     )
     n_total = len(annotation.raw_sequences)
-    logging.info(f"total number of reads in {args.fname} ({sample_name}) is {n_total}")
+    logging.info(
+        f"total number of reads in {args.fname} ({args.sample_name}) is {n_total}"
+    )
 
     sig_counts, n_concat, n_reprimed = annotation.count_signatures()
     util.count_dict_out(sig_counts, "common signatures", total=n_total)
@@ -79,11 +163,11 @@ def ann_main(args):
     df_reprimed = util.count_dict_to_df(reprimed_counts, "repriming", n_total=n_total)
 
     partial_counts, prefixes, suffixes, pT_counts = annotation.completeness(
-        sig_core, polyT=args.polyT
+        args.sig_core, polyT=args.polyT
     )
 
     partial_counts_simple, _ = util.count_dict_collapse_misc(
-        partial_counts, sig_intact=sig_intact, total=n_total, misc_thresh=0.00001
+        partial_counts, sig_intact=args.sig_intact, total=n_total, misc_thresh=0.00001
     )
     util.count_dict_out(partial_counts_simple, "completeness", total=n_total)
 
@@ -93,7 +177,9 @@ def ann_main(args):
 
     df_pT = util.count_dict_to_df(pT_counts, kind="polyT_after", n_total=n_total)
 
-    fname = os.path.join(util.ensure_path(args.stats_out), f"{sample_name}.stats.tsv")
+    fname = os.path.join(
+        util.ensure_path(args.stats_out), f"{args.sample_name}.stats.tsv"
+    )
     logging.info(f"storing annotation signature counts as DataFrame '{fname}'")
     df = pd.concat([df_sig, df_concat, df_reprimed, df_comp, df_pT])
     df.to_csv(fname, sep="\t", index=False)
@@ -105,13 +191,13 @@ def ann_main(args):
 
     # Gather statistics about the parts that make up intact oligos
     qintact, qL, qstarts, qends, qscores = annotation.query_dimensions(
-        sig_core, substring=True
+        args.sig_core, substring=True
     )
     # print(qstarts.shape, qintact.shape, qL.shape)
     from collections import Counter
 
     data = []
-    for part, starts, ends, scores in zip(sig_core, qstarts.T, qends.T, qscores.T):
+    for part, starts, ends, scores in zip(args.sig_core, qstarts.T, qends.T, qscores.T):
         starts_hist = sorted(Counter(starts).items())
         ends_hist = sorted(Counter(ends).items())
         lens_hist = sorted(Counter(ends - starts).items())
@@ -132,7 +218,7 @@ def ann_main(args):
     # For reference, also gather statistics for each part of the intact signature,
     # regardless of whether it occurs in the context of an intact signature or not,
     # i.e. what do *all matches* look like
-    for part in sig_intact:
+    for part in args.sig_intact:
         qnames, starts, ends, scores, qL = annotation.query_oligo_occurrences(part)
         starts_hist = sorted(Counter(starts).items())
         ends_hist = sorted(Counter(ends).items())
@@ -155,18 +241,20 @@ def ann_main(args):
         data, columns=["signature", "oligo", "attr", "value", "freq"]
     )
     fname = os.path.join(
-        util.ensure_path(args.stats_out), f"{sample_name}.intact_parts.tsv"
+        util.ensure_path(args.stats_out), f"{args.sample_name}.intact_parts.tsv"
     )
     logging.info(f"storing intact signature part-statistics as DataFrame '{fname}'")
     df_parts.to_csv(fname, sep="\t", index=False)
 
-    # plot score distributions
-    qnames, starts, ends, scores, qlens = annotation.query_oligo_occurrences(
-        "bead_start"
-    )
+    # # plot score distributions
+    # qnames, starts, ends, scores, qlens = annotation.query_oligo_occurrences(
+    #     "bead_start"
+    # )
 
     # output representative examples
-    eo_fname = util.ensure_path(os.path.join(args.examples_out, f"{sample_name}.txt"))
+    eo_fname = util.ensure_path(
+        os.path.join(args.examples_out, f"{args.sample_name}.txt")
+    )
     with open(eo_fname, "wt") as eo:
         for signame, sigcount in sorted(sig_counts.items(), key=lambda x: -x[1]):
             try:
@@ -175,14 +263,17 @@ def ann_main(args):
                 )
                 eo.write(f"# {signame} n={sigcount}\n{annotation.fmt(qname)}\n")
             except StopIteration:
-                logger.warning(f"unable to find any reads with signature {signame}")
+                args.logger.warning(
+                    f"unable to find any reads with signature {signame}"
+                )
 
 
 def rep_main(args):
-    logger = logging.getLogger("longread.report")
-    logger.info(f"generating reports from '{args.fname}'")
-    sample_name = detect_sample(args)
-    fname = os.path.join(util.ensure_path(args.stats_out), f"{sample_name}.stats.tsv")
+    args = setup_namespace(args)
+    args.logger.info(f"generating reports from '{args.fname}'")
+    fname = os.path.join(
+        util.ensure_path(args.stats_out), f"{args.sample_name}.stats.tsv"
+    )
     df = pd.read_csv(fname, sep="\t", comment="#").fillna("other")
     print(df)
     sig_counts = util.count_dict_from_df(df, "signatures")
@@ -193,17 +284,12 @@ def rep_main(args):
     print(
         "summed up counts in sig_counts dict", np.array(list(sig_counts.values())).sum()
     )
-    bead_related = args.bead_related
-    if bead_related is None:
-        sig_intact = tuple(args.intact_bead.split(","))
-        bead_related = sig_intact[0]
-
     n_total = sig_counts["n_total"]
-    print(f"oligo name flagging 'bead-related' signature: {bead_related}")
+    print(f"oligo name flagging 'bead-related' signature: {args.bead_related}")
 
     ov_counts, bead_counts, found_part_counts, core_signature = util.digest_signatures(
         sig_counts,
-        bead_related,
+        args.bead_related,
         args.intact_bead,
         # prefixes=args.prefixes,
         # suffixes=args.suffixes,
@@ -236,7 +322,9 @@ def rep_main(args):
     bead_labels = [x[0] for x in bead_items]
     bead_counts = [x[1] for x in bead_items]
 
-    fname = os.path.join(util.ensure_path(args.report_out), f"{sample_name}.donuts.pdf")
+    fname = os.path.join(
+        util.ensure_path(args.report_out), f"{args.sample_name}.donuts.pdf"
+    )
     syn_rates = report.plot_results(
         sig_counts,
         ov_labels,
@@ -246,67 +334,71 @@ def rep_main(args):
         found_part_counts,
         all_parts=core_signature,
         fname=fname,
-        suptitle=sample_name,
+        suptitle=args.sample_name,
     )
     # print(core_signature)
     # print(syn_rates)
-    fname = os.path.join(util.ensure_path(args.stats_out), f"{sample_name}.synth.tsv")
+    fname = os.path.join(
+        util.ensure_path(args.stats_out), f"{args.sample_name}.synth.tsv"
+    )
     df = pd.DataFrame(dict(segment=core_signature, rate=syn_rates))
-    df["sample"] = sample_name
+    df["sample"] = args.sample_name
     print(df)
     df.to_csv(fname, sep="\t")
 
     fname = os.path.join(
-        util.ensure_path(args.stats_out), f"{sample_name}.intact_parts.tsv"
+        util.ensure_path(args.stats_out), f"{args.sample_name}.intact_parts.tsv"
     )
     df = pd.read_csv(fname, sep="\t", comment="#").fillna("other")
-    fname = os.path.join(util.ensure_path(args.report_out), f"{sample_name}.hists.pdf")
+    fname = os.path.join(
+        util.ensure_path(args.report_out), f"{args.sample_name}.hists.pdf"
+    )
     report.plot_histograms(
         df, fname, n_total=n_total, parts=args.intact_bead.split(",")
     )
 
 
 def main_edits(args):
-    sample_name = detect_sample(args)
-    blocks = util.load_oligos(args.blocks)
-    sig_intact = tuple(args.intact_bead.split(","))
+    args = setup_namespace(args)
 
     annotation = ann.AnnotatedSequences(
         args.fname,
-        os.path.join(args.annotation_out, f"{sample_name}.annotation.tsv"),
-        sample_name,
-        blocks,
+        os.path.join(args.annotation_out, f"{args.sample_name}.annotation.tsv"),
+        args.sample_name,
+        args.blocks,
         min_score=args.min_score,
     )
     n_total = len(annotation.raw_sequences)
-    logging.info(f"total number of reads in {args.fname} ({sample_name}) is {n_total}")
+    logging.info(
+        f"total number of reads in {args.fname} ({args.sample_name}) is {n_total}"
+    )
 
     data = []
-    for part in sig_intact:
+    for part in args.sig_intact:
         qmatches = annotation.query_oligo_occurrences(part)
         if len(qmatches[0]) > args.n_samples:
             qmatches = ann.subsample(qmatches, n=args.n_samples)
 
         nmatch = len(qmatches[0])
-        m, ed = ann.align_stats(annotation, blocks[part], qmatches)
+        m, ed = ann.align_stats(annotation, args.blocks[part], qmatches)
         for x in np.arange(len(m)):
             # print(part, x, m)
-            data.append((part, blocks[part], nmatch, x, m[x], ed[x]))
+            data.append((part, args.blocks[part], nmatch, x, m[x], ed[x]))
 
     df = pd.DataFrame(
         data, columns=["oligo", "seq", "nmatch", "pos", "fmatch", "ed_dict"]
     )
     # print(df)
     df.to_csv(
-        os.path.join(args.stats_out, f"{sample_name}.oligo_edits.tsv"),
+        os.path.join(args.stats_out, f"{args.sample_name}.oligo_edits.tsv"),
         sep="\t",
         index=False,
     )
 
     report.plot_edits(
         df,
-        os.path.join(args.report_out, f"{sample_name}.oligo_edits.pdf"),
-        parts=sig_intact,
+        os.path.join(args.report_out, f"{args.sample_name}.oligo_edits.pdf"),
+        parts=args.sig_intact,
     )
 
 
@@ -408,50 +500,13 @@ def load_tables_overview(sample_fnames, pattern):
     return df, samples
 
 
-class SampleDB:
-    def __init__(self, intact={}, color={}, label={}, prio={}):
-        self.intact = intact
-        self.color = color
-        self.label = label
-        self.prio = prio
-
-    @classmethod
-    def from_YAML(cls, fname="samples.yaml"):
-        import yaml
-
-        groups = yaml.load(open(fname), Loader=yaml.SafeLoader)
-        print(groups)
-        grp = groups["groups"]
-        default = grp[groups["default"]]
-        print("default THING", default)
-
-        intact_lkup = defaultdict(lambda: default["intact_bead"])
-        color_lkup = defaultdict(lambda: default["color"])
-        label_lkup = defaultdict(lambda: default["label"])
-        prio_lkup = defaultdict(lambda: default["prio"])
-        for name, d in groups["groups"].items():
-            print(f"name={name} d={d}")
-            for sample in d["samples"]:
-                intact_lkup[sample] = d["intact_bead"]
-                color_lkup[sample] = d["color"]
-                label_lkup[sample] = d["label"]
-                prio_lkup[sample] = d["prio"]
-
-        print(color_lkup)
-        print("DEFAULT COLOR", color_lkup["TEST"])
-        return cls(intact_lkup, color_lkup, label_lkup, prio_lkup)
-
-    def sort_samples(self, samples):
-        return sorted(samples, key=lambda x: (self.prio.get(x, np.inf), x))
-
-
 def synthesis_rates_overview(args):
     df, samples = load_tables_overview(
         args.overview_samples, os.path.join(args.stats_out, "{sample_name}.synth.tsv")
     )
     df["segment"] = df["segment"].apply(lambda x: x.replace("_2s", ""))
 
-    db = SampleDB.from_YAML("samples.yaml")
+    db = get_samples_db(args)
     samples = db.sort_samples(samples)
 
     row_labels = ["bead_start", "OP1", "OP2", "OP3", "polyT"]
@@ -472,9 +527,6 @@ def main_overview(args):
 
 
 def prepare_parser():
-    # import pb
-    # import overview as ov
-
     parser = argparse.ArgumentParser(prog="longread")
     parser.add_argument(
         "fname", default=None, help="file with pacbio reads (FASTQ or BAM format)"
@@ -484,9 +536,11 @@ def prepare_parser():
         help="sample name (default=autodetect from fname)",
         default=None,
     )
-    # parser.add_argument(
-    #     "--aln-cache", help="alignment cache folder", default="./cache/"
-    # )
+    parser.add_argument(
+        "--config",
+        help="YAML describing expected longread signature (default=./longread.yaml if detected or built-in)",
+        default="longread.yaml",
+    )
     parser.add_argument(
         "--blocks",
         default="",
@@ -503,6 +557,14 @@ def prepare_parser():
         help="path to store annotation data in (default=./annotation/)",
     )
     parser.add_argument(
+        "--stats-out",
+        help="path to store statistics (pandas dataframes)",
+        default="./stats/",
+    )
+    parser.add_argument(
+        "--report-out", help="path to render graphical reports in", default="./reports/"
+    )
+    parser.add_argument(
         "--parallel",
         default=16,
         type=int,
@@ -517,28 +579,9 @@ def prepare_parser():
     parser.add_argument(
         "--debug", default=False, action="store_true", help="activate debug output"
     )
-    parser.add_argument(
-        "--intact-bead",
-        default="bead_start,OP1,pT",
-        help="sequence of oligos that correspond to intact bead sequence in correct order",
-    )
-    parser.add_argument(
-        "--bead-related",
-        default=None,
-        help="name of oligo-block that is specific to the capture oligo. default=first element of --intact-bead",
-    )
-
-    parser.add_argument(
-        "--stats-out",
-        help="path to store statistics (pandas dataframes)",
-        default="./stats/",
-    )
-    parser.add_argument(
-        "--report-out", help="path to render graphical reports in", default="./reports/"
-    )
 
     ## sub-parser setup ##
-    subparsers = parser.add_subparsers(help="sub-command help")
+    subparsers = parser.add_subparsers(help="sub-command help", dest="subcmd")
     aln_parser = subparsers.add_parser(
         "align", help="align PacBio reads against oligos"
     )
