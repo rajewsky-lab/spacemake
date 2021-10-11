@@ -97,6 +97,11 @@ def get_sample_extra_arguments_parser(species_required=False, reads_required=Fal
         help="fastq(.gz)|fq(.gz)|bam file path to pacbio long reads for library debugging",
         required=reads_required,
     )
+    parser.add_argument(
+        "--longread-signature",
+        type=str,
+        help="identify the expected longread signature (see longread.yaml)",
+    )
 
     parser.add_argument(
         "--barcode_flavor", type=str, help="barcode flavor for this sample"
@@ -420,6 +425,7 @@ class ProjectDF:
         "R1": None,
         "R2": None,
         "longreads": None,
+        "longread_signature": None,
         "investigator": "unknown",
         "sequencing_date": "unknown",
         "experiment": "unknown",
@@ -443,6 +449,12 @@ class ProjectDF:
                 na_values=["None", "none"],
             )
             project_list = []
+            # required if upgrading from pre-longread tree
+            if not "longreads" in df.columns:
+                df["longreads"] = None
+
+            if not "longread_signature" in df.columns:
+                df["longread_signature"] = None
 
             # update with new columns, if they exist.
             for ix, row in df.iterrows():
@@ -632,6 +644,7 @@ class ProjectDF:
         R1=None,
         R2=None,
         longreads=None,
+        longread_signature=None,
         sample_sheet=None,
         basecalls_dir=None,
         is_merged=False,
@@ -672,6 +685,11 @@ class ProjectDF:
                         "Neither R1 & R2, longreads, nor basecalls_dir & "
                         + "sample_sheet were provided. You need to provide some reads"
                     )
+            else:
+                if not longread_signature:
+                    raise ValueError(
+                        "adding longreads requires to set --longread-signature as well (e.g. dropseq, noUMI, default, visium, slideseq_bc14,...)"
+                    )
 
         # assert files first
         assert_file(R1, default_value=None, extension=".fastq.gz")
@@ -706,6 +724,7 @@ class ProjectDF:
         kwargs["R1"] = R1
         kwargs["R2"] = R2
         kwargs["longreads"] = longreads
+        kwargs["longread_signature"] = longread_signature
         kwargs["sample_sheet"] = sample_sheet
         kwargs["basecalls_dir"] = basecalls_dir
         kwargs["is_merged"] = is_merged
