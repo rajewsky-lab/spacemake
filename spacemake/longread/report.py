@@ -209,76 +209,6 @@ def plot_results(
     return rates
 
 
-# def plot_histograms(
-#     classes, fname="measures.pdf", prefix=("bead_start", "optical_primer", "oligo_dT")
-# ):
-#     n_prefix = len(prefix)
-#     keys = [k for k in classes.keys() if k[:n_prefix] == prefix]
-#     frag_lengths = []
-#     starts = []
-#     ends = []
-#     for k in keys:
-#         rep = classes[k]
-#         frag_lengths.extend(rep.frag_lengths)
-#         # print(k, rep.name, rep.starts)
-#         starts.append(np.array([s[:n_prefix] for s in rep.starts]))
-#         ends.append(np.array([e[:n_prefix] for e in rep.ends]))
-
-#     frag_lengths = np.array(frag_lengths)
-#     starts = np.concatenate(starts)
-#     ends = np.concatenate(ends)
-#     lengths = ends - starts
-#     dists = starts[:, 1:] - ends[:, :-1]
-#     features = rep.key[:n_prefix]
-
-#     # print("starts", starts)
-#     # print("ends", ends)
-#     # print("dists", dists)
-#     fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, figsize=(6, 9))
-#     y = np.bincount(frag_lengths).cumsum()
-#     x = np.arange(len(y))
-#     ax1.plot(x, y, ".-")
-#     ax1.set_xlabel("fragment length")
-#     ax1.set_ylabel("count")
-
-#     for fs, f in zip(starts.T, features):
-#         y = np.bincount(fs).cumsum()
-#         x = np.arange(len(y))
-#         ax2.plot(x, y, ".-", label=f)
-
-#     ax2.legend(ncol=n_prefix)
-#     ax2.set_xlabel("start position")
-#     ax2.set_ylabel("cumulative count")
-
-#     xmax = 0
-#     for fl, f in zip(lengths.T, features):
-#         xmax = max(xmax, np.percentile(fl, 95))
-#         y = np.bincount(fl).cumsum()
-#         x = np.arange(len(y))
-#         ax3.plot(x, y, ".-", label=f)
-
-#     ax3.set_xlim(-1, xmax)
-#     ax3.legend(ncol=n_prefix)
-#     ax3.set_xlabel("oligo match length")
-#     ax3.set_ylabel("cumulative count")
-
-#     # print(dists)
-#     xmax = 0
-#     for fd, f1, f2 in zip(dists.T, features[:-1], features[1:]):
-#         xmax = max(xmax, np.percentile(fd, 95))
-#         y = np.bincount(fd).cumsum()
-#         x = np.arange(len(y))
-#         ax4.plot(x, y, ".-", label=f"{f1}-{f2}")
-
-#     ax4.set_xlim(-1, xmax)
-#     ax4.legend(ncol=n_prefix)
-#     ax4.set_xlabel("match distance")
-#     ax4.set_ylabel("cumulative count")
-
-#     fig.tight_layout()
-#     fig.savefig(fname)
-
-
 def obs_to_arrays(df):
     x = df["value"].values
     y = df["freq"].values
@@ -325,14 +255,14 @@ def plot_histograms(df, fname, parts=["bead_start", "OP1", "pT"], n_total=1):
             ax.plot(
                 sig_x,
                 ys,
-                "-",
+                "--",
                 color=color,
                 label=f"intact",
             )
             ax.plot(
                 ctrl_x,
                 yc,
-                "--",
+                "-",
                 color=color,
                 label=f"all",
             )
