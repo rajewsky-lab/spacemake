@@ -1,60 +1,119 @@
-# pacbio_projects, pacbio_samples, pacbio_ext = glob_wildcards(pacbio_fq)
-pacbio_projects, pacbio_samples, pacbio_ext = [], [], []
-pacbio_reports = []
-pacbio_rRNA_counts = []
-pacbio_stats = []
+#########
+# about #
+#########
+__version__ = '0.2'
+__author__ = ['Marvin Jens', 'Tamas Ryszard Sztanka-Toth']
+__email__ = ['marvin.jens@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
-byo_package = '/data/rajewsky/projects/slide_seq/.repos/pb_annotate/byo'
-pythonpath_prepend = 'PYTHONPATH=$PYTHONPATH:' + byo_package
-blocks_fa_file = '/data/rajewsky/projects/slide_seq/.repos/pb_annotate/blocks.fa'
+##################
+# include pacbio #
+##################
+pb_root = project_dir + "/processed_data/{sample}/pacbio"
+pb_cache_dir = pb_root + "/cache/"
+pb_ann_dir = pb_root + "/annotation/"
+pb_stats_dir = pb_root + "/stats/"
+pb_report_dir = pb_root + "/reports/"
 
-ext_lookup = {}
+# targets
+pb_ann = pb_ann_dir + "{sample}.annotation.tsv"
+pb_stats = pb_stats_dir + "{sample}.stats.tsv"
+pb_report = pb_report_dir + "{sample}.donuts.pdf"
+pb_edits = pb_report_dir + "{sample}.oligo_edits.pdf"
 
-for project, sample, ext in zip(pacbio_projects, pacbio_samples, pacbio_ext):
-    pacbio_reports = pacbio_reports + expand(pacbio_report, project=project, sample=sample)
-    pacbio_rRNA_counts = pacbio_rRNA_counts + expand(pacbio_rRNA_out, project=project, sample=sample)
-    pacbio_stats = pacbio_stats + expand(pacbio_stats_file, project=project, sample=sample)
+# pb_run_summary = processed_data_pacbio + "/{sample}.examples.txt"
+# # pb_rRNA_out = processed_data_pacbio + "/{sample}.rRNA.txt"
+# pb_overview = "/data/rajewsky/projects/slide_seq/.config/pb_overview.pdf"
+# pb_overview_csv = "/data/rajewsky/projects/slide_seq/.config/pb_overview.csv"
 
-    if project not in ext_lookup.keys():
-        ext_lookup[project] = {}
-    
-    ext_lookup[project][sample] = ext
+# pb_bead_overview = (
+#     "/data/rajewsky/projects/slide_seq/.config/pb_bead_overview.pdf"
+# )
 
-bin = "/data/rajewsky/projects/slide_seq/.repos/pb_annotate/pb_annotate"
+PB_RAW_FILES = {}
+def get_longread_output():
+    """
+    This function is called from main.smk at least once 
+    to determine which output files need to be generated
+    from pacbio longread analysis.
+    We use this opportunity to populate PB_RAW_FILES
+    """
+    out_files = []
+    for index, row in project_df.df.iterrows():
+        # for run_mode in row["run_mode"]:
+        #     run_mode_variables = project_df.config.get_run_mode(run_mode).variables
+            if row.longreads:
+                out_files += \
+                expand(
+                    pb_report,
+                    project=index[0],
+                    sample=index[1],
+                ) + \
+                expand(
+                    pb_edits,
+                    project=index[0],
+                    sample=index[1],
+                )
+                PB_RAW_FILES[index[1]] = row.longreads
 
-rule pacbio:
+    print("PACBIO OUTPUT FILES", out_files)
+    return out_files
+
+def get_args(wc):
+    args = f""" \
+    --cache={pb_cache_dir} \
+    --annotation-out={pb_ann_dir} \
+    --stats-out={pb_stats_dir} \
+    --report-out={pb_report_dir} \
+    --sample={wc.sample} \
+    """.format(sample=wc.sample, project=wc.project)
+    return args
+
+# Use {root_dir}/longread.yaml to set intact_bead layout and other settings that only make sense for
+# pacbio
+longread_cmd = """
+python -m spacemake.longread \
+    --parallel={threads} \
+    --config=longread.yaml \
+    {params.args} \
+    {input.fname} \
+"""
+
+rule cmd_report:
+    input:
+        fname=lambda wc: PB_RAW_FILES[wc.sample],
+        stats=pb_stats
+    output:
+        donuts=pb_report
+    params:
+        args=get_args
+    threads: 1
+    shell: longread_cmd + " report"
+
+rule cmd_edits:
     input: 
-        reports=pacbio_reports,
-        rRNA_counts=pacbio_rRNA_counts,
-        stats=pacbio_stats
-    output:
-        overview=pacbio_overview,
-        bead_overview=pacbio_bead_overview,
-        csv=pacbio_overview_csv
-    shell:
-        "{pythonpath_prepend} python {bin} overview --rRNA-same-place --multi-page --breakdown {output.bead_overview} --output {output.overview} --csv-out {output.csv} {input.stats}"
+        fname = lambda wc: PB_RAW_FILES[wc.sample],
+        stats = pb_stats
+    output: pb_edits
+    params:
+        args=get_args
+    threads: 1
+    shell: longread_cmd + " edits"
 
-rRNA_index = "/data/rajewsky/indices/rRNA_hsa_bwa_0.7.17/rRNA_hsa.fa"
-# SAM Flag 2308 means, "not primary", "supplementary", or "unmapped". 
-# We kick these out for counting rRNA hits
-def get_pacbio_fq(wildcards):
-    ext = ext_lookup[wildcards.project][wildcards.sample]
+rule cmd_annotate:
+    input: 
+        fname = lambda wc: PB_RAW_FILES[wc.sample],
+        ann = pb_ann
+    output: pb_stats
+    params:
+        args=get_args
+    threads: 1
+    shell: longread_cmd + " annotate"
 
-    return expand(pacbio_fq, project = wildcards.project, sample=wildcards.sample, pacbio_ext = ext)
-
-
-rule rRNA_fq:
-    input:
-        unpack(get_pacbio_fq)
-    output: pacbio_rRNA_out
-    threads: 4
-    shell: "bwa mem -t {threads} -x pacbio {rRNA_index} {input} | samtools view -F 2308 /dev/stdin | wc -l > {output}"
-
-rule annotate_fq:
-    input:
-        unpack(get_pacbio_fq)
-    output:
-        report=pacbio_report,
-        stats=pacbio_stats_file,
-        run_summary=pacbio_run_summary
-    shell: "{pythonpath_prepend} python {bin} scan --deletions --report {output.report} --blocks {blocks_fa_file} --summary {output.stats} {input}  > {output.run_summary}"
+rule cmd_align:
+    input: 
+        fname = lambda wc: PB_RAW_FILES[wc.sample]
+    output: pb_ann
+    params:
+        args=get_args
+    threads: 64
+    shell: longread_cmd + " align"
