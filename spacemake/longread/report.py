@@ -61,7 +61,7 @@ def donut_plot(
         horizontalalignment = {-1: "right", 1: "left"}[int(np.sign(x))]
         connectionstyle = "angle,angleA=0,angleB={}".format(ang)
         kw["arrowprops"].update({"connectionstyle": connectionstyle})
-        print(i, labels[i], pcts[i], x, y)
+        # print(i, labels[i], pcts[i], x, y)
         if pcts[i] > 1.0:
             if label_inside:
                 label = f"{labels[i]}\n{pcts[i]:.1f}"
@@ -144,8 +144,8 @@ def plot_results(
     sig_labels = [f"{x[0]} ({x[1]})" for x in sig_items]
     sig_counts = [x[1] for x in sig_items]
     y_pos = np.arange(len(sig_labels))
-    print(y_pos)
-    print(sig_counts)
+    # print(y_pos)
+    # print(sig_counts)
     ax0.barh(y_pos, sig_counts, height=0.2)
     ax0.set_yticks(y_pos)
     ax0.set_yticklabels(sig_labels)
@@ -182,7 +182,7 @@ def plot_results(
     for i in x:
         key = tuple(all_parts[:i])
         # print(found_part_counts)
-        print(key, found_part_counts[key], n0, rates)
+        # print(key, found_part_counts[key], n0, rates)
         rates.append(found_part_counts[key] / float(max(1, n0)))
         # print(i, rates)
         n0 = found_part_counts[key]
@@ -298,6 +298,7 @@ def plot_histograms(df, fname, parts=["bead_start", "OP1", "pT"], n_total=1):
     n_parts = len(parts)
     fig, axes = plt.subplots(4, n_parts, figsize=(2 + n_parts * 3, 8))
     # axes = np.array(axes)
+    # print(axes, n_parts)
     # first row: start coordinates, second row end coordinates, third row score distributions
     colors = plt.get_cmap("tab10")(np.arange(len(parts)))
     for ax_row, attr in zip(axes, ["start", "end", "score", "len"]):
@@ -311,7 +312,7 @@ def plot_histograms(df, fname, parts=["bead_start", "OP1", "pT"], n_total=1):
             df_sig = df.query(
                 f"signature != 'anywhere' and oligo == '{part}' and attr == '{attr}'"
             )
-            print(df_sig)
+            # print(df_sig)
             sig_x, sig_y = obs_to_arrays(df_sig)
 
             if attr == "len":
@@ -365,8 +366,8 @@ def plot_edits_heatmap(ax, oname, oseq, edits, nmatch=1):
         is_ins = np.array([edits.iloc[i]["-" + ins] for ins in "ACGT"]).sum()
         counts[i, 5] = is_ins
 
-    print(counts, "non-finite entries", (~np.isfinite(counts)).sum())
-    print(counts / nmatch)
+    # print(counts, "non-finite entries", (~np.isfinite(counts)).sum())
+    # print(counts / nmatch)
     im = ax.imshow(counts.T / nmatch, interpolation="none", cmap="viridis")
     plt.colorbar(im, ax=ax, shrink=0.5)
     ax.set_xticks(x)
