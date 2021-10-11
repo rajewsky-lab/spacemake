@@ -244,14 +244,16 @@ def get_output_files(pattern, projects = [], samples = [], **kwargs):
     for index, row in df.iterrows():
         for run_mode in row['run_mode']:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
-            out_files = out_files + expand(pattern,
-                project = index[0],
-                sample = index[1],
-                puck=row['puck_id'], 
-                run_mode=run_mode,
-                umi_cutoff=run_mode_variables['umi_cutoff'],
-                **kwargs)
+            if row.R1 and row.R2:
+                out_files = out_files + expand(pattern,
+                    project = index[0],
+                    sample = index[1],
+                    puck=row['puck_id'], 
+                    run_mode=run_mode,
+                    umi_cutoff=run_mode_variables['umi_cutoff'],
+                    **kwargs)
 
+    # print(f"{pattern} -> {out_files}")
     return out_files
 
 ##################
@@ -306,7 +308,8 @@ rule all:
             downsampling_percentage=''),
         #get_output_files(novosparc_h5ad),
         get_output_files(qc_sheet, data_root_type = 'complete_data',
-            downsampling_percentage='')
+            downsampling_percentage=''),
+        get_longread_output()
 
 ##############
 # DOWNSAMPLE #
@@ -372,7 +375,7 @@ def get_reads(wildcards):
     ###
     # R1 and R2 for demultiplexed reads will return none
     ### 
-    reads = project_df.get_metadata('R'+ wildcards.mate, sample_id = wildcards.sample, project_id = wildcards.project) 
+    reads = project_df.get_metadata('R'+ wildcards.mate, sample_id = wildcards.sample, project_id = wildcards.project)
     if reads is None:
         return ['none']
     else:
