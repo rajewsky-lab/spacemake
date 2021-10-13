@@ -1,10 +1,12 @@
-build:
-    image: latest
+version: 2
 
-python:
-    install:
-        - method: pip
-        - requirments: docs/requirments.txt
+build:
+    tools:
+        python: 3.7
 
 sphinx:
     configuration: docs/conf.py
+
+python:
+    install:
+        - requirments: docs/requirments.txt
