@@ -1,0 +1,10 @@
+build:
+    image: latest
+
+python:
+    setup_py_install: true
+    install:
+    - requirments: docs/requirments.txt
+
+sphinx:
+    configuration: docs/conf.py
