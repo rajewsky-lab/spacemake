@@ -1,7 +1,5 @@
 API
 ===
 
-.. autosummary::
-   :toctree: generated
-   
-   spacemake.project_df
+.. automodule:: spacemake.project_df
+   :members:
