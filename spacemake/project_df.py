@@ -17,11 +17,16 @@ def get_project_sample_parser(allow_multiple=False,
         prepend='',
         help_extra=''):
     """
-    Return the main parser for `spacemake projects`
+    Return a parser for project_id's and sample_id's
 
-    :param allow_multiple:
-    :param prepend:
-    :param help_extra:
+    :param allow_multiple: if true, we allow multiple projects and samples,
+        and the parser will have a `--project_id_list` and a `--sample_id_list`
+        parameter
+    :param prepend: a string that will be prepended before the arguments
+    :param help_extra: extra help message
+    ...
+    :return: a parser object
+    :rtype: argparse.ArgumentParser
     """
     parser = argparse.ArgumentParser(
         allow_abbrev=False,
@@ -62,7 +67,12 @@ def get_project_sample_parser(allow_multiple=False,
 
 
 def get_add_sample_sheet_parser():
-    """get_add_sample_sheet_parser."""
+    """
+    Returns parser for sample sheet addition
+
+    :return: parser
+    :rtype: argparse.ArgumentParser
+    """
     parser = argparse.ArgumentParser(
         allow_abbrev=False,
         description="add a new sample sheet to the samples",
@@ -86,10 +96,17 @@ def get_add_sample_sheet_parser():
 
 def get_sample_extra_arguments_parser(species_required=False,
         reads_required=False):
-    """get_sample_extra_arguments_parser.
+    """
+    Returns a parser which contain extra arguments for a given sample.
+    The returned parser will contain the --R1, --R2, --longreads,
+    --longread-signature, --barcode_flavor, --species, --puck,  --puck_id,
+    --puck_barcode_file, --investigator, --experiment, --sequencing_date,
+    --run_mode arguments.
 
-    :param species_required:
-    :param reads_required:
+    :param species_required: if true, the --species argument will be required
+        during parsing.
+    :param reads_required: if true, --R1, --R2, and --longreads arguments will be
+        required during parsing.
     """
     parser = argparse.ArgumentParser(
         allow_abbrev=False,
