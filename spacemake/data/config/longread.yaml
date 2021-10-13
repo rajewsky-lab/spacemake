@@ -1,0 +1,35 @@
+signatures:
+    withUMI:
+        label: "withUMI"
+        prio: 1
+        read1_primer: bead_start
+        read2_primer: N70X
+        CB: "r1[0:12]"
+        UMI: "r2[0:8]"
+        color: "blue"
+        intact_bead: "P5,bead_start,OP1,polyT,N70X"
+        bead_related: "bead_start"
+
+    noUMI:
+        label: "noUMI"
+        prio: 2
+        read1_primer: bead_start
+        read2_primer: N70X
+        CB: "r1[0:12]"
+        UMI: "r2[0:8]"
+        color: "darkgray"
+        intact_bead: "P5,bead_start,OP1,polyT,N70X"
+        bead_related: "bead_start"
+
+    dropseq:
+        prio: -1
+        label: "dropseq"
+        read1_primer: bead_start
+        read2_primer: N70X
+        CB: "r1[8:20]"
+        UMI: "r1[0:8]"
+        color: "gray"
+        intact_bead: "P5,bead_start,polyT,N70X"
+        bead_related: "bead_start"
+
+default: "withUMI"

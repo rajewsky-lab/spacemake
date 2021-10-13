@@ -62,6 +62,14 @@ class Results:
     pass
 
 
+def coarsegrain_CIGAR(cigar):
+    coarse = cigar.replace("MNM", "M").replace("MDM", "M").replace("MIM", "M")
+    if coarse == cigar:
+        return cigar
+    else:
+        return coarsegrain_CIGAR(coarse)
+
+
 def scan_bam(fname, n_max=0):
     res = Results()
     res.fname = fname
@@ -97,7 +105,7 @@ def scan_bam(fname, n_max=0):
 
         cigar = list(r.cigartuples)
         cigtype = "".join([op_dict[c[0]] for c in cigar])
-        cigtype = cigtype.replace("MNM", "M").replace("MNM", "M")  # ignore splicing
+        cigtype = coarsegrain_CIGAR(cigtype)  # ignore splicing
         res.cigar_types[cigtype] += 1
 
         if cigar[0][0] == pysam.CSOFT_CLIP:
