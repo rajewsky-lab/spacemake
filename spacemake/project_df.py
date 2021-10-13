@@ -10,6 +10,7 @@ import logging
 from spacemake.errors import *
 from spacemake.config import ConfigFile
 from spacemake.util import message_aggregation, assert_file
+from typing import List, Dict
 
 logger_name = "spacemake.project_df"
 
@@ -504,7 +505,15 @@ def list_projects_cmdline(pdf, args):
 
 
 class ProjectDF:
-    """ProjectDF."""
+    """
+    ProjectDF: class responsible for managing spacemake projects.
+
+    :param file_path: path to the project_df.csv file, where we will save the project list.
+    :param config: config file object
+    :type config: ConfigFile
+    :param df: A pandas dataframe, containing one row per sample
+    :type df: pd.DataFrame
+    """
 
     # default values of the project dataframe columns
     project_df_default_values = {
@@ -535,8 +544,8 @@ class ProjectDF:
     ):
         """__init__.
 
-        :param file_path:
-        :param config:
+        :param file_path: path to pandas data frame (saved as .csv)
+        :param config: ConfigFile
         :type config: ConfigFile
         """
         self.file_path = file_path
@@ -579,10 +588,13 @@ class ProjectDF:
 
         self.logger = logging.getLogger(logger_name)
 
-    def compute_max_barcode_mismatch(self, indices):
+    def compute_max_barcode_mismatch(self, indices: List[str]) -> int:
         """compute_max_barcode_mismatch.
 
-        :param indices:
+        :param indices: List of illumina I7 index barcodes
+        :type indices: List[str]
+        :return: the maximum mismatch to be allowed for this set of index barcodes
+        :rtype: int
         """
         num_samples = len(indices)
 
@@ -597,18 +609,24 @@ class ProjectDF:
 
         return max_mismatch
 
-    def hamming_distance(self, string1, string2):
-        """hamming_distance.
+    def hamming_distance(self, string1: str, string2: str) -> int:
+        """Cacluate hamming distance between two strings
 
         :param string1:
+        :type string1: str
         :param string2:
+        :type string2: str
+        :rtype: int
         """
         return sum(c1 != c2 for c1, c2 in zip(string1, string2))
 
-    def find_barcode_file(self, puck_id):
-        """find_barcode_file.
+    def find_barcode_file(self, puck_id: str) -> str:
+        """Tries to find path of a barcode file, using the puck_id.
 
-        :param puck_id:
+        :param puck_id: puck_id of the puck we are looking for.
+        :type puck_id: str
+        :return: path of the puck file, containing barcodes, or None
+        :rtype: str
         """
         # first find directory of puck file
 
@@ -644,22 +662,30 @@ class ProjectDF:
         else:
             return self.project_df_default_values["puck_barcode_file"]
 
-    def get_sample_info(self, project_id, sample_id):
+    def get_sample_info(self, project_id: str, sample_id: str) -> Dict:
         """get_sample_info.
 
         :param project_id:
+        :type project_id: str
         :param sample_id:
+        :type sample_id: str
+        :return: A dictionary containing all the values of a given sample, from the ProjectDF.
+        :rtype: Dict
         """
         # returns sample info from the projects df
         out_dict = self.df.loc[(project_id, sample_id)].to_dict()
 
         return out_dict
 
-    def is_spatial(self, project_id ,sample_id):
-        """is_spatial.
+    def is_spatial(self, project_id: str,sample_id: str) -> bool:
+        """Returns true if a sample with index (project_id, sample_id) is spatial,
+        meaning that it has spatial barcodes attached.
 
         :param project_id:
+        :type project_id: str
         :param sample_id:
+        :type sample_id: str
+        :rtype: bool
         """
         puck_barcode_file = self.get_metadata('puck_barcode_file',
             project_id = project_id,
@@ -676,12 +702,16 @@ class ProjectDF:
         else:
             return False
 
-    def get_puck_variables(self, project_id, sample_id, return_empty=False):
+    def get_puck_variables(self, project_id: str, sample_id:str, return_empty=False) -> Dict:
         """get_puck_variables.
 
-        :param project_id:
-        :param sample_id:
+        :param project_id: project_id of a sample
+        :type project_id: str
+        :param sample_id: sample_id of a sample
+        :type sample_id: str
         :param return_empty:
+        :return: A dictionary containing the puck variables of a given sample
+        :rtype: Dict
         """
         puck_name = self.get_metadata(
             "puck", project_id=project_id, sample_id=sample_id
