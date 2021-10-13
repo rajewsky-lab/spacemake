@@ -2,7 +2,9 @@ build:
     image: latest
 
 python:
-   setup_py_install: true
+    setup_py_install: true
+    install:
+    - requirments: docs/requirments.txt
 
-conda:
-    file: environment.yaml
+sphinx:
+    configuration: docs/conf.py
