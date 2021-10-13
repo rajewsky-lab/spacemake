@@ -16,6 +16,9 @@ pucks:
         barcodes: 'puck_data/visium_barcode_positions.csv'
         width_um: 6500
         spot_diameter_um: 55
+    seqscope:
+        width_um: 1000
+        spot_diameter_um: 1
 
 run_modes:
     default:
@@ -39,10 +42,17 @@ run_modes:
         count_intronic_reads: False
         count_mm_reads: True
     slideseq:
-        expected_n_beads: 100000
+        n_beads: 100000
         umi_cutoff: [50]
         clean_dge: False
         detect_tissue: False
+    scRNAseq:
+        n_beads: 10000
+        umi_cutoff: [500]
+        detect_tissue: False
+        polyA_adapter_trimming: True
+        count_intronic_reads: True
+        count_mm_reads: False
 
 adapters:
     smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'

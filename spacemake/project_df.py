@@ -13,9 +13,19 @@ from spacemake.util import message_aggregation, assert_file
 
 logger_name = "spacemake.project_df"
 
+def get_project_sample_parser(allow_multiple=False,
+        prepend='',
+        help_extra=''):
+    """
+    Return the main parser for `spacemake projects`
 
-def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
+    :param allow_multiple:
+    :param prepend:
+    :param help_extra:
+    """
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False,
+        add_help=False)
 
     project_argument = "project_id"
     sample_argument = "sample_id"
@@ -52,6 +62,7 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
 
 
 def get_add_sample_sheet_parser():
+    """get_add_sample_sheet_parser."""
     parser = argparse.ArgumentParser(
         allow_abbrev=False,
         description="add a new sample sheet to the samples",
@@ -73,9 +84,16 @@ def get_add_sample_sheet_parser():
 
     return parser
 
+def get_sample_extra_arguments_parser(species_required=False,
+        reads_required=False):
+    """get_sample_extra_arguments_parser.
 
-def get_sample_extra_arguments_parser(species_required=False, reads_required=False):
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
+    :param species_required:
+    :param reads_required:
+    """
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False,
+        add_help=False)
 
     parser.add_argument(
         "--R1",
@@ -164,12 +182,24 @@ def get_sample_extra_arguments_parser(species_required=False, reads_required=Fal
 def get_set_remove_variable_subparsers(
     parent_parser, variable_name, func, prepend="", allow_multiple=False
 ):
+    """get_set_remove_variable_subparsers.
+
+    :param parent_parser:
+    :param variable_name:
+    :param func:
+    :param prepend:
+    :param allow_multiple:
+    """
     if allow_multiple:
         nargs = "+"
     else:
         nargs = None
 
     def get_action_parser(action):
+        """get_action_parser.
+
+        :param action:
+        """
         action_parser = parent_parser.add_parser(
             f"{action}_{variable_name}",
             parents=[get_project_sample_parser(allow_multiple=True)],
@@ -192,6 +222,12 @@ def get_set_remove_variable_subparsers(
 
 
 def get_action_sample_parser(parent_parser, action, func):
+    """get_action_sample_parser.
+
+    :param parent_parser:
+    :param action:
+    :param func:
+    """
     if action not in ["add", "update", "delete", "merge"]:
         raise ValueError(f"Invalid action: {action}")
 
@@ -223,6 +259,11 @@ def get_action_sample_parser(parent_parser, action, func):
 
 
 def setup_project_parser(pdf, attach_to):
+    """setup_project_parser.
+
+    :param pdf:
+    :param attach_to:
+    """
     parser = attach_to.add_parser(
         "projects",
         help="manage projects and samples",
@@ -339,7 +380,12 @@ def setup_project_parser(pdf, attach_to):
 
 @message_aggregation(logger_name)
 def add_update_delete_sample_cmdline(pdf, args):
-    action = args["action"]
+    """add_update_delete_sample_cmdline.
+
+    :param pdf:
+    :param args:
+    """
+    action = args['action']
 
     # remove the action from args
     del args["action"]
@@ -355,22 +401,39 @@ def add_update_delete_sample_cmdline(pdf, args):
 
 @message_aggregation(logger_name)
 def add_sample_sheet_cmdline(pdf, args):
-    pdf.add_sample_sheet(args["sample_sheet"], args["basecalls_dir"])
+    """add_sample_sheet_cmdline.
+
+    :param pdf:
+    :param args:
+    """
+    pdf.add_sample_sheet(args['sample_sheet'],
+        args['basecalls_dir'])
 
     pdf.dump()
 
 
 @message_aggregation(logger_name)
 def add_samples_from_yaml_cmdline(pdf, args):
-    pdf.add_samples_from_yaml(args["samples_yaml"])
+    """add_samples_from_yaml_cmdline.
+
+    :param pdf:
+    :param args:
+    """
+    pdf.add_samples_from_yaml(args['samples_yaml'])
 
     pdf.dump()
 
 
 @message_aggregation(logger_name)
 def set_remove_variable_cmdline(pdf, args):
-    variable_name = args["variable"]
-    action = args["action"]
+    """set_remove_variable_cmdline.
+
+    :param pdf:
+    :param args:
+    """
+    variable_name = args['variable']
+    action = args['action']
+
     variable_key = args[variable_name]
 
     pdf.set_remove_variable(
@@ -387,6 +450,11 @@ def set_remove_variable_cmdline(pdf, args):
 
 @message_aggregation(logger_name)
 def merge_samples_cmdline(pdf, args):
+    """merge_samples_cmdline.
+
+    :param pdf:
+    :param args:
+    """
     pdf.merge_samples(**args)
 
     pdf.dump()
@@ -394,9 +462,14 @@ def merge_samples_cmdline(pdf, args):
 
 @message_aggregation(logger_name)
 def list_projects_cmdline(pdf, args):
-    projects = args["project_id_list"]
-    samples = args["sample_id_list"]
-    variables = args["always_show"] + args["variables"]
+    """list_projects_cmdline.
+
+    :param pdf:
+    :param args:
+    """
+    projects = args['project_id_list']
+    samples = args['sample_id_list']
+    variables = args['always_show'] + args['variables']
 
     df = pdf.df
     logger = logging.getLogger(logger_name)
@@ -414,6 +487,8 @@ def list_projects_cmdline(pdf, args):
 
 
 class ProjectDF:
+    """ProjectDF."""
+
     # default values of the project dataframe columns
     project_df_default_values = {
         "puck_id": "no_optical_puck",
@@ -432,12 +507,21 @@ class ProjectDF:
         "puck_barcode_file": None,
         "run_mode": ["default"],
         "barcode_flavor": "default",
-        "is_merged": False,
-        "merged_from": [],
-        "puck": None,
-    }
+        "is_merged":False,
+        "merged_from":[],
+        "puck":None}
+    
+    def __init__(
+        self,
+        file_path,
+        config: ConfigFile = None
+    ):
+        """__init__.
 
-    def __init__(self, file_path, config: ConfigFile = None):
+        :param file_path:
+        :param config:
+        :type config: ConfigFile
+        """
         self.file_path = file_path
         self.config = config
 
@@ -479,8 +563,10 @@ class ProjectDF:
         self.logger = logging.getLogger(logger_name)
 
     def compute_max_barcode_mismatch(self, indices):
-        """computes the maximum number of mismatches allowed for demultiplexing based
-        on the indices present in the sample sheet."""
+        """compute_max_barcode_mismatch.
+
+        :param indices:
+        """
         num_samples = len(indices)
 
         if num_samples == 1:
@@ -495,19 +581,37 @@ class ProjectDF:
         return max_mismatch
 
     def hamming_distance(self, string1, string2):
+        """hamming_distance.
+
+        :param string1:
+        :param string2:
+        """
         return sum(c1 != c2 for c1, c2 in zip(string1, string2))
 
     def find_barcode_file(self, puck_id):
+        """find_barcode_file.
+
+        :param puck_id:
+        """
         # first find directory of puck file
 
         # return none or the path of the file
         def get_barcode_file(path):
+            """get_barcode_file.
+
+            :param path:
+            """
             if os.path.isfile(path):
                 return path
 
             return None
 
         def find_dir(name, path):
+            """find_dir.
+
+            :param name:
+            :param path:
+            """
             for root, dirs, files in os.walk(path):
                 if name in dirs:
                     return os.path.join(root, name)
@@ -524,15 +628,25 @@ class ProjectDF:
             return self.project_df_default_values["puck_barcode_file"]
 
     def get_sample_info(self, project_id, sample_id):
+        """get_sample_info.
+
+        :param project_id:
+        :param sample_id:
+        """
         # returns sample info from the projects df
         out_dict = self.df.loc[(project_id, sample_id)].to_dict()
 
         return out_dict
 
-    def is_spatial(self, project_id, sample_id):
-        puck_barcode_file = self.get_metadata(
-            "puck_barcode_file", project_id=project_id, sample_id=sample_id
-        )
+    def is_spatial(self, project_id ,sample_id):
+        """is_spatial.
+
+        :param project_id:
+        :param sample_id:
+        """
+        puck_barcode_file = self.get_metadata('puck_barcode_file',
+            project_id = project_id,
+            sample_id = sample_id)
 
         puck_name = self.get_metadata(
             "puck", project_id=project_id, sample_id=sample_id
@@ -546,6 +660,12 @@ class ProjectDF:
             return False
 
     def get_puck_variables(self, project_id, sample_id, return_empty=False):
+        """get_puck_variables.
+
+        :param project_id:
+        :param sample_id:
+        :param return_empty:
+        """
         puck_name = self.get_metadata(
             "puck", project_id=project_id, sample_id=sample_id
         )
@@ -553,6 +673,13 @@ class ProjectDF:
         return self.config.get_puck(puck_name, return_empty=return_empty).variables
 
     def get_metadata(self, field, project_id=None, sample_id=None, **kwargs):
+        """get_metadata.
+
+        :param field:
+        :param project_id:
+        :param sample_id:
+        :param kwargs:
+        """
         df = self.df
         if sample_id is not None:
             df = df.query("sample_id == @sample_id")
@@ -573,9 +700,15 @@ class ProjectDF:
         # return df[field].to_list()[0]
 
     def dump(self):
+        """dump."""
         self.df.to_csv(self.file_path)
 
     def add_sample_sheet(self, sample_sheet_path, basecalls_dir):
+        """add_sample_sheet.
+
+        :param sample_sheet_path:
+        :param basecalls_dir:
+        """
         with open(sample_sheet_path) as sample_sheet:
             ix = 0
             investigator = None
@@ -626,7 +759,12 @@ class ProjectDF:
         for ix, row in df.iterrows():
             self.add_update_sample(project_id=ix[0], sample_id=ix[1], **row.to_dict())
 
-    def sample_exists(self, project_id=None, sample_id=None):
+    def sample_exists(self, project_id = None, sample_id = None):
+        """sample_exists.
+
+        :param project_id:
+        :param sample_id:
+        """
         if project_id is None or sample_id is None:
             raise Exception(
                 f"you need to provide a sample_id and project_id to check if sample exists"
@@ -651,8 +789,20 @@ class ProjectDF:
         return_series=False,
         **kwargs,
     ):
-        """
-        adds or updates a sample with a given project_id and sample_id
+        """add_update_sample.
+
+        :param action:
+        :param project_id:
+        :param sample_id:
+        :param R1:
+        :param R2:
+        :param longreads:
+        :param longread_signature:
+        :param sample_sheet:
+        :param basecalls_dir:
+        :param is_merged:
+        :param return_series:
+        :param kwargs:
         """
         print(kwargs)
         ix = (project_id, sample_id)
@@ -749,6 +899,11 @@ class ProjectDF:
             return (ix, new_project)
 
     def delete_sample(self, project_id, sample_id):
+        """delete_sample.
+
+        :param project_id:
+        :param sample_id:
+        """
         if self.sample_exists(project_id, sample_id):
             self.logger.info(
                 f"Deleting sample: {ix}, with the following"
@@ -765,6 +920,10 @@ class ProjectDF:
             )
 
     def add_samples_from_yaml(self, projects_yaml_file):
+        """add_samples_from_yaml.
+
+        :param projects_yaml_file:
+        """
         config = yaml.load(open(projects_yaml_file), Loader=yaml.FullLoader)
         demux_projects = config.get("projects", None)
 
@@ -778,7 +937,14 @@ class ProjectDF:
         for project in config["additional_projects"]:
             self.add_update_sample(**project)
 
-    def get_ix_from_project_sample_list(self, project_id_list=[], sample_id_list=[]):
+    def get_ix_from_project_sample_list(self,
+        project_id_list = [], sample_id_list = []):
+        """get_ix_from_project_sample_list.
+
+        :param project_id_list:
+        :param sample_id_list:
+        """
+
         # raise error if both lists are empty
         if project_id_list == [] and sample_id_list == []:
             raise NoProjectSampleProvidedError()
@@ -796,6 +962,13 @@ class ProjectDF:
         return ix
 
     def set_variable(self, ix, variable_name, variable_key, keep_old=False):
+        """set_variable.
+
+        :param ix:
+        :param variable_name:
+        :param variable_key:
+        :param keep_old:
+        """
         variable_name_pl = self.config.main_variables_sg2pl[variable_name]
         self.config.assert_main_variable(variable_name_pl)
         self.config.assert_variable(variable_name_pl, variable_key)
@@ -821,6 +994,12 @@ class ProjectDF:
         self.df.at[ix, variable_name] = i_variable
 
     def remove_variable(self, ix, variable_name, variable_key):
+        """remove_variable.
+
+        :param ix:
+        :param variable_name:
+        :param variable_key:
+        """
         variable_name_pl = self.config.main_variables_sg2pl[variable_name]
         self.config.assert_main_variable(variable_name_pl)
         self.config.assert_variable(variable_name_pl, variable_key)
@@ -845,6 +1024,15 @@ class ProjectDF:
         sample_id_list=[],
         keep_old=False,
     ):
+        """set_remove_variable.
+
+        :param variable_name:
+        :param variable_key:
+        :param action:
+        :param project_id_list:
+        :param sample_id_list:
+        :param keep_old:
+        """
         self.assert_projects_samples_exist(project_id_list, sample_id_list)
 
         variable_name_pl = self.config.main_variables_sg2pl[variable_name]
@@ -869,7 +1057,13 @@ class ProjectDF:
 
         return ix.to_list()
 
-    def assert_projects_samples_exist(self, project_id_list=[], sample_id_list=[]):
+    def assert_projects_samples_exist(self,
+            project_id_list = [], sample_id_list = []):
+        """assert_projects_samples_exist.
+
+        :param project_id_list:
+        :param sample_id_list:
+        """
         for project in project_id_list:
             if project not in self.df.index.get_level_values("project_id"):
                 raise ProjectSampleNotFoundError("project_id", project)
@@ -886,6 +1080,14 @@ class ProjectDF:
         sample_id_list=[],
         **kwargs,
     ):
+        """merge_samples.
+
+        :param merged_project_id:
+        :param merged_sample_id:
+        :param project_id_list:
+        :param sample_id_list:
+        :param kwargs:
+        """
         # check if projects and samples with these IDs exist
         self.assert_projects_samples_exist(project_id_list, sample_id_list)
 

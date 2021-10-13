@@ -285,31 +285,6 @@ def get_dge_from_run_mode(
         dge_out_pattern = dge_spatial
         dge_out_summary_pattern = dge_spatial_obs
 
-    dge_out_file = expand(dge_out_pattern,
-            project = project_id,
-            sample = sample_id,
-            dge_type = dge_type,
-            dge_cleaned = dge_cleaned,
-            polyA_adapter_trimmed = polyA_adapter_trimmed,
-            mm_included = mm_included,
-            n_beads = run_mode_variables['n_beads'],
-            spot_diameter_um = spot_diameter_um,
-            spot_distance_um = spot_distance_um,
-            data_root_type = data_root_type,
-            downsampling_percentage = downsampling_percentage)
-
-    dge_out_summary_file = expand(dge_out_summary_pattern,
-            project = project_id,
-            sample = sample_id,
-            dge_type = dge_type,
-            dge_cleaned = dge_cleaned,
-            polyA_adapter_trimmed = polyA_adapter_trimmed,
-            mm_included = mm_included,
-            spot_diameter_um = spot_diameter_um,
-            spot_distance_um = spot_distance_um,
-            n_beads = run_mode_variables['n_beads'],
-            data_root_type = data_root_type,
-            downsampling_percentage = downsampling_percentage)
     out_files_pattern = {
         'dge_summary': dge_out_summary_pattern,
         'dge': dge_out_pattern}
