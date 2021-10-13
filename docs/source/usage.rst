@@ -6,11 +6,13 @@ Usage
 Installation
 ------------
 
-To use Lumache, first install it using pip:
+To install spacemake first, install it via pip:
 
 .. code-block:: console
 
-   (.venv) $ pip install lumache
+   $ pip install spacemake
+
+Then you will need to install dependencies:
 
 Creating recipes
 ----------------
