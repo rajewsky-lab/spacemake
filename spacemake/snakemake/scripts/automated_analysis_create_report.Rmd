@@ -34,8 +34,8 @@ cpalette <- list('orange' = '#D55E00', 'blue' = '#0072B2', 'green' = '#009E73', 
 clrs = c('umis'=cpalette$light_orange, 'genes' = cpalette$light_blue,
          'reads'=cpalette$green, 'pcr'=cpalette$pink, 'pct_counts_mt'= 'black')
 
-#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_automated_analysis.rds')
-#snakemake <- read_rds('visium_automated_analysis.rds')
+#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_automated_analysis_2.rds')
+#snakemake <- read_rds('seq_scope_automated_analysis_2.rds')
 source(snakemake@params$r_shared_scripts)
 ```
 
@@ -118,6 +118,8 @@ if ('cluster' %in% colnames(obs_df)){
     data_complete = T
 }
 
+is_spatial <- snakemake@params$is_spatial & data_complete
+
 fig_height=6
 fig_width=7
 ```
@@ -150,7 +152,6 @@ def_plot_bead_size <- ifelse(n_cells > 10000, 0.1, def_plot_bead_size)
 obs_colnames <- colnames(obs_df)
 
 # barcode file attached at the python level
-is_spatial <- snakemake@params$is_spatial
 is_hexagonal <- snakemake@params$run_mode_variables$mesh_type == 'hexagon' & snakemake@params$run_mode_variables$mesh_data
 
 filter_quant <- quantile(obs_df$total_counts, 0.9, na.rm=T)

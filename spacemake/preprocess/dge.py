@@ -23,8 +23,6 @@ def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
     if add_reads:
         adata.obs['reads_per_counts'] = adata.obs.n_reads / adata.obs.total_counts
 
-    return adata
-
 def calculate_shannon_entropy_scompression(adata):
     import math
     import itertools
@@ -55,8 +53,6 @@ def calculate_shannon_entropy_scompression(adata):
         [compute_string_compression(cell_bc) for cell_bc in bc]), 2)
     adata.obs['theoretical_compression'] = np.round(np.array(
         [compute_string_compression(cell_bc) for cell_bc in theoretical_barcodes]), 2)
-
-    return adata
 
 def dge_to_sparse_adata(dge_path, dge_summary_path):
     import anndata
@@ -129,10 +125,10 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
 
         # attach metrics such as: total_counts, pct_mt_counts, etc
         # also attach n_genes, and calculate pcr
-        adata = calculate_adata_metrics(adata, dge_summary_path)
+        calculate_adata_metrics(adata, dge_summary_path)
 
         # calculate per shannon_entropy and string_compression per bead
-        adata = calculate_shannon_entropy_scompression(adata)
+        calculate_shannon_entropy_scompression(adata)
 
         return adata
 

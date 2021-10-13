@@ -89,6 +89,25 @@ def detect_tissue(adata, min_umi):
 
     return adata
 
+def create_mesh(
+    width,
+    height,
+    diameter,
+    distance,
+    push_x = 0,
+    push_y = 0):
+    import numpy as np
+
+    distance_y = np.sqrt(3) * distance
+    
+    x_coord = np.arange(push_x, width + diameter, distance)
+    y_coord = np.arange(push_y, height + diameter, distance_y)
+    
+    X, Y = np.meshgrid(x_coord, y_coord)
+    xy = np.vstack((X.flatten(), Y.flatten())).T
+    
+    return xy
+
 def create_meshed_adata(adata,
         width_um,
         spot_diameter_um = 55,
@@ -127,24 +146,6 @@ def create_meshed_adata(adata,
     spot_distance_px = spot_distance_um / um_by_px
 
     height_um = height_px * um_by_px
-
-    def create_mesh(
-        width,
-        height,
-        diameter,
-        distance,
-        push_x = 0,
-        push_y = 0):
-        distance_y = np.sqrt(3) * distance
-        
-        x_coord = np.arange(push_x, width + diameter, distance)
-        y_coord = np.arange(push_y, height + diameter, distance_y)
-        
-        X, Y = np.meshgrid(x_coord, y_coord)
-        xy = np.vstack((X.flatten(), Y.flatten())).T
-        
-        return xy
-
 
     # create meshgrid with one radius push
     xy = create_mesh(width_um,
@@ -226,7 +227,7 @@ def create_meshed_adata(adata,
     print(adata)
 
     # summarise and attach n_reads, calculate metrics (incl. pcr)
-    adata_out = calculate_adata_metrics(adata_out,
+    calculate_adata_metrics(adata_out,
         # provide the n_reads as a parameter
         n_reads = summarise_adata_obs_column(adata, 'n_reads'))
 
@@ -240,7 +241,7 @@ def create_meshed_adata(adata,
 
     return adata_out
 
-def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000):
+def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000, locations=None):
     import numpy as np
     import pandas as pd
     import scanpy as sc
@@ -276,9 +277,11 @@ def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000):
         dataset = dense_dataset
         del dense_dataset
 
-    locations_circle = novosparc.gm.construct_circle(num_locations = num_spatial_locations)
+    if locations is None:
+        # create circle locations
+        locations = novosparc.gm.construct_circle(num_locations = num_spatial_locations)
 
-    tissue = novosparc.cm.Tissue(dataset=dataset, locations=locations_circle)
+    tissue = novosparc.cm.Tissue(dataset=dataset, locations=locations)
 
     num_neighbors_s = num_neighbors_t = 5
 
@@ -290,7 +293,7 @@ def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000):
         csc_matrix(tissue.sdge.T),
         var = pd.DataFrame(index=gene_names))
 
-    dataset_reconst.obsm['spatial'] = locations_circle
+    dataset_reconst.obsm['spatial'] = locations
 
     # copy of a yet-to-be-pushed novosparc function
     def quantify_clusters_spatially(tissue, cluster_key='clusters'):

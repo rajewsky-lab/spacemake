@@ -23,6 +23,7 @@ adata_complete = any([key in adata.uns.keys() for key in uns_keys])
 #################
 if not adata_complete:
     pd.DataFrame().to_csv(snakemake.output['cluster_markers'])
+    pd.DataFrame().to_csv(snakemake.output['nhood_enrichment'])
 else:
     res_keys = adata.obs.columns[adata.obs.columns.str.startswith('leiden_')]
     

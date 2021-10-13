@@ -204,7 +204,7 @@ def setup_project_parser(pdf, attach_to):
     # LIST PROJECTS
     # always show these variables
     always_show = ['puck_id', 'species', 'investigator', 'sequencing_date',
-        'experiment']
+        'experiment', 'run_mode', 'barcode_flavor']
     remaining_options = [x for x in pdf.project_df_default_values.keys() \
         if x not in always_show]
     list_projects = subparsers.add_parser('list',

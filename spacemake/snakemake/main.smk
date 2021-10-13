@@ -30,6 +30,7 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 # this file should contain all sample information, sample name etc.
 ####
 # configfile should be loaded from command line
+#
 
 ###############
 # Global vars #
@@ -407,7 +408,7 @@ rule reverse_first_mate:
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 4
+    threads: 32
     shell:
         "python {spacemake_dir}/preprocess/cmdline.py "
         "--sample={wildcards.sample} "

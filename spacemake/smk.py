@@ -195,11 +195,12 @@ parser_init = setup_init_parser(subparsers)
 # SPACEMAKE CONFIG #
 ####################
 ## spacemake_config args
+from spacemake.config import setup_config_parser
 if os.path.isfile(config_path):
     cf = ConfigFile(config_path)
     # save config file
     cf.dump()
-    parser_config = cf.get_subparsers(subparsers)
+    parser_config = setup_config_parser(cf, subparsers)
 
 ############################
 # SPACEMAKE PROJECT/SAMPLE #
