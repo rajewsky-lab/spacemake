@@ -289,7 +289,6 @@ for (i in obs_df %$% res %>% unique){
             theme(panel.background = element_rect(fill = 'gray95'),
                 legend.spacing = unit(0.1, 'cm'),
                 axis.line = element_line(color = 'black'),
-                legend.position='none',
                 plot.subtitle=element_text(size=18),
                 text = element_text(color='black')) +
             ggtitle('', subtitle=paste0('resolution = ', res))
@@ -302,7 +301,9 @@ for (i in obs_df %$% res %>% unique){
 }
 ```
 
-### Neighborhood enrichment
+```{r nhood_enrichment_title, results='asis', eval=is_spatial}
+cat('\n\n### Neighborhood enrichment\n\n')
+```
 
 ```{r plot_nhood_enrichment, echo =F, eval=is_spatial}
 nhood_dat <- read_table(snakemake@input$nhood_enrichment)
@@ -312,7 +313,9 @@ for (i in obs_df %$% res %>% unique){
     dat <- nhood_dat %>%
         filter(resolution == res) %>%
         mutate(a = as.character(1000 + cluster_a),
-               b = as.character(1000 + cluster_b))
+               b = as.character(1000 + cluster_b)) %>%
+        mutate(zscore = ifelse(zscore > 100, 100, zscore),
+               zscore = ifelse(zscore < -50, -50, zscore))
 
     labs <- dat %>%
         select(cluster_a, cluster_b, a, b) %>%
@@ -321,7 +324,7 @@ for (i in obs_df %$% res %>% unique){
     pl <- dat %>%
         ggplot(aes(a, b, fill=zscore)) +
             geom_tile(color='white') + 
-            scale_fill_viridis_c(option='inferno', limits = c(-50, 100)) +
+            scale_fill_viridis_c(option='inferno', limits = c(-51, 101)) +
         guides(fill = guide_colorbar(barheight = 12)) + 
         scale_x_discrete(labels = labs$cluster_a, breaks=labs$a) +
         scale_y_discrete(labels = labs$cluster_b, breaks=labs$b) +

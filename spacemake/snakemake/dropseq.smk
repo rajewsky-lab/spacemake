@@ -71,7 +71,7 @@ rule map_reads_final_bam:
     output:
         star_log_file,
         final_bam=final_bam
-    threads: 32
+    threads: 8
     params:
         tmp_dir = star_tmp_dir,
         star_prefix = star_prefix

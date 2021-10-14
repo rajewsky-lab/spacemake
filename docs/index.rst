@@ -1,5 +1,5 @@
 welcome to the documentation of spacemake
-===================================
+=========================================
 
 **spacemake** 
 
@@ -12,5 +12,7 @@ Contents
 
 .. toctree::
 
-   usage
+   install
+   config
+   run
    api
