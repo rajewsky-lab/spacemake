@@ -58,7 +58,7 @@ In spacemake each sample can have the folloing variables:
 ``experiment`` (optional)
    description of the experiment
 
-``sequencing_date``
+``sequencing_date`` (optional)
    sequencing date of the sample
 
 ``run_mode`` (optional)
@@ -140,7 +140,7 @@ The ``samples.yaml`` should have the following structure:
 Under ``additional_projects`` we define a list where each element will be a key:value pair, to be inserted in the ``project_df.csv``
 
 .. note::
-   When using the above command, if a sample is already present in the ``project_df.csv`` rather than added again, it will be updated with the new values, if they changed.
+   When using the above command, if a sample is already present in the ``project_df.csv`` rather than adding it again, spacemake will update it.
    
    If someone runs ``spacemake projects add_samples_from_yaml --samples yaml samples.yaml`` and
    then modifies something in the ``samples.yaml``, and runs the command again, the ``project_df.csv``

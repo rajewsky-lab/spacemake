@@ -12,11 +12,15 @@ To do this, we highly recommend using `mamba <https://github.com/mamba-org/mamba
 
 After mamba is installed, download the `environment.yaml <https://raw.githubusercontent.com/rajewsky-lab/spacemake/dev/environment.yaml>`_. This environment.yaml, contains all the dependencies required by spacemake.
 
-Once downloaded, to install all spacemake dependencies, type::
+Once downloaded, to install all spacemake dependencies type::
 
     mamba env create -f environment.yaml
 
-This will create a conda environment called ``spacemake``, to activate it type ``conda activate spacemake``.
+This will create a conda environment called ``spacemake``.
+
+Too activate the newly created environment type::
+
+   conda activate spacemake
 
 Installing spacemake
 --------------------

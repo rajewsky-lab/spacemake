@@ -321,6 +321,8 @@ def setup_project_parser(pdf, attach_to):
         "investigator",
         "sequencing_date",
         "experiment",
+        "run_mode",
+        "barcode_flavor",
     ]
     remaining_options = [
         x for x in pdf.project_df_default_values.keys() if x not in always_show
@@ -496,7 +498,7 @@ def list_projects_cmdline(pdf, args):
         df = df.query("project_id in @projects or sample_id in @samples")
         logger.inof(f"listing projects: {projects} and samples: {samples}")
     else:
-        logger.info("listin all projects and samples")
+        logger.info("listing all projects and samples")
 
     logger.info(f"variables used: {variables}")
 
