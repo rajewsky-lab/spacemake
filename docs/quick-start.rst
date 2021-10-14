@@ -10,7 +10,7 @@ using ``spacemake config add_species`` as described :ref:`here <configure-specie
 Visium quick start
 ------------------
 
-To add a visium project, simply type::
+To add a visium sample, simply type::
 
    spacemake projects add_sample \
       --project_id <project_id> \
@@ -28,14 +28,14 @@ This is possible as spacemake comes with pre-defined variables, all suited for v
 sample in the same way as `spaceranger <https://support.10xgenomics.com/spatial-gene-expression/software/pipelines/latest/what-is-space-ranger>`_ would: intronic reads will not be counted, multi-mappers (where the multi-mapping read maps only to one CDS or UTR region) will be counted,
 3' polyA stretches will not be trimmed from Read2.
 
-To see the values of these predefined variables checkout the :ref:`configuration:Configuration`.
+To see the values of these predefined variables checkout the :ref:`configuration<Configuration>` docs.
 
-**To add several visium projects at once, follow** :ref:`the tutorial here <add-several-projects>`
+**To add several visium samples at once, follow** :ref:`the tutorial here <add-several-samples>`
 
 Slide-seq quick start
 ---------------------
 
-To add a Slide-seq project, simply type::
+To add a Slide-seq sample, simply type::
 
    spacemake projects add_sample \
       --project_id <project_id> \
@@ -66,7 +66,7 @@ The other pre-defined ``barcode_flavor`` for Slide-seq is ``slideseq_15bc``: her
 
 To see the values of these predefined variables checkout the :ref:`configuration:Configuration`.
 
-**To add several slideseq projects at once, follow** :ref:`the tutorial here <add-several-projects>`
+**To add several slideseq projects at once, follow** :ref:`the tutorial here <add-several-samples>`
 
 Drop-seq quick start
 -------------------
@@ -74,7 +74,7 @@ Drop-seq quick start
 spacemake was written as a spatial-transcriptomics pipeline, however it will also work for
 single-cell experiments, where there is no spatial information available. 
 
-To add a drop-seq project, simply type::
+To add a Drop-seq sample, simply type::
 
    spacemake projects add_sample \
       --project_id <project_id> \
@@ -99,7 +99,7 @@ Of course, running single-cell samples with other ``run_mode`` settings is also 
 
 To see the values of these predefined variables checkout the :ref:`configuration:Configuration`.
 
-**To add several single-cell projects at once, follow** :ref:`the tutorial here <add-several-projects>`
+**To add several single-cell projects at once, follow** :ref:`the tutorial here <add-several-samples>`
 
 Running spacemake
 -----------------
