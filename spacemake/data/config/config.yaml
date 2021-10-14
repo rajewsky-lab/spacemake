@@ -75,3 +75,7 @@ barcode_flavors:
         cell: "r1[0:16]"
         UMI: "r1[16:28]"
         bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+    sc_10x_v2:
+        cell: "r1[0:16]"
+        UMI: "r1[16:26]"
+        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"

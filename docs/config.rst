@@ -18,10 +18,10 @@ Optionally, you can also provide the ``--download_species`` flag, which will dow
 annotations for ``mouse`` and ``human``, and place them under ``project\_root/species\_data/<species>``,
 where <species> is either mouse or human.
 
-Important variables to set
---------------------------
+Sample-variables
+----------------
 
-In spacemake, each has to have the following variables:
+In spacemake, each sample has to have the following sample-variables:
 
 species
    a collection of genome, annotation and rRNA\_genome. There is no default species, and each sample can have exactly one species.
@@ -30,19 +30,20 @@ barcode\_flavor
    the variable which specifies the structure of Read1 and Read2, namely how the cell\_barcode and UMI should be extracted. If no value provided for a sample, the default will be used.
 
 run\_mode
-   each sample can have several run\_modes, all of which are user definable. If no run\_mode is specified, a sample will be processed using the default settings.
+   each sample can have several ``run_mode``-s, all of which are user definable. If no ``run_mode``-s is specified, a sample will be processed using ``default`` ``run_mode`` settings.
 
 puck (for spatial samples only)
    if a sample is spatial, it has to have a puck variable. If no puck is specified, a default puck will be used.  
 
 
-Each of these variables can be added, updated and deleted with::
+To add, update, delete or list a sample-variable, you can use the following commands::
 
-   spacemake config add_<variable>
-   spacemake config update_<variable>
-   spacemaek config delete_<variable>
+   spacemake config add_<sample-variable>
+   spacemake config update_<sample-variable>
+   spacemake config delete_<sample-variable>
+   spacemake config list_<sample-variable>
 
-where ``<variable`` can be ``species, barcode_flavor, run_mode or puck``
+where ``<sample-variable>`` can be ``species, barcode_flavor, run_mode or puck``
 
 Configure species
 -----------------
@@ -64,16 +65,20 @@ To add species, the following command can be used::
 
 The ``spacemake config update_species`` takes the same arguments as above, while ``spacemake config delete_species`` takes only ``--name``.
 
+To list the currently available ``species``, type::
+   
+   spacemake config list_species
+
 Configure barcode\_flavors
 --------------------------
 
 .. _configure-barcode_flavor:
 
-This variable describes how the cell-barcode and the UMI should be extracted from Read1 and Read2.
+This sample-variable describes how the cell-barcode and the UMI should be extracted from Read1 and Read2.
 The ``default`` value for barcode\_flavor will be dropseq: ``cell_barcode = r1[0:12]`` (cell-barcode comes from first 12nt of Read1) and
 ``UMI = r1[12:20]`` (UMI comes from the 13-20 nt of Read1). 
 
-**If a sample has no barcode\_flavor provided, the ``default`` will be used**
+**If a sample has no barcode\_flavor provided, the ``default`` run\_mode will be used**
 
 Provided barcode\_flavors
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -94,7 +99,13 @@ Spacemake provides the following barcode\_flavors out of the box:
     visium:
         cell: "r1[0:16]"
         UMI: "r1[16:28]"
+    sc_10x_v2:
+        cell: "r1[0:16]"
+        UMI: "r1[16:26]"
 
+To list the currently available ``barcode_flavor``-s, type::
+   
+   spacemake config list_barcode_flavors
 
 Add a new barcode\_flavor
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -126,23 +137,52 @@ Configure run\_modes
 
 .. _configure-run_mode:
 
-Specifying a run mode is an essential flexibity that spacemake offers. Through the run\_mode settings, a sample can 
-processed and analysed downstream in various fashions.
+Specifying a "run mode" is an essential flexibity that spacemake offers.
+Through setting a ``run_mode``, a sample can be processed and analysed downstream in various fashions.
 
-Each run\_mode can have the following variables:
+Each ``run_mode`` can have the following variables:
 
-- ``n_beads``: number of cell-barcode expected
-- ``umi_cutoff``: a list of integers. downstream the analysis will be run using these UMI cutoffs, that is cell-barcodes with less UMIs will be discarded
-- ``clean_dge``: whether to clean cell-barcodes from overhang primers, before creating the DGE.
-- ``detect_tissue`` (spatial only): if ``True``, apart from UMI cutoff spacemake will try to detect the tissue *in-silico*.
-- ``polyA_adapter_trimming``: if ``True`` 3' polyA stretches and apaters will be trimmed from Read2.
-- ``count_intronic_reads``: if ``True`` intronic reads will be counted when creating the DGE.
-- ``count_mm_reads``: if ``True`` multi-mappers will be counted. Only those multi-mapping reads will be counted this way, which map to exactly one CDS or UTR segment of a gene.
-- ``mesh_data`` (spatial only): if ``True`` a mesh will be created when running this run\_mode.
-- ``mesh_type`` (spatial only): spacemake currently offers two types of meshes: (1) ``circle``, where circles with a given ``mesh_spot_diameter_um`` will be placed in a hexagonal grid, ``mesh_spot_distance_um`` distance apart; (2) a hexagonal grid, where equal hexagons with ``mesh_spot_diameter_um`` sides will be placed in a full mesh grid, such that the whole area is covered.
-- ``mesh_spot_diameter_um`` (spatial only): the diameter of the mesh spatial-unit, in microns.
-- ``mesh_spot_distance_um`` (spatial only, only for circle mesh): distance between the meshed circles, in microns.
-- ``parent_run_mode``: Each run\_mode can have a parent, to which it will fall back, if a variable is not set. If not provided, the ``default`` run\_mode will be the parent. 
+``n_beads``
+   number of cell-barcode expected
+
+``umi_cutoff``
+   a list of integers. downstream the analysis will be run using these UMI cutoffs,
+   that is cell-barcodes with less UMIs will be discarded
+
+``clean_dge``
+   whether to clean cell-barcodes from overhang primers, before creating the DGE.
+
+``detect_tissue`` (spatial only): if ``True``, apart from UMI cutoff spacemake will try to detect the tissue *in-silico*.
+
+``polyA_adapter_trimming``
+   if ``True`` 3' polyA stretches and apaters will be trimmed from Read2.
+
+``count_intronic_reads``
+   if ``True`` intronic reads will be counted when creating the DGE.
+
+``count_mm_reads``
+   if ``True`` multi-mappers will be counted. Only those multi-mapping reads will be
+   counted this way, which map to exactly one CDS or UTR segment of a gene.
+
+``mesh_data`` (spatial only)
+   if ``True`` a mesh will be created when running this ``run_mode``.
+
+``mesh_type`` (spatial only)
+   spacemake currently offers two types of meshes: (1) ``circle``, where circles with a given
+   ``mesh_spot_diameter_um`` will be placed in a hexagonal grid, ``mesh_spot_distance_um``
+   distance apart; (2) a hexagonal grid, where equal hexagons with ``mesh_spot_diameter_um``
+   sides will be placed in a full mesh grid, such that the whole area is covered.
+
+``mesh_spot_diameter_um`` (spatial only)
+   the diameter of the mesh spatial-unit, in microns.
+
+``mesh_spot_distance_um`` (spatial only, only for circle mesh)
+   distance between the meshed circles, in microns.
+
+``parent_run_mode``
+   Each ``run_mode`` can have a parent, to which it will fall back.
+   If a one of the ``run_mode`` variables is missing, the variable of the parent will be used.
+   If parent is not provided, the ``default`` ``run_mode`` will be the parent. 
 
 Provided run\_mode(s)
 ^^^^^^^^^^^^^^^^^^^^^
@@ -184,7 +224,11 @@ Provided run\_mode(s)
 
 **NOTE: If a sample has no run\_mode provided, the ``default`` will be used**
 
-**NOTE 2: If a run\_mode variable is not provided, the variable of the default run\_mode will be used**
+**NOTE 2: If a run\_mode setting is not provided, the setting of the default run\_mode will be used**
+
+To list the currently available ``barcode_run_mode``-s, type::
+   
+   spacemake config list_run_modes
 
 Add a new run\_mode
 ^^^^^^^^^^^^^^^^^^^
@@ -219,7 +263,7 @@ Configure pucks
 
 .. _configure-puck:
 
-Each spatial sample, needs to have a ``puck``. The ``puck`` variable will define the 
+Each spatial sample, needs to have a ``puck``. The ``puck`` sample-variable will define the 
 dimensionality of the underlying spatial structure, which then spacemake will use
 during the autmated analysis and plotting. 
 
@@ -251,6 +295,11 @@ Provided pucks
 as you can see, the ``visium`` puck comes with a ``barcodes`` variable, which points to
 ``puck_data/visium_barcode_positions.csv``. Upon initiation, this file will automatically placed 
 there by spacemake
+
+To list the currently available ``barcode_run_mode``-s, type::
+   
+   spacemake config list_run_modes
+
 
 Add a new puck
 ^^^^^^^^^^^^^^
