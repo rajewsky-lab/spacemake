@@ -30,7 +30,7 @@ sample in the same way as `spaceranger <https://support.10xgenomics.com/spatial-
 
 To see the values of these predefined variables checkout the :ref:`configuration:Configuration`.
 
-**To add several visium projects at once, follow :ref:`the tutorial here <add-several-projects>`**
+**To add several visium projects at once, follow** :ref:`the tutorial here <add-several-projects>`
 
 Slide-seq quick start
 ---------------------
@@ -51,12 +51,14 @@ To add a Slide-seq project, simply type::
 Above we add a new Slide-seq project with the ``puck, run_mode`` will be set to ``slideseq``
 which are pre-defined settings for Slide-seq samples.
 
-**NOTE** that for Slide-seq we need to provide a ``puck_barcode_file`` (since each puck has different barcodes, unlike for visium samples). This file should be a comma or tab separated,
-containing column names as first row. Acceptable column names are:
+.. note::
+   For spatial samples other than visium - such as Slide-seq - we need to provide a
+   ``puck_barcode_file`` (since each puck has different barcodes, unlike for visium samples).
+   This file should be a comma or tab separated, containing column names as first row. Acceptable column names are:
 
-- ``cell_bc``, ``barcodes``  or ``barcode`` for cell-barcode
-- ``xcoord`` or ``x_pos`` for x-positions
-- ``ycoord`` or ``y_pos`` for y-positions
+   - ``cell_bc``, ``barcodes``  or ``barcode`` for cell-barcode
+   - ``xcoord`` or ``x_pos`` for x-positions
+   - ``ycoord`` or ``y_pos`` for y-positions
 
 In this example ``barcode_flavor`` will be set to ``slideseq_14bc``,
 a pre-defined ``barcode_flavor`` in spacemake, where the ``cell_barcode`` comes from the first 14nt of Read1, and the ``UMI`` comes from nt 13-22 (remaining 9 nt). 
@@ -64,7 +66,7 @@ The other pre-defined ``barcode_flavor`` for Slide-seq is ``slideseq_15bc``: her
 
 To see the values of these predefined variables checkout the :ref:`configuration:Configuration`.
 
-**To add several slideseq projects at once, follow :ref:`the tutorial here <add-several-projects>`**
+**To add several slideseq projects at once, follow** :ref:`the tutorial here <add-several-projects>`
 
 Drop-seq quick start
 -------------------
@@ -97,7 +99,7 @@ Of course, running single-cell samples with other ``run_mode`` settings is also 
 
 To see the values of these predefined variables checkout the :ref:`configuration:Configuration`.
 
-**To add several single-cell projects at once, follow :ref:`the tutorial here <add-several-projects>`**
+**To add several single-cell projects at once, follow** :ref:`the tutorial here <add-several-projects>`
 
 Running spacemake
 -----------------
@@ -106,7 +108,7 @@ After a sample is added, like in one of the examples above, spacemake can be run
 
    spacemake run --cores <n_cores> --keep-going
 
-The ``--keep-going`` flag is optionaly, however it will ensure that spacemake runs all
+The ``--keep-going`` flag is optional, however it will ensure that spacemake runs all
 the jobs it can, even if one job fails (this logic is directly taken from snakemake).
 
 Listing projects

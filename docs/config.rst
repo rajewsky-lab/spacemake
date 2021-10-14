@@ -30,7 +30,7 @@ barcode\_flavor
    the variable which specifies the structure of Read1 and Read2, namely how the cell\_barcode and UMI should be extracted. If no value provided for a sample, the default will be used.
 
 run\_mode
-   each sample can have several ``run_mode``-s, all of which are user definable. If no ``run_mode``-s is specified, a sample will be processed using ``default`` ``run_mode`` settings.
+   each sample can have several ``run_mode``-s, all of which are user definable. If no ``run_mode``-s are specified, a sample will be processed using ``default`` ``run_mode`` settings.
 
 puck (for spatial samples only)
    if a sample is spatial, it has to have a puck variable. If no puck is specified, a default puck will be used.  
@@ -78,7 +78,7 @@ This sample-variable describes how the cell-barcode and the UMI should be extrac
 The ``default`` value for barcode\_flavor will be dropseq: ``cell_barcode = r1[0:12]`` (cell-barcode comes from first 12nt of Read1) and
 ``UMI = r1[12:20]`` (UMI comes from the 13-20 nt of Read1). 
 
-**If a sample has no barcode\_flavor provided, the ``default`` run\_mode will be used**
+**If a sample has no barcode\_flavor provided, the default run\_mode will be used**
 
 Provided barcode\_flavors
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -152,7 +152,8 @@ Each ``run_mode`` can have the following variables:
 ``clean_dge``
    whether to clean cell-barcodes from overhang primers, before creating the DGE.
 
-``detect_tissue`` (spatial only): if ``True``, apart from UMI cutoff spacemake will try to detect the tissue *in-silico*.
+``detect_tissue`` (spatial only)
+   if ``True``, apart from UMI cutoff spacemake will try to detect the tissue *in-silico*.
 
 ``polyA_adapter_trimming``
    if ``True`` 3' polyA stretches and apaters will be trimmed from Read2.
@@ -222,11 +223,13 @@ Provided run\_mode(s)
         count_intronic_reads: True
         count_mm_reads: False
 
-**NOTE: If a sample has no run\_mode provided, the ``default`` will be used**
+.. note::
+   If a sample has no ``run_mode`` provided, the ``default`` will be used
 
-**NOTE 2: If a run\_mode setting is not provided, the setting of the default run\_mode will be used**
+.. note:: 
+   If a ``run_mode`` variable is not provided, the variable of the default ``run_mode`` will be used
 
-To list the currently available ``barcode_run_mode``-s, type::
+To list the currently available ``run_mode``-s, type::
    
    spacemake config list_run_modes
 
@@ -296,9 +299,9 @@ as you can see, the ``visium`` puck comes with a ``barcodes`` variable, which po
 ``puck_data/visium_barcode_positions.csv``. Upon initiation, this file will automatically placed 
 there by spacemake
 
-To list the currently available ``barcode_run_mode``-s, type::
+To list the currently available ``puck``-s, type::
    
-   spacemake config list_run_modes
+   spacemake config list_pucks
 
 
 Add a new puck
