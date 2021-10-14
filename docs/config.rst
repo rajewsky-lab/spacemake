@@ -64,8 +64,8 @@ To add species, the following command can be used::
 
 The ``spacemake config update_species`` takes the same arguments as above, while ``spacemake config delete_species`` takes only ``--name``.
 
-Configure barcode\_flavor
--------------------------
+Configure barcode\_flavors
+--------------------------
 
 .. _configure-barcode_flavor:
 
@@ -81,6 +81,7 @@ Provided barcode\_flavors
 Spacemake provides the following barcode\_flavors out of the box:
 
 .. code-block:: yaml
+
     default:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
@@ -120,8 +121,8 @@ Update/delete a barcode\_flavor
 
 The ``spacemake config update_barcode_flavor`` takes the same arguments as above, while ``spacemake config delete_barcode_flavor`` takes only ``--name``.
 
-Configure run\_mode(s)
-----------------------
+Configure run\_modes
+--------------------
 
 .. _configure-run_mode:
 
@@ -182,6 +183,7 @@ Provided run\_mode(s)
         count_mm_reads: False
 
 **NOTE: If a sample has no run\_mode provided, the ``default`` will be used**
+
 **NOTE 2: If a run\_mode variable is not provided, the variable of the default run\_mode will be used**
 
 Add a new run\_mode
@@ -212,8 +214,8 @@ Update/delete a run\_mode
 The ``spacemake config update_run_mode`` takes the same arguments as above, while ``spacemake config delete_run_mode`` takes only ``--name``.
 
 
-Configure puck(s)
------------------
+Configure pucks
+---------------
 
 .. _configure-puck:
 
@@ -255,7 +257,7 @@ Add a new puck
 
 .. code-block::
 
-   spacemake config add_puck
+   spacemake config add_puck \
       --name NAME \        # name of the puck
       --width_um WIDTH_UM \
       --spot_diameter_um SPOT_DIAMETER_UM \

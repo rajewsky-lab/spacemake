@@ -6,15 +6,11 @@ Installation
 Create a conda environment
 --------------------------
 
-Spacemake has the following dependencies:
-
-.. include:: ../environment.yaml
-
 The most straightforward way of installing spacemake, is first creating a conda environment with the above packages.
 
 To do this, we highly recommend using `mamba <https://github.com/mamba-org/mamba>`_, a much faster conda package manager than conda itself.
 
-After mamba is installed, download the `environment.yaml <https://raw.githubusercontent.com/rajewsky-lab/spacemake/dev/environment.yaml>`_.
+After mamba is installed, download the `environment.yaml <https://raw.githubusercontent.com/rajewsky-lab/spacemake/dev/environment.yaml>`_. This environment.yaml, contains all the dependencies required by spacemake.
 
 Once downloaded, to install all spacemake dependencies, type::
 

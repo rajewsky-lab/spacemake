@@ -13,6 +13,8 @@ Contents
 .. toctree::
 
    install
+   quick-start
    config
+   projects
    run
    api
