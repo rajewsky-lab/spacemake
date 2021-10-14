@@ -1,11 +1,23 @@
 Quick start guide
 =================
 
-The examples here are minimal code pieces how to start spacemake. They assume that you have initialised spacemake
-with ``spacemake init`` as described :ref:`here <installation>`.
+The examples here are minimal code pieces how to start spacemake. It is assumed that spacemake
+has been instaled following the instructions :ref:`here <installation>`.
 
-As spacemake comes with no ``default`` value for ``species``, before you can start anything, you need to add one
-using ``spacemake config add_species`` as described :ref:`here <configure-species>`.
+.. include:: shared/spacemake_init.rst
+
+.. include:: shared/shared_sample_variables.rst
+
+As spacemake comes with no ``default`` value for ``species``, before anything can be done,
+a new species has to be added::
+
+   spacemake config add_species \
+      --name \       # name of the species
+      --genome \     # path to .fa file
+      --annotation \ # path to .gtf file
+      --rRNA_genome  # (optional) path to ribosomal-RNA genome
+      
+More info :ref:`here <configure-species>`.
 
 Visium quick start
 ------------------

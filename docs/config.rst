@@ -3,47 +3,13 @@ Configuration
 
 Once installed, spacemake configured before running.
 
-Initialise
-----------
-
-To initialise a spacemake project, ``cd`` into the directory in which you want to start spacemake, this will be your ``project_root``.
-
-Then simply type::
-   
-   spacemake init \
-      --dropseq_tools <path_to_dropseq_tools_dir> \
-      --picard_tools <path_to_picardtools_picard.jar>
+.. include:: shared/spacemake_init.rst
 
 Optionally, you can also provide the ``--download_species`` flag, which will download Gencode genomes and
 annotations for ``mouse`` and ``human``, and place them under ``project\_root/species\_data/<species>``,
 where <species> is either mouse or human.
 
-Sample-variables
-----------------
-
-In spacemake, each sample has to have the following sample-variables:
-
-species
-   a collection of genome, annotation and rRNA\_genome. There is no default species, and each sample can have exactly one species.
-
-barcode\_flavor
-   the variable which specifies the structure of Read1 and Read2, namely how the cell\_barcode and UMI should be extracted. If no value provided for a sample, the default will be used.
-
-run\_mode
-   each sample can have several ``run_mode``-s, all of which are user definable. If no ``run_mode``-s are specified, a sample will be processed using ``default`` ``run_mode`` settings.
-
-puck (for spatial samples only)
-   if a sample is spatial, it has to have a puck variable. If no puck is specified, a default puck will be used.  
-
-
-To add, update, delete or list a sample-variable, you can use the following commands::
-
-   spacemake config add_<sample-variable>
-   spacemake config update_<sample-variable>
-   spacemake config delete_<sample-variable>
-   spacemake config list_<sample-variable>
-
-where ``<sample-variable>`` can be ``species, barcode_flavor, run_mode or puck``
+.. include:: shared/shared_sample_variables.rst
 
 Configure species
 -----------------
