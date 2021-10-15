@@ -119,13 +119,14 @@ def plot_results(
     donut_counts,
     bead_normed_labels,
     bead_normed_counts,
-    found_part_counts,
+    syn_rates,
     all_parts=["bead_start", "polyT"],
     fname="donuts.pdf",
     suptitle="",
 ):
 
-    fig, [(ax1, ax2), (ax0, ax3)] = plt.subplots(2, 2, figsize=(12, 8))
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    [(ax1, ax2), (ax0, ax3)] = axes
     n_total = sig_counts["n_total"]
 
     if suptitle:
@@ -133,23 +134,19 @@ def plot_results(
 
     ax0.set_title("top 10 read signatures")
     ax0.set_xscale("log")
+
     # Hide the right and top spines
     ax0.spines["right"].set_visible(False)
     ax0.spines["top"].set_visible(False)
 
-    # # Only show ticks on the left and bottom spines
-    # ax.yaxis.set_ticks_position('left')
-    # ax.xaxis.set_ticks_position('bottom')
+    # Only show ticks on the left and bottom spines
     sig_items = sorted(sig_counts.items(), key=lambda x: x[1])[-10:]
     sig_labels = [f"{x[0]} ({x[1]})" for x in sig_items]
-    sig_counts = [x[1] for x in sig_items]
+    sig_cnt = [x[1] for x in sig_items]
     y_pos = np.arange(len(sig_labels))
-    # print(y_pos)
-    # print(sig_counts)
-    ax0.barh(y_pos, sig_counts, height=0.2)
+    ax0.barh(y_pos, sig_cnt, height=0.2)
     ax0.set_yticks(y_pos)
     ax0.set_yticklabels(sig_labels)
-    # ax0.set_ylim(0, y_pos.max())
 
     ax1.set_title("library overview")
     ax1.set_aspect("equal")
@@ -170,26 +167,13 @@ def plot_results(
     donut_plot(
         ax2, bead_normed_labels, bead_normed_counts, sa=30, explode=ex, colors=colors
     )
-    # fig.tight_layout()
-
     # estimate synthesis completion rates based on co-linear detection
     # of the constitutive parts of the capture oligos
     ax3.set_title("synthesis rates")
-    rates = []
-
-    n0 = n_total
-    x = range(1, len(all_parts) + 1)
-    for i in x:
-        key = tuple(all_parts[:i])
-        # print(found_part_counts)
-        # print(key, found_part_counts[key], n0, rates)
-        rates.append(found_part_counts[key] / float(max(1, n0)))
-        # print(i, rates)
-        n0 = found_part_counts[key]
-
     ax3.spines["right"].set_visible(False)
     ax3.spines["top"].set_visible(False)
-    ax3.barh(x, rates[::-1])
+    x = range(1, len(syn_rates) + 1)
+    ax3.barh(x, syn_rates[::-1])
     ax3.set_yticks(x)
     ax3.set_yticklabels([all_parts[i - 1] for i in x[::-1]])
     ax3.set_xlabel("synthesis completion")
@@ -206,7 +190,7 @@ def plot_results(
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.savefig(fname)
 
-    return rates
+    return fig, axes
 
 
 def obs_to_arrays(df):
