@@ -11,7 +11,6 @@ license: GPL
 
 ```{r knitr_options, include=FALSE, cache=FALSE}
 knitr::opts_chunk$set(
-  cache = T,
   autodep = TRUE,
   message = FALSE,
   warning = FALSE,
@@ -45,8 +44,6 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
-
-#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_saturation_analysis.rds')
 ```
 
 ```{r load_run_info, echo = F}
@@ -211,7 +208,7 @@ plot_deciled_data <- function(run_mode_in) {
     return(pl)
 }
 
-plot_data <- function(run_mode_in, umi_cutoff=c(1, 100, 200)){
+plot_data <- function(run_mode_in, obs_in, obs_name, umi_cutoff=c(1, 100, 200)){
     tibble(umi_cutoff = umi_cutoff,
                   dat = map(umi_cutoff, ~ filter(dge_data, umis > .))) %>%
         unnest(dat) %>%
@@ -231,25 +228,25 @@ plot_data <- function(run_mode_in, umi_cutoff=c(1, 100, 200)){
                           'median_genes',
                           'median_pcr', 'n_beads'))) %>%
     mutate(umi_cutoff = factor(umi_cutoff)) %>%
+    filter(observation == obs_in) %>%
     ggplot(aes(percentage, value, color = observation, fill=observation, linetype=umi_cutoff)) +
         scale_color_manual(values=median_clrs) +
         scale_fill_manual(values=median_clrs) +
         geom_smooth(formula = y~log(x), size = 0.6,se=F) +
         geom_point(size=2, color = 'black', pch=21) + 
-        scale_x_continuous(breaks=seq(0, 100, 20)) +
-        facet_wrap(~observation, scales = 'free', ncol=2) +
-        labs(y='', x='downsampling percentage', color='', fill='', linetype='') +
+        scale_x_continuous(breaks=seq(0, 100, 20), labels=paste0(seq(0, 100, 20), '%')) +
+        labs(y=obs_name, x='downsampling percentage', color='', fill='', linetype='UMI cutoff') +
         theme(strip.background=element_blank(), legend.position='bottom',
-              legend.key.width=unit(1.2, 'cm')) +
-        guides(colour = guide_legend(nrow=3, byrow=T, override.aes = list(size=3)),
-               linetype = guide_legend(nrow=3, byrow=T, override.aes = list(size=2)))
+              legend.key.width=unit(0.8, 'cm')) +
+        guides(colour = 'none',fill='none',
+               linetype = guide_legend(nrow=2, byrow=T, override.aes = list(size=1)))
 }
 ```
 
 
 ## Histograms per run\_mode {.tabset}
 
-```{r plot_histogram_of_observations, echo =F, fig.width=7,fig.height=4,results='asis'}
+```{r plot_histogram_of_observations, echo =F, fig.width=7, fig.height=4,results='asis'}
 run_mode_names <- dge_data %$% 
     run_mode %>% unique()
     
@@ -265,7 +262,7 @@ for (run_mode_in in run_mode_names){
 
 ## Median plots per run\_mode {.tabset}
 
-```{r plot_median_values_of, echo =F, fig.width=7,fig.height=7,results='asis'}
+```{r plot_median_values_of, echo =F, fig.width=7,fig.height=5,results='asis'}
 run_mode_names <- dge_data %$% 
     run_mode %>% unique()
     
@@ -273,8 +270,25 @@ for (run_mode_in in run_mode_names){
     umi_cutoff <- snakemake@params$run_modes[[run_mode_in]]$umi_cutoff
     cat(paste0('\n\n### ', run_mode_in, '\n\n'))
 
-    print(plot_deciled_data(run_mode_in))
+    print(plot_data(run_mode_in, obs_in = 'median_reads',
+                    obs_name = 'median reads\nper spatial unit', umi_cutoff = c(1, umi_cutoff)))
+    print(plot_data(run_mode_in, obs_in = 'median_umis',
+                    obs_name = 'median UMIs\nper spatial unit', umi_cutoff = c(1, umi_cutoff)))
+    print(plot_data(run_mode_in, obs_in = 'median_pcr',
+                    obs_name = 'median reads/UMIs\nper spatial unit', umi_cutoff = c(1, umi_cutoff)))
+}
+```
 
-    print(plot_data(run_mode_in, umi_cutoff = c(1, umi_cutoff)))
+## Deciled median plots per run\_mode {.tabset}
+
+```{r plot_deciled_median_values_of, echo =F, fig.width=7,fig.height=7,results='asis'}
+run_mode_names <- dge_data %$% 
+    run_mode %>% unique()
+    
+for (run_mode_in in run_mode_names){
+    umi_cutoff <- snakemake@params$run_modes[[run_mode_in]]$u5i_cutoff
+    cat(paste0('\n\n### ', run_mode_in, '\n\n'))
+
+    print(plot_deciled_data(run_mode_in))
 }
 ```

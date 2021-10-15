@@ -338,48 +338,62 @@ class ConfigFile:
         'species': str
     }
 
-    def __init__(self, file_path):
-        self.file_path = file_path
-        self.variables = yaml.load(open(file_path),
-                    Loader=yaml.FullLoader)
+    def __init__(self):
+        self.variables = {
+            'root_dir': '',
+            'temp_dir': '/tmp',
+            'species': {},
+            'barcode_flavors': {},
+            'run_modes': {},
+            'pucks': {},
+        }
+        self.file_path = 'config.yaml'
+        self.logger = logging.getLogger(logger_name)
 
-        if file_path != self.initial_config_path:
+    @classmethod
+    def from_yaml(cls, file_path):
+        cf = cls()
+        cf.variables = yaml.load(open(file_path),
+                    Loader=yaml.FullLoader)
+        cf.file_path = file_path
+
+        if file_path != cf.initial_config_path:
             initial_config = ConfigFile.get_initial_config()
 
             # correct variables to ensure backward compatibility
-            self.correct() 
+            cf.correct() 
             
             # check which variables do not exist, if they dont, 
             # copy them from initial config
-            for main_variable in self.main_variables_pl2sg:
+            for main_variable in cf.main_variables_pl2sg:
                 # update new main_variables
-                if main_variable not in self.variables:
-                    self.variables[main_variable] = initial_config.variables[main_variable]
+                if main_variable not in cf.variables:
+                    cf.variables[main_variable] = initial_config.variables[main_variable]
 
             # deduce variables which have 'default' value. this is to ensure spacemake
             # always runs w/o errors downstream: ie when barcode flavor, run_mode or puck
             # is set to default
-            self.vars_with_default = [key for key, value in initial_config.variables.items()
+            cf.vars_with_default = [key for key, value in initial_config.variables.items()
                 if 'default' in value]
 
-            for var_with_default in self.vars_with_default:
+            for var_with_default in cf.vars_with_default:
                 default_val = initial_config.variables[var_with_default]['default']
-                if 'default' not in self.variables[var_with_default]:
-                    self.variables[var_with_default]['default'] = default_val
+                if 'default' not in cf.variables[var_with_default]:
+                    cf.variables[var_with_default]['default'] = default_val
                 else:
                     # update default run mode with missing values
-                    default_val.update(self.variables[var_with_default]['default'])
-                    self.variables[var_with_default]['default'] = default_val
+                    default_val.update(cf.variables[var_with_default]['default'])
+                    cf.variables[var_with_default]['default'] = default_val
 
-            if self.file_path != initial_config.file_path:
+            if cf.file_path != initial_config.file_path:
                 # only dump if not initial config
-                self.dump()
+                cf.dump()
         
-        self.logger = logging.getLogger(logger_name)
+        return cf
 
     @classmethod
     def get_initial_config(cls):
-        cf = cls(cls.initial_config_path)
+        cf = cls.from_yaml(cls.initial_config_path)
 
         return cf
 

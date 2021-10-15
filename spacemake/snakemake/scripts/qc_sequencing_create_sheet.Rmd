@@ -578,7 +578,7 @@ qc_var_info <- dge_summary %>%
                        '# of UMIs\nper spatial unit',
                        'reads / UMIs\nper spatial unit',
                        '% mt counts\nper spatial unit',
-                       'Shannon\nentropy\nper spatial unit\nbarcode',
+                       'Shannon\nentropy\nper spatial unit',
                        'barcode length\nafter\ncompression\nper spatial unit'),
                cut_dist = c(F, T, T, T, T, T, F, F)),
                by='qc_vars') %>%

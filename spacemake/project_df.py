@@ -853,7 +853,6 @@ class ProjectDF:
         :param return_series:
         :param kwargs:
         """
-        print(kwargs)
         ix = (project_id, sample_id)
         sample_exists = self.sample_exists(*ix)
 
@@ -901,6 +900,11 @@ class ProjectDF:
             ),
             default_value=self.project_df_default_values["puck_barcode_file"],
         )
+
+        if 'run_mode' in kwargs and isinstance(kwargs['run_mode'], str):
+            # if a single run mode is provided as a string
+            # create a list manually
+            kwargs['run_mode'] = [kwargs['run_mode']]
 
         # check if run mode exists
         for run_mode in kwargs.get("run_mode", []):

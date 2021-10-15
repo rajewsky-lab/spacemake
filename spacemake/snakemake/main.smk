@@ -45,7 +45,7 @@ config['puck_data']['root'] = config['microscopy_out']
 project_dir = os.path.join(config['root_dir'], 'projects/{project}')
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
-project_df = ProjectDF(config['project_df'], ConfigFile('config.yaml'))
+project_df = ProjectDF(config['project_df'], ConfigFile.from_yaml('config.yaml'))
 
 #################
 # DIRECTORY STR #

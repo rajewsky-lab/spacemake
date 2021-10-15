@@ -76,7 +76,7 @@ def spacemake_init(args):
             'data/config/config.yaml')
 
     # initialise config file
-    cf = ConfigFile(initial_config)
+    cf = ConfigFile.from_yaml(initial_config)
     # update the file path 
     cf.set_file_path(config_path)
     cf.variables['root_dir'] = args['root_dir']
@@ -158,13 +158,16 @@ def spacemake_run(args):
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), 'snakemake/main.smk')
     # run snakemake
-    snakemake.snakemake(snakefile, configfiles=[config_path],
+    run_successful = snakemake.snakemake(snakefile, configfiles=[config_path],
         cores = args['cores'], dryrun=args['dryrun'],
         targets=targets, touch=args['touch'],
         force_incomplete=args['rerun_incomplete'],
         keepgoing=args['keep_going'], printshellcmds = args['printshellcmds'],
         config={'project_df': project_df, 'samples': samples,
                 'projects': projects})
+
+    if not run_successful:
+        raise SpacemakeError('snakemake threw an error. looks like something went wrong')
 
 #################
 # DEFINE PARSER #
@@ -197,7 +200,7 @@ parser_init = setup_init_parser(subparsers)
 ## spacemake_config args
 from spacemake.config import setup_config_parser
 if os.path.isfile(config_path):
-    cf = ConfigFile(config_path)
+    cf = ConfigFile.from_yaml(config_path)
     # save config file
     cf.dump()
     parser_config = setup_config_parser(cf, subparsers)
