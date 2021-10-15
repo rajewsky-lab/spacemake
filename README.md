@@ -1,9 +1,9 @@
-|PyPI| |Docs|
+<a href="https://pypi.org/project/spacemake/">
+   <img src="https://img.shields.io/pypi/v/spacemake.svg" / ></a>
+   
+<a href="https://spacemake.readthedocs.io/">
+   <img src="https://readthedocs.org/projects/spacemake/badge/?version=latest" / ></a>
 
-.. |PyPI| image:: https://img.shields.io/pypi/v/spacemake.svg
-   :target: https://pypi.org/project/spacemake/
-.. |Docs| image:: https://readthedocs.org/projects/spacemake/badge/?version=latest
-   :target: https://spacemake.readthedocs.io/
 
 # Spatial transcriptomics sequencing
 
