@@ -1,3 +1,10 @@
+|PyPI| |Docs|
+
+.. |PyPI| image:: https://img.shields.io/pypi/v/spacemake.svg
+   :target: https://pypi.org/project/spacemake/
+.. |Docs| image:: https://readthedocs.org/projects/spacemake/badge/?version=latest
+   :target: https://spacemake.readthedocs.io/
+
 # Spatial transcriptomics sequencing
 
 ## Structure of the pipeline
