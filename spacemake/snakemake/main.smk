@@ -567,7 +567,7 @@ rule create_mesh_spatial_dge:
             spot_distance_um = 10.0
         else:
             mesh_type = 'circle'
-            spot_distance = float(wildcards.spot_distance_um)
+            spot_distance_um = float(wildcards.spot_distance_um)
         adata = create_meshed_adata(adata,
             width_um = params['puck_data']['width_um'],
             bead_diameter_um = params['puck_data']['spot_diameter_um'],

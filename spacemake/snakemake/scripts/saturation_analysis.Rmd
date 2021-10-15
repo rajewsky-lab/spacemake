@@ -256,9 +256,9 @@ run_mode_names <- dge_data %$%
 for (run_mode_in in run_mode_names){
     umi_cutoff <- snakemake@params$run_modes[[run_mode_in]]$umi_cutoff
     cat(paste0('\n\n### ', run_mode_in, '\n\n'))
-    print(plot_observations('umis', run_mode_in, ttl='# of UMIs per spot'))
-    print(plot_observations('reads', run_mode_in, ttl='# of reads per spot'))
-    print(plot_observations('pcr', run_mode_in, log_scale=F, ttl='reads / UMI per spot'))
+    print(plot_observations('umis', run_mode_in, ttl='# of UMIs per spatial unit'))
+    print(plot_observations('reads', run_mode_in, ttl='# of reads per spatial unit'))
+    print(plot_observations('pcr', run_mode_in, log_scale=F, ttl='reads / UMIs per spatial unit'))
 
 }
 ```

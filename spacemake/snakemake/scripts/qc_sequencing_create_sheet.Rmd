@@ -276,7 +276,7 @@ umi_cutoff_data <- tibble(umi_cutoffs = umi_cutoffs) %>%
 
 
 ```{r plot_umi_cutoff_plot, echo = F, fig.height=7.5, fig.width=12}
-metric_names <- list('umis' = 'UMIs', 'genes' = 'genes', 'pcr' = 'UMIs/reads',
+metric_names <- list('umis' = 'UMIs', 'genes' = 'genes', 'pcr' = 'reads / UMIs',
                      'reads'='reads')
 umi_cutoff_plot <- function(metric, y_log_transform = F, legend_pos='none'){
     y_label <- strsplit(metric, '_')
@@ -543,7 +543,7 @@ plot_spatial_qc <- function(variable, dat_in, plot_bead_size=0.1, ttl='', cut_di
             scale_x_continuous(labels = x_mm_breaks, breaks = x_breaks) +
             scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks) +
             coord_fixed()+
-            guides(color = guide_colorbar(barheight = 15)) + 
+            guides(color = guide_colorbar(barheight = 12)) + 
             labs(color=ttl, x='', y='') + 
             theme(panel.background = element_rect(fill = 'gray95'), 
                  legend.spacing = unit(0.1, 'cm'),
@@ -572,18 +572,17 @@ qc_var_info <- dge_summary %>%
     colnames() %>%
     tibble(qc_vars = .) %>%
     inner_join(tibble(qc_vars = qc_vars,
-               ttl = c('# beads joined',
-                       '# of reads',
-                       '# of genes',
-                       '# of umis',
-                       'umis / reads',
-                       '% mt counts',
-                       'entropy',
-                       'compression'),
+               ttl = c('# beads joined\nper spatial unit',
+                       '# of reads\nper spatial unit',
+                       '# of genes\nper spatial unit',
+                       '# of UMIs\nper spatial unit',
+                       'reads / UMIs\nper spatial unit',
+                       '% mt counts\nper spatial unit',
+                       'Shannon\nentropy\nper spatial unit\nbarcode',
+                       'barcode length\nafter\ncompression\nper spatial unit'),
                cut_dist = c(F, T, T, T, T, T, F, F)),
                by='qc_vars') %>%
-    mutate(qc_vars = factor(qc_vars, levels= qc_vars)) %>%
-    mutate(ttl = paste0(ttl, '\nper spatial unit'))
+    mutate(qc_vars = factor(qc_vars, levels= qc_vars))
 ```
 
 
