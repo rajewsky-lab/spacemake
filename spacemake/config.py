@@ -219,7 +219,6 @@ def setup_config_parser(config, subparsers):
 @message_aggregation(logger_name)
 def add_update_delete_variable_cmdline(config, args):
     # set the name and delete from dictionary
-    print(args)
     name = args['name']
     variable = args['variable']
     action = args['action']
@@ -353,12 +352,24 @@ class ConfigFile:
     @classmethod
     def from_yaml(cls, file_path):
         cf = cls()
-        cf.variables = yaml.load(open(file_path),
+
+        config_yaml_variables = None
+        with open(file_path, 'r') as f:
+            config_yaml_variables = yaml.load(f,
                     Loader=yaml.FullLoader)
+
+        if config_yaml_variables is None:
+            with open(file_path, 'r') as f:
+                for line in f:
+                    print(line)
+
+        if config_yaml_variables is not None:
+            cf.variables = config_yaml_variables
+
         cf.file_path = file_path
 
         if file_path != cf.initial_config_path:
-            initial_config = ConfigFile.get_initial_config()
+            initial_config = ConfigFile.from_yaml(cf.initial_config_path)
 
             # correct variables to ensure backward compatibility
             cf.correct() 
@@ -385,16 +396,6 @@ class ConfigFile:
                     default_val.update(cf.variables[var_with_default]['default'])
                     cf.variables[var_with_default]['default'] = default_val
 
-            if cf.file_path != initial_config.file_path:
-                # only dump if not initial config
-                cf.dump()
-        
-        return cf
-
-    @classmethod
-    def get_initial_config(cls):
-        cf = cls.from_yaml(cls.initial_config_path)
-
         return cf
 
     def assert_main_variable(self, variable):
@@ -404,46 +405,51 @@ class ConfigFile:
 
     def correct(self):
         # ensures backward compatibility
-        if 'pucks' not in self.variables and 'pucks' in self.variables['puck_data']:
-            self.variables['pucks'] = self.variables['puck_data']['pucks']
-            del self.variables['puck_data']['pucks']
-
-        if 'barcode_flavors' not in self.variables.keys() and 'barcode_flavor' in self.variables['knowledge']:
-            self.variables['barcode_flavors'] = self.variables['knowledge']['barcode_flavor']
+        if 'pucks' not in self.variables:
+            self.variables['pucks'] = {}
+            if 'puck_data' in self.variables:
+                if 'pucks' in self.variables['puck_data']:
+                    self.variables['pucks'] = self.variables['puck_data']['pucks']
+                    del self.variables['puck_data']['pucks']
         
-        if 'species' not in self.variables and 'knowledge' in self.variables:
+        if 'barcode_flavors' not in self.variables:
+            self.variables['barcode_flavors'] = {}
+            if 'knowledge' in self.variables:
+                if 'barcode_flavor' in self.variables['knowledge']:
+                    self.variables['barcode_flavors'] = self.variables['knowledge']['barcode_flavor']
+        
+        if 'species' not in self.variables:
             # get all the species and save them in the right place
             # if species is empty, create a species dictionary
             self.variables['species'] = {}
 
-            # extract all annotation info, if exists
-            for species in self.variables['knowledge'].get('annotations', {}):
-                if species not in self.variables['species']:
-                    self.variables['species'][species] = {}
+            if 'knowledge' in self.variables:
+                # extract all annotation info, if exists
+                for species in self.variables['knowledge'].get('annotations', {}):
+                    if species not in self.variables['species']:
+                        self.variables['species'][species] = {}
 
-                self.variables['species'][species]['annotation'] = \
-                    self.variables['knowledge']['annotations'][species]
+                    self.variables['species'][species]['annotation'] = \
+                        self.variables['knowledge']['annotations'][species]
 
-            for species in self.variables['knowledge'].get('genomes', {}):
-                if species not in self.variables['species']:
-                    self.variables['species'][species] = {}
+                for species in self.variables['knowledge'].get('genomes', {}):
+                    if species not in self.variables['species']:
+                        self.variables['species'][species] = {}
 
-                self.variables['species'][species]['genome'] = \
-                    self.variables['knowledge']['genomes'][species]
+                    self.variables['species'][species]['genome'] = \
+                        self.variables['knowledge']['genomes'][species]
 
-            for species in self.variables['knowledge'].get('rRNA_genomes', {}):
-                if species not in self.variables['species']:
-                    self.variables['species'][species] = {}
+                for species in self.variables['knowledge'].get('rRNA_genomes', {}):
+                    if species not in self.variables['species']:
+                        self.variables['species'][species] = {}
 
-                self.variables['species'][species]['rRNA_genome'] = \
-                    self.variables['knowledge']['rRNA_genomes'][species]
+                    self.variables['species'][species]['rRNA_genome'] = \
+                        self.variables['knowledge']['rRNA_genomes'][species]
 
         if 'knowledge' in self.variables:
             del self.variables['knowledge']
         
-        if 'species' not in self.variables:
-            self.variables['species'] = {}
-
+        # correct run modes
         for run_mode_name, run_mode_variables in self.variables['run_modes'].items():
             variables = run_mode_variables.copy()
             for var in run_mode_variables:

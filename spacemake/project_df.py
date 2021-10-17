@@ -9,7 +9,7 @@ import logging
 
 from spacemake.errors import *
 from spacemake.config import ConfigFile
-from spacemake.util import message_aggregation, assert_file
+from spacemake.util import message_aggregation, assert_file, str_to_list
 from typing import List, Dict
 
 logger_name = "spacemake.project_df"
@@ -117,6 +117,7 @@ def get_sample_extra_arguments_parser(species_required=False,
         "--R1",
         type=str,
         help=".fastq.gz file path to R1 reads",
+        nargs='+',
         required=reads_required,
     )
 
@@ -124,6 +125,7 @@ def get_sample_extra_arguments_parser(species_required=False,
         "--R2",
         type=str,
         help=".fastq.gz file path to R2 reads",
+        nargs='+',
         required=reads_required,
     )
 
@@ -557,8 +559,9 @@ class ProjectDF:
             df = pd.read_csv(
                 file_path,
                 index_col=["project_id", "sample_id"],
-                converters={"run_mode": eval, "merged_from": eval},
-                na_values=["None", "none"],
+                converters={"run_mode": eval, "merged_from": eval,
+                            "R1": str_to_list, "R2": str_to_list},
+                na_values=["None", "none"]
             )
             project_list = []
             # required if upgrading from pre-longread tree
@@ -893,6 +896,21 @@ class ProjectDF:
         assert_file(R1, default_value=None, extension=".fastq.gz")
         assert_file(R2, default_value=None, extension=".fastq.gz")
         assert_file(longreads, default_value=None, extension="all")
+
+        # assign reads
+        if R1 is not None and isinstance(R1, str):
+            R1 = [R1]
+
+        if R2 is not None and isinstance(R2, str):
+            R2 = [R2]
+
+        if R1 is not None and R2 is not None:
+            if len(R1) != len(R2):
+                raise SpacemakeError(
+                        f'Trying to set an unmatching number of ' +
+                        f'read pairs for sample: {ix}.\n' +
+                        f'# of R1 files = {len(R1)}\n' +
+                        f'# of R2 files = {len(R2)}')
 
         is_spatial = assert_file(
             kwargs.get(

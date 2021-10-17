@@ -380,17 +380,22 @@ def get_reads(wildcards):
     if reads is None:
         return ['none']
     else:
-        return [reads]
+        # reads already 
+        return reads
 
 rule link_raw_reads:
     input:
         unpack(get_reads)
     output:
         raw_reads_pattern
-    shell:
-        """
-        ln -rs {input} {output}
-        """
+    run:
+        if len(input) == 1:
+            # either link raw reads
+            shell("ln -rs {input} {output}")
+        else:
+            # or append reads together
+            shell("cat {input} > {output}")
+            
 
 rule zcat_pipe:
     input: "{name}.fastq.gz"
