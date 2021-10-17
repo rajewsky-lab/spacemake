@@ -1,6 +1,11 @@
+config.yaml
+samples.yaml
 *.rds
 *.html
+*.csv
 *.pdf
+*.txt.gz
+*.fastq.gz
 .snakemake
 
 scratch

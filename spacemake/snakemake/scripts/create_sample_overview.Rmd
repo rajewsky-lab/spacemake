@@ -1,0 +1,222 @@
+---
+header-includes:
+    - \usepackage{float}
+    - \usepackage[table]{xcolor}
+output:
+    html_document:
+        toc: true
+        toc_depth: 6
+classoption: landscape
+geometry: margin=0.5cm
+version: 0.1.1
+author: Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos
+email: tamasryszard.sztanka-toth@mdc-berlin.de, nikolaos.karaiskos@mdc.berlin.de
+license: GPL
+title: Sample overview
+pagetitle: Sample overview
+date: "`r format(Sys.time(),'%d/%m/%y')`"
+---
+
+```{r knitr_options, include=FALSE, cache=FALSE}
+knitr::opts_chunk$set(
+  cache = F,
+  autodep = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  comment = NA
+)
+
+options(knitr.table.format ='markdown')
+```
+
+```{r functions, echo = F}
+readStarLog <- function(log_file){
+
+		out = list()
+		lines = readLines(log_file)
+	
+		out$input_reads = (lines[6] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
+
+		out$uniq_mapped_reads = (lines[9] %>% strsplit('\t') %>% unlist)[2] %>% as.integer
+
+		#out$avg_length = (lines[11] %>% strsplit('\t') %>% unlist)[2] %>% as.numeric
+		
+        tibble(observation=names(out), value=unlist(unname(out)))
+	}
+```
+
+```{r load_projects_puck_info, echo=F}
+library(tidyverse)
+library(magrittr)
+metadata <- read_csv(snakemake@input[[1]])
+```
+
+```{r collect_data, echo = F}
+root_dir <- snakemake@config$root_dir
+read_metrics <- metadata %>%
+    select(project_id, sample_id, puck_id, species, sequencing_date) %>%
+    mutate(star_log = paste0(root_dir, '/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/star_Log.final.out'),
+           read_types =paste0(root_dir,'/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/split_reads/read_type_num.txt')) %>%
+    mutate(star_log = map(star_log,
+                          ~ readStarLog(.))) %>%
+    unnest(star_log) %>%
+    mutate(read_types = map(read_types,
+                            ~ read_table2(., col_names=c('rt_obs', 'rt_value')))) %>%
+    unnest(read_types) %>%
+    mutate(rt_obs = tolower(rt_obs)) %>%
+    spread(rt_obs, rt_value) %>%
+    spread(observation, value)
+```
+
+```{r show_sample_table, echo = F}
+library(kableExtra)
+to_table <- read_metrics %>%
+    mutate(um_r = uniq_mapped_reads) %>%
+    gather('obs', 'val', intergenic, amb, coding, intronic, utr) %>%
+    mutate(val_p = round(val / um_r, 2),
+           val = round(val / 1e6, 2),
+           # add ratio in paranthesis if obs is not cds
+           val = paste0(val, ' (', val_p, ')'),
+           uniq_mapped_reads = round(uniq_mapped_reads / 1e6, 2),
+           input_reads = round(input_reads / 1e6, 2),
+           uniq_mapped_reads = paste0(uniq_mapped_reads, ' (', round(uniq_mapped_reads / input_reads, 2), ')')) %>%
+    select(-um_r, -val_p) %>%
+    spread(obs, val) %>%
+    arrange(species) %>%
+    select(sample_id, puck_id, species, sequencing_date, input_reads, uniq_mapped_reads, coding, utr, intergenic, intronic, amb) %>%
+    rename(uniq_m = uniq_mapped_reads,
+           input_r = input_reads,
+           cds = coding)
+```
+
+```{r load_strand_info, echo = F}
+strand_info <- metadata %>%
+    select(project_id, sample_id, puck_id, species, sequencing_date) %>%
+    mutate(filename = paste0(root_dir, '/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/split_reads/strand_type_num.txt'),
+           content = map(filename, ~read_table2(., col_names = c('obs', 'num')))) %>%
+    unnest(content) %>%
+    select(-filename, project_id) %>%
+    group_by(sample_id) %>%
+    mutate(num_sum = sum(num),
+           num_ratio = round(num / num_sum, 2),
+           num = round(num / 1e6, 2),
+           num = paste0(num, ' (', num_ratio, ')')) %>%
+    select(-num_ratio, -num_sum) %>%
+    spread(obs, num)
+```
+
+```{r load_barcode_metadata, echo = F}
+umi_cutoffs <- c(1, 10, 50, 100)
+
+load_filter_dge <- function(x, y){
+    read_table2(x, skip=6) %>%
+        filter(NUM_TRANSCRIPTS > y)
+}
+
+read_dge_summary <- function(filename){
+    tibble(umi_cutoff = umi_cutoffs, filename=filename) %>%
+        mutate(dat = map2(filename, umi_cutoff, load_filter_dge)) %>%
+        select(-filename) %>%
+        unnest(dat) %>%
+        group_by(umi_cutoff) %>%
+        summarise(
+                median_umi = median(NUM_TRANSCRIPTS),
+                median_reads = median(NUM_GENIC_READS),
+                median_genes = median(NUM_GENES),
+                median_pcr = median(round(NUM_GENIC_READS / NUM_TRANSCRIPTS, 1)),
+                mean_umi = as.integer(mean(NUM_TRANSCRIPTS)),
+                mean_reads = as.integer(mean(NUM_GENIC_READS)),
+                mean_genes = as.integer(mean(NUM_GENES)),
+                num_beads = n())
+        
+}
+
+barcode_metadata <- metadata %>%
+    select(project_id, sample_id, puck_id, species, sequencing_date) %>%
+    mutate(filename = paste0(root_dir, '/projects/', project_id, '/processed_data/', sample_id, '/illumina/complete_data/dge/')) %>%
+    mutate(filename = ifelse(file.exists(paste0(filename, 'dge_all_summary.txt')),
+                             paste0(filename, 'dge_all_summary.txt'),
+                             paste0(filename, 'dge_all_cleaned_summary.txt')),
+           content = map(filename, ~read_dge_summary(.))) %>%
+    select(-filename, -project_id) %>%
+    unnest(content)
+```
+
+## Overview
+
+We show here downstream metadata for each experiment performed in the sts project. There are three types of tables:
+
+* Read information table: containing the parsed output of mapping, such as input read number, uniquely mapped read number etc.
+* Expression summary table: containing median number of umis, genes, reads (and mean) per bead for each sample. This is done after applying a UMI filter of 1, 10, 50, 100.
+* Strand information table: containing the numbers for reads mapping to the correct strand
+
+Each table has the following 4 columns: sample\_id, puck\_id, species, sequencing\_date
+
+### Table column description
+
+__Read information table__
+
+* input\_r: number of input reads (millions) from the flowcell
+* uniq\_m: number of uniquely mapped reads (millions). In parantheses ratio to input\_r
+* cds, utr, intergenic, intronic, amb: coding, utr, intergenic, intronic and ambient (overlapping genes on both strands, or cannot be assigned to a single gene part). In millions, in parantheses ratio to uniq\_m.
+
+__Expression summary tables__
+
+All columns here are in raw counts. We have mean and median for UMIs, genes, reads (all per bead). Median pcr is the median of reads/umi (per bead).
+
+__Strand information table__
+
+Here there are 6 columns: minus\_AMB,  minus\_minus, minus\_plus, plus\_AMB, plus\_minus, plus\_plus. The first part is the position of the read (plus or minus strand) the second is the position of the mapped gene. AMB means that the mapped gene is ambient (overlapping genes on different strand) or that the read is intergenic.
+
+## Tables by species containing sequencing metadata
+
+
+```{r print_by_species, echo = F, results = 'asis'}
+for(s in unique(to_table$species)){
+    cat(paste0('### ', s, ' samples'))
+    cat('\n')
+
+    cat('#### Read information table\n') 
+    to_table %>%
+        filter(species == s) %>%
+        kable("html") %>%
+        kable_styling('striped', font_size=12)  %>%
+        row_spec(row=0, bold=T) %>%
+        print
+
+    cat('\n')
+    cat('[Back to top](#)\n\n')
+
+    cat('#### Expression summary tables\n')
+
+    for(cutoff in umi_cutoffs){
+        cat(paste0('##### UMI cutoff: ', cutoff))
+        cat('\n')
+
+        barcode_metadata %>%
+            filter(species == s, umi_cutoff == cutoff) %>%
+            kable("html") %>%
+            kable_styling('striped', font_size=12)  %>%
+            row_spec(row=0, bold=T) %>%
+            print
+
+        cat('\n')
+        cat('[Back to top](#)\n\n')
+
+    }
+
+    cat('#### Strand information table\n')
+
+    strand_info %>%
+        filter(species == s) %>%
+        kable("html") %>%
+        kable_styling('striped', font_size=12)  %>%
+        row_spec(row=0, bold=T) %>%
+        print
+
+    cat('\n')
+    cat('[Back to top](#)\n\n')
+}
+```
+
+

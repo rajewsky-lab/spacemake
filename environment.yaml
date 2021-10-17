@@ -1,34 +1,36 @@
-name: sts-sequencing
+name: spacemake
 channels:
     - bih-cubi
     - conda-forge
     - bioconda
     - defaults
 dependencies:
-    - python==3.8.3
-    - snakemake==5.18.1
-    - samtools=1.10
-    - sambamba==0.6.8
-    - star==2.7.1a
-    - bwa==0.7.17
-    - bowtie2==2.4.1
-    - bcl2fastq2==2.20.0.422
-    - fastqc==0.11.9
-    - pip==21.1
-    - tbb==2020.2
-    - r-base==4.0.3
-    - r-rmarkdown==2.7
-    - r-tidyverse==1.3.1
-    - r-kableextra==1.3.4
-    - r-cowplot==1.1.1
+    - python>=3.6
+    - snakemake>=5.32.0,<6.5.0
+    - star>=2.7.1a
+    - samtools>=1.13
+    - sambamba>=0.6.8
+    - bowtie2>=2.3.4
+    - bcl2fastq2>=2.19
+    - fastqc>=0.11.9
+    - pip>=21.1
+    - r-base>=4.0.3
+    - r-rmarkdown>=2.7
+    - r-tidyverse>=1.3.1
+    - r-kableextra>=1.3.4
+    - r-cowplot>=1.1.1
+    - r-pals>=1.7
+    - r-hexbin
+    - r-scales
+    - pysam>=0.16.0.1
     - pip:
-        - pandas==1.2.3
-        - scanpy==1.7.1
-        - leidenalg==0.8.1
-        - scikit-learn==0.23.1
-        - scipy==1.5.0
-        - numpy==1.18.1
-        - pysam==0.16.0.1
-        - more-itertools==8.7.0
-        - biopython==1.78
-        - scikit-misc==0.1.3
+        - pandas>=1.3.0
+        - scanpy>=1.8.1
+        - leidenalg>=0.8.1
+        - numpy>=1.18.1
+        - more-itertools>=8.7.0
+        - biopython>=1.78
+        - scipy>=1.5.0
+        - scikit-misc>=0.1.3
+        - scikit-learn>=0.23.1
+        - squidpy>=1.0.0
