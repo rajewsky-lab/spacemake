@@ -15,7 +15,6 @@ license: GPL
 
 ```{r knitr_options, include=FALSE, cache=FALSE}
 knitr::opts_chunk$set(
-  cache=T,
   autodep = TRUE,
   message = FALSE,
   warning = FALSE,
@@ -53,8 +52,8 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
-#snakemake <- read_rds('slideseq_qc.rds')
-#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_qc.rds')
+#snakemake <- read_rds('qc_sheet.rds')
+#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/qc_sheet.rds')
 ```
 
 ```{r read_sample_information_tables, echo = F}
@@ -222,7 +221,8 @@ dge_summary <- tibble(run_mode = run_mode_names,
            umis = total_counts,
            genes = n_genes_by_counts,
            reads = n_reads) %>%
-    group_by(run_mode)
+    group_by(run_mode) %>%
+    filter(grepl('^[ACTGAN]+$', cell_bc))
 
 
 read_counts <- dge_summary %>%

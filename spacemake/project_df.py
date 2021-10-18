@@ -539,7 +539,7 @@ class ProjectDF:
         "barcode_flavor": "default",
         "is_merged":False,
         "merged_from":[],
-        "puck":None}
+        "puck":"default"}
     
     def __init__(
         self,
@@ -579,6 +579,7 @@ class ProjectDF:
                 project_list.append(s)
 
             self.df = pd.concat(project_list, axis=1).T
+            self.df.is_merged = self.df.is_merged.astype(bool)
             self.df.index.names = ["project_id", "sample_id"]
 
             # dump the result
@@ -692,6 +693,7 @@ class ProjectDF:
         :type sample_id: str
         :rtype: bool
         """
+        self.assert_sample(project_id, sample_id)
         puck_barcode_file = self.get_metadata('puck_barcode_file',
             project_id = project_id,
             sample_id = sample_id)
@@ -743,13 +745,11 @@ class ProjectDF:
             df = df.loc[df.loc[:, key] == value]
 
         # print(f"query: field={field} proj={project_id} samp={sample_id} kw={kwargs}")
-        # print(df[field].to_list())
         dl = df[field].to_list()
         if len(dl):
             return dl[0]
         else:
             return ""
-        # return df[field].to_list()[0]
 
     def dump(self):
         """dump."""
@@ -826,6 +826,12 @@ class ProjectDF:
 
             return ix in self.df.index
 
+    def assert_sample(self, project_id, sample_id):
+        if not self.sample_exists(project_id, sample_id):
+            raise ProjectSampleNotFoundError(
+                '(project_id, sample_id)',
+                (project_id, sample_id))
+
     def add_update_sample(
         self,
         action=None,
@@ -876,7 +882,7 @@ class ProjectDF:
             raise ValueError(f"Unknown action {action}")
 
         # check variables
-        if action == "add" and (R1 is None or R2 is None):
+        if action == "add" and (R1 is None or R2 is None) and not is_merged:
             self.logger.info("R1 or R2 not provided, trying longreads")
 
             if not longreads:
@@ -1245,8 +1251,10 @@ class ProjectDF:
             # finally add run mode to arguments
             kwargs["run_mode"] = run_mode
 
+        # set the action to add
+        kwargs['action'] = 'add'
+
         sample_added = self.add_update_sample(
-            action="add",
             project_id=merged_project_id,
             sample_id=merged_sample_id,
             is_merged=True,

@@ -30,6 +30,9 @@ def get_run_parser():
     parser.add_argument('--keep-going', action='store_true', help='if a job fails, keep executing independent jobs')
     parser.add_argument('--printshellcmds', '-p', action='store_true', help='print shell commands for each rule, if exist')
     parser.add_argument('--touch', '-t', action='store_true', help = 'rather than running the rules, just touch each file')
+    parser.add_argument('--with_fastqc', '-qfqc',
+        action = 'store_true',
+        help = 'Run also fastqc as part of the spacemake run')
 
     return parser
 
@@ -147,6 +150,7 @@ def spacemake_run(args):
     samples = []
     projects = []
     targets = None
+    with_fastqc = args.get('with_fastqc', False)
 
     downsample = args.get('downsample', False)
 
@@ -163,8 +167,10 @@ def spacemake_run(args):
         targets=targets, touch=args['touch'],
         force_incomplete=args['rerun_incomplete'],
         keepgoing=args['keep_going'], printshellcmds = args['printshellcmds'],
-        config={'project_df': project_df, 'samples': samples,
-                'projects': projects})
+        config={
+            'project_df': project_df, 'samples': samples,
+            'projects': projects, 'with_fastqc': with_fastqc
+        })
 
     if not run_successful:
         raise SpacemakeError('snakemake threw an error. looks like something went wrong')
