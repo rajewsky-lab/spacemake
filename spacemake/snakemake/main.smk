@@ -30,7 +30,6 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 # this file should contain all sample information, sample name etc.
 ####
 # configfile should be loaded from command line
-#
 
 ###############
 # Global vars #
@@ -256,19 +255,6 @@ def get_output_files(pattern, projects = [], samples = [], **kwargs):
 
     # print(f"{pattern} -> {out_files}")
     return out_files
-
-##################
-# include pacbio #
-##################
-processed_data_pacbio = processed_data_root + '/pacbio'
-pacbio_fq = raw_data_root + '/pacbio/{sample}.{pacbio_ext}'
-pacbio_report = processed_data_pacbio + '/{sample}.report.pdf'
-pacbio_stats_file = processed_data_pacbio + '/{sample}.summary.tsv'
-pacbio_run_summary = processed_data_pacbio + '/{sample}.examples.txt'
-pacbio_rRNA_out = processed_data_pacbio + '/{sample}.rRNA.txt'
-pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf'
-pacbio_overview_csv = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.csv'
-pacbio_bead_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_bead_overview.pdf'
 
 
 ####################
