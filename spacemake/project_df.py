@@ -9,7 +9,7 @@ import logging
 
 from spacemake.errors import *
 from spacemake.config import ConfigFile
-from spacemake.util import message_aggregation, assert_file
+from spacemake.util import message_aggregation, assert_file, str_to_list
 from typing import List, Dict
 
 logger_name = "spacemake.project_df"
@@ -117,6 +117,7 @@ def get_sample_extra_arguments_parser(species_required=False,
         "--R1",
         type=str,
         help=".fastq.gz file path to R1 reads",
+        nargs='+',
         required=reads_required,
     )
 
@@ -124,6 +125,7 @@ def get_sample_extra_arguments_parser(species_required=False,
         "--R2",
         type=str,
         help=".fastq.gz file path to R2 reads",
+        nargs='+',
         required=reads_required,
     )
 
@@ -537,7 +539,7 @@ class ProjectDF:
         "barcode_flavor": "default",
         "is_merged":False,
         "merged_from":[],
-        "puck":None}
+        "puck":"default"}
     
     def __init__(
         self,
@@ -557,8 +559,9 @@ class ProjectDF:
             df = pd.read_csv(
                 file_path,
                 index_col=["project_id", "sample_id"],
-                converters={"run_mode": eval, "merged_from": eval},
-                na_values=["None", "none"],
+                converters={"run_mode": eval, "merged_from": eval,
+                            "R1": str_to_list, "R2": str_to_list},
+                na_values=["None", "none"]
             )
             project_list = []
             # required if upgrading from pre-longread tree
@@ -576,6 +579,7 @@ class ProjectDF:
                 project_list.append(s)
 
             self.df = pd.concat(project_list, axis=1).T
+            self.df.is_merged = self.df.is_merged.astype(bool)
             self.df.index.names = ["project_id", "sample_id"]
 
             # dump the result
@@ -689,6 +693,7 @@ class ProjectDF:
         :type sample_id: str
         :rtype: bool
         """
+        self.assert_sample(project_id, sample_id)
         puck_barcode_file = self.get_metadata('puck_barcode_file',
             project_id = project_id,
             sample_id = sample_id)
@@ -740,13 +745,11 @@ class ProjectDF:
             df = df.loc[df.loc[:, key] == value]
 
         # print(f"query: field={field} proj={project_id} samp={sample_id} kw={kwargs}")
-        # print(df[field].to_list())
         dl = df[field].to_list()
         if len(dl):
             return dl[0]
         else:
             return ""
-        # return df[field].to_list()[0]
 
     def dump(self):
         """dump."""
@@ -823,6 +826,12 @@ class ProjectDF:
 
             return ix in self.df.index
 
+    def assert_sample(self, project_id, sample_id):
+        if not self.sample_exists(project_id, sample_id):
+            raise ProjectSampleNotFoundError(
+                '(project_id, sample_id)',
+                (project_id, sample_id))
+
     def add_update_sample(
         self,
         action=None,
@@ -853,7 +862,6 @@ class ProjectDF:
         :param return_series:
         :param kwargs:
         """
-        print(kwargs)
         ix = (project_id, sample_id)
         sample_exists = self.sample_exists(*ix)
 
@@ -874,7 +882,7 @@ class ProjectDF:
             raise ValueError(f"Unknown action {action}")
 
         # check variables
-        if action == "add" and (R1 is None or R2 is None):
+        if action == "add" and (R1 is None or R2 is None) and not is_merged:
             self.logger.info("R1 or R2 not provided, trying longreads")
 
             if not longreads:
@@ -895,12 +903,32 @@ class ProjectDF:
         assert_file(R2, default_value=None, extension=".fastq.gz")
         assert_file(longreads, default_value=None, extension="all")
 
+        # assign reads
+        if R1 is not None and isinstance(R1, str):
+            R1 = [R1]
+
+        if R2 is not None and isinstance(R2, str):
+            R2 = [R2]
+
+        if R1 is not None and R2 is not None:
+            if len(R1) != len(R2):
+                raise SpacemakeError(
+                        f'Trying to set an unmatching number of ' +
+                        f'read pairs for sample: {ix}.\n' +
+                        f'# of R1 files = {len(R1)}\n' +
+                        f'# of R2 files = {len(R2)}')
+
         is_spatial = assert_file(
             kwargs.get(
                 "puck_barcode_file", self.project_df_default_values["puck_barcode_file"]
             ),
             default_value=self.project_df_default_values["puck_barcode_file"],
         )
+
+        if 'run_mode' in kwargs and isinstance(kwargs['run_mode'], str):
+            # if a single run mode is provided as a string
+            # create a list manually
+            kwargs['run_mode'] = [kwargs['run_mode']]
 
         # check if run mode exists
         for run_mode in kwargs.get("run_mode", []):
@@ -1223,8 +1251,10 @@ class ProjectDF:
             # finally add run mode to arguments
             kwargs["run_mode"] = run_mode
 
+        # set the action to add
+        kwargs['action'] = 'add'
+
         sample_added = self.add_update_sample(
-            action="add",
             project_id=merged_project_id,
             sample_id=merged_sample_id,
             is_merged=True,

@@ -35,7 +35,7 @@ clrs = c('umis'=cpalette$light_orange, 'genes' = cpalette$light_blue,
          'reads'=cpalette$green, 'pcr'=cpalette$pink, 'pct_counts_mt'= 'black')
 
 #write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_automated_analysis_2.rds')
-#snakemake <- read_rds('seq_scope_automated_analysis_2.rds')
+#snakemake <- read_rds('automated_report.rds')
 source(snakemake@params$r_shared_scripts)
 ```
 
@@ -46,6 +46,10 @@ var_df <- read_table(snakemake@input$var_df)
 
 n_beads = nrow(obs_df)
 data_empty <- n_beads == 0
+
+if (!data_empty){
+    data_empty <- sum(obs_df$total_counts) < 1
+}
 ```
 
 ### Overview
@@ -83,7 +87,7 @@ pl1 <- obs_df %>%
         scale_fill_manual(values=clrs) +
         facet_wrap(~obs, ncol=2, scales='free')
 
-if (nrow(obs_df) > 50){
+if (length(unique(obs_df$total_counts)) > 50){
     pl1 <- pl1 +
         scale_x_log10() +
         annotation_logticks(sides='b') +
@@ -103,7 +107,7 @@ pl2 <- obs_df %>%
         labs(x='value', y='count')
 
 plot_grid(pl1,
-          plot_grid(pl2, NULL, ncol=2, rel_widths=c(1.5,1), labels=""),
+          plot_grid(pl2, NULL, ncol=2, rel_widths=c(1.5,1)),
           ncol=1, rel_heights=c(1,1), labels="")
 ```
 

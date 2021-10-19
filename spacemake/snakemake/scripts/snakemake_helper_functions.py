@@ -1,5 +1,68 @@
 from spacemake.errors import *
 
+################################
+# Final output file generation #
+################################
+def get_output_files(pattern, projects = [], samples = [], filter_merged=False,
+        **kwargs):
+    out_files = []
+    df = project_df.df
+
+    if projects != [] or samples != []:
+        ix = project_df.get_ix_from_project_sample_list(
+            project_id_list = projects,
+            sample_id_list = samples)
+
+        df = df.loc[ix]
+
+    if filter_merged:
+        df = df.loc[~df.is_merged]
+
+    for index, row in df.iterrows():
+        for run_mode in row['run_mode']:
+            run_mode_variables = project_df.config.get_run_mode(run_mode).variables
+            if row.R1 and row.R2:
+                out_files = out_files + expand(pattern,
+                    project = index[0],
+                    sample = index[1],
+                    puck=row['puck_id'], 
+                    run_mode=run_mode,
+                    umi_cutoff=run_mode_variables['umi_cutoff'],
+                    **kwargs)
+
+    # print(f"{pattern} -> {out_files}")
+    return out_files
+
+def get_all_dges(wildcards):
+    df = project_df.df
+
+    dges = []
+
+    for index, row in df.iterrows():
+        for run_mode in row['run_mode']:
+            dges.append(
+                get_dge_from_run_mode(
+                    project_id = index[0],
+                    sample_id = index[1],
+                    run_mode=run_mode,
+                    data_root_type='complete_data',
+                    downsampling_percentage='',
+                )['dge'],
+            )
+
+    return dges
+
+def get_reads(wildcards):
+    ###
+    # R1 and R2 for demultiplexed reads will return none
+    ### 
+    reads = project_df.get_metadata('R'+ wildcards.mate, sample_id = wildcards.sample, project_id = wildcards.project)
+    if reads is None:
+        return ['none']
+    else:
+        # reads already 
+        return reads
+
 # barcode flavor parsing and query functions
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
@@ -234,6 +297,7 @@ def get_parsed_puck_file(wildcards):
 
     if is_spatial: return {'puck_file': parsed_spatial_barcodes}
     else: return []
+
 
 def get_dge_from_run_mode(
         project_id,

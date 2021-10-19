@@ -44,7 +44,7 @@ config['puck_data']['root'] = config['microscopy_out']
 project_dir = os.path.join(config['root_dir'], 'projects/{project}')
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
-project_df = ProjectDF(config['project_df'], ConfigFile('config.yaml'))
+project_df = ProjectDF(config['project_df'], ConfigFile.from_yaml('config.yaml'))
 
 #################
 # DIRECTORY STR #
@@ -272,8 +272,6 @@ include: 'pacbio.smk'
 
 # global wildcard constraints
 wildcard_constraints:
-    sample='(?!merged_).+',
-    project='(?!merged_).+',
     dge_cleaned='|.cleaned',
     dge_type = '|'.join(dge_types),
     pacbio_ext = 'fq|fastq|bam',
@@ -290,6 +288,15 @@ wildcard_constraints:
 #############
 rule all:
     input:
+        # create fastq
+        unpack(
+            lambda wildcards: get_output_files(
+                    fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
+                    data_root_type = 'complete_data', downsampling_percentage = '',
+                    filter_merged=True) 
+                if config['with_fastqc'] else []
+        ),
+        unpack(get_all_dges),
         # this will also create the clean dge
         get_output_files(automated_report, data_root_type = 'complete_data',
             downsampling_percentage=''),
@@ -358,25 +365,19 @@ rule link_demultiplexed_reads:
         find {params.demux_dir} -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -sr {{}} {output} \; 
         """
 
-def get_reads(wildcards):
-    ###
-    # R1 and R2 for demultiplexed reads will return none
-    ### 
-    reads = project_df.get_metadata('R'+ wildcards.mate, sample_id = wildcards.sample, project_id = wildcards.project)
-    if reads is None:
-        return ['none']
-    else:
-        return [reads]
-
 rule link_raw_reads:
     input:
         unpack(get_reads)
     output:
         raw_reads_pattern
-    shell:
-        """
-        ln -rs {input} {output}
-        """
+    run:
+        if len(input) == 1:
+            # either link raw reads
+            shell("ln -rs {input} {output}")
+        else:
+            # or append reads together
+            shell("cat {input} > {output}")
+            
 
 rule zcat_pipe:
     input: "{name}.fastq.gz"
@@ -553,7 +554,7 @@ rule create_mesh_spatial_dge:
             spot_distance_um = 10.0
         else:
             mesh_type = 'circle'
-            spot_distance = float(wildcards.spot_distance_um)
+            spot_distance_um = float(wildcards.spot_distance_um)
         adata = create_meshed_adata(adata,
             width_um = params['puck_data']['width_um'],
             bead_diameter_um = params['puck_data']['spot_diameter_um'],
