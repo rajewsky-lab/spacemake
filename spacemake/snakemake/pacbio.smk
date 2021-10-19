@@ -25,7 +25,7 @@ pb_examples = pb_examples_dir + "{sample}.txt"
 
 # pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf'
 # print(config)
-pb_overview = config['root_dir'] + '/pacbio_overview'
+pb_overview = os.path.join(config['root_dir'], 'pacbio_overview')
 pb_overview_csv = pb_overview + '/pacbio_overview.csv'
 pb_overview_pdf = pb_overview + '/pacbio_overview.pdf'
 
@@ -74,8 +74,8 @@ def get_longread_output():
     if out_files:
         out_files.append(pb_overview_pdf)
 
-    print("PACBIO OUTPUT FILES", out_files)
-    print("PB_REPORT_STATS", PB_REPORT_STATS)
+    # print("PACBIO OUTPUT FILES", out_files)
+    # print("PB_REPORT_STATS", PB_REPORT_STATS)
     return out_files
 
 def get_args(wc):
@@ -97,12 +97,11 @@ python -m spacemake.longread \
     --parallel={threads} \
     --config=longread.yaml \
     {params.args} \
-    {input.fname} \
 """
 
 rule cmd_overview:
-    input: 
-        reports=PB_REPORT_STATS
+    input:
+        reports=lambda wc: PB_REPORT_STATS
     output:
         pb_overview_pdf
     params:
@@ -111,7 +110,6 @@ rule cmd_overview:
 
 rule cmd_report:
     input:
-        fname=lambda wc: PB_RAW_FILES[wc.sample],
         stats=pb_stats
     output:
         donuts=pb_report,
@@ -123,7 +121,6 @@ rule cmd_report:
 
 rule cmd_edits:
     input: 
-        fname = lambda wc: PB_RAW_FILES[wc.sample],
         stats = pb_stats
     output: pb_edits
     params:
@@ -132,14 +129,14 @@ rule cmd_edits:
     shell: longread_cmd + " edits"
 
 rule cmd_annotate:
-    input: 
+    input:
         fname = lambda wc: PB_RAW_FILES[wc.sample],
         ann = pb_ann
     output: pb_stats
     params:
         args=get_args
     threads: 1
-    shell: longread_cmd + " annotate"
+    shell: longread_cmd + " annotate  {input.fname}"
 
 rule cmd_align:
     input: 
@@ -148,4 +145,4 @@ rule cmd_align:
     params:
         args=get_args
     threads: 64
-    shell: longread_cmd + " align"
+    shell: longread_cmd + " align {input.fname}"
