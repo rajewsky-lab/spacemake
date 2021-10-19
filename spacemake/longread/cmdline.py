@@ -509,14 +509,13 @@ def main_overview(args):
         dfs.append(df)
 
     df = pd.concat(dfs, ignore_index=True)
-    print(df)
 
-    df_overview = df.query("kind == 'overview'")[["name","count","sample"]].pivot(index="sample", columns="name", values="count")
-    df_overview = df_overview.fillna(0).div(df_overview["n_total"], axis=0)
+    dfsig = df[["sample", "signature"]].drop_duplicates().set_index("sample")
+    print(dfsig)
+    df = df[["name","count","sample"]].pivot(index="sample", columns="name", values="count") # .query("kind == 'overview'")
+    df = df.fillna(0).div(df["n_total"], axis=0)
+    df *= 100  # we'd like percentages
 
-    return df
-
-    return
     repriming = [
         "TSO,TSO_RC",
         "dN-SMRT,dN-SMRT_RC",
@@ -525,27 +524,37 @@ def main_overview(args):
     bead = ["complete", "only_bead_start", "missing_polyT", "missing_OP1"][::-1]
 
     # # avoid crash if columns are missing
-    # for r in repriming + concatenation + bead:
-    #     if r not in df.columns:
-    #         df[r] = 0
+    for r in repriming + concatenation + bead:
+        if r not in df.columns:
+            df[r] = 0
 
     # print(df)
     # print(f"concat columns {concatenation}")
     # print(f"bead columns {bead}")
     df["reprimed"] = df[repriming].sum(axis=1)
-    df["bead_complete"] = np.nan_to_num(df["bead_complete"], nan=0.0)
+    # df["complete"] = np.nan_to_num(df["complete"], nan=0.0)
     df["concat"] = df[concatenation].sum(axis=1)
     df["bead_related"] = np.nan_to_num(df[bead].sum(axis=1), nan=0.0)
-    df["bead_dropseq"] = np.nan_to_num(df["bead_no_opseq"], nan=0.0)
-    df["bead_incomplete"] = (
-        df["bead_related"] - df["bead_complete"] - df["bead_dropseq"]
+    
+    def ds(row):
+        print("ROW", row, "AHA!")
+        sig = dfsig.loc[row.name]
+        print("SIG", sig)
+        res =  (sig == "dropseq") * row.complete
+        print(row, res)
+        return res
+
+    df["dropseq"] = df[["complete"]].apply(ds, axis=1)
+    # df["complete"] = df[""]
+    df["incomplete"] = (
+        df["bead-related"] - df["complete"] - df["dropseq"]
     )
-    df["non_bead"] = 100 - df["bead_related"]
-    df["bead_fidelity"] = 100 * df["bead_complete"] / df["bead_related"]
+    df["non_bead"] = 100 - df["bead-related"]
+    df["fidelity"] = 100 * df["complete"] / df["bead-related"]
     df = df.fillna(0)
     # print(df)
     if args.csv_out:
-        df.to_csv(args.csv_out, float_format="%.2f", sep="\t", index=False)
+        df.to_csv(args.csv_out, float_format="%.2f", sep="\t")
 
     def clean(txt):
         txt = os.path.basename(txt)
@@ -564,9 +573,9 @@ def main_overview(args):
 
         return t
 
-    df["name"] = df["qfa"].apply(clean)
+    df = df.reset_index()
     # df = df.sort_values('bead_related')
-    df = df.sort_values("name")
+    df = df.sort_values("sample")
 
     def guess_rRNA_file(path):
         # print("guessrRNA raw path", path)
@@ -594,24 +603,29 @@ def main_overview(args):
             ).replace(".rRNA.tsv", ".rRNA.txt"),
         ]
 
-    rRNA_fracs = []
-    for row in df[["stats_file", "N_reads"]].itertuples():
-        rcount = np.nan
-        for fname in guess_rRNA_file(row.stats_file):
-            print(fname)
-            try:
-                rcount = int(open(fname).read())
-            except (FileNotFoundError, ValueError):
-                pass
-            else:
-                break
-        if rcount == np.nan:
-            raise ValueError
+    # rRNA_fracs = []
+    # for row in df[["stats_file", "N_reads"]].itertuples():
+    #     rcount = np.nan
+    #     for fname in guess_rRNA_file(row.stats_file):
+    #         print(fname)
+    #         try:
+    #             rcount = int(open(fname).read())
+    #         except (FileNotFoundError, ValueError):
+    #             pass
+    #         else:
+    #             break
+    #     if rcount == np.nan:
+    #         raise ValueError
 
-        rRNA_fracs.append(100.0 * rcount / row.N_reads)
+    #     rRNA_fracs.append(100.0 * rcount / row.N_reads)
 
-    df["rRNA"] = rRNA_fracs
+    # df["rRNA"] = rRNA_fracs
     # print(df[['qfa', 'rRNA']])
+
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({'font.size': 8})
 
     def make_bars(
         ax, df, kinds, labels, cmap=plt.get_cmap("tab10"), w=0.9, colors=None
@@ -631,30 +645,30 @@ def main_overview(args):
 
         ax.set_ylabel("fraction of library")
         ax.set_xticks(x)
-        labels = df["name"]  # [clean(fq) for fq in df['qfa']]
+        labels = df["sample"]  # [clean(fq) for fq in df['qfa']]
         ax.set_xticklabels(labels, rotation=90)
         ax.set_ylim(0, 100)
 
     marie = [
         "non_bead",
-        "bead_incomplete",
-        "bead_dropseq",
-        "bead_complete",
+        "incomplete",
+        "dropseq",
+        "complete",
     ]
     marie_colors = ["gray", "royalblue", "green", "gold"]
 
-    w = max(8 / 25.0 * len(df), 3)
+    w = max(8 / 25.0 * len(df), 5)
     if args.multi_page:
         pdf = PdfPages(args.breakdown)
-        fig, ax1 = plt.subplots(1, figsize=(w, 4))
+        fig, ax1 = plt.subplots(1, figsize=(w, 8))
     else:
-        fig, (ax1, ax2) = plt.subplots(2, figsize=(w, 6), sharex=True)
+        fig, (ax1, ax2) = plt.subplots(2, figsize=(w, 8), sharex=True)
 
     make_bars(
         ax1,
         df,
         marie,
-        labels=[b.replace("bead_", "") for b in marie],
+        labels=marie,
         colors=marie_colors,
     )
     ax1.legend(title="Marie-stats", ncol=len(marie))
@@ -664,7 +678,7 @@ def main_overview(args):
         plt.close()
         fig, ax2 = plt.subplots(1, figsize=(w, 4))
 
-    make_bars(ax2, df, ["bead_fidelity"], labels=["bead fidelity"])
+    make_bars(ax2, df, ["fidelity"], labels=["bead fidelity"])
     ax2.set_ylabel("bead fidelity")
     if args.multi_page:
         fig.tight_layout()
@@ -683,7 +697,7 @@ def main_overview(args):
         fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, figsize=(w, 12), sharex=True)
 
     # print("bead related", bead)
-    make_bars(ax1, df, bead, labels=[b.replace("bead_", "") for b in bead])
+    make_bars(ax1, df, bead, labels=bead)
     ax1.legend(title="bead-related", ncol=len(bead))
     if args.multi_page:
         fig.tight_layout()
@@ -715,15 +729,15 @@ def main_overview(args):
         plt.close()
         fig, ax4 = plt.subplots(1, figsize=(w, 4))
 
-    make_bars(
-        ax4,
-        df,
-        [
-            "rRNA",
-        ],
-        labels=["rRNA"],
-        cmap=plt.get_cmap("tab20c"),
-    )
+    # make_bars(
+    #     ax4,
+    #     df,
+    #     [
+    #         "rRNA",
+    #     ],
+    #     labels=["rRNA"],
+    #     cmap=plt.get_cmap("tab20c"),
+    # )
     ax4.legend(title="human rRNA", ncol=1)
     if args.multi_page:
         fig.tight_layout()
@@ -734,6 +748,7 @@ def main_overview(args):
         plt.savefig(args.output)
 
     plt.close()
+    return df
 
 
 def prepare_parser():
