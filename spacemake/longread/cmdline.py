@@ -15,6 +15,9 @@ from collections import defaultdict
 
 def detect_sample(args):
     if args.sample is None:
+        if not hasattr(args.fname):
+            raise ValueError("please provide a sample-identifier via --sample")
+
         sample_name, _ = os.path.splitext(os.path.basename(args.fname))
         logging.info(f"auto-detected sample_name={sample_name}")
     else:
@@ -291,7 +294,7 @@ def get_synth_rates(found_part_counts, all_parts, n_total):
 
 def rep_main(args):
     args = setup_namespace(args)
-    args.logger.info(f"generating report plots for '{args.fname}'")
+    args.logger.info(f"generating report plots for '{args.sample_name}'")
     args.logger.debug(f"'bead-related' if we detect: '{args.bead_related}'")
 
     df = load_results(args.stats_out, f"{args.sample_name}.stats.tsv", args.logger)
@@ -322,6 +325,8 @@ def rep_main(args):
     df_ov = util.count_dict_to_df(ov_simple, kind="overview")
     df_bead = util.count_dict_to_df(bead_simple, kind="bead_related")
     df_rep = pd.concat([df_ov, df_bead])
+    df_rep["sample"] = args.sample_name
+    df_rep["signature"] = args.signature
     print(df_rep)
     store_results(df_rep, args.stats_out, f"{args.sample_name}.report.tsv", args.logger)
 
@@ -496,68 +501,33 @@ def main_extract(args):
             print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
 
 
-def load_tables_overview(sample_fnames, pattern):
+def main_overview(args):
     dfs = []
-    for fname in sample_fnames:
-        sample_name = os.path.splitext(os.path.basename(fname))[0]
-        df = pd.read_csv(
-            pattern.format(sample_name=sample_name),
-            sep="\t",
-        )
-        df["sample"] = sample_name
+    for fname in list(args.reports):
+        print(f"loading {fname}")
+        df = pd.read_csv(fname, sep="\t", index_col=0)
         dfs.append(df)
 
-    df = pd.concat(dfs)
-    samples = sorted(df["sample"].drop_duplicates())
+    df = pd.concat(dfs, ignore_index=True)
+    print(df)
 
-    return df, samples
+    df_overview = df.query("kind == 'overview'")[["name","count","sample"]].pivot(index="sample", columns="name", values="count")
+    df_overview = df_overview.fillna(0).div(df_overview["n_total"], axis=0)
 
-
-def synthesis_rates_overview(args):
-    df, samples = load_tables_overview(
-        args.overview_samples, os.path.join(args.stats_out, "{sample_name}.synth.tsv")
-    )
-    df["segment"] = df["segment"].apply(lambda x: x.replace("_2s", ""))
-
-    db = get_samples_db(args)
-    samples = db.sort_samples(samples)
-
-    row_labels = ["bead_start", "OP1", "OP2", "OP3", "polyT"]
-    dfs = [df.query(f"segment == '{part}'") for part in row_labels]
-
-    fig, axes = report.multi_row_barplots(
-        dfs, row_labels, samples, "rate", color_dict=db.color
-    )
-    fig.suptitle("apparent synthesis rates")
-
-    fig.tight_layout()
-    fig.savefig("overview_syn_rates.pdf")
     return df
 
-
-def main_overview(args):
-    # dfs = []
-    # for fname in list(args.fnames) + list(glob(args.glob_pattern)):
-    #     print(f"loading {fname}")
-    #     df = pd.read_csv(fname, sep='\t')
-    #     df['stats_file'] = fname
-    #     dfs.append(df)
-
-    # df = pd.concat(dfs)
     return
-
-    df = synthesis_rates_overview(args)
     repriming = [
         "TSO,TSO_RC",
         "dN-SMRT,dN-SMRT_RC",
     ]
-    concatenation = [c for c in df.columns if c.endswith("+") and "," not in c]
-    bead = ["bead_complete", "bead_only_handle", "bead_no_dT", "bead_no_opseq"][::-1]
+    concatenation = [c for c in df.columns if "+" in c]
+    bead = ["complete", "only_bead_start", "missing_polyT", "missing_OP1"][::-1]
 
-    # avoid crash if columns are missing
-    for r in repriming + concatenation + bead:
-        if r not in df.columns:
-            df[r] = 0
+    # # avoid crash if columns are missing
+    # for r in repriming + concatenation + bead:
+    #     if r not in df.columns:
+    #         df[r] = 0
 
     # print(df)
     # print(f"concat columns {concatenation}")
@@ -769,9 +739,6 @@ def main_overview(args):
 def prepare_parser():
     parser = argparse.ArgumentParser(prog="longread")
     parser.add_argument(
-        "fname", default=None, help="file with pacbio reads (FASTQ or BAM format)"
-    )
-    parser.add_argument(
         "--sample",
         help="sample name (default=autodetect from fname)",
         default=None,
@@ -835,9 +802,18 @@ def prepare_parser():
     aln_parser = subparsers.add_parser(
         "align", help="align PacBio reads against oligos"
     )
-
+    aln_parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
+    )
     ann_parser = subparsers.add_parser(
         "annotate", help="create annotation from detected oligo matches"
+    )
+    ann_parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
     )
     ann_parser.add_argument(
         "--polyT",
@@ -902,7 +878,6 @@ def prepare_parser():
         type=int,
         help="number of nt from end of sequence that are considered for oligo matches when extracting cDNA",
     )
-
     xt_parser.add_argument(
         "--top-barcodes",
         type=str,
@@ -913,9 +888,7 @@ def prepare_parser():
     ov_parser = subparsers.add_parser(
         "overview", help="make overview plots across samples"
     )
-    ov_parser.add_argument(
-        "overview_samples", nargs="+", help="sample names to aggregate"
-    )
+    ov_parser.add_argument("reports", nargs="+", help="sample reports to aggregate")
     ov_parser.add_argument(
         "--output", default="pb_overview.pdf", help="path/name of detailed report PDF"
     )
@@ -927,22 +900,17 @@ def prepare_parser():
         default="bead_overview.pdf",
         help="path/name of bead report (Marie style) PDF",
     )
-    ov_parser.add_argument(
-        "--glob-pattern",
-        default="stats/*summary.tsv",
-        help="search pattern to gather summary files generated by the scan command",
-    )
-    ov_parser.add_argument(
-        "--rRNA",
-        default="rRNA/",
-        help="path to search for rRNA counts corresponding to samples",
-    )
-    ov_parser.add_argument(
-        "--rRNA-same-place",
-        default=False,
-        action="store_true",
-        help="If set, look for rRNA txt file with same sample name in same directory",
-    )
+    # ov_parser.add_argument(
+    #     "--rRNA",
+    #     default="rRNA/",
+    #     help="path to search for rRNA counts corresponding to samples",
+    # )
+    # ov_parser.add_argument(
+    #     "--rRNA-same-place",
+    #     default=False,
+    #     action="store_true",
+    #     help="If set, look for rRNA txt file with same sample name in same directory",
+    # )
     ov_parser.add_argument(
         "--multi-page",
         default=False,
