@@ -3,11 +3,12 @@ from spacemake.errors import *
 ################################
 # Final output file generation #
 ################################
-def get_output_files(pattern, projects = [], samples = [], filter_merged=False,
+def get_output_files(pattern, projects = [], samples = [],
+        filter_merged=False, run_on_external = True,
         **kwargs):
     out_files = []
-    df = project_df.df
-
+    df = project_df.df  
+    
     if projects != [] or samples != []:
         ix = project_df.get_ix_from_project_sample_list(
             project_id_list = projects,
@@ -21,7 +22,14 @@ def get_output_files(pattern, projects = [], samples = [], filter_merged=False,
     for index, row in df.iterrows():
         for run_mode in row['run_mode']:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
-            if row.R1 and row.R2:
+
+            run = ((row.R1 and row.R2) or
+                   (row.basecalls_dir and row.sample_sheet))
+
+            if run_on_external:
+                run = run or row.dge
+
+            if run:
                 out_files = out_files + expand(pattern,
                     project = index[0],
                     sample = index[1],
@@ -30,7 +38,6 @@ def get_output_files(pattern, projects = [], samples = [], filter_merged=False,
                     umi_cutoff=run_mode_variables['umi_cutoff'],
                     **kwargs)
 
-    # print(f"{pattern} -> {out_files}")
     return out_files
 
 def get_all_dges(wildcards):
@@ -51,6 +58,24 @@ def get_all_dges(wildcards):
             )
 
     return dges
+
+def get_raw_dge(wildcards):
+    is_external = project_df.is_external(
+        project_id = wildcards.project,
+        sample_id = wildcards.sample)
+
+    out_files = {}
+
+    if is_external:
+        out_files['dge'] = project_df.get_metadata(
+            'dge',
+            project_id = wildcards.project,
+            sample_id = wildcards.sample)
+    else:
+        out_files['dge'] = dge_out
+        out_files['dge_summary'] = dge_out_summary
+
+    return out_files
 
 def get_reads(wildcards):
     ###
@@ -306,24 +331,35 @@ def get_dge_from_run_mode(
         data_root_type,
         downsampling_percentage
     ):
+
+    is_spatial = project_df.is_spatial(project_id = project_id,\
+            sample_id = sample_id)
+
+    is_external = project_df.is_external(project_id = project_id,\
+            sample_id = sample_id)
+
     run_mode_variables = project_df.config.get_run_mode(run_mode).variables
     
-    dge_type = '.exon'
+    dge_type = ''
     dge_cleaned = ''
     polyA_adapter_trimmed = ''
     mm_included = ''
 
-    if run_mode_variables['polyA_adapter_trimming']:
-        polyA_adapter_trimmed = '.polyA_adapter_trimmed'
+    # assign wildcards only for internal samples
+    if not is_external:
+        if run_mode_variables['polyA_adapter_trimming']:
+            polyA_adapter_trimmed = '.polyA_adapter_trimmed'
 
-    if run_mode_variables['count_intronic_reads']:
-        dge_type = '.all'
+        if run_mode_variables['count_intronic_reads']:
+            dge_type = '.all'
+        else:
+            dge_type = '.exon'
 
-    if run_mode_variables['count_mm_reads']:
-        mm_included = '.mm_included'
+        if run_mode_variables['count_mm_reads']:
+            mm_included = '.mm_included'
 
-    if run_mode_variables['clean_dge']:
-        dge_cleaned = '.cleaned'
+        if run_mode_variables['clean_dge']:
+            dge_cleaned = '.cleaned'
 
     if run_mode_variables['mesh_type'] == 'hexagon':
         spot_diameter_um = run_mode_variables['mesh_spot_diameter_um']
@@ -332,8 +368,17 @@ def get_dge_from_run_mode(
         spot_diameter_um = run_mode_variables['mesh_spot_diameter_um']
         spot_distance_um = run_mode_variables['mesh_spot_distance_um']
 
-    is_spatial = project_df.is_spatial(project_id = project_id,\
-            sample_id = sample_id)
+    external_wildcard = ''
+
+    n_beads = run_mode_variables['n_beads']
+
+    if is_external:
+        n_beads = 'external'
+        external_wildcard ='.external'
+
+    if is_spatial:
+        n_beads = 'spatial'
+
     # select which pattern
     # if sample is not spatial, we simply select the normal, umi_filtered
     # dge, with the top_n barcodes
@@ -362,7 +407,8 @@ def get_dge_from_run_mode(
             mm_included = mm_included,
             spot_diameter_um = spot_diameter_um,
             spot_distance_um = spot_distance_um,
-            n_beads = run_mode_variables['n_beads'],
+            n_beads = n_beads,
+            is_external = external_wildcard,
             data_root_type = data_root_type,
             downsampling_percentage = downsampling_percentage) for key, pattern in
             out_files_pattern.items()}
@@ -433,6 +479,7 @@ def get_bam_tag_names(project_id, sample_id):
 def get_puck_file(wildcards):
     if not project_df.is_spatial(project_id = wildcards.project,\
             sample_id = wildcards.sample):
+
         return []
 
     puck_barcode_file = project_df.get_metadata('puck_barcode_file',

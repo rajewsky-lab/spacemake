@@ -69,10 +69,10 @@ else:
 
             nhood_enrichment_dfs.append(df)
         
-    pd.concat(top_10_marker_dfs).to_csv(snakemake.output['cluster_markers'], index=False, sep = '\t')
+    pd.concat(top_10_marker_dfs).to_csv(snakemake.output['cluster_markers'], index=False)
 
     if snakemake.params['is_spatial']:
-        pd.concat(nhood_enrichment_dfs).to_csv(snakemake.output['nhood_enrichment'], index=False, sep='\t')
+        pd.concat(nhood_enrichment_dfs).to_csv(snakemake.output['nhood_enrichment'], index=False)
     else:
         # output empty csv file
         pd.DataFrame().to_csv(snakemake.output['nhood_enrichment'])
@@ -90,11 +90,11 @@ if adata_complete:
 
 obs_df.index.set_names('cell_bc', inplace=True)
 
-obs_df.to_csv(snakemake.output['obs_df'], sep = '\t')
+obs_df.to_csv(snakemake.output['obs_df'])
 
 ###############
 # SAVE VAR DF #
 ###############
 adata.var.index.set_names('gene_name', inplace=True)
 
-adata.var.to_csv(snakemake.output['var_df'], sep = '\t')
+adata.var.to_csv(snakemake.output['var_df'])
