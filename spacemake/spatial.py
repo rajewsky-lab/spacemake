@@ -261,7 +261,7 @@ def run_novosparc(adata, num_spatial_locations=5000, num_input_cells=30000, loca
     if num_cells < num_spatial_locations:
         num_spatial_locations = num_cells
 
-    sc.pp.highly_variable_genes(adata, n_to_genes = 100)
+    sc.pp.highly_variable_genes(adata, n_top_genes = 100)
     is_var_gene = adata.var['highly_variable']
     # select only 100 genes
     var_genes = list(is_var_gene.index[is_var_gene])
