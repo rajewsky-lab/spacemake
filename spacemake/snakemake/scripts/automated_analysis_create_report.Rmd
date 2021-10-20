@@ -217,11 +217,10 @@ if (is_spatial){
                 scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks, limits=y_limits) +
                 scale_color_viridis_c(option =  "magma", limits = limits) +
                 guides(color = guide_colorbar(barheight = 15)) + 
-                labs(color='UMI count', x='', y='')
+                labs(color='# of UMIs\nper spatial unit', x='', y='')
     }
     umi_pl <- umi_pl + 
         theme(panel.background = element_rect(fill = 'gray95'), 
-            plot.background = element_rect(fill='gray95'),
              legend.spacing = unit(0.1, 'cm'),
             axis.line = element_line(color = 'black'),
             text = element_text(color='black', size=18))

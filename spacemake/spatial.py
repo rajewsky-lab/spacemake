@@ -241,6 +241,30 @@ def create_meshed_adata(adata,
 
     return adata_out
 
+# copy of a yet-to-be-pushed novosparc function
+def quantify_clusters_spatially(tissue, cluster_key='clusters'):
+    """Maps the annotated clusters obtained from the scRNA-seq analysis onto
+    the tissue space.
+    Args:
+        tissue: the novosparc tissue object containing the gene expression data,
+                the clusters annotation and the spatial reconstruction. Assumes
+                that the cluster annotation exists in the underlying anndata object.
+    Returns:
+        [numpy array]: An array of the cluster annotation per tissue position.
+    """
+    import numpy as np
+    clusters = tissue.dataset.obs[cluster_key].to_numpy().flatten()
+    cluster_names = np.unique(clusters)
+    ixs = np.array(
+            [np.argmax(
+                np.array(
+                    [np.median(
+                        np.array(
+                            tissue.gw[:, location][np.argwhere(clusters == cluster).flatten()]))
+                                         for cluster in cluster_names]))
+                    for location in range(len(tissue.locations))])
+    return [cluster_names[ix] for ix in ixs]
+    
 def run_novosparc(adata, num_spatial_locations=5000, num_input_cells=30000, locations=None):
     import numpy as np
     import pandas as pd
@@ -292,29 +316,21 @@ def run_novosparc(adata, num_spatial_locations=5000, num_input_cells=30000, loca
 
     tissue.reconstruct(alpha_linear=0, epsilon=5e-3)
 
+    return tissue
+
+def save_novosparc_res(tissue, adata_original):
+    import anndata
+    import pandas as pd
+
+    from scipy.sparse import csc_matrix
+
     adata_reconst = anndata.AnnData(
         csc_matrix(tissue.sdge.T),
-        var = pd.DataFrame(index=gene_names))
+        var = pd.DataFrame(index=tissue.dataset.var_names))
 
-    adata_reconst.obsm['spatial'] = locations
+    adata_reconst.obsm['spatial'] = tissue.locations
 
-    # copy of a yet-to-be-pushed novosparc function
-    def quantify_clusters_spatially(tissue, cluster_key='clusters'):
-        """Maps the annotated clusters obtained from the scRNA-seq analysis onto
-        the tissue space.
-        Args:
-            tissue: the novosparc tissue object containing the gene expression data,
-                    the clusters annotation and the spatial reconstruction. Assumes
-                    that the cluster annotation exists in the underlying anndata object.
-        Returns:
-            [numpy array]: An array of the cluster annotation per tissue position.
-        """
-        clusters = tissue.dataset.obs[cluster_key].to_numpy().flatten()
-        return np.array([np.argmax(np.array([np.median(np.array(tissue.gw[:, location][np.argwhere(clusters == cluster).flatten()]))
-                                             for cluster in np.unique(clusters)])) for location in range(len(tissue.locations))])
-    
-    for res_key in adata.obs.columns[adata.obs.columns.str.startswith('leiden_')]:
+    for res_key in adata_original.obs.columns[adata_original.obs.columns.str.startswith('leiden_')]:
         adata_reconst.obs[res_key] = quantify_clusters_spatially(tissue, res_key)
 
     return adata_reconst
-
