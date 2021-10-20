@@ -850,6 +850,16 @@ class ProjectDF:
         for ix, row in df.iterrows():
             self.add_update_sample(project_id=ix[0], sample_id=ix[1], **row.to_dict())
 
+    def assert_index_value(self, index_value, index_level):
+        if not isinstance(index_value, list):
+            index_value = [index_value]
+
+        ixs = self.df.index.get_level_values(index_level)
+
+        for ixv in index_value:
+            if ixv not in ixs:
+                raise ProjectSampleNotFoundError(index_level, ixv)
+        
     def sample_exists(self, project_id = None, sample_id = None):
         """sample_exists.
 

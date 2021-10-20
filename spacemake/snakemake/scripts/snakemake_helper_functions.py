@@ -1,5 +1,3 @@
-from spacemake.errors import *
-
 ################################
 # Final output file generation #
 ################################
@@ -10,6 +8,10 @@ def get_output_files(pattern, projects = [], samples = [],
     df = project_df.df  
     
     if projects != [] or samples != []:
+        project_df.assert_index_value(projects, 'project_id')
+            
+        project_df.assert_index_value(samples, 'sample_id')
+
         ix = project_df.get_ix_from_project_sample_list(
             project_id_list = projects,
             sample_id_list = samples)
