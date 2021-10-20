@@ -184,9 +184,9 @@ if (is_spatial){
     x_breaks <- seq(x_limits[1], x_limits[2], px_to_um * mm_dist)
     y_breaks <- seq(y_limits[1], y_limits[2], px_to_um * mm_dist)
 
-    puck_bead_size <- max(def_plot_bead_size, ifelse(snakemake@params$run_mode_variables$mesh_data,
-        snakemake@params$run_mode_variables$mesh_spot_diameter_um / 50,
-        snakemake@params$puck_variables$spot_diameter_um / 50))
+    puck_bead_size <- min(def_plot_bead_size, ifelse(snakemake@params$run_mode_variables$mesh_data,
+        snakemake@params$run_mode_variables$mesh_spot_diameter_um / 40,
+        snakemake@params$puck_variables$spot_diameter_um / 40))
     
     res_colnames <- obs_df$res %>%
         unique

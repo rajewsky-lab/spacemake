@@ -326,11 +326,12 @@ plot_grid(pl1, pl2, pl3,
 
 Next we show mertics such as number of UMIs, genes, reads and pcr per physical spot. We further distinguish between each run mode, showing one histogram for each. 
 
-```{r plot_n_reads_bead_hist, echo = F, fig.width=12.5, fig.height=5, dpi=200, results='asis'}
+```{r plot_n_reads_bead_hist, echo = F, fig.width=12.5, fig.height=5, dpi=300, results='asis'}
 to_plot <- dge_summary %>%
     gather('obs', 'val', -cell_bc, -quartile, -run_mode)
 
 min_difference <- to_plot %>% group_by(obs) %>%
+    filter(!is.na(val)) %>%
     summarise(min_val = min(val,na.rm=T ),
               max_val = max(val,na.rm=T),
               difference = max_val - min_val) %>%
@@ -383,7 +384,7 @@ For each run mode we plot the nucleotide distribution per quartile.
 
 **Only not-meshed run\_mode(s) are shown**
 
-```{r plot_nucl_freq, results='asis', fig.width=10, fig.height = 5, echo=F}
+```{r plot_nucl_freq, results='asis', fig.width=10, fig.height = 5, echo=F, dpi=300}
 plot_nucl_freq <- function(dge_s){
     cell_bc_len <- nchar((dge_s %$% cell_bc)[1])
 
@@ -434,7 +435,7 @@ for (run_mode_in in unique(normal_run_mode_names)){
 
 ### Shannon entropy and string compression {.tabset}
 
-```{r plot_shannon, echo = F, fig.height=5, fig.width=10, results='asis'}
+```{r plot_shannon, echo = F, fig.height=5, fig.width=10, results='asis', dpi=300}
 plot_shannon_scompression <- function(run_mode_in){
     dat <- dge_summary %>%
         filter(run_mode == run_mode_in) %>%
@@ -450,8 +451,8 @@ plot_shannon_scompression <- function(run_mode_in){
         filter(observation == 'entropy') %>%
         ggplot(aes(value, fill = type)) +
             geom_histogram(bins=30, color='black', position='dodge') +
-            scale_fill_manual(values=c(cpalette$grey, cpalette$orange)) +
-            labs(fill='', y='# of beads', x='shannon entropy of beads') +
+            scale_fill_manual(values=c(cpalette$grey, cpalette$orange),labels=c('theoretical', 'observed')) +
+            labs(fill='', y='# of beads', x='Shannon entropy of beads') +
             theme(legend.position = c(0.1, 0.8), text = element_text(size=18, face='plain'))
 
     pl2 <- dat %>%
@@ -459,6 +460,7 @@ plot_shannon_scompression <- function(run_mode_in){
         ggplot(aes(value, fill = type)) +
             geom_histogram(bins=30, color='black', position='dodge') +
             scale_fill_manual(values=c(cpalette$grey, cpalette$orange)) +
+            scale_x_continuous(limits=c(0, NA)) +
             labs(fill='', y='# of beads', x='length of beads after compression') +
             theme(text = element_text(size=18, face='plain'), legend.position='none')
 
@@ -502,7 +504,7 @@ plot_bead_size <- run_mode_settings %>%
     inner_join(run_mode_info, by='run_mode') %>%
     mutate(mesh_data = as.logical(mesh_data)) %>%
     group_by(run_mode) %>%
-    mutate(plot_bead_size = max(ifelse(mesh_data, mesh_spot_diameter_um / 40,
+    mutate(plot_bead_size = min(ifelse(mesh_data, mesh_spot_diameter_um / 40,
                               spot_diameter_um / 40), def_plot_bead_size)) %>%
     select(run_mode, plot_bead_size)
 
@@ -525,7 +527,7 @@ x_breaks <- seq(x_limits[1], x_limits[2], px_to_mm)
 y_breaks <- seq(y_limits[1], y_limits[2], px_to_mm)
 
 
-plot_spatial_qc <- function(variable, dat_in, plot_bead_size=0.1, ttl='', cut_dist=T){
+plot_spatial_qc <- function(variable, dat_in, plot_bead_size=0.1, ttl='', cut_dist=T, min_value=0){
     spatial_qc_dat <- dat_in %>%
         mutate(qnt = quantile(val, 0.9, na.rm=T)) %>%
         arrange(val)
@@ -535,7 +537,7 @@ plot_spatial_qc <- function(variable, dat_in, plot_bead_size=0.1, ttl='', cut_di
         mutate(val = ifelse(val > qnt, qnt, val))
     }
 
-    limits <- c(0, quantile(spatial_qc_dat$val, 0.91, na.rm=T))
+    limits <- c(min_value, quantile(spatial_qc_dat$val, 0.91, na.rm=T))
 
     pl <- spatial_qc_dat %>%
         ggplot(aes(x_pos, y_pos, color = val)) +
@@ -580,13 +582,14 @@ qc_var_info <- dge_summary %>%
                        '% mt counts\nper spatial unit',
                        'Shannon\nentropy\nper spatial unit',
                        'barcode length\nafter\ncompression\nper spatial unit'),
-               cut_dist = c(F, T, T, T, T, T, F, F)),
+               cut_dist = c(F, T, T, T, T, T, F, F),
+               min_value = c(0, 0, 0, 0, 1, 0, 0, 0)),
                by='qc_vars') %>%
     mutate(qc_vars = factor(qc_vars, levels= qc_vars))
 ```
 
 
-```{r plot_per_run_mode, echo =F, results='asis', fig.width=7, fig.height=6, eval=is_spatial}
+```{r plot_per_run_mode, echo =F, results='asis', fig.width=7, fig.height=6, eval=is_spatial, dpi=300}
 for (run_mode_name in run_mode_names){
     cat(paste0('\n\n### ', run_mode_name, '\n\n'))
 
@@ -600,10 +603,18 @@ for (run_mode_name in run_mode_names){
             filter(!is.na(val))
 
         if (qc_var %in% colnames(dge_summary) & nrow(dat_in) > 0){
-        print(plot_spatial_qc(
-                  qc_var, dat_in, plot_bead_size = pbs,
-                  ttl = filter(qc_var_info, qc_vars == qc_var)$ttl,
-                  cut_dist = filter(qc_var_info, qc_vars == qc_var)$cut_dist))
+            qc_var_info %>%
+                filter(qc_vars == qc_var) %>%
+                {
+                    plot_spatial_qc(
+                       qc_var,
+                       dat_in,
+                       plot_bead_size = pbs,
+                       ttl = .$ttl,
+                       cut_dist = .$cut_dist,
+                       min_value = .$min_value)
+                } %>%
+                print()
         }
 
     }

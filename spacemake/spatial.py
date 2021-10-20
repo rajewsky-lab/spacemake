@@ -241,7 +241,7 @@ def create_meshed_adata(adata,
 
     return adata_out
 
-def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000, locations=None):
+def run_novosparc(adata, num_spatial_locations=5000, num_input_cells=30000, locations=None):
     import numpy as np
     import pandas as pd
     import scanpy as sc
@@ -251,37 +251,40 @@ def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000, lo
 
     from scipy.sparse import issparse, csc_matrix
 
-    gene_names = dataset.var.index.tolist()
+    gene_names = adata.var.index.tolist()
 
-    num_cells, num_genes = dataset.shape
+    num_cells, num_genes = adata.shape
 
     if num_cells > num_input_cells:
-        sc.pp.subsample(dataset, n_obs = num_input_cells)
+        sc.pp.subsample(adata, n_obs = num_input_cells)
 
     if num_cells < num_spatial_locations:
         num_spatial_locations = num_cells
 
-    is_var_gene = dataset.var['highly_variable']
+    sc.pp.highly_variable_genes(adata, n_to_genes = 100)
+    is_var_gene = adata.var['highly_variable']
     # select only 100 genes
     var_genes = list(is_var_gene.index[is_var_gene])
 
-    dge_rep = dataset.to_df()[var_genes]
+    print(len(var_genes))
 
-    # if you uncomment this, dataset.X will be stored not as sparse matrix, rather
+    dge_rep = adata.to_df()[var_genes]
+
+    # if you uncomment this, adata.X will be stored not as sparse matrix, rather
     # as a regular numpy array. uncommenting this doesnt throw an error
-    if issparse(dataset.X):
-        dense_dataset = anndata.AnnData(
-            dataset.X.toarray(),
-            obs = dataset.obs,
-            var = dataset.var)
-        dataset = dense_dataset
-        del dense_dataset
+    if issparse(adata.X):
+        dense_adata = anndata.AnnData(
+            adata.X.toarray(),
+            obs = adata.obs,
+            var = adata.var)
+        adata = dense_adata
+        del dense_adata
 
     if locations is None:
         # create circle locations
         locations = novosparc.gm.construct_circle(num_locations = num_spatial_locations)
 
-    tissue = novosparc.cm.Tissue(dataset=dataset, locations=locations)
+    tissue = novosparc.cm.Tissue(dataset=adata, locations=locations)
 
     num_neighbors_s = num_neighbors_t = 5
 
@@ -289,11 +292,11 @@ def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000, lo
 
     tissue.reconstruct(alpha_linear=0, epsilon=5e-3)
 
-    dataset_reconst = anndata.AnnData(
+    adata_reconst = anndata.AnnData(
         csc_matrix(tissue.sdge.T),
         var = pd.DataFrame(index=gene_names))
 
-    dataset_reconst.obsm['spatial'] = locations
+    adata_reconst.obsm['spatial'] = locations
 
     # copy of a yet-to-be-pushed novosparc function
     def quantify_clusters_spatially(tissue, cluster_key='clusters'):
@@ -310,9 +313,8 @@ def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000, lo
         return np.array([np.argmax(np.array([np.median(np.array(tissue.gw[:, location][np.argwhere(clusters == cluster).flatten()]))
                                              for cluster in np.unique(clusters)])) for location in range(len(tissue.locations))])
     
-    for res_key in dataset.obs.columns[dataset.obs.columns.str.startswith('leiden_')]:
-        dataset_reconst.obs[res_key] = quantify_clusters_spatially(tissue, res_key)
+    for res_key in adata.obs.columns[adata.obs.columns.str.startswith('leiden_')]:
+        adata_reconst.obs[res_key] = quantify_clusters_spatially(tissue, res_key)
 
-    return dataset_reconst
-
+    return adata_reconst
 
