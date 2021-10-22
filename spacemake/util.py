@@ -17,6 +17,9 @@ def assert_file(file_path, default_value=None, extension="all"):
         # so we do not need to assert anything
         return False
 
+    if isinstance(extension, str):
+        extension = [extension]
+
     if not isinstance(file_path, list):
         file_path = [file_path]
         
@@ -26,7 +29,10 @@ def assert_file(file_path, default_value=None, extension="all"):
             raise FileNotFoundError(errno.ENOENT,
                     os.strerror(errno.ENOENT), fp)
 
-        if not fp.endswith(extension) and extension != "all":
+        # check for all extensions
+        extension_check = [fp.endswith(ex) and ex != "all" for ex in extension]
+
+        if not any(extension_check):
             raise FileWrongExtensionError(fp, extension)
 
     # return true if file exists and every test was good
@@ -331,6 +337,9 @@ def message_aggregation(log_listen="spacemake", print_logger=False):
 
 def str_to_list(value):
     # if list in string representation, return the list
+    if value is None:
+        return None
+
     if value.startswith('['):
         return eval(value)
     # else create a list

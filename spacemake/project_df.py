@@ -130,6 +130,14 @@ def get_sample_extra_arguments_parser(species_required=False,
     )
 
     parser.add_argument(
+        '--dge',
+        type=str,
+        help='Path to dge matrix. spacemake can also handle already processed' +
+            ' digital expression data',
+        required=reads_required,
+    )
+
+    parser.add_argument(
         "--longreads",
         type=str,
         help="fastq(.gz)|fq(.gz)|bam file path to pacbio long reads for library debugging",
@@ -539,7 +547,8 @@ class ProjectDF:
         "barcode_flavor": "default",
         "is_merged":False,
         "merged_from":[],
-        "puck":"default"}
+        "puck":"default",
+        "dge": None}
     
     def __init__(
         self,
@@ -559,10 +568,17 @@ class ProjectDF:
             df = pd.read_csv(
                 file_path,
                 index_col=["project_id", "sample_id"],
-                converters={"run_mode": eval, "merged_from": eval,
-                            "R1": str_to_list, "R2": str_to_list},
+                converters={"run_mode": eval, "merged_from": eval},
                 na_values=["None", "none"]
             )
+
+            # replacing NaN with None
+            df = df.where(pd.notnull(df), None)
+
+            # convert R1/R2 to list, if they are stored as string
+            df.R1 = df.R1.apply(str_to_list)
+            df.R2 = df.R2.apply(str_to_list)
+
             project_list = []
             # required if upgrading from pre-longread tree
             if not "longreads" in df.columns:
@@ -682,6 +698,29 @@ class ProjectDF:
         out_dict = self.df.loc[(project_id, sample_id)].to_dict()
 
         return out_dict
+    
+    def is_external(self, project_id: str, sample_id: str) -> bool:
+        """is_external.
+
+        :param project_id:
+        :type project_id: str
+        :param sample_id:
+        :type sample_id: str
+        :rtype: bool
+        """
+        self.assert_sample(project_id, sample_id)
+
+        data = self.df.loc[(project_id, sample_id), ['R1', 'R2', 'basecalls_dir',
+            'sample_sheet', 'longreads', 'dge', 'is_merged']]
+
+        if ((data.R1 and data.R2) or
+            (data.basecalls_dir and data.sample_sheet)
+            and not data.dge or
+            data.is_merged):
+            return False
+        else:
+            return True
+
 
     def is_spatial(self, project_id: str,sample_id: str) -> bool:
         """Returns true if a sample with index (project_id, sample_id) is spatial,
@@ -744,8 +783,8 @@ class ProjectDF:
         for key, value in kwargs.items():
             df = df.loc[df.loc[:, key] == value]
 
-        # print(f"query: field={field} proj={project_id} samp={sample_id} kw={kwargs}")
-        dl = df[field].to_list()
+
+        dl = df.loc[:, field].to_list()
         if len(dl):
             return dl[0]
         else:
@@ -811,6 +850,16 @@ class ProjectDF:
         for ix, row in df.iterrows():
             self.add_update_sample(project_id=ix[0], sample_id=ix[1], **row.to_dict())
 
+    def assert_index_value(self, index_value, index_level):
+        if not isinstance(index_value, list):
+            index_value = [index_value]
+
+        ixs = self.df.index.get_level_values(index_level)
+
+        for ixv in index_value:
+            if ixv not in ixs:
+                raise ProjectSampleNotFoundError(index_level, ixv)
+        
     def sample_exists(self, project_id = None, sample_id = None):
         """sample_exists.
 
@@ -839,6 +888,7 @@ class ProjectDF:
         sample_id=None,
         R1=None,
         R2=None,
+        dge=None,
         longreads=None,
         longread_signature=None,
         sample_sheet=None,
@@ -854,6 +904,7 @@ class ProjectDF:
         :param sample_id:
         :param R1:
         :param R2:
+        :param dge:
         :param longreads:
         :param longread_signature:
         :param sample_sheet:
@@ -882,19 +933,28 @@ class ProjectDF:
             raise ValueError(f"Unknown action {action}")
 
         # check variables
+        # First we check if R1 and R2 is present. 
+        # If not, we check for longreads. If provided, we also need
+        #   --longread-signature
+        # If longreads not provided, we try with basecalls_dir and sample_sheet
+        #   (only used by add_sample_sheet command)
+        # If those area also not provided, we try to add a simple dge
         if action == "add" and (R1 is None or R2 is None) and not is_merged:
             self.logger.info("R1 or R2 not provided, trying longreads")
 
             if not longreads:
-                self.logger.info("trying basecalls_dir and sample_sheet")
+                self.logger.info('longreads not provided, trying basecalls_dir and sample_sheet')
                 if basecalls_dir is None or sample_sheet is None:
-                    raise ValueError(
-                        "Neither R1 & R2, longreads, nor basecalls_dir & "
-                        + "sample_sheet were provided. You need to provide some reads"
-                    )
+                    self.logger.info('basecalls_dir or sample_sheet not provided, trying dge')
+                    if not dge:
+                        raise SpacemakeError(
+                            "Neither R1 & R2, longreads, basecalls_dir & "
+                            + "sample_sheet, nor dge were provided.\n"
+                            + "Some reads/data has to be provided"
+                        )
             else:
                 if not longread_signature:
-                    raise ValueError(
+                    raise SpacemakeError(
                         "adding longreads requires to set --longread-signature as well (e.g. dropseq, noUMI, default, visium, slideseq_bc14,...)"
                     )
 
@@ -902,8 +962,11 @@ class ProjectDF:
         assert_file(R1, default_value=None, extension=".fastq.gz")
         assert_file(R2, default_value=None, extension=".fastq.gz")
         assert_file(longreads, default_value=None, extension="all")
+        assert_file(dge, default_value=None, extension=['.h5', '.csv', '.h5ad',
+            '.loom', '.txt', '.txt.gz'])
 
         # assign reads
+        # if there are strings, make them lists, as one sample can have many read files
         if R1 is not None and isinstance(R1, str):
             R1 = [R1]
 
@@ -950,6 +1013,7 @@ class ProjectDF:
         # first populate kwargs
         kwargs["R1"] = R1
         kwargs["R2"] = R2
+        kwargs["dge"] = dge
         kwargs["longreads"] = longreads
         kwargs["longread_signature"] = longread_signature
         kwargs["sample_sheet"] = sample_sheet

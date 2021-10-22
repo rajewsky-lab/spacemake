@@ -1,7 +1,7 @@
-Initialise
+Initialize
 ----------
 
-To initialise a spacemake project, ``cd`` into the directory in which you want to start spacemake, this will be your ``project_root``.
+To initialize a spacemake project, ``cd`` into the directory in which you want to start spacemake, this will be your ``project_root``.
 
 Then simply type::
    

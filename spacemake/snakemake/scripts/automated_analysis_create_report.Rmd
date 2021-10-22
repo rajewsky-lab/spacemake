@@ -34,15 +34,15 @@ cpalette <- list('orange' = '#D55E00', 'blue' = '#0072B2', 'green' = '#009E73', 
 clrs = c('umis'=cpalette$light_orange, 'genes' = cpalette$light_blue,
          'reads'=cpalette$green, 'pcr'=cpalette$pink, 'pct_counts_mt'= 'black')
 
-#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/seq_scope_automated_analysis_2.rds')
+#write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/repos/sts-paper/automated_report.rds')
 #snakemake <- read_rds('automated_report.rds')
 source(snakemake@params$r_shared_scripts)
 ```
 
 ```{r read_data, echo = F}
-obs_df <- read_table(snakemake@input$obs_df) %>%
+obs_df <- read_csv(snakemake@input$obs_df) %>%
     mutate(pct_counts_mt = as.double(pct_counts_mt))
-var_df <- read_table(snakemake@input$var_df)
+var_df <- read_csv(snakemake@input$var_df)
 
 n_beads = nrow(obs_df)
 data_empty <- n_beads == 0
@@ -184,9 +184,9 @@ if (is_spatial){
     x_breaks <- seq(x_limits[1], x_limits[2], px_to_um * mm_dist)
     y_breaks <- seq(y_limits[1], y_limits[2], px_to_um * mm_dist)
 
-    puck_bead_size <- max(def_plot_bead_size, ifelse(snakemake@params$run_mode_variables$mesh_data,
-        snakemake@params$run_mode_variables$mesh_spot_diameter_um / 50,
-        snakemake@params$puck_variables$spot_diameter_um / 50))
+    puck_bead_size <- min(def_plot_bead_size, ifelse(snakemake@params$run_mode_variables$mesh_data,
+        snakemake@params$run_mode_variables$mesh_spot_diameter_um / 40,
+        snakemake@params$puck_variables$spot_diameter_um / 40))
     
     res_colnames <- obs_df$res %>%
         unique
@@ -217,11 +217,10 @@ if (is_spatial){
                 scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks, limits=y_limits) +
                 scale_color_viridis_c(option =  "magma", limits = limits) +
                 guides(color = guide_colorbar(barheight = 15)) + 
-                labs(color='UMI count', x='', y='')
+                labs(color='# of UMIs\nper spatial unit', x='', y='')
     }
     umi_pl <- umi_pl + 
         theme(panel.background = element_rect(fill = 'gray95'), 
-            plot.background = element_rect(fill='gray95'),
              legend.spacing = unit(0.1, 'cm'),
             axis.line = element_line(color = 'black'),
             text = element_text(color='black', size=18))
@@ -235,7 +234,7 @@ library(pals)
 
 cluster_clrs <- unname(glasbey())
 
-top10_marker_table <- read_table2(snakemake@input$cluster_markers)
+#top10_marker_table <- read_table2(snakemake@input$cluster_markers)
 
 for (i in obs_df %$% res %>% unique){
     res <- as.double(strsplit(i, '_')[[1]][2])
@@ -305,12 +304,12 @@ for (i in obs_df %$% res %>% unique){
 }
 ```
 
-```{r nhood_enrichment_title, results='asis', eval=is_spatial}
+```{r nhood_enrichment_title, echo =F, eval=is_spatial, results='asis'}
 cat('\n\n### Neighborhood enrichment\n\n')
 ```
 
 ```{r plot_nhood_enrichment, echo =F, eval=is_spatial}
-nhood_dat <- read_table(snakemake@input$nhood_enrichment)
+nhood_dat <- read_csv(snakemake@input$nhood_enrichment)
 
 for (i in obs_df %$% res %>% unique){
     res <- as.double(strsplit(i, '_')[[1]][2])

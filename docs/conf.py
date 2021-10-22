@@ -7,7 +7,7 @@ copyright = '2021, Rajewsky lab'
 author = 'Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos, Marvin Jens, Nikolaus Rajewsky'
 
 release = '0.1'
-version = '0.0.6'
+version = '0.0.7'
 
 # -- General configuration
 

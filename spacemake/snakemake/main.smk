@@ -16,7 +16,7 @@ import math
 import scanpy as sc
 
 from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
-    parse_barcode_file
+    parse_barcode_file, load_external_dge
 from spacemake.spatial import create_meshed_adata, run_novosparc
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
@@ -144,16 +144,24 @@ dge_out_prefix = dge_root + '/dge'
 dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}'
 dge_out = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.txt.gz'
 dge_out_summary = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.summary.txt'
-dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.h5ad'
-dge_out_h5ad_obs = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.obs.csv'
-dge_spatial = dge_out_prefix + dge_out_suffix + '.spatial_beads.h5ad'
-dge_spatial_obs = dge_out_prefix + dge_out_suffix + '.spatial_beads.obs.csv'
+
+# processed dge
+h5ad_dge_suffix = '{is_external}.h5ad'
+h5ad_dge_obs_suffix = '{is_external}.obs.csv'
+dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads' + h5ad_dge_suffix
+dge_out_h5ad_obs = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads' + h5ad_dge_obs_suffix
+
+# spatial dge
+dge_spatial = dge_out_prefix + dge_out_suffix + '.spatial_beads' + h5ad_dge_suffix
+dge_spatial_obs = dge_out_prefix + dge_out_suffix + '.spatial_beads' + h5ad_dge_obs_suffix
+
+# spatial + meshed dge
 dge_spatial_mesh_suffix = '.spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}'
 dge_spatial_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_mesh_suffix
-dge_spatial_mesh = dge_spatial_mesh_prefix + '.h5ad'
-dge_spatial_mesh_obs = dge_spatial_mesh_prefix + '.obs.csv'
+dge_spatial_mesh = dge_spatial_mesh_prefix + h5ad_dge_suffix
+dge_spatial_mesh_obs = dge_spatial_mesh_prefix + h5ad_dge_obs_suffix
 
-dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all']
+dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all', '']
 
 # kmer stats per position
 kmer_stats_file = complete_data_root + '/kmer_stats/{kmer_len}mer_counts.csv'
@@ -174,9 +182,9 @@ automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
 
 automated_analysis_processed_data_files = {
     'cluster_markers': '/top10_cluster_markers.csv',
-    'nhood_enrichment': '/nhood_enrichment.tsv',
-    'obs_df': '/obs_df.tsv',
-    'var_df': '/var_df.tsv'
+    'nhood_enrichment': '/nhood_enrichment.csv',
+    'obs_df': '/obs_df.csv',
+    'var_df': '/var_df.csv'
     }
 
 # prepend automated_result_root
@@ -277,7 +285,8 @@ wildcard_constraints:
     pacbio_ext = 'fq|fastq|bam',
     polyA_adapter_trimmed = '|.polyA_adapter_trimmed',
     mm_included = '|.mm_included',
-    n_beads = '[0-9]+|spatial',
+    n_beads = '[0-9]+|spatial|external',
+    is_external = '|.external',
     spot_diameter_um = '[0-9]+',
     spot_distance_um = '[0-9]+|hexagon',
     data_root_type = 'complete_data|downsampled_data',
@@ -300,9 +309,8 @@ rule all:
         # this will also create the clean dge
         get_output_files(automated_report, data_root_type = 'complete_data',
             downsampling_percentage=''),
-        #get_output_files(novosparc_h5ad),
         get_output_files(qc_sheet, data_root_type = 'complete_data',
-            downsampling_percentage=''),
+            downsampling_percentage='', run_on_external=False),
         get_longread_output()
 
 ##############
@@ -523,14 +531,18 @@ rule create_dge:
 rule create_h5ad_dge:
     input:
         unpack(get_puck_file),
-        dge_txt = dge_out,
-        dge_summary_txt = dge_out_summary
+        unpack(get_raw_dge)
     # output here will either be n_beads=number, n_beads=spatial
     output: dge_out_h5ad, dge_out_h5ad_obs
     run:
-        adata = dge_to_sparse_adata(
-            input['dge_txt'],
-            input['dge_summary_txt'])
+        if wildcards.is_external == '.external':
+            adata = load_external_dge(input['dge'])
+        else:
+            adata = dge_to_sparse_adata(
+                input['dge'],
+                input['dge_summary'])
+
+        # attach barcodes
         if 'barcode_file' in input.keys() and wildcards.n_beads == 'spatial':
             adata = attach_barcode_file(adata, input['barcode_file'])
         adata.write(output[0])

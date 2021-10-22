@@ -132,6 +132,32 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
 
         return adata
 
+def load_external_dge(dge_path):
+    import anndata
+    import scanpy as sc
+
+    from scanpy._utils import check_nonnegative_integers
+    from scipy.sparse import issparse, csc_matrix
+    from spacemake.errors import SpacemakeError
+
+    adata = sc.read(dge_path)
+
+    if not check_nonnegative_integers(adata.X):
+        raise SpacemakeError(f'External dge seems to contain values '+
+            'which are already normalised. Raw-count matrix expected.')
+
+    if not issparse(adata.X):
+        adata.X = csc_matrix(adata.X)
+
+    # name the index
+    adata.obs.index.name = 'cell_bc'
+
+    # attach metrics such as: total_counts, pct_mt_counts, etc
+    # also attach n_genes, and calculate pcr
+    calculate_adata_metrics(adata)
+
+    return adata
+
 def parse_barcode_file(barcode_file):
     import pandas as pd
 
