@@ -32,7 +32,7 @@ def sig2str(sig, max_repeat_only=True):
         # all other building blocks and disregard orientation. If any block X
         # is tandem repeated we call the signature of this just 'X+'.
         max_rep, nrep = sorted(repeat_counts.items(), key=lambda x: -x[1])[0]
-        return max_rep.replace("_RC", "") + "+"
+        return f"?{max_rep.replace('_RC', '')}+"
     else:
         return ",".join(parts)
 
