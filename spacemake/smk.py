@@ -20,7 +20,6 @@ logger = logging.getLogger(logger_name)
 
 
 def get_run_parser():
-<<<<<<< HEAD
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
 
     parser.add_argument(
@@ -55,22 +54,12 @@ def get_run_parser():
         action="store_true",
         help="rather than running the rules, just touch each file",
     )
-=======
-    parser = argparse.ArgumentParser(
-        allow_abbrev=False,
-        add_help=False)
-
-    parser.add_argument('--cores',
-        default=1, type=int, help = 'number of cores to be used in total')
-    parser.add_argument('--dryrun', '-n', action='store_true', help = 'invokes a dry snakemake run, printing only commands')
-    parser.add_argument('--rerun-incomplete', '--ri', action='store_true', help = 'forces snakemake to rerun incompletely generated files')
-    parser.add_argument('--keep-going', action='store_true', help='if a job fails, keep executing independent jobs')
-    parser.add_argument('--printshellcmds', '-p', action='store_true', help='print shell commands for each rule, if exist')
-    parser.add_argument('--touch', '-t', action='store_true', help = 'rather than running the rules, just touch each file')
-    parser.add_argument('--with_fastqc', '-qfqc',
-        action = 'store_true',
-        help = 'Run also fastqc as part of the spacemake run')
->>>>>>> 952dc0b7bc618f2eb9d953229433a211daf21df6
+    parser.add_argument(
+        "--with_fastqc",
+        "-qfqc",
+        action="store_true",
+        help="Run also fastqc as part of the spacemake run",
+    )
 
     return parser
 
@@ -138,13 +127,8 @@ def spacemake_init(args):
     initial_config = os.path.join(os.path.dirname(__file__), "data/config/config.yaml")
 
     # initialise config file
-<<<<<<< HEAD
-    cf = ConfigFile(initial_config)
-    # update the file path
-=======
     cf = ConfigFile.from_yaml(initial_config)
-    # update the file path 
->>>>>>> 952dc0b7bc618f2eb9d953229433a211daf21df6
+    # update the file path
     cf.set_file_path(config_path)
     cf.variables["root_dir"] = args["root_dir"]
     cf.variables["temp_dir"] = args["temp_dir"]
@@ -229,7 +213,7 @@ def spacemake_run(args):
     samples = []
     projects = []
     targets = None
-    with_fastqc = args.get('with_fastqc', False)
+    with_fastqc = args.get("with_fastqc", False)
 
     downsample = args.get("downsample", False)
 
@@ -251,7 +235,12 @@ def spacemake_run(args):
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
-        config={"project_df": project_df, "samples": samples, "projects": projects},
+        config={
+            "project_df": project_df,
+            "samples": samples,
+            "projects": projects,
+            "with_fastqc": with_fastqc,
+        },
     )
 
     if run_successful is False:
