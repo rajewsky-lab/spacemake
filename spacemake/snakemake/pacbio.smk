@@ -121,12 +121,13 @@ rule cmd_report:
 
 rule cmd_edits:
     input: 
+        fname = lambda wc: PB_RAW_FILES[wc.sample],
         stats = pb_stats
     output: pb_edits
     params:
         args=get_args
     threads: 1
-    shell: longread_cmd + " edits"
+    shell: longread_cmd + " edits {input.fname}"
 
 rule cmd_annotate:
     input:
