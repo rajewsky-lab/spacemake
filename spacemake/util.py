@@ -11,7 +11,7 @@ LINE_SEPARATOR = "-" * 50 + "\n"
 bool_in_str = ["True", "true", "False", "false"]
 
 
-def assert_file(file_path, default_value=None, extension="all"):
+def assert_file(file_path, default_value=None, extension=["all"]):
     if file_path == default_value:
         # file doesn't exist but has the default value,
         # so we do not need to assert anything
@@ -22,18 +22,17 @@ def assert_file(file_path, default_value=None, extension="all"):
 
     if not isinstance(file_path, list):
         file_path = [file_path]
-        
+
     for fp in file_path:
         # check if file exists, raise error if not
         if not os.path.isfile(fp):
-            raise FileNotFoundError(errno.ENOENT,
-                    os.strerror(errno.ENOENT), fp)
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fp)
 
         # check for all extensions
-        extension_check = [fp.endswith(ex) and ex != "all" for ex in extension]
-
-        if not any(extension_check):
-            raise FileWrongExtensionError(fp, extension)
+        if extension != ["all"]:
+            extension_check = [fp.endswith(ex) for ex in extension]
+            if not any(extension_check):
+                raise FileWrongExtensionError(fp, extension)
 
     # return true if file exists and every test was good
     return True
@@ -335,12 +334,13 @@ def message_aggregation(log_listen="spacemake", print_logger=False):
     except SpacemakeError as e:
         print(e)
 
+
 def str_to_list(value):
     # if list in string representation, return the list
     if value is None:
         return None
 
-    if value.startswith('['):
+    if type(value) is str and value.startswith("["):
         return eval(value)
     # else create a list
     else:
