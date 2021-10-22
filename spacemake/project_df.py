@@ -14,9 +14,8 @@ from typing import List, Dict
 
 logger_name = "spacemake.project_df"
 
-def get_project_sample_parser(allow_multiple=False,
-        prepend='',
-        help_extra=''):
+
+def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
     """
     Return a parser for project_id's and sample_id's
 
@@ -29,9 +28,7 @@ def get_project_sample_parser(allow_multiple=False,
     :return: a parser object
     :rtype: argparse.ArgumentParser
     """
-    parser = argparse.ArgumentParser(
-        allow_abbrev=False,
-        add_help=False)
+    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
 
     project_argument = "project_id"
     sample_argument = "sample_id"
@@ -95,8 +92,8 @@ def get_add_sample_sheet_parser():
 
     return parser
 
-def get_sample_extra_arguments_parser(species_required=False,
-        reads_required=False):
+
+def get_sample_extra_arguments_parser(species_required=False, reads_required=False):
     """
     Returns a parser which contain extra arguments for a given sample.
     The returned parser will contain the --R1, --R2, --longreads,
@@ -109,15 +106,13 @@ def get_sample_extra_arguments_parser(species_required=False,
     :param reads_required: if true, --R1, --R2, and --longreads arguments will be
         required during parsing.
     """
-    parser = argparse.ArgumentParser(
-        allow_abbrev=False,
-        add_help=False)
+    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
 
     parser.add_argument(
         "--R1",
         type=str,
         help=".fastq.gz file path to R1 reads",
-        nargs='+',
+        nargs="+",
         required=reads_required,
     )
 
@@ -125,15 +120,15 @@ def get_sample_extra_arguments_parser(species_required=False,
         "--R2",
         type=str,
         help=".fastq.gz file path to R2 reads",
-        nargs='+',
+        nargs="+",
         required=reads_required,
     )
 
     parser.add_argument(
-        '--dge',
+        "--dge",
         type=str,
-        help='Path to dge matrix. spacemake can also handle already processed' +
-            ' digital expression data',
+        help="Path to dge matrix. spacemake can also handle already processed"
+        + " digital expression data",
         required=reads_required,
     )
 
@@ -415,7 +410,7 @@ def add_update_delete_sample_cmdline(pdf, args):
     :param pdf:
     :param args:
     """
-    action = args['action']
+    action = args["action"]
 
     # remove the action from args
     del args["action"]
@@ -436,8 +431,7 @@ def add_sample_sheet_cmdline(pdf, args):
     :param pdf:
     :param args:
     """
-    pdf.add_sample_sheet(args['sample_sheet'],
-        args['basecalls_dir'])
+    pdf.add_sample_sheet(args["sample_sheet"], args["basecalls_dir"])
 
     pdf.dump()
 
@@ -449,7 +443,7 @@ def add_samples_from_yaml_cmdline(pdf, args):
     :param pdf:
     :param args:
     """
-    pdf.add_samples_from_yaml(args['samples_yaml'])
+    pdf.add_samples_from_yaml(args["samples_yaml"])
 
     pdf.dump()
 
@@ -461,8 +455,8 @@ def set_remove_variable_cmdline(pdf, args):
     :param pdf:
     :param args:
     """
-    variable_name = args['variable']
-    action = args['action']
+    variable_name = args["variable"]
+    action = args["action"]
 
     variable_key = args[variable_name]
 
@@ -497,9 +491,9 @@ def list_projects_cmdline(pdf, args):
     :param pdf:
     :param args:
     """
-    projects = args['project_id_list']
-    samples = args['sample_id_list']
-    variables = args['always_show'] + args['variables']
+    projects = args["project_id_list"]
+    samples = args["sample_id_list"]
+    variables = args["always_show"] + args["variables"]
 
     df = pdf.df
     logger = logging.getLogger(logger_name)
@@ -545,16 +539,13 @@ class ProjectDF:
         "puck_barcode_file": None,
         "run_mode": ["default"],
         "barcode_flavor": "default",
-        "is_merged":False,
-        "merged_from":[],
-        "puck":"default",
-        "dge": None}
-    
-    def __init__(
-        self,
-        file_path,
-        config: ConfigFile = None
-    ):
+        "is_merged": False,
+        "merged_from": [],
+        "puck": "default",
+        "dge": None,
+    }
+
+    def __init__(self, file_path, config: ConfigFile = None):
         """__init__.
 
         :param file_path: path to pandas data frame (saved as .csv)
@@ -569,7 +560,7 @@ class ProjectDF:
                 file_path,
                 index_col=["project_id", "sample_id"],
                 converters={"run_mode": eval, "merged_from": eval},
-                na_values=["None", "none"]
+                na_values=["None", "none"],
             )
 
             # replacing NaN with None
@@ -698,7 +689,7 @@ class ProjectDF:
         out_dict = self.df.loc[(project_id, sample_id)].to_dict()
 
         return out_dict
-    
+
     def is_external(self, project_id: str, sample_id: str) -> bool:
         """is_external.
 
@@ -710,19 +701,30 @@ class ProjectDF:
         """
         self.assert_sample(project_id, sample_id)
 
-        data = self.df.loc[(project_id, sample_id), ['R1', 'R2', 'basecalls_dir',
-            'sample_sheet', 'longreads', 'dge', 'is_merged']]
+        data = self.df.loc[
+            (project_id, sample_id),
+            [
+                "R1",
+                "R2",
+                "basecalls_dir",
+                "sample_sheet",
+                "longreads",
+                "dge",
+                "is_merged",
+            ],
+        ]
 
-        if ((data.R1 and data.R2) or
-            (data.basecalls_dir and data.sample_sheet)
-            and not data.dge or
-            data.is_merged):
+        if (
+            (data.R1 and data.R2)
+            or (data.basecalls_dir and data.sample_sheet)
+            and not data.dge
+            or data.is_merged
+        ):
             return False
         else:
             return True
 
-
-    def is_spatial(self, project_id: str,sample_id: str) -> bool:
+    def is_spatial(self, project_id: str, sample_id: str) -> bool:
         """Returns true if a sample with index (project_id, sample_id) is spatial,
         meaning that it has spatial barcodes attached.
 
@@ -733,9 +735,9 @@ class ProjectDF:
         :rtype: bool
         """
         self.assert_sample(project_id, sample_id)
-        puck_barcode_file = self.get_metadata('puck_barcode_file',
-            project_id = project_id,
-            sample_id = sample_id)
+        puck_barcode_file = self.get_metadata(
+            "puck_barcode_file", project_id=project_id, sample_id=sample_id
+        )
 
         puck_name = self.get_metadata(
             "puck", project_id=project_id, sample_id=sample_id
@@ -748,7 +750,9 @@ class ProjectDF:
         else:
             return False
 
-    def get_puck_variables(self, project_id: str, sample_id:str, return_empty=False) -> Dict:
+    def get_puck_variables(
+        self, project_id: str, sample_id: str, return_empty=False
+    ) -> Dict:
         """get_puck_variables.
 
         :param project_id: project_id of a sample
@@ -782,7 +786,6 @@ class ProjectDF:
 
         for key, value in kwargs.items():
             df = df.loc[df.loc[:, key] == value]
-
 
         dl = df.loc[:, field].to_list()
         if len(dl):
@@ -859,8 +862,8 @@ class ProjectDF:
         for ixv in index_value:
             if ixv not in ixs:
                 raise ProjectSampleNotFoundError(index_level, ixv)
-        
-    def sample_exists(self, project_id = None, sample_id = None):
+
+    def sample_exists(self, project_id=None, sample_id=None):
         """sample_exists.
 
         :param project_id:
@@ -878,8 +881,8 @@ class ProjectDF:
     def assert_sample(self, project_id, sample_id):
         if not self.sample_exists(project_id, sample_id):
             raise ProjectSampleNotFoundError(
-                '(project_id, sample_id)',
-                (project_id, sample_id))
+                "(project_id, sample_id)", (project_id, sample_id)
+            )
 
     def add_update_sample(
         self,
@@ -933,7 +936,7 @@ class ProjectDF:
             raise ValueError(f"Unknown action {action}")
 
         # check variables
-        # First we check if R1 and R2 is present. 
+        # First we check if R1 and R2 is present.
         # If not, we check for longreads. If provided, we also need
         #   --longread-signature
         # If longreads not provided, we try with basecalls_dir and sample_sheet
@@ -943,9 +946,13 @@ class ProjectDF:
             self.logger.info("R1 or R2 not provided, trying longreads")
 
             if not longreads:
-                self.logger.info('longreads not provided, trying basecalls_dir and sample_sheet')
+                self.logger.info(
+                    "longreads not provided, trying basecalls_dir and sample_sheet"
+                )
                 if basecalls_dir is None or sample_sheet is None:
-                    self.logger.info('basecalls_dir or sample_sheet not provided, trying dge')
+                    self.logger.info(
+                        "basecalls_dir or sample_sheet not provided, trying dge"
+                    )
                     if not dge:
                         raise SpacemakeError(
                             "Neither R1 & R2, longreads, basecalls_dir & "
@@ -962,8 +969,11 @@ class ProjectDF:
         assert_file(R1, default_value=None, extension=".fastq.gz")
         assert_file(R2, default_value=None, extension=".fastq.gz")
         assert_file(longreads, default_value=None, extension="all")
-        assert_file(dge, default_value=None, extension=['.h5', '.csv', '.h5ad',
-            '.loom', '.txt', '.txt.gz'])
+        assert_file(
+            dge,
+            default_value=None,
+            extension=[".h5", ".csv", ".h5ad", ".loom", ".txt", ".txt.gz"],
+        )
 
         # assign reads
         # if there are strings, make them lists, as one sample can have many read files
@@ -976,10 +986,11 @@ class ProjectDF:
         if R1 is not None and R2 is not None:
             if len(R1) != len(R2):
                 raise SpacemakeError(
-                        f'Trying to set an unmatching number of ' +
-                        f'read pairs for sample: {ix}.\n' +
-                        f'# of R1 files = {len(R1)}\n' +
-                        f'# of R2 files = {len(R2)}')
+                    f"Trying to set an unmatching number of "
+                    + f"read pairs for sample: {ix}.\n"
+                    + f"# of R1 files = {len(R1)}\n"
+                    + f"# of R2 files = {len(R2)}"
+                )
 
         is_spatial = assert_file(
             kwargs.get(
@@ -988,10 +999,10 @@ class ProjectDF:
             default_value=self.project_df_default_values["puck_barcode_file"],
         )
 
-        if 'run_mode' in kwargs and isinstance(kwargs['run_mode'], str):
+        if "run_mode" in kwargs and isinstance(kwargs["run_mode"], str):
             # if a single run mode is provided as a string
             # create a list manually
-            kwargs['run_mode'] = [kwargs['run_mode']]
+            kwargs["run_mode"] = [kwargs["run_mode"]]
 
         # check if run mode exists
         for run_mode in kwargs.get("run_mode", []):
@@ -1078,8 +1089,7 @@ class ProjectDF:
         for project in config["additional_projects"]:
             self.add_update_sample(**project)
 
-    def get_ix_from_project_sample_list(self,
-        project_id_list = [], sample_id_list = []):
+    def get_ix_from_project_sample_list(self, project_id_list=[], sample_id_list=[]):
         """get_ix_from_project_sample_list.
 
         :param project_id_list:
@@ -1198,8 +1208,7 @@ class ProjectDF:
 
         return ix.to_list()
 
-    def assert_projects_samples_exist(self,
-            project_id_list = [], sample_id_list = []):
+    def assert_projects_samples_exist(self, project_id_list=[], sample_id_list=[]):
         """assert_projects_samples_exist.
 
         :param project_id_list:
@@ -1316,7 +1325,7 @@ class ProjectDF:
             kwargs["run_mode"] = run_mode
 
         # set the action to add
-        kwargs['action'] = 'add'
+        kwargs["action"] = "add"
 
         sample_added = self.add_update_sample(
             project_id=merged_project_id,
