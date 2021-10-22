@@ -512,7 +512,9 @@ def main_overview(args):
 
     dfsig = df[["sample", "signature"]].drop_duplicates().set_index("sample")
     print(dfsig)
-    df = df[["name","count","sample"]].pivot(index="sample", columns="name", values="count") # .query("kind == 'overview'")
+    df = df[["name", "count", "sample"]].pivot(
+        index="sample", columns="name", values="count"
+    )  # .query("kind == 'overview'")
     df = df.fillna(0).div(df["n_total"], axis=0)
     df *= 100  # we'd like percentages
 
@@ -535,20 +537,15 @@ def main_overview(args):
     # df["complete"] = np.nan_to_num(df["complete"], nan=0.0)
     df["concat"] = df[concatenation].sum(axis=1)
     df["bead_related"] = np.nan_to_num(df[bead].sum(axis=1), nan=0.0)
-    
+
     def ds(row):
-        print("ROW", row, "AHA!")
         sig = dfsig.loc[row.name]
-        print("SIG", sig)
-        res =  (sig == "dropseq") * row.complete
-        print(row, res)
+        res = (sig == "dropseq") * row.complete
         return res
 
     df["dropseq"] = df[["complete"]].apply(ds, axis=1)
     # df["complete"] = df[""]
-    df["incomplete"] = (
-        df["bead-related"] - df["complete"] - df["dropseq"]
-    )
+    df["incomplete"] = df["bead-related"] - df["complete"] - df["dropseq"]
     df["non_bead"] = 100 - df["bead-related"]
     df["fidelity"] = 100 * df["complete"] / df["bead-related"]
     df = df.fillna(0)
@@ -623,9 +620,11 @@ def main_overview(args):
     # print(df[['qfa', 'rRNA']])
 
     import matplotlib
-    matplotlib.use('Agg')
+
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    plt.rcParams.update({'font.size': 8})
+
+    plt.rcParams.update({"font.size": 8})
 
     def make_bars(
         ax, df, kinds, labels, cmap=plt.get_cmap("tab10"), w=0.9, colors=None
@@ -846,6 +845,11 @@ def prepare_parser():
         type=int,
         default=1000,
         help="number of sample alignments to gather edit statistics from (default=1000)",
+    )
+    ed_parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
     )
 
     xt_parser = subparsers.add_parser(
