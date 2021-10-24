@@ -1,3 +1,5 @@
+from anndata import AnnData
+from novosparc.common import Tissue
 from spacemake.preprocess import calculate_adata_metrics
 
 def compute_neighbors(adata, min_dist=None, max_dist=None):
@@ -265,7 +267,12 @@ def quantify_clusters_spatially(tissue, cluster_key='clusters'):
                     for location in range(len(tissue.locations))])
     return [cluster_names[ix] for ix in ixs]
     
-def run_novosparc(adata, num_spatial_locations=5000, num_input_cells=30000, locations=None):
+def novosparc_denovo(
+        adata: AnnData,
+        num_spatial_locations=5000: int,
+        num_input_cells=30000,
+        locations=None,
+    ) -> Tissue:
     import numpy as np
     import pandas as pd
     import scanpy as sc
@@ -318,7 +325,27 @@ def run_novosparc(adata, num_spatial_locations=5000, num_input_cells=30000, loca
 
     return tissue
 
-def save_novosparc_res(tissue, adata_original):
+def novosparc_mapping(sc_adata: AnnData, st_adata: AnnData) -> Tissue:
+    """novosparc_mapping.
+
+    :param sc_adata:
+    :type sc_adata: AnnData
+    :param st_adata:
+    :type st_adata: AnnData
+    :rtype: Tissue
+    """
+    from scanpy._utils import check_nonnegative_integers
+
+    if (check_nonnegative_integers(sc_adata.X)
+        or check_nonnegative_integers(st_adata.X)
+    ):
+        # if any of the inputs is count-data, raise error
+        raise SpacemakeError(f'External dge seems to contain values '+
+            'which are already normalised. Raw-count matrix expected.')
+
+    raise SpacemakeError('Function not implemented')
+
+def save_novosparc_res(tissue, adata_original) -> AnnData:
     import anndata
     import pandas as pd
 
