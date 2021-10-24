@@ -235,36 +235,6 @@ star_index = 'species_data/{species}/star_index'
 bt2_rRNA_index_dir = 'species_data/{species}/bt2_rRNA_index'
 bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'
 
-################################
-# Final output file generation #
-################################
-def get_output_files(pattern, projects = [], samples = [], **kwargs):
-    out_files = []
-    df = project_df.df
-
-    if projects != [] or samples != []:
-        ix = project_df.get_ix_from_project_sample_list(
-            project_id_list = projects,
-            sample_id_list = samples)
-
-        df = df.loc[ix]
-
-    for index, row in df.iterrows():
-        for run_mode in row['run_mode']:
-            run_mode_variables = project_df.config.get_run_mode(run_mode).variables
-            if row.R1 and row.R2:
-                out_files = out_files + expand(pattern,
-                    project = index[0],
-                    sample = index[1],
-                    puck=row['puck_id'], 
-                    run_mode=run_mode,
-                    umi_cutoff=run_mode_variables['umi_cutoff'],
-                    **kwargs)
-
-    # print(f"{pattern} -> {out_files}")
-    return out_files
-
-
 ####################
 # HELPER FUNCTIONS #
 ####################
