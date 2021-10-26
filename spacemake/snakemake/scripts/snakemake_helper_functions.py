@@ -245,7 +245,12 @@ def get_star_index(wildcards):
     species = project_df.get_metadata(
         "species", project_id=wildcards.project, sample_id=wildcards.sample
     )
-    return {"index": expand(star_index, species=species)[0]}
+    species_data = project_df.config.get_variable("species", name=species)
+
+    if 'STAR_index_dir' in species_data:
+        return {'index': species_data['STAR_index_dir']}
+    else:
+        return {"index": expand(star_index, species=species)[0]}
 
 
 def get_rRNA_genome(wildcards):
@@ -558,12 +563,15 @@ def get_puck_file(wildcards):
         "puck_barcode_file", project_id=wildcards.project, sample_id=wildcards.sample
     )
 
-    puck = project_df.get_metadata(
+    puck_name = project_df.get_metadata(
         "puck", project_id=wildcards.project, sample_id=wildcards.sample
     )
+    
+    puck = project_df.config.get_puck(puck_name)
+    print(puck.variables)
 
     if puck_barcode_file is None:
-        return {"barcode_file": config["pucks"][puck]["barcodes"]}
+        return {"barcode_file": puck.variables['barcodes']}
     else:
         return {"barcode_file": puck_barcode_file}
 

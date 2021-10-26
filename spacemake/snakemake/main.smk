@@ -17,7 +17,7 @@ import scanpy as sc
 
 from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
     parse_barcode_file, load_external_dge
-from spacemake.spatial import create_meshed_adata, run_novosparc
+from spacemake.spatial import create_meshed_adata
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
 
@@ -583,21 +583,21 @@ rule run_automated_analysis:
     script:
         'scripts/automated_analysis.py'
 
-rule run_novosparc_analysis:
-    input:
-        automated_analysis_result_file
-    output:
-        novosparc_h5ad,
-        novosparc_obs_df,
-        novosparc_var_df
-    threads: 4
-    run:
-        adata = sc.read(input[0])
-        adata = run_novosparc(adata)
-
-        adata.write(output[0])
-        adata.obs.to_csv(output[1])
-        adata.var.to_csv(output[2])
+#rule run_novosparc_analysis:
+#    input:
+#        automated_analysis_result_file
+#    output:
+#        novosparc_h5ad,
+#        novosparc_obs_df,
+#        novosparc_var_df
+#    threads: 4
+#    run:
+#        adata = sc.read(input[0])
+#        adata = run_novosparc(adata)
+#
+#        adata.write(output[0])
+#        adata.obs.to_csv(output[1])
+#        adata.var.to_csv(output[2])
 
 rule create_automated_analysis_processed_data_files:
     input:

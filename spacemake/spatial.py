@@ -269,8 +269,8 @@ def quantify_clusters_spatially(tissue, cluster_key='clusters'):
     
 def novosparc_denovo(
         adata: AnnData,
-        num_spatial_locations=5000: int,
-        num_input_cells=30000: int,
+        num_spatial_locations: int=5000,
+        num_input_cells: int=30000,
         locations=None,
     ) -> Tissue:
     """reconstruct spatial information de-novo with novosparc.
