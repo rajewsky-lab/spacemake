@@ -27,8 +27,8 @@ To add a visium sample, simply type::
    spacemake projects add_sample \
       --project_id <project_id> \
       --sample_id <sample_id> \
-      --R1 <path_to_R1.fastq.gz> \
-      --R2 <path_to_R2.fastq.gz> \
+      --R1 <path_to_R1.fastq.gz> \ # single R1 or several R1 files
+      --R2 <path_to_R2.fastq.gz> \ # single R2 or several R2 files
       --species <species> \
       --puck visium \
       --run_mode visium \
@@ -39,6 +39,21 @@ Above we add a new visium project with ``puck, run_mode, barcode_flavor`` all se
 This is possible as spacemake comes with pre-defined variables, all suited for visium. The visium ``run_mode`` will process the 
 sample in the same way as `spaceranger <https://support.10xgenomics.com/spatial-gene-expression/software/pipelines/latest/what-is-space-ranger>`_ would: intronic reads will not be counted, multi-mappers (where the multi-mapping read maps only to one CDS or UTR region) will be counted,
 3' polyA stretches will not be trimmed from Read2.
+
+.. note::
+
+   With the ``--R1`` and ``--R2`` you can provide a single ``.fastq.gz`` file (one per mate) or several files per mate.
+   For example, if the result of a demultiplexing run is as follows:
+   
+   ``sample_1a_R1.fastq.gz``, ``sample_1b_R1.fastq.gz``, ``sample_1a_R2.fastq.gz``, ``sample_1b_R2.fastq.gz``, meaning that
+   R1 and R2 are both split into two, one can simply call spacemake with the following command::
+      
+      spacemake projects add_sample \
+         ...
+         --R1 sample_1a_R1.fastq.gz sample_1b_R1.fastq.gz \
+         --R2 sample_1a_R2.fastq.gz sample_1b_R2.fastq.gz \
+
+   The important thing is to always keep the order consistent between the two mates.
 
 To see the values of these predefined variables checkout the :ref:`configuration<Configuration>` docs.
 
