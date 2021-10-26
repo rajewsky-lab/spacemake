@@ -6,6 +6,9 @@ samples.yaml
 *.pdf
 *.txt.gz
 *.fastq.gz
+*.fa
+*.gtf
+*.DS_Store
 .snakemake
 
 scratch
