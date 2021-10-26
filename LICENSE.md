@@ -1,4 +1,7 @@
+GNU General Public License, version 2 (GPL-2.0)
+
 spacemake: pipeline for processing and analysing sequencing based spatial-transcriptomics data.
+
 Copyright (C) 2021 Tamas Ryszard Sztanka-Toth, Marvin Jens, Nikolaos Karaiskos and Nikolaus Rajewsky.
 All rights reserved.
 
