@@ -270,9 +270,21 @@ def quantify_clusters_spatially(tissue, cluster_key='clusters'):
 def novosparc_denovo(
         adata: AnnData,
         num_spatial_locations=5000: int,
-        num_input_cells=30000,
+        num_input_cells=30000: int,
         locations=None,
     ) -> Tissue:
+    """reconstruct spatial information de-novo with novosparc.
+
+    :param adata: A spacemake processed sample.
+    :type adata: AnnData
+    :param num_spatial_locations:
+    :type num_spatial_locations: int
+    :param num_input_cells:
+    :type num_input_cells: int
+    :param locations: Numpy array of (x,y) locations (optional)
+    :type locations: ndarray
+    :rtype: Tissue
+    """
     import numpy as np
     import pandas as pd
     import scanpy as sc
@@ -334,7 +346,12 @@ def novosparc_mapping(sc_adata: AnnData, st_adata: AnnData) -> Tissue:
     :type st_adata: AnnData
     :rtype: Tissue
     """
+    import scanpy as sc
+    import anndata
+    import novosparc
+
     from scanpy._utils import check_nonnegative_integers
+    from scipy.sparse import csc_matrix
 
     if (check_nonnegative_integers(sc_adata.X)
         or check_nonnegative_integers(st_adata.X)
@@ -343,7 +360,44 @@ def novosparc_mapping(sc_adata: AnnData, st_adata: AnnData) -> Tissue:
         raise SpacemakeError(f'External dge seems to contain values '+
             'which are already normalised. Raw-count matrix expected.')
 
-    raise SpacemakeError('Function not implemented')
+    # calculate top 500 variable genes for both
+    sc.pp.highly_variable_genes(sc_adata, n_top_genes=500)
+    sc.pp.highly_variable_genes(st_adata, n_top_genes=500)
+
+    sc_adata_hv = sc_adata.var_names[sc_adata.var.highly_variable].to_list()
+    st_adata_hv = st_adata.var_names[st_adata.var.highly_variable].to_list()
+
+    markers = list(set(sc_adata_hv).intersection(st_adata_hv))
+
+    # save sc dge as a pandas dataframe
+    dge_rep = sc_adata.to_df()[sc_adata_hv]
+
+    if not 'spatial' in st_adata.obsm:
+        raise SpacemakeError(f'The object provided to st_adata is not spatial')
+
+    locations = st_adata.obsm['spatial']
+    atlas_matrix = st_adata.to_df()[markers].values
+
+    # make dense dataset
+    dense_dataset = anndata.AnnData(
+        sc_adata.X.toarray(),
+        obs = sc_adata.obs,
+        var = sc_adata.var)
+
+    marker_ix = [dense_dataset.var.index.get_loc(marker) for marker in markers]
+
+    tissue = novosparc.Tissue(dataset=dense_dataset, locations=locations)
+    num_neighbors_s = num_neighbors_t = 5
+
+    tissue.setup_linear_cost(markers_to_use=marker_ix, atlas_matrix=atlas_matrix,
+                             markers_metric='minkowski', markers_metric_p=2)
+    tissue.setup_smooth_costs(dge_rep = dge_rep,
+                              num_neighbors_s=num_neighbors_s,
+                              num_neighbors_t=num_neighbors_t)
+
+    tissue.reconstruct(alpha_linear=0.5, epsilon=5e-3)
+
+    return tissue
 
 def save_novosparc_res(tissue, adata_original) -> AnnData:
     import anndata
