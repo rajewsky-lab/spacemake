@@ -1336,6 +1336,8 @@ class ProjectDF:
                     ix=ix.to_list(),
                 )
 
+        # after all checks, log that we are merging
+        self.logger.info(f'Merging samples {ix_list} together\n')
         variables_to_deduce = ["investigator", "experiment", "sequencing_date"]
 
         for variable in variables_to_deduce:
