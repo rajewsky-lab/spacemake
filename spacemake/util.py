@@ -1,4 +1,3 @@
-import os
 import errno
 import os
 import logging
@@ -9,7 +8,6 @@ from spacemake.errors import SpacemakeError, FileWrongExtensionError
 LINE_SEPARATOR = "-" * 50 + "\n"
 
 bool_in_str = ["True", "true", "False", "false"]
-
 
 def assert_file(file_path, default_value=None, extension=["all"]):
     if file_path == default_value:
@@ -345,3 +343,16 @@ def str_to_list(value):
     # else create a list
     else:
         return [value]
+
+def check_star_index_compatibility(star_index_dir):
+    import os
+    
+    star_version = os.popen('STAR --version').read().strip()
+
+    with open(os.path.join(star_index_dir, 'Log.out'), 'r') as f:
+        first_line = f.readline().strip()
+        index_version = first_line.split('=')[-1].split('_')[-1]
+
+        if index_version != star_version:
+            raise SpacemakeError(f'STAR index version ({index_version}) is' +
+                f' incompatible with your STAR version ({star_version})')

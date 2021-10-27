@@ -6,6 +6,7 @@ import logging
 
 from spacemake.errors import *
 from spacemake.util import str2bool, assert_file, bool_in_str, message_aggregation
+from spacemake.util import check_star_index_compatibility
 
 logger_name = 'spacemake.config'
 
@@ -110,10 +111,10 @@ def get_species_parser(required=True):
         type = str, required=True)
     parser.add_argument('--genome',
         help = 'path to the genome (.fa) file for the species to be added',
-        type = str, required=True)
+        type = str, required=required)
     parser.add_argument('--annotation',
         help = 'path to the annotation (.gtf) file for the species to be added',
-        type = str, required=True)
+        type = str, required=required)
     parser.add_argument('--rRNA_genome',
         help = 'path to the ribosomal-RNA genome (.fa) file for the species to be added',
         default=None,
@@ -557,6 +558,7 @@ class ConfigFile:
             species['rRNA_genome'] = rRNA_genome
 
         if STAR_index_dir is not None:
+            check_star_index_compatibility(STAR_index_dir)
             species['STAR_index_dir'] = STAR_index_dir
 
         return species
