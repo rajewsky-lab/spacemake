@@ -12,12 +12,19 @@ As spacemake comes with no ``default`` value for ``species``, before anything ca
 a new species has to be added::
 
    spacemake config add_species \
-      --name \       # name of the species
-      --genome \     # path to .fa file
-      --annotation \ # path to .gtf file
-      --rRNA_genome  # (optional) path to ribosomal-RNA genome
+      --name \         # name of the species
+      --genome \       # path to .fa file
+      --annotation \   # path to .gtf file
+      --rRNA_genome \  # (optional) path to ribosomal-RNA genome
+      --STAR_index_dir # (optional) path to an existing STAR index directory
       
 More info :ref:`here <configure-species>`.
+
+.. warning::
+
+    If you provide the ``--STAR_index_dir`` flag, spacemake will check if the STAR 
+    index provided has the same version of STAR as your command-line STAR. If this is
+    not the case, an error will be raised.
 
 Visium quick start
 ------------------

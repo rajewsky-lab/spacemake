@@ -10,5 +10,7 @@ samples.yaml
 *.gtf
 *.DS_Store
 .snakemake
+build
 
+spacemake.egg-info
 scratch

@@ -305,7 +305,11 @@ def fasta_chunks(lines, strip=True, fuse=True):
 
 
 @contextmanager
-def message_aggregation(log_listen="spacemake", print_logger=False):
+def message_aggregation(
+    log_listen="spacemake",
+    print_logger=False,
+    print_success=True
+):
     message_buffer = []
 
     log = logging.getLogger(log_listen)
@@ -325,7 +329,8 @@ def message_aggregation(log_listen="spacemake", print_logger=False):
         else:
             msg = "\n".join(message_buffer)
 
-        msg = f"{msg}\n{LINE_SEPARATOR}SUCCESS!"
+        if print_success:
+            msg = f"{msg}\n{LINE_SEPARATOR}SUCCESS!"
 
         print(msg)
 
