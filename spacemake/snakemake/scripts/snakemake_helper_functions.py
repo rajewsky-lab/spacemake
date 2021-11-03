@@ -568,7 +568,6 @@ def get_puck_file(wildcards):
     )
     
     puck = project_df.config.get_puck(puck_name)
-    print(puck.variables)
 
     if puck_barcode_file is None:
         return {"barcode_file": puck.variables['barcodes']}

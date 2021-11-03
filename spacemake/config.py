@@ -365,11 +365,6 @@ class ConfigFile:
             config_yaml_variables = yaml.load(f,
                     Loader=yaml.FullLoader)
 
-        if config_yaml_variables is None:
-            with open(file_path, 'r') as f:
-                for line in f:
-                    print(line)
-
         if config_yaml_variables is not None:
             cf.variables = config_yaml_variables
 
