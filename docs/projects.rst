@@ -21,16 +21,20 @@ In spacemake each sample can have the folloing variables:
    ``sample_id`` of a sample
 
 ``R1``
-   .fastq.gz file path to Read1 reads
+   ``.fastq.gz`` file path(s) to Read1 read file(s). Can be either a single file, or a space separated list of consecutive files. If a list provided, the files will be merged together and the merged ``R1.fastq.gz`` will be processed downstream.
 
 ``R2``
-   .fastq.gz file path to R2 reads
+    same as before, but for Read2 read file(s).    
 
 ``longreads`` (optional)
    fastq(.gz)|fq(.gz)|bam file path to pacbio long reads for library debugging
 
 ``longread-signature`` (optional)
    identify the expected longread signature (see longread.yaml)
+
+``dge`` (optional)
+    Since the ``0.1`` version of spacemake, it is possible to only provide the count matrix as input data for spacemake.
+    Note: a raw count matrix is expected, if a non count matrix is provided, spacemake will raise an error. 
 
 ``barcode_flavor`` (optional)
    ``barcode_flavor`` of the sample. If not provided, ``default`` will be used (Drop-seq).
@@ -71,8 +75,8 @@ To add a single sample, we can use the following command::
    spacemake projects add_sample \
       --project_id PROJECT_ID \                 # required
       --sample_id SAMPLE_ID \                   # required
-      --R1 R1 \                                 # required, if no longreads
-      --R2 R2 \                                 # required, if no longreads
+      --R1 R1 [R1 R1 ...] \                     # required, if no longreads
+      --R2 R2 [R2 R2 ...] \                     # required, if no longreads
       --longreads LONGREADS \                   # required, if no R1 & R2
       --longread-signature LONGREAD_SIGNATURE \ # optional
       --barcode_flavor BARCODE_FLAVOR \         # optional

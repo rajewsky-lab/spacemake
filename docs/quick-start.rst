@@ -12,12 +12,19 @@ As spacemake comes with no ``default`` value for ``species``, before anything ca
 a new species has to be added::
 
    spacemake config add_species \
-      --name \       # name of the species
-      --genome \     # path to .fa file
-      --annotation \ # path to .gtf file
-      --rRNA_genome  # (optional) path to ribosomal-RNA genome
+      --name \         # name of the species
+      --genome \       # path to .fa file
+      --annotation \   # path to .gtf file
+      --rRNA_genome \  # (optional) path to ribosomal-RNA genome
+      --STAR_index_dir # (optional) path to an existing STAR index directory
       
 More info :ref:`here <configure-species>`.
+
+.. warning::
+
+    If you provide the ``--STAR_index_dir`` flag, spacemake will check if the STAR 
+    index provided has the same version of STAR as your command-line STAR. If this is
+    not the case, an error will be raised.
 
 Visium quick start
 ------------------
@@ -27,8 +34,8 @@ To add a visium sample, simply type::
    spacemake projects add_sample \
       --project_id <project_id> \
       --sample_id <sample_id> \
-      --R1 <path_to_R1.fastq.gz> \
-      --R2 <path_to_R2.fastq.gz> \
+      --R1 <path_to_R1.fastq.gz> \ # single R1 or several R1 files
+      --R2 <path_to_R2.fastq.gz> \ # single R2 or several R2 files
       --species <species> \
       --puck visium \
       --run_mode visium \
@@ -39,6 +46,21 @@ Above we add a new visium project with ``puck, run_mode, barcode_flavor`` all se
 This is possible as spacemake comes with pre-defined variables, all suited for visium. The visium ``run_mode`` will process the 
 sample in the same way as `spaceranger <https://support.10xgenomics.com/spatial-gene-expression/software/pipelines/latest/what-is-space-ranger>`_ would: intronic reads will not be counted, multi-mappers (where the multi-mapping read maps only to one CDS or UTR region) will be counted,
 3' polyA stretches will not be trimmed from Read2.
+
+.. note::
+
+   With the ``--R1`` and ``--R2`` you can provide a single ``.fastq.gz`` file (one per mate) or several files per mate.
+   For example, if the result of a demultiplexing run is as follows:
+   
+   ``sample_1a_R1.fastq.gz``, ``sample_1b_R1.fastq.gz``, ``sample_1a_R2.fastq.gz``, ``sample_1b_R2.fastq.gz``, meaning that
+   R1 and R2 are both split into two, one can simply call spacemake with the following command::
+      
+      spacemake projects add_sample \
+         ...
+         --R1 sample_1a_R1.fastq.gz sample_1b_R1.fastq.gz \
+         --R2 sample_1a_R2.fastq.gz sample_1b_R2.fastq.gz \
+
+   The important thing is to always keep the order consistent between the two mates.
 
 To see the values of these predefined variables checkout the :ref:`configuration<Configuration>` docs.
 

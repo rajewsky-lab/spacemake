@@ -1,5 +1,5 @@
 __author__ = ["Marvin Jens"]
-__license__ = "MIT"
+__license__ = "GPL"
 __email__ = ["marvin.jens@mdc-berlin.de"]
 
 import shelve

@@ -16,8 +16,8 @@ import math
 import scanpy as sc
 
 from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
-    parse_barcode_file
-from spacemake.spatial import create_meshed_adata, run_novosparc
+    parse_barcode_file, load_external_dge
+from spacemake.spatial import create_meshed_adata
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
 
@@ -30,7 +30,6 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 # this file should contain all sample information, sample name etc.
 ####
 # configfile should be loaded from command line
-#
 
 ###############
 # Global vars #
@@ -145,16 +144,24 @@ dge_out_prefix = dge_root + '/dge'
 dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}'
 dge_out = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.txt.gz'
 dge_out_summary = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.summary.txt'
-dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.h5ad'
-dge_out_h5ad_obs = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.obs.csv'
-dge_spatial = dge_out_prefix + dge_out_suffix + '.spatial_beads.h5ad'
-dge_spatial_obs = dge_out_prefix + dge_out_suffix + '.spatial_beads.obs.csv'
+
+# processed dge
+h5ad_dge_suffix = '{is_external}.h5ad'
+h5ad_dge_obs_suffix = '{is_external}.obs.csv'
+dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads' + h5ad_dge_suffix
+dge_out_h5ad_obs = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads' + h5ad_dge_obs_suffix
+
+# spatial dge
+dge_spatial = dge_out_prefix + dge_out_suffix + '.spatial_beads' + h5ad_dge_suffix
+dge_spatial_obs = dge_out_prefix + dge_out_suffix + '.spatial_beads' + h5ad_dge_obs_suffix
+
+# spatial + meshed dge
 dge_spatial_mesh_suffix = '.spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}'
 dge_spatial_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_mesh_suffix
-dge_spatial_mesh = dge_spatial_mesh_prefix + '.h5ad'
-dge_spatial_mesh_obs = dge_spatial_mesh_prefix + '.obs.csv'
+dge_spatial_mesh = dge_spatial_mesh_prefix + h5ad_dge_suffix
+dge_spatial_mesh_obs = dge_spatial_mesh_prefix + h5ad_dge_obs_suffix
 
-dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all']
+dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all', '']
 
 # kmer stats per position
 kmer_stats_file = complete_data_root + '/kmer_stats/{kmer_len}mer_counts.csv'
@@ -175,9 +182,9 @@ automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
 
 automated_analysis_processed_data_files = {
     'cluster_markers': '/top10_cluster_markers.csv',
-    'nhood_enrichment': '/nhood_enrichment.tsv',
-    'obs_df': '/obs_df.tsv',
-    'var_df': '/var_df.tsv'
+    'nhood_enrichment': '/nhood_enrichment.csv',
+    'obs_df': '/obs_df.csv',
+    'var_df': '/var_df.csv'
     }
 
 # prepend automated_result_root
@@ -228,49 +235,6 @@ star_index = 'species_data/{species}/star_index'
 bt2_rRNA_index_dir = 'species_data/{species}/bt2_rRNA_index'
 bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'
 
-################################
-# Final output file generation #
-################################
-def get_output_files(pattern, projects = [], samples = [], **kwargs):
-    out_files = []
-    df = project_df.df
-
-    if projects != [] or samples != []:
-        ix = project_df.get_ix_from_project_sample_list(
-            project_id_list = projects,
-            sample_id_list = samples)
-
-        df = df.loc[ix]
-
-    for index, row in df.iterrows():
-        for run_mode in row['run_mode']:
-            run_mode_variables = project_df.config.get_run_mode(run_mode).variables
-            if row.R1 and row.R2:
-                out_files = out_files + expand(pattern,
-                    project = index[0],
-                    sample = index[1],
-                    puck=row['puck_id'], 
-                    run_mode=run_mode,
-                    umi_cutoff=run_mode_variables['umi_cutoff'],
-                    **kwargs)
-
-    # print(f"{pattern} -> {out_files}")
-    return out_files
-
-##################
-# include pacbio #
-##################
-processed_data_pacbio = processed_data_root + '/pacbio'
-pacbio_fq = raw_data_root + '/pacbio/{sample}.{pacbio_ext}'
-pacbio_report = processed_data_pacbio + '/{sample}.report.pdf'
-pacbio_stats_file = processed_data_pacbio + '/{sample}.summary.tsv'
-pacbio_run_summary = processed_data_pacbio + '/{sample}.examples.txt'
-pacbio_rRNA_out = processed_data_pacbio + '/{sample}.rRNA.txt'
-pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf'
-pacbio_overview_csv = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.csv'
-pacbio_bead_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_bead_overview.pdf'
-
-
 ####################
 # HELPER FUNCTIONS #
 ####################
@@ -286,14 +250,13 @@ include: 'pacbio.smk'
 
 # global wildcard constraints
 wildcard_constraints:
-    sample='(?!merged_).+',
-    project='(?!merged_).+',
     dge_cleaned='|.cleaned',
     dge_type = '|'.join(dge_types),
     pacbio_ext = 'fq|fastq|bam',
     polyA_adapter_trimmed = '|.polyA_adapter_trimmed',
     mm_included = '|.mm_included',
-    n_beads = '[0-9]+|spatial',
+    n_beads = '[0-9]+|spatial|external',
+    is_external = '|.external',
     spot_diameter_um = '[0-9]+',
     spot_distance_um = '[0-9]+|hexagon',
     data_root_type = 'complete_data|downsampled_data',
@@ -304,12 +267,20 @@ wildcard_constraints:
 #############
 rule all:
     input:
+        # create fastq
+        unpack(
+            lambda wildcards: get_output_files(
+                    fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
+                    data_root_type = 'complete_data', downsampling_percentage = '',
+                    filter_merged=True) 
+                if config['with_fastqc'] else []
+        ),
+        unpack(get_all_dges),
         # this will also create the clean dge
         get_output_files(automated_report, data_root_type = 'complete_data',
             downsampling_percentage=''),
-        #get_output_files(novosparc_h5ad),
         get_output_files(qc_sheet, data_root_type = 'complete_data',
-            downsampling_percentage=''),
+            downsampling_percentage='', run_on_external=False),
         get_longread_output()
 
 ##############
@@ -372,25 +343,19 @@ rule link_demultiplexed_reads:
         find {params.demux_dir} -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -sr {{}} {output} \; 
         """
 
-def get_reads(wildcards):
-    ###
-    # R1 and R2 for demultiplexed reads will return none
-    ### 
-    reads = project_df.get_metadata('R'+ wildcards.mate, sample_id = wildcards.sample, project_id = wildcards.project)
-    if reads is None:
-        return ['none']
-    else:
-        return [reads]
-
 rule link_raw_reads:
     input:
         unpack(get_reads)
     output:
         raw_reads_pattern
-    shell:
-        """
-        ln -rs {input} {output}
-        """
+    run:
+        if len(input) == 1:
+            # either link raw reads
+            shell("ln -rs {input} {output}")
+        else:
+            # or append reads together
+            shell("cat {input} > {output}")
+            
 
 rule zcat_pipe:
     input: "{name}.fastq.gz"
@@ -536,14 +501,18 @@ rule create_dge:
 rule create_h5ad_dge:
     input:
         unpack(get_puck_file),
-        dge_txt = dge_out,
-        dge_summary_txt = dge_out_summary
+        unpack(get_raw_dge)
     # output here will either be n_beads=number, n_beads=spatial
     output: dge_out_h5ad, dge_out_h5ad_obs
     run:
-        adata = dge_to_sparse_adata(
-            input['dge_txt'],
-            input['dge_summary_txt'])
+        if wildcards.is_external == '.external':
+            adata = load_external_dge(input['dge'])
+        else:
+            adata = dge_to_sparse_adata(
+                input['dge'],
+                input['dge_summary'])
+
+        # attach barcodes
         if 'barcode_file' in input.keys() and wildcards.n_beads == 'spatial':
             adata = attach_barcode_file(adata, input['barcode_file'])
         adata.write(output[0])
@@ -614,21 +583,21 @@ rule run_automated_analysis:
     script:
         'scripts/automated_analysis.py'
 
-rule run_novosparc_analysis:
-    input:
-        automated_analysis_result_file
-    output:
-        novosparc_h5ad,
-        novosparc_obs_df,
-        novosparc_var_df
-    threads: 4
-    run:
-        adata = sc.read(input[0])
-        adata = run_novosparc(adata)
-
-        adata.write(output[0])
-        adata.obs.to_csv(output[1])
-        adata.var.to_csv(output[2])
+#rule run_novosparc_analysis:
+#    input:
+#        automated_analysis_result_file
+#    output:
+#        novosparc_h5ad,
+#        novosparc_obs_df,
+#        novosparc_var_df
+#    threads: 4
+#    run:
+#        adata = sc.read(input[0])
+#        adata = run_novosparc(adata)
+#
+#        adata.write(output[0])
+#        adata.obs.to_csv(output[1])
+#        adata.var.to_csv(output[2])
 
 rule create_automated_analysis_processed_data_files:
     input:

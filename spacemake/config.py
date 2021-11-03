@@ -6,6 +6,7 @@ import logging
 
 from spacemake.errors import *
 from spacemake.util import str2bool, assert_file, bool_in_str, message_aggregation
+from spacemake.util import check_star_index_compatibility
 
 logger_name = 'spacemake.config'
 
@@ -110,14 +111,18 @@ def get_species_parser(required=True):
         type = str, required=True)
     parser.add_argument('--genome',
         help = 'path to the genome (.fa) file for the species to be added',
-        type = str, required=True)
+        type = str, required=required)
     parser.add_argument('--annotation',
         help = 'path to the annotation (.gtf) file for the species to be added',
-        type = str, required=True)
+        type = str, required=required)
     parser.add_argument('--rRNA_genome',
         help = 'path to the ribosomal-RNA genome (.fa) file for the species to be added',
         default=None,
         type = str)
+    parser.add_argument('--STAR_index_dir',
+        help = 'path to STAR index directory',
+        type = str,
+        required = False)
 
     return parser
 
@@ -219,7 +224,6 @@ def setup_config_parser(config, subparsers):
 @message_aggregation(logger_name)
 def add_update_delete_variable_cmdline(config, args):
     # set the name and delete from dictionary
-    print(args)
     name = args['name']
     variable = args['variable']
     action = args['action']
@@ -316,7 +320,9 @@ class Puck(ConfigMainVariable):
 
     @property
     def has_barcodes(self):
-        return 'barcodes' in self.variables
+        return ('barcodes' in self.variables
+                and self.variables['barcodes']
+                and self.variables['barcodes'] != 'None')
 
 class ConfigFile:
     initial_config_path = os.path.join(os.path.dirname(__file__),
@@ -353,12 +359,19 @@ class ConfigFile:
     @classmethod
     def from_yaml(cls, file_path):
         cf = cls()
-        cf.variables = yaml.load(open(file_path),
+
+        config_yaml_variables = None
+        with open(file_path, 'r') as f:
+            config_yaml_variables = yaml.load(f,
                     Loader=yaml.FullLoader)
+
+        if config_yaml_variables is not None:
+            cf.variables = config_yaml_variables
+
         cf.file_path = file_path
 
         if file_path != cf.initial_config_path:
-            initial_config = ConfigFile.get_initial_config()
+            initial_config = ConfigFile.from_yaml(cf.initial_config_path)
 
             # correct variables to ensure backward compatibility
             cf.correct() 
@@ -385,16 +398,6 @@ class ConfigFile:
                     default_val.update(cf.variables[var_with_default]['default'])
                     cf.variables[var_with_default]['default'] = default_val
 
-            if cf.file_path != initial_config.file_path:
-                # only dump if not initial config
-                cf.dump()
-        
-        return cf
-
-    @classmethod
-    def get_initial_config(cls):
-        cf = cls.from_yaml(cls.initial_config_path)
-
         return cf
 
     def assert_main_variable(self, variable):
@@ -404,46 +407,51 @@ class ConfigFile:
 
     def correct(self):
         # ensures backward compatibility
-        if 'pucks' not in self.variables and 'pucks' in self.variables['puck_data']:
-            self.variables['pucks'] = self.variables['puck_data']['pucks']
-            del self.variables['puck_data']['pucks']
-
-        if 'barcode_flavors' not in self.variables.keys() and 'barcode_flavor' in self.variables['knowledge']:
-            self.variables['barcode_flavors'] = self.variables['knowledge']['barcode_flavor']
+        if 'pucks' not in self.variables:
+            self.variables['pucks'] = {}
+            if 'puck_data' in self.variables:
+                if 'pucks' in self.variables['puck_data']:
+                    self.variables['pucks'] = self.variables['puck_data']['pucks']
+                    del self.variables['puck_data']['pucks']
         
-        if 'species' not in self.variables and 'knowledge' in self.variables:
+        if 'barcode_flavors' not in self.variables:
+            self.variables['barcode_flavors'] = {}
+            if 'knowledge' in self.variables:
+                if 'barcode_flavor' in self.variables['knowledge']:
+                    self.variables['barcode_flavors'] = self.variables['knowledge']['barcode_flavor']
+        
+        if 'species' not in self.variables:
             # get all the species and save them in the right place
             # if species is empty, create a species dictionary
             self.variables['species'] = {}
 
-            # extract all annotation info, if exists
-            for species in self.variables['knowledge'].get('annotations', {}):
-                if species not in self.variables['species']:
-                    self.variables['species'][species] = {}
+            if 'knowledge' in self.variables:
+                # extract all annotation info, if exists
+                for species in self.variables['knowledge'].get('annotations', {}):
+                    if species not in self.variables['species']:
+                        self.variables['species'][species] = {}
 
-                self.variables['species'][species]['annotation'] = \
-                    self.variables['knowledge']['annotations'][species]
+                    self.variables['species'][species]['annotation'] = \
+                        self.variables['knowledge']['annotations'][species]
 
-            for species in self.variables['knowledge'].get('genomes', {}):
-                if species not in self.variables['species']:
-                    self.variables['species'][species] = {}
+                for species in self.variables['knowledge'].get('genomes', {}):
+                    if species not in self.variables['species']:
+                        self.variables['species'][species] = {}
 
-                self.variables['species'][species]['genome'] = \
-                    self.variables['knowledge']['genomes'][species]
+                    self.variables['species'][species]['genome'] = \
+                        self.variables['knowledge']['genomes'][species]
 
-            for species in self.variables['knowledge'].get('rRNA_genomes', {}):
-                if species not in self.variables['species']:
-                    self.variables['species'][species] = {}
+                for species in self.variables['knowledge'].get('rRNA_genomes', {}):
+                    if species not in self.variables['species']:
+                        self.variables['species'][species] = {}
 
-                self.variables['species'][species]['rRNA_genome'] = \
-                    self.variables['knowledge']['rRNA_genomes'][species]
+                    self.variables['species'][species]['rRNA_genome'] = \
+                        self.variables['knowledge']['rRNA_genomes'][species]
 
         if 'knowledge' in self.variables:
             del self.variables['knowledge']
         
-        if 'species' not in self.variables:
-            self.variables['species'] = {}
-
+        # correct run modes
         for run_mode_name, run_mode_variables in self.variables['run_modes'].items():
             variables = run_mode_variables.copy()
             for var in run_mode_variables:
@@ -489,7 +497,7 @@ class ConfigFile:
 
         return variable_data
 
-    def __process_run_mode_args(self, **kwargs):
+    def process_run_mode_args(self, **kwargs):
         # typeset boolean values of run_mode
         default_run_mode = self.get_variable('run_modes', 'default')
 
@@ -499,7 +507,7 @@ class ConfigFile:
 
         return kwargs
 
-    def __process_barcode_flavor_args(self, cell_barcode=None, umi=None):
+    def process_barcode_flavor_args(self, cell_barcode=None, umi=None):
         bam_tags = 'CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}'
 
         # r(1|2) and then string slice
@@ -522,7 +530,13 @@ class ConfigFile:
 
         return barcode_flavor
 
-    def __process_species_args(self, genome=None, annotation=None, rRNA_genome = None):
+    def process_species_args(
+        self,
+        genome=None,
+        annotation=None,
+        rRNA_genome = None,
+        STAR_index_dir = None,
+    ):
         assert_file(genome, default_value=None, extension = '.fa')
         assert_file(annotation, default_value=None, extension = '.gtf')
         assert_file(rRNA_genome, default_value = None, extension = '.fa')
@@ -538,9 +552,13 @@ class ConfigFile:
         if rRNA_genome is not None:
             species['rRNA_genome'] = rRNA_genome
 
+        if STAR_index_dir is not None:
+            check_star_index_compatibility(STAR_index_dir)
+            species['STAR_index_dir'] = STAR_index_dir
+
         return species
 
-    def __process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes = None):
+    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes = None):
         assert_file(barcodes, default_value = None, extension = 'all')
         
         puck = {}
@@ -556,21 +574,21 @@ class ConfigFile:
 
         return puck
 
-    def __process_variable_args(self, variable, **kwargs):
+    def process_variable_args(self, variable, **kwargs):
         if variable == 'barcode_flavors':
-            return self.__process_barcode_flavor_args(**kwargs)
+            return self.process_barcode_flavor_args(**kwargs)
         elif variable == 'run_modes':
-            return self.__process_run_mode_args(**kwargs)
+            return self.process_run_mode_args(**kwargs)
         elif variable == 'pucks':
-            return self.__process_puck_args(**kwargs)
+            return self.process_puck_args(**kwargs)
         elif variable == 'species':
-            return self.__process_species_args(**kwargs)
+            return self.process_species_args(**kwargs)
         else:
             ValueError(f'Invalid variable: {variable}')
         
     def add_variable(self, variable, name, **kwargs):
         if not self.variable_exists(variable, name):
-            values = self.__process_variable_args(variable, **kwargs)
+            values = self.process_variable_args(variable, **kwargs)
             self.variables[variable][name] = values
         else:
             if variable in ['run_modes', 'pucks', 'barcode_flavors']:
@@ -583,7 +601,7 @@ class ConfigFile:
 
     def update_variable(self, variable, name, **kwargs):
         if self.variable_exists(variable, name):
-            values = self.__process_variable_args(variable, **kwargs)
+            values = self.process_variable_args(variable, **kwargs)
             self.variables[variable][name].update(values)
 
             variable_data = self.variables[variable][name]

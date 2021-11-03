@@ -18,6 +18,10 @@ else:
     print(f'filtering by umi cutoff: {umi_cutoff}')
     adata = adata[adata.obs.total_counts > umi_cutoff, :]
 
+# make the var indices (gene names) and obs indices (cell barcode) unique
+adata.obs_names_make_unique()
+adata.var_names_make_unique()
+
 # save the raw counts
 adata.raw = adata
 

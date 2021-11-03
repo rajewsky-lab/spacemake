@@ -15,11 +15,28 @@ from collections import defaultdict
 
 def detect_sample(args):
     if args.sample is None:
+        if not hasattr(args.fname):
+            raise ValueError("please provide a sample-identifier via --sample")
+
         sample_name, _ = os.path.splitext(os.path.basename(args.fname))
         logging.info(f"auto-detected sample_name={sample_name}")
     else:
         sample_name = args.sample
     return sample_name.replace(".stats", "")
+
+
+def store_results(df, path, fname, logger, **kw):
+    fpath = os.path.join(util.ensure_path(path), fname)
+    df.to_csv(fpath, sep="\t", **kw)
+    logger.info(f"storing {len(df)} rows to '{fpath}'")
+    return fpath
+
+
+def load_results(path, fname, logger, **kw):
+    fpath = os.path.join(path, fname)
+    df = pd.read_csv(fpath, sep="\t", comment="#", **kw).fillna("other")
+    logger.info(f"loaded {len(df)} rows from '{fpath}'")
+    return df
 
 
 class SignatureDB:
@@ -178,12 +195,8 @@ def ann_main(args):
 
     df_pT = util.count_dict_to_df(pT_counts, kind="polyT_after", n_total=n_total)
 
-    fname = os.path.join(
-        util.ensure_path(args.stats_out), f"{args.sample_name}.stats.tsv"
-    )
-    logging.info(f"storing annotation signature counts as DataFrame '{fname}'")
     df = pd.concat([df_sig, df_concat, df_reprimed, df_comp, df_pT])
-    df.to_csv(fname, sep="\t", index=False)
+    store_results(df, args.stats_out, f"{args.sample_name}.stats.tsv", args.logger)
 
     # TODO: prefix/suffix counts add up to > 100%. Needs fix
     util.count_dict_out(pT_counts, "polyT after", total=n_total)
@@ -241,21 +254,15 @@ def ann_main(args):
     df_parts = pd.DataFrame(
         data, columns=["signature", "oligo", "attr", "value", "freq"]
     )
-    fname = os.path.join(
-        util.ensure_path(args.stats_out), f"{args.sample_name}.intact_parts.tsv"
+    store_results(
+        df_parts, args.stats_out, f"{args.sample_name}.intact_parts.tsv", args.logger
     )
-    logging.info(f"storing intact signature part-statistics as DataFrame '{fname}'")
-    df_parts.to_csv(fname, sep="\t", index=False)
-
-    # # plot score distributions
-    # qnames, starts, ends, scores, qlens = annotation.query_oligo_occurrences(
-    #     "bead_start"
-    # )
 
     # output representative examples
-    eo_fname = util.ensure_path(
-        os.path.join(args.examples_out, f"{args.sample_name}.txt")
+    eo_fname = os.path.join(
+        util.ensure_path(args.examples_out), f"{args.sample_name}.txt"
     )
+
     with open(eo_fname, "wt") as eo:
         for signame, sigcount in sorted(sig_counts.items(), key=lambda x: -x[1]):
             try:
@@ -269,25 +276,36 @@ def ann_main(args):
                 )
 
 
+def get_synth_rates(found_part_counts, all_parts, n_total):
+    rates = []
+
+    n0 = n_total
+    x = range(1, len(all_parts) + 1)
+    for i in x:
+        key = tuple(all_parts[:i])
+        # print(found_part_counts)
+        # print(key, found_part_counts[key], n0, rates)
+        rates.append(found_part_counts[key] / float(max(1, n0)))
+        # print(i, rates)
+        n0 = found_part_counts[key]
+
+    return np.array(rates)
+
+
 def rep_main(args):
     args = setup_namespace(args)
-    args.logger.info(f"generating reports from '{args.fname}'")
-    fname = os.path.join(
-        util.ensure_path(args.stats_out), f"{args.sample_name}.stats.tsv"
-    )
-    df = pd.read_csv(fname, sep="\t", comment="#").fillna("other")
-    print(df)
+    args.logger.info(f"generating report plots for '{args.sample_name}'")
+    args.logger.debug(f"'bead-related' if we detect: '{args.bead_related}'")
+
+    df = load_results(args.stats_out, f"{args.sample_name}.stats.tsv", args.logger)
     sig_counts = util.count_dict_from_df(df, "signatures")
-    # print(sig_counts)
     util.count_dict_out(
         sig_counts, "signatures", misc_thresh=0.05, total=sig_counts["n_total"]
     )
-    print(
-        "summed up counts in sig_counts dict", np.array(list(sig_counts.values())).sum()
-    )
     n_total = sig_counts["n_total"]
-    print(f"oligo name flagging 'bead-related' signature: {args.bead_related}")
+    args.logger.info(f"n_total={n_total}")
 
+    # disentangle bead-related from other signatures
     ov_counts, bead_counts, found_part_counts, core_signature = util.digest_signatures(
         sig_counts,
         args.bead_related,
@@ -295,67 +313,69 @@ def rep_main(args):
         # prefixes=args.prefixes,
         # suffixes=args.suffixes,
     )
+    # group low abundance signatures into 'misc' for overview donut plot
     ov_simple, _ = util.count_dict_out(
         ov_counts, "overview counts", misc_thresh=0.01, total=sig_counts["n_total"]
     )
+    # group low abundance signatures into 'misc' for bead completeness donut plot
     bead_simple, _ = util.count_dict_out(
         bead_counts, "bead counts", misc_thresh=0.0, total=ov_counts["bead-related"]
     )
-    print("found_part_counts")
-    for k, v in found_part_counts.items():
-        print(k, v)
+    # store the donut plot values in ...report.tsv for cross-sample overviews and such
+    df_ov = util.count_dict_to_df(ov_simple, kind="overview")
+    df_bead = util.count_dict_to_df(bead_simple, kind="bead_related")
+    df_rep = pd.concat([df_ov, df_bead])
+    df_rep["sample"] = args.sample_name
+    df_rep["signature"] = args.signature
+    print(df_rep)
+    store_results(df_rep, args.stats_out, f"{args.sample_name}.report.tsv", args.logger)
 
-    print("=" * 30)
+    # compute and store apparent synthesis rates
+    syn_rates = get_synth_rates(found_part_counts, core_signature, n_total)
+    df = pd.DataFrame(dict(segment=core_signature, rate=syn_rates))
+    df["sample"] = args.sample_name
+    store_results(df, args.stats_out, f"{args.sample_name}.synth.tsv", args.logger)
+
+    # prepare for plotting
     del ov_simple["n_total"]
-
+    # assert np.array(list(ov_simple.values())).sum() == n_total
     print(
-        "summed up counts after splitting and dropping n_total",
-        np.array(list(ov_simple.values())).sum(),
+        f"sum of ov_simple {np.array(list(ov_simple.values())).sum()} n_total={n_total}"
     )
-    print(f"n_total={n_total}")
 
     ov_items = sorted(ov_simple.items(), key=lambda x: -x[1])
     ov_labels = [x[0] for x in ov_items]
     ov_counts = [x[1] for x in ov_items]
 
     bead_items = sorted(bead_simple.items(), key=lambda x: -x[1])
-
     bead_labels = [x[0] for x in bead_items]
     bead_counts = [x[1] for x in bead_items]
 
-    fname = os.path.join(
-        util.ensure_path(args.report_out), f"{args.sample_name}.donuts.pdf"
-    )
-    syn_rates = report.plot_results(
+    # render the donut plots #
+    report.plot_results(
         sig_counts,
         ov_labels,
         ov_counts,
         bead_labels,
         bead_counts,
-        found_part_counts,
+        syn_rates,
         all_parts=core_signature,
-        fname=fname,
+        fname=os.path.join(
+            util.ensure_path(args.report_out), f"{args.sample_name}.donuts.pdf"
+        ),
         suptitle=args.sample_name,
     )
-    # print(core_signature)
-    # print(syn_rates)
-    fname = os.path.join(
-        util.ensure_path(args.stats_out), f"{args.sample_name}.synth.tsv"
-    )
-    df = pd.DataFrame(dict(segment=core_signature, rate=syn_rates))
-    df["sample"] = args.sample_name
-    print(df)
-    df.to_csv(fname, sep="\t")
 
-    fname = os.path.join(
-        util.ensure_path(args.stats_out), f"{args.sample_name}.intact_parts.tsv"
-    )
-    df = pd.read_csv(fname, sep="\t", comment="#").fillna("other")
-    fname = os.path.join(
-        util.ensure_path(args.report_out), f"{args.sample_name}.hists.pdf"
-    )
+    # render the pre-computed position/score/length histograms as a plot
     report.plot_histograms(
-        df, fname, n_total=n_total, parts=args.intact_bead.split(",")
+        df=load_results(
+            args.stats_out, f"{args.sample_name}.intact_parts.tsv", args.logger
+        ),
+        fname=os.path.join(
+            util.ensure_path(args.report_out), f"{args.sample_name}.hists.pdf"
+        ),
+        n_total=n_total,
+        parts=args.intact_bead.split(","),
     )
 
 
@@ -389,11 +409,8 @@ def main_edits(args):
     df = pd.DataFrame(
         data, columns=["oligo", "seq", "nmatch", "pos", "fmatch", "ed_dict"]
     )
-    # print(df)
-    df.to_csv(
-        os.path.join(args.stats_out, f"{args.sample_name}.oligo_edits.tsv"),
-        sep="\t",
-        index=False,
+    store_results(
+        df, args.stats_out, f"{args.sample_name}.oligo_edits.tsv", args.logger
     )
 
     report.plot_edits(
@@ -484,54 +501,257 @@ def main_extract(args):
             print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
 
 
-def load_tables_overview(sample_fnames, pattern):
+def main_overview(args):
     dfs = []
-    for fname in sample_fnames:
-        sample_name = os.path.splitext(os.path.basename(fname))[0]
-        df = pd.read_csv(
-            pattern.format(sample_name=sample_name),
-            sep="\t",
-        )
-        df["sample"] = sample_name
+    for fname in list(args.reports):
+        print(f"loading {fname}")
+        df = pd.read_csv(fname, sep="\t", index_col=0)
         dfs.append(df)
 
-    df = pd.concat(dfs)
-    samples = sorted(df["sample"].drop_duplicates())
+    df = pd.concat(dfs, ignore_index=True)
 
-    return df, samples
+    dfsig = df[["sample", "signature"]].drop_duplicates().set_index("sample")
+    print(dfsig)
+    df = df[["name", "count", "sample"]].pivot(
+        index="sample", columns="name", values="count"
+    )  # .query("kind == 'overview'")
+    df = df.fillna(0).div(df["n_total"], axis=0)
+    df *= 100  # we'd like percentages
 
+    repriming = [
+        "TSO,TSO_RC",
+        "dN-SMRT,dN-SMRT_RC",
+    ]
+    concatenation = [c for c in df.columns if "+" in c]
+    bead = ["complete", "only_bead_start", "missing_polyT", "missing_OP1"][::-1]
 
-def synthesis_rates_overview(args):
-    df, samples = load_tables_overview(
-        args.overview_samples, os.path.join(args.stats_out, "{sample_name}.synth.tsv")
+    # # avoid crash if columns are missing
+    for r in repriming + concatenation + bead:
+        if r not in df.columns:
+            df[r] = 0
+
+    # print(df)
+    # print(f"concat columns {concatenation}")
+    # print(f"bead columns {bead}")
+    df["reprimed"] = df[repriming].sum(axis=1)
+    # df["complete"] = np.nan_to_num(df["complete"], nan=0.0)
+    df["concat"] = df[concatenation].sum(axis=1)
+    df["bead_related"] = np.nan_to_num(df[bead].sum(axis=1), nan=0.0)
+
+    def ds(row):
+        sig = dfsig.loc[row.name]
+        res = (sig == "dropseq") * row.complete
+        return res
+
+    df["dropseq"] = df[["complete"]].apply(ds, axis=1)
+    # df["complete"] = df[""]
+    df["incomplete"] = df["bead-related"] - df["complete"] - df["dropseq"]
+    df["non_bead"] = 100 - df["bead-related"]
+    df["fidelity"] = 100 * df["complete"] / df["bead-related"]
+    df = df.fillna(0)
+    # print(df)
+    if args.csv_out:
+        df.to_csv(args.csv_out, float_format="%.2f", sep="\t")
+
+    def clean(txt):
+        txt = os.path.basename(txt)
+        t = (
+            txt.replace("source/", "")
+            .replace("sts_", "")
+            .replace("pb_", "")
+            .replace("ds_", "")
+            .replace(".fq", "")
+            .replace(".bam", "")
+            .replace("lima.", "")
+        )
+
+        if t.count("_") > 1:
+            t = "_".join(t.split("_")[:2])
+
+        return t
+
+    df = df.reset_index()
+    # df = df.sort_values('bead_related')
+    df = df.sort_values("sample")
+
+    def guess_rRNA_file(path):
+        # print("guessrRNA raw path", path)
+        name = os.path.basename(path).replace(".summary", ".rRNA")
+
+        if args.rRNA_same_place:
+            place = os.path.dirname(path)
+        else:
+            place = args.rRNA
+
+        return [
+            os.path.join(place, name.replace(".fq", ".txt")),
+            os.path.join(place, name.replace(".fq", ".txt")).replace(
+                ".rRNA.tsv", ".txt"
+            ),
+            os.path.join(place, name.replace(".fq", ".txt")).replace(
+                ".rRNA.tsv", ".rRNA.txt"
+            ),
+            os.path.join(place, name.replace(".bam", ".txt").replace("lima.", "")),
+            os.path.join(
+                place, name.replace(".bam", ".txt").replace("lima.", "")
+            ).replace(".rRNA.tsv", ".txt"),
+            os.path.join(
+                place, name.replace(".bam", ".txt").replace("lima.", "")
+            ).replace(".rRNA.tsv", ".rRNA.txt"),
+        ]
+
+    # rRNA_fracs = []
+    # for row in df[["stats_file", "N_reads"]].itertuples():
+    #     rcount = np.nan
+    #     for fname in guess_rRNA_file(row.stats_file):
+    #         print(fname)
+    #         try:
+    #             rcount = int(open(fname).read())
+    #         except (FileNotFoundError, ValueError):
+    #             pass
+    #         else:
+    #             break
+    #     if rcount == np.nan:
+    #         raise ValueError
+
+    #     rRNA_fracs.append(100.0 * rcount / row.N_reads)
+
+    # df["rRNA"] = rRNA_fracs
+    # print(df[['qfa', 'rRNA']])
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    plt.rcParams.update({"font.size": 8})
+
+    def make_bars(
+        ax, df, kinds, labels, cmap=plt.get_cmap("tab10"), w=0.9, colors=None
+    ):
+        n = len(kinds)
+        if colors is None:
+            colors = cmap(np.linspace(0, 1, n))
+
+        x = np.arange(len(df)) - w / 2.0
+        y0 = np.zeros(len(x), dtype=float)
+        for kind, label, color in zip(kinds, labels, colors):
+            y = np.nan_to_num(df[kind], nan=0.0)
+            # print(kind)
+            # print(y)
+            ax.bar(x, y, bottom=y0, label=label, width=w, color=color)
+            y0 += y
+
+        ax.set_ylabel("fraction of library")
+        ax.set_xticks(x)
+        labels = df["sample"]  # [clean(fq) for fq in df['qfa']]
+        ax.set_xticklabels(labels, rotation=90)
+        ax.set_ylim(0, 100)
+
+    marie = [
+        "non_bead",
+        "incomplete",
+        "dropseq",
+        "complete",
+    ]
+    marie_colors = ["gray", "royalblue", "green", "gold"]
+
+    w = max(8 / 25.0 * len(df), 5)
+    if args.multi_page:
+        pdf = PdfPages(args.breakdown)
+        fig, ax1 = plt.subplots(1, figsize=(w, 8))
+    else:
+        fig, (ax1, ax2) = plt.subplots(2, figsize=(w, 8), sharex=True)
+
+    make_bars(
+        ax1,
+        df,
+        marie,
+        labels=marie,
+        colors=marie_colors,
     )
-    df["segment"] = df["segment"].apply(lambda x: x.replace("_2s", ""))
+    ax1.legend(title="Marie-stats", ncol=len(marie))
+    if args.multi_page:
+        fig.tight_layout()
+        pdf.savefig()
+        plt.close()
+        fig, ax2 = plt.subplots(1, figsize=(w, 4))
 
-    db = get_samples_db(args)
-    samples = db.sort_samples(samples)
+    make_bars(ax2, df, ["fidelity"], labels=["bead fidelity"])
+    ax2.set_ylabel("bead fidelity")
+    if args.multi_page:
+        fig.tight_layout()
+        pdf.savefig()
+        pdf.close()
+    else:
+        fig.tight_layout()
+        plt.savefig(args.breakdown)
 
-    row_labels = ["bead_start", "OP1", "OP2", "OP3", "polyT"]
-    dfs = [df.query(f"segment == '{part}'") for part in row_labels]
+    plt.close()
 
-    fig, axes = report.multi_row_barplots(
-        dfs, row_labels, samples, "rate", color_dict=db.color
+    if args.multi_page:
+        pdf = PdfPages(args.output)
+        fig, ax1 = plt.subplots(1, figsize=(w, 4))
+    else:
+        fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, figsize=(w, 12), sharex=True)
+
+    # print("bead related", bead)
+    make_bars(ax1, df, bead, labels=bead)
+    ax1.legend(title="bead-related", ncol=len(bead))
+    if args.multi_page:
+        fig.tight_layout()
+        pdf.savefig()
+        plt.close()
+        fig, ax2 = plt.subplots(1, figsize=(w, 4))
+
+    # print("repriming events", repriming)
+    make_bars(
+        ax2,
+        df,
+        repriming,
+        labels=[r.split(",")[0] for r in repriming],
+        cmap=plt.get_cmap("tab20c"),
     )
-    fig.suptitle("apparent synthesis rates")
+    ax2.legend(title="repriming", ncol=len(repriming))
+    if args.multi_page:
+        fig.tight_layout()
+        pdf.savefig()
+        plt.close()
+        fig, ax3 = plt.subplots(1, figsize=(w, 4))
 
-    fig.tight_layout()
-    fig.savefig("overview_syn_rates.pdf")
+    # print("concat events", concatenation)
+    make_bars(ax3, df, concatenation, labels=concatenation, cmap=plt.get_cmap("tab20b"))
+    ax3.legend(title="concatamers", ncol=len(concatenation))
+    if args.multi_page:
+        fig.tight_layout()
+        pdf.savefig()
+        plt.close()
+        fig, ax4 = plt.subplots(1, figsize=(w, 4))
+
+    # make_bars(
+    #     ax4,
+    #     df,
+    #     [
+    #         "rRNA",
+    #     ],
+    #     labels=["rRNA"],
+    #     cmap=plt.get_cmap("tab20c"),
+    # )
+    ax4.legend(title="human rRNA", ncol=1)
+    if args.multi_page:
+        fig.tight_layout()
+        pdf.savefig()
+        pdf.close()
+    else:
+        fig.tight_layout()
+        plt.savefig(args.output)
+
+    plt.close()
     return df
-
-
-def main_overview(args):
-    return synthesis_rates_overview(args)
 
 
 def prepare_parser():
     parser = argparse.ArgumentParser(prog="longread")
-    parser.add_argument(
-        "fname", default=None, help="file with pacbio reads (FASTQ or BAM format)"
-    )
     parser.add_argument(
         "--sample",
         help="sample name (default=autodetect from fname)",
@@ -563,6 +783,11 @@ def prepare_parser():
         help="path to store annotation data in (default=./annotation/)",
     )
     parser.add_argument(
+        "--examples-out",
+        help="path to store annotated example read sequences",
+        default="./examples/",
+    )
+    parser.add_argument(
         "--stats-out",
         help="path to store statistics (pandas dataframes)",
         default="./stats/",
@@ -591,14 +816,18 @@ def prepare_parser():
     aln_parser = subparsers.add_parser(
         "align", help="align PacBio reads against oligos"
     )
-
+    aln_parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
+    )
     ann_parser = subparsers.add_parser(
         "annotate", help="create annotation from detected oligo matches"
     )
     ann_parser.add_argument(
-        "--examples-out",
-        help="path to store annotated example read sequences",
-        default="./examples/",
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
     )
     ann_parser.add_argument(
         "--polyT",
@@ -616,6 +845,11 @@ def prepare_parser():
         type=int,
         default=1000,
         help="number of sample alignments to gather edit statistics from (default=1000)",
+    )
+    ed_parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
     )
 
     xt_parser = subparsers.add_parser(
@@ -663,7 +897,6 @@ def prepare_parser():
         type=int,
         help="number of nt from end of sequence that are considered for oligo matches when extracting cDNA",
     )
-
     xt_parser.add_argument(
         "--top-barcodes",
         type=str,
@@ -674,8 +907,34 @@ def prepare_parser():
     ov_parser = subparsers.add_parser(
         "overview", help="make overview plots across samples"
     )
+    ov_parser.add_argument("reports", nargs="+", help="sample reports to aggregate")
     ov_parser.add_argument(
-        "overview_samples", nargs="+", help="sample names to aggregate"
+        "--output", default="pb_overview.pdf", help="path/name of detailed report PDF"
+    )
+    ov_parser.add_argument(
+        "--csv-out", default="all_pb_stats.csv", help="path/name of detailed report PDF"
+    )
+    ov_parser.add_argument(
+        "--breakdown",
+        default="bead_overview.pdf",
+        help="path/name of bead report (Marie style) PDF",
+    )
+    # ov_parser.add_argument(
+    #     "--rRNA",
+    #     default="rRNA/",
+    #     help="path to search for rRNA counts corresponding to samples",
+    # )
+    # ov_parser.add_argument(
+    #     "--rRNA-same-place",
+    #     default=False,
+    #     action="store_true",
+    #     help="If set, look for rRNA txt file with same sample name in same directory",
+    # )
+    ov_parser.add_argument(
+        "--multi-page",
+        default=False,
+        action="store_true",
+        help="If set, generate multiple PDF pages instead of subplots",
     )
 
     parser.set_defaults(func=lambda args: parser.print_help())

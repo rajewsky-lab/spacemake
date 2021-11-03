@@ -1,3 +1,5 @@
+from anndata import AnnData
+from novosparc.common import Tissue
 from spacemake.preprocess import calculate_adata_metrics
 
 def compute_neighbors(adata, min_dist=None, max_dist=None):
@@ -241,7 +243,48 @@ def create_meshed_adata(adata,
 
     return adata_out
 
-def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000, locations=None):
+# copy of a yet-to-be-pushed novosparc function
+def quantify_clusters_spatially(tissue, cluster_key='clusters'):
+    """Maps the annotated clusters obtained from the scRNA-seq analysis onto
+    the tissue space.
+    Args:
+        tissue: the novosparc tissue object containing the gene expression data,
+                the clusters annotation and the spatial reconstruction. Assumes
+                that the cluster annotation exists in the underlying anndata object.
+    Returns:
+        [numpy array]: An array of the cluster annotation per tissue position.
+    """
+    import numpy as np
+    clusters = tissue.dataset.obs[cluster_key].to_numpy().flatten()
+    cluster_names = np.unique(clusters)
+    ixs = np.array(
+            [np.argmax(
+                np.array(
+                    [np.median(
+                        np.array(
+                            tissue.gw[:, location][np.argwhere(clusters == cluster).flatten()]))
+                                         for cluster in cluster_names]))
+                    for location in range(len(tissue.locations))])
+    return [cluster_names[ix] for ix in ixs]
+    
+def novosparc_denovo(
+        adata: AnnData,
+        num_spatial_locations: int=5000,
+        num_input_cells: int=30000,
+        locations=None,
+    ) -> Tissue:
+    """reconstruct spatial information de-novo with novosparc.
+
+    :param adata: A spacemake processed sample.
+    :type adata: AnnData
+    :param num_spatial_locations:
+    :type num_spatial_locations: int
+    :param num_input_cells:
+    :type num_input_cells: int
+    :param locations: Numpy array of (x,y) locations (optional)
+    :type locations: ndarray
+    :rtype: Tissue
+    """
     import numpy as np
     import pandas as pd
     import scanpy as sc
@@ -251,37 +294,40 @@ def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000, lo
 
     from scipy.sparse import issparse, csc_matrix
 
-    gene_names = dataset.var.index.tolist()
+    gene_names = adata.var.index.tolist()
 
-    num_cells, num_genes = dataset.shape
+    num_cells, num_genes = adata.shape
 
     if num_cells > num_input_cells:
-        sc.pp.subsample(dataset, n_obs = num_input_cells)
+        sc.pp.subsample(adata, n_obs = num_input_cells)
 
     if num_cells < num_spatial_locations:
         num_spatial_locations = num_cells
 
-    is_var_gene = dataset.var['highly_variable']
+    sc.pp.highly_variable_genes(adata, n_top_genes = 100)
+    is_var_gene = adata.var['highly_variable']
     # select only 100 genes
     var_genes = list(is_var_gene.index[is_var_gene])
 
-    dge_rep = dataset.to_df()[var_genes]
+    print(len(var_genes))
 
-    # if you uncomment this, dataset.X will be stored not as sparse matrix, rather
+    dge_rep = adata.to_df()[var_genes]
+
+    # if you uncomment this, adata.X will be stored not as sparse matrix, rather
     # as a regular numpy array. uncommenting this doesnt throw an error
-    if issparse(dataset.X):
-        dense_dataset = anndata.AnnData(
-            dataset.X.toarray(),
-            obs = dataset.obs,
-            var = dataset.var)
-        dataset = dense_dataset
-        del dense_dataset
+    if issparse(adata.X):
+        dense_adata = anndata.AnnData(
+            adata.X.toarray(),
+            obs = adata.obs,
+            var = adata.var)
+        adata = dense_adata
+        del dense_adata
 
     if locations is None:
         # create circle locations
         locations = novosparc.gm.construct_circle(num_locations = num_spatial_locations)
 
-    tissue = novosparc.cm.Tissue(dataset=dataset, locations=locations)
+    tissue = novosparc.cm.Tissue(dataset=adata, locations=locations)
 
     num_neighbors_s = num_neighbors_t = 5
 
@@ -289,30 +335,83 @@ def run_novosparc(dataset, num_spatial_locations=5000, num_input_cells=30000, lo
 
     tissue.reconstruct(alpha_linear=0, epsilon=5e-3)
 
-    dataset_reconst = anndata.AnnData(
+    return tissue
+
+def novosparc_mapping(sc_adata: AnnData, st_adata: AnnData) -> Tissue:
+    """novosparc_mapping.
+
+    :param sc_adata:
+    :type sc_adata: AnnData
+    :param st_adata:
+    :type st_adata: AnnData
+    :rtype: Tissue
+    """
+    import scanpy as sc
+    import anndata
+    import novosparc
+
+    from scanpy._utils import check_nonnegative_integers
+    from scipy.sparse import csc_matrix
+
+    if (check_nonnegative_integers(sc_adata.X)
+        or check_nonnegative_integers(st_adata.X)
+    ):
+        # if any of the inputs is count-data, raise error
+        raise SpacemakeError(f'External dge seems to contain values '+
+            'which are already normalised. Raw-count matrix expected.')
+
+    # calculate top 500 variable genes for both
+    sc.pp.highly_variable_genes(sc_adata, n_top_genes=500)
+    sc.pp.highly_variable_genes(st_adata, n_top_genes=500)
+
+    sc_adata_hv = sc_adata.var_names[sc_adata.var.highly_variable].to_list()
+    st_adata_hv = st_adata.var_names[st_adata.var.highly_variable].to_list()
+
+    markers = list(set(sc_adata_hv).intersection(st_adata_hv))
+
+    # save sc dge as a pandas dataframe
+    dge_rep = sc_adata.to_df()[sc_adata_hv]
+
+    if not 'spatial' in st_adata.obsm:
+        raise SpacemakeError(f'The object provided to st_adata is not spatial')
+
+    locations = st_adata.obsm['spatial']
+    atlas_matrix = st_adata.to_df()[markers].values
+
+    # make dense dataset
+    dense_dataset = anndata.AnnData(
+        sc_adata.X.toarray(),
+        obs = sc_adata.obs,
+        var = sc_adata.var)
+
+    marker_ix = [dense_dataset.var.index.get_loc(marker) for marker in markers]
+
+    tissue = novosparc.Tissue(dataset=dense_dataset, locations=locations)
+    num_neighbors_s = num_neighbors_t = 5
+
+    tissue.setup_linear_cost(markers_to_use=marker_ix, atlas_matrix=atlas_matrix,
+                             markers_metric='minkowski', markers_metric_p=2)
+    tissue.setup_smooth_costs(dge_rep = dge_rep,
+                              num_neighbors_s=num_neighbors_s,
+                              num_neighbors_t=num_neighbors_t)
+
+    tissue.reconstruct(alpha_linear=0.5, epsilon=5e-3)
+
+    return tissue
+
+def save_novosparc_res(tissue, adata_original) -> AnnData:
+    import anndata
+    import pandas as pd
+
+    from scipy.sparse import csc_matrix
+
+    adata_reconst = anndata.AnnData(
         csc_matrix(tissue.sdge.T),
-        var = pd.DataFrame(index=gene_names))
+        var = pd.DataFrame(index=tissue.dataset.var_names))
 
-    dataset_reconst.obsm['spatial'] = locations
+    adata_reconst.obsm['spatial'] = tissue.locations
 
-    # copy of a yet-to-be-pushed novosparc function
-    def quantify_clusters_spatially(tissue, cluster_key='clusters'):
-        """Maps the annotated clusters obtained from the scRNA-seq analysis onto
-        the tissue space.
-        Args:
-            tissue: the novosparc tissue object containing the gene expression data,
-                    the clusters annotation and the spatial reconstruction. Assumes
-                    that the cluster annotation exists in the underlying anndata object.
-        Returns:
-            [numpy array]: An array of the cluster annotation per tissue position.
-        """
-        clusters = tissue.dataset.obs[cluster_key].to_numpy().flatten()
-        return np.array([np.argmax(np.array([np.median(np.array(tissue.gw[:, location][np.argwhere(clusters == cluster).flatten()]))
-                                             for cluster in np.unique(clusters)])) for location in range(len(tissue.locations))])
-    
-    for res_key in dataset.obs.columns[dataset.obs.columns.str.startswith('leiden_')]:
-        dataset_reconst.obs[res_key] = quantify_clusters_spatially(tissue, res_key)
+    for res_key in adata_original.obs.columns[adata_original.obs.columns.str.startswith('leiden_')]:
+        adata_reconst.obs[res_key] = quantify_clusters_spatially(tissue, res_key)
 
-    return dataset_reconst
-
-
+    return adata_reconst

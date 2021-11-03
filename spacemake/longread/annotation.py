@@ -6,7 +6,7 @@ from spacemake.util import read_fq
 from collections import defaultdict
 
 
-def sig2str(sig):
+def sig2str(sig, max_repeat_only=True):
     """
     basically merge oligo block names with ',' but contract homopolymeric repeats by
     adding a '+' suffix instead of repeating the thing over and over
@@ -16,16 +16,25 @@ def sig2str(sig):
 
     parts = [sig[0]]
     poly_runs = set()
+    repeat_counts = defaultdict(int)
     for s in sig[1:]:
         if s != parts[-1]:
             parts.append(s)
         else:
             poly_runs.add(len(parts) - 1)
+            repeat_counts[s] += 1
 
     for i in poly_runs:
         parts[i] += "+"
 
-    return ",".join(parts)
+    if poly_runs and max_repeat_only:
+        # This is a more drastic reduction of the original signature: we drop
+        # all other building blocks and disregard orientation. If any block X
+        # is tandem repeated we call the signature of this just 'X+'.
+        max_rep, nrep = sorted(repeat_counts.items(), key=lambda x: -x[1])[0]
+        return f"?{max_rep.replace('_RC', '')}+"
+    else:
+        return ",".join(parts)
 
 
 class AnnotatedSequences:

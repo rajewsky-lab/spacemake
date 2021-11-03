@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 __version__ = "0.9"
 __author__ = ["Marvin Jens"]
-__license__ = "MIT"
+__license__ = "GPL"
 __email__ = ["marvin.jens@mdc-berlin.de"]
 
 import argparse
