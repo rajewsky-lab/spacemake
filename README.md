@@ -3,6 +3,9 @@
    
 <a href="https://spacemake.readthedocs.io/">
    <img src="https://readthedocs.org/projects/spacemake/badge/?version=latest" / ></a>
+   
+ <a href="https://pepy.tech/project/spacemake">
+   <img src="https://pepy.tech/badge/spacemake" / ></a>
 
 # spacemake: pipeline for processing and analyzing sequencing based spatial-transcriptomics data
 
