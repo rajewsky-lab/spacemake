@@ -1,6 +1,6 @@
 __version__ = "0.9.6"
 __author__ = ["Marvin Jens"]
-__license__ = "MIT"
+__license__ = "GPL"
 __email__ = ["marvin.jens@mdc-berlin.de"]
 
 import os

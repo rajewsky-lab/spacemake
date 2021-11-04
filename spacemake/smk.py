@@ -282,7 +282,6 @@ from spacemake.config import setup_config_parser
 if os.path.isfile(config_path):
     cf = ConfigFile.from_yaml(config_path)
     # save config file
-    cf.dump()
     parser_config = setup_config_parser(cf, subparsers)
 
 ############################

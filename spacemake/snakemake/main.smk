@@ -17,7 +17,7 @@ import scanpy as sc
 
 from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
     parse_barcode_file, load_external_dge
-from spacemake.spatial import create_meshed_adata, run_novosparc
+from spacemake.spatial import create_meshed_adata
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
 
@@ -234,36 +234,6 @@ downsample_saturation_analysis = downsampled_data_prefix + '/{project}_{sample}_
 star_index = 'species_data/{species}/star_index'
 bt2_rRNA_index_dir = 'species_data/{species}/bt2_rRNA_index'
 bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'
-
-################################
-# Final output file generation #
-################################
-def get_output_files(pattern, projects = [], samples = [], **kwargs):
-    out_files = []
-    df = project_df.df
-
-    if projects != [] or samples != []:
-        ix = project_df.get_ix_from_project_sample_list(
-            project_id_list = projects,
-            sample_id_list = samples)
-
-        df = df.loc[ix]
-
-    for index, row in df.iterrows():
-        for run_mode in row['run_mode']:
-            run_mode_variables = project_df.config.get_run_mode(run_mode).variables
-            if row.R1 and row.R2:
-                out_files = out_files + expand(pattern,
-                    project = index[0],
-                    sample = index[1],
-                    puck=row['puck_id'], 
-                    run_mode=run_mode,
-                    umi_cutoff=run_mode_variables['umi_cutoff'],
-                    **kwargs)
-
-    # print(f"{pattern} -> {out_files}")
-    return out_files
-
 
 ####################
 # HELPER FUNCTIONS #
@@ -613,21 +583,21 @@ rule run_automated_analysis:
     script:
         'scripts/automated_analysis.py'
 
-rule run_novosparc_analysis:
-    input:
-        automated_analysis_result_file
-    output:
-        novosparc_h5ad,
-        novosparc_obs_df,
-        novosparc_var_df
-    threads: 4
-    run:
-        adata = sc.read(input[0])
-        adata = run_novosparc(adata)
-
-        adata.write(output[0])
-        adata.obs.to_csv(output[1])
-        adata.var.to_csv(output[2])
+#rule run_novosparc_analysis:
+#    input:
+#        automated_analysis_result_file
+#    output:
+#        novosparc_h5ad,
+#        novosparc_obs_df,
+#        novosparc_var_df
+#    threads: 4
+#    run:
+#        adata = sc.read(input[0])
+#        adata = run_novosparc(adata)
+#
+#        adata.write(output[0])
+#        adata.obs.to_csv(output[1])
+#        adata.var.to_csv(output[2])
 
 rule create_automated_analysis_processed_data_files:
     input:

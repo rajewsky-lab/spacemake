@@ -27,37 +27,46 @@ def get_output_files(
         df = df.loc[~df.is_merged]
 
     for index, row in df.iterrows():
+        is_external = project_df.is_external(
+            project_id=index[0], sample_id=index[1]
+        )
+
+        has_dge = project_df.has_dge(
+            project_id=index[0], sample_id=index[1]
+        )
+
+        if not has_dge:
+            # if there is no dge, skip
+            continue
+        
+        if not run_on_external and is_external:
+            # if we do not want to run this on external samples
+            # and sample is external, skip
+            continue
+
         for run_mode in row["run_mode"]:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
 
-            run = (row.R1 and row.R2) or (row.basecalls_dir and row.sample_sheet)
-
-            if run_on_external:
-                run = run or row.dge
-
-            if run:
-                out_files = out_files + expand(
-                    pattern,
-                    project=index[0],
-                    sample=index[1],
-                    puck=row["puck_id"],
-                    run_mode=run_mode,
-                    umi_cutoff=run_mode_variables["umi_cutoff"],
-                    **kwargs,
-                )
+            out_files = out_files + expand(
+                pattern,
+                project=index[0],
+                sample=index[1],
+                puck=row["puck_id"],
+                run_mode=run_mode,
+                umi_cutoff=run_mode_variables["umi_cutoff"],
+                **kwargs,
+            )
 
     return out_files
-
 
 def get_all_dges(wildcards):
     df = project_df.df
 
     dges = []
 
-    # TODO: needs to fix is_external check for pacbio only samples so that is_external == True samples will be included here even w/o any illumina reads
     for index, row in df.iterrows():
         for run_mode in row["run_mode"]:
-            if (row.R1 and row.R2) or (row.basecalls_dir and row.sample_sheet):
+            if project_df.has_dge(project_id=index[0], sample_id=index[1]):
                 dges.append(
                     get_dge_from_run_mode(
                         project_id=index[0],
@@ -76,7 +85,14 @@ def get_raw_dge(wildcards):
         project_id=wildcards.project, sample_id=wildcards.sample
     )
 
-    out_files = {}
+    has_dge = project_df.has_dge(
+        project_id=wildcards.project, sample_id=wildcards.sample
+    )
+
+    if has_dge:
+        out_files = {}
+    else:
+        return []
 
     if is_external:
         out_files["dge"] = project_df.get_metadata(
@@ -86,10 +102,6 @@ def get_raw_dge(wildcards):
         out_files["dge"] = dge_out
         out_files["dge_summary"] = dge_out_summary
 
-    # print(f"get_raw_dge about to return '{out_files}'")
-    if out_files["dge"] is None:
-        # quick workaround to handle pacbio only samples that do not have DGE
-        return []
     return out_files
 
 
@@ -233,7 +245,12 @@ def get_star_index(wildcards):
     species = project_df.get_metadata(
         "species", project_id=wildcards.project, sample_id=wildcards.sample
     )
-    return {"index": expand(star_index, species=species)[0]}
+    species_data = project_df.config.get_variable("species", name=species)
+
+    if 'STAR_index_dir' in species_data:
+        return {'index': species_data['STAR_index_dir']}
+    else:
+        return {"index": expand(star_index, species=species)[0]}
 
 
 def get_rRNA_genome(wildcards):
@@ -370,6 +387,13 @@ def get_parsed_puck_file(wildcards):
 def get_dge_from_run_mode(
     project_id, sample_id, run_mode, data_root_type, downsampling_percentage
 ):
+    has_dge = project_df.has_dge(
+        project_id=project_id, sample_id=sample_id)
+
+    if not has_dge:
+        raise SpacemakeError(
+            f'Sample with id (project_id, sample_id)={project_id}, {sample_id})' +
+            f' does not have a DGE')
 
     is_spatial = project_df.is_spatial(project_id=project_id, sample_id=sample_id)
 
@@ -539,12 +563,14 @@ def get_puck_file(wildcards):
         "puck_barcode_file", project_id=wildcards.project, sample_id=wildcards.sample
     )
 
-    puck = project_df.get_metadata(
+    puck_name = project_df.get_metadata(
         "puck", project_id=wildcards.project, sample_id=wildcards.sample
     )
+    
+    puck = project_df.config.get_puck(puck_name)
 
     if puck_barcode_file is None:
-        return {"barcode_file": config["pucks"][puck]["barcodes"]}
+        return {"barcode_file": puck.variables['barcodes']}
     else:
         return {"barcode_file": puck_barcode_file}
 

@@ -717,12 +717,54 @@ class ProjectDF:
         if (
             (data.R1 and data.R2)
             or (data.basecalls_dir and data.sample_sheet)
+            or (data.longreads)
             and not data.dge
             or data.is_merged
         ):
             return False
-        else:
+        elif data.dge:
             return True
+        else:
+            raise SpacemakeError(f'Sample with id (project_id, sample_id)=' +
+                f'({project_id}, {sample_id}) is invalid.')
+
+    def has_dge(self, project_id: str, sample_id: str) -> bool:
+        """Returns True if a has dge. for Pacbio only samples returns False.
+
+        :param project_id:
+        :type project_id: str
+        :param sample_id:
+        :type sample_id: str
+        :rtype: bool
+        """
+        self.assert_sample(project_id, sample_id)
+
+        data = self.df.loc[
+            (project_id, sample_id),
+            [
+                "R1",
+                "R2",
+                "basecalls_dir",
+                "sample_sheet",
+                "longreads",
+                "dge",
+                "is_merged",
+            ],
+        ]
+
+        if (
+            data.is_merged
+            or (data.R1 and data.R2)
+            or (data.sample_sheet and data.basecalls_dir)
+            or data.dge
+        ):
+            return True
+        elif data.longreads:
+            return False
+        else:
+            raise SpacemakeError(f'Sample with id (project_id, sample_id)=' +
+                f'({project_id}, {sample_id}) is invalid.')
+            
 
     def is_spatial(self, project_id: str, sample_id: str) -> bool:
         """Returns true if a sample with index (project_id, sample_id) is spatial,
@@ -1294,6 +1336,8 @@ class ProjectDF:
                     ix=ix.to_list(),
                 )
 
+        # after all checks, log that we are merging
+        self.logger.info(f'Merging samples {ix_list} together\n')
         variables_to_deduce = ["investigator", "experiment", "sequencing_date"]
 
         for variable in variables_to_deduce:
