@@ -74,7 +74,7 @@ def BAM_src(src):
         yield read.query_name, read.query_sequence, read.query_qualities
 
 
-def read_fq(fname):
+def read_fq(fname, skim=0):
     import gzip
 
     if fname.endswith(".gz"):
@@ -86,8 +86,12 @@ def read_fq(fname):
     else:
         src = FASTQ_src(fname)  # assume its a stream or file-like object already
 
-    for name, seq, qual in src:
-        yield name, seq, qual
+    for i, (name, seq, qual) in enumerate(src):
+        if not skim:
+            yield name, seq, qual
+        else:
+            if (i % skim) == 0:
+                yield name, seq, qual
 
 
 def dge_to_sparse(dge_path):
