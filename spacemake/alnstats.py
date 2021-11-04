@@ -39,10 +39,10 @@ def parse_args():
     parser = argparse.ArgumentParser("alnstats")
     parser.add_argument("fname", help="a gene-annotated BAM file")
     parser.add_argument(
-        "--n-max",
+        "--skim",
         type=int,
         default=0,
-        help="number of BAM records to process (default=0 -> all)",
+        help="only examin every n-th alignment (default=0 -> all)",
     )
     parser.add_argument(
         "--out-csv", default="./", help="where to store the CSV raw stats"
@@ -70,10 +70,10 @@ def coarsegrain_CIGAR(cigar):
         return coarsegrain_CIGAR(coarse)
 
 
-def scan_bam(fname, n_max=0):
+def scan_bam(fname, skim=0):
     res = Results()
     res.fname = fname
-    res.n_max = n_max
+    res.skim = skim
     res.aln_types = defaultdict(int)
     res.cigar_types = defaultdict(int)
     res.tag_types = defaultdict(int)
@@ -81,19 +81,30 @@ def scan_bam(fname, n_max=0):
     res.match_len_by_tag = defaultdict(lambda: defaultdict(int))
     res.sc_lengths = defaultdict(lambda: defaultdict(int))
     res.sc_seq = defaultdict(lambda: defaultdict(int))
+    res.read_lengths_by_mapstat = defaultdict(lambda: defaultdict(int))
 
     op_dict = list("MIDNSHP=XB")
     sam = pysam.Samfile(fname, "rb")
-    for r in sam.fetch(until_eof=True):
+    for i, r in enumerate(sam.fetch(until_eof=True)):
+        if skim:
+            if (i % skim) != 0:
+                continue
+
+        l_read = len(r.query_sequence)
+        res.read_lengths_by_mapstat["all"][l_read] += 1
+
         res.aln_types["N_reads"] += 1
         if r.is_unmapped:
             res.aln_types["unmapped"] += 1
+            res.read_lengths_by_mapstat["unmapped"][l_read] += 1
             continue
 
         if r.mapping_quality < 255:
             res.aln_types["multimapper"] += 1
+            res.read_lengths_by_mapstat["multimapper"][l_read] += 1
         else:
             res.aln_types["unique"] += 1
+            res.read_lengths_by_mapstat["unique"][l_read] += 1
 
         minus_strand = r.is_reverse
         if r.has_tag("gf"):
@@ -138,8 +149,8 @@ def scan_bam(fname, n_max=0):
         res.match_len_by_tag[tag][n_match] += 1
         res.match_len_by_tag["all"][n_match] += 1
 
-        if (n_max > 0) and (res.aln_types["N_reads"] >= n_max):
-            break
+        # if (n_max > 0) and (res.aln_types["N_reads"] >= n_max):
+        #     break
 
     res.N_total = res.aln_types["N_reads"]
 
@@ -151,7 +162,7 @@ def make_plots(res):
 
     # preparing the plot
     fig, axes = plt.subplots(
-        3, 3, figsize=(14, 11)
+        3, 4, figsize=(18, 11)
     )  # gridspec_kw={'height_ratios': [1, 1, 1]})
     axes = np.array(axes).flatten()
 
@@ -181,32 +192,43 @@ def make_plots(res):
 
     # Second row: histograms of no. matching bases
     rep.len_plot(
-        axes[3],
+        axes[4],
         res.match_len_by_cigtype,
         labels=ciglabels + ["all"],
         colors=cigcolors + ["k"],
         title="CIGAR types",
-    )
-
-    rep.len_plot(
-        axes[4],
-        res.match_len_by_tag,
-        labels=taglabels + ["all"],
-        colors=tagcolors + ["k"],
-        title="gf (annotation) types",
     )
 
     rep.len_plot(
         axes[5],
+        res.match_len_by_tag,
+        labels=taglabels + ["all"],
+        colors=tagcolors + ["k"],
+        title="gf (annotation) types",
+    )
+
+    rep.len_plot(
+        axes[6],
         res.sc_lengths,
         title="read position",
         xlabel="soft-clipped bases",
         colors=["r", "b"],
     )
 
+    axes[7].axis("off")
+
+    rep.len_plot(
+        axes[8],
+        res.read_lengths_by_mapstat,
+        title="alignment status",
+        labels=alnlabels + ["all"],
+        colors=alncolors + ["k"],
+        xlabel="read length [nt]",
+    )
+
     # Third row: cumulative histograms of no. matching bases
     rep.len_plot(
-        axes[6],
+        axes[8],
         res.match_len_by_cigtype,
         labels=ciglabels + ["all"],
         colors=cigcolors + ["k"],
@@ -217,7 +239,7 @@ def make_plots(res):
     )
 
     rep.len_plot(
-        axes[7],
+        axes[9],
         res.match_len_by_tag,
         labels=taglabels + ["all"],
         colors=tagcolors + ["k"],
@@ -228,7 +250,7 @@ def make_plots(res):
     )
 
     rep.len_plot(
-        axes[8],
+        axes[10],
         res.sc_lengths,
         title="read position",
         colors=["r", "b"],
@@ -237,6 +259,19 @@ def make_plots(res):
         ylabel="cumulative fraction",
         legend=False,
     )
+
+    rep.len_plot(
+        axes[11],
+        res.read_lengths_by_mapstat,
+        title="alignment status",
+        labels=alnlabels + ["all"],
+        colors=alncolors + ["k"],
+        xlabel="read length [nt]",
+        cumulative=True,
+        ylabel="cumulative fraction",
+        legend=False,
+    )
+
     return fig
 
 
@@ -250,7 +285,7 @@ def cmdline():
         sample_name = os.path.basename(args.fname).rsplit(".", maxsplit=1)[0]
 
     logging.info(f"Starting analysis of sample_name='{sample_name}'")
-    res = scan_bam(args.fname, n_max=args.n_max)
+    res = scan_bam(args.fname, skim=args.skim)
 
     import matplotlib
 
