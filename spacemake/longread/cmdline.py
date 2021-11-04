@@ -401,7 +401,9 @@ def main_edits(args):
             qmatches = ann.subsample(qmatches, n=args.n_samples)
 
         nmatch = len(qmatches[0])
-        m, ed = ann.align_stats(annotation, args.blocks[part], qmatches)
+        m, ed = ann.align_stats(
+            annotation, args.blocks[part], qmatches, min_score=args.min_score
+        )
         for x in np.arange(len(m)):
             # print(part, x, m)
             data.append((part, args.blocks[part], nmatch, x, m[x], ed[x]))
@@ -764,7 +766,7 @@ def prepare_parser():
     )
     parser.add_argument(
         "--signature",
-        help="expected long read signature (e.g. dropseq, noUMI, withUMI,...)",
+        help="expected long read signature (e.g. dropseq, chromium, noUMI, withUMI,...)",
         default=None,
     )
     parser.add_argument(
@@ -850,6 +852,12 @@ def prepare_parser():
         "fname",
         default=None,
         help="file with pacbio reads (FASTQ or BAM format)",
+    )
+    ed_parser.add_argument(
+        "--min-score",
+        default=0.6,
+        type=float,
+        help="minimal match alignment score to consider a match for edit extraction, relative to its size (default=0.6)",
     )
 
     xt_parser = subparsers.add_parser(
@@ -956,3 +964,7 @@ def cmdline():
     parser = prepare_parser()
     args = parser.parse_args()
     return args.func(args)
+
+
+if __name__ == "__main__":
+    cmdline()

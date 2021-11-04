@@ -383,7 +383,7 @@ class AnnotatedSequences:
         return partial_counts, prefixes, suffixes, pT_counts
 
 
-def align_stats(ann, oseq, qmatches, pad=1):
+def align_stats(ann, oseq, qmatches, pad=1, min_score=0):
     import spacemake.longread.cache as cache
     from Bio import pairwise2
 
@@ -395,14 +395,16 @@ def align_stats(ann, oseq, qmatches, pad=1):
         e = min(l, e + pad)
         n += 1
         rseq = ann.raw_sequences[qn][s:e]
-        res = cache.align(rseq, oseq, min_score=0)
+        res = cache.align(rseq, oseq, min_score=min_score)
         if not res:
             continue
         aln = res[0]
         aln_str = pairwise2.format_alignment(*aln, full_sequences=True).split("\n")
         i = 0
         j = 0
-        # print("\n".join(aln_str))
+        # if oseq.startswith("TTTTTTTTTTTTTTTT"):
+        #     print("\n".join(aln_str))
+
         for r, m, q in zip(aln_str[0], aln_str[1], aln_str[2]):
             # print(r, m, q, i, len(oseq))
             if q == " ":
