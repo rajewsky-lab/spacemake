@@ -77,12 +77,12 @@ To add a Slide-seq sample, simply type::
       --R1 <path_to_R1.fastq.gz> \
       --R2 <path_to_R2.fastq.gz> \
       --species <species> \
-      --puck slideseq \
-      --run_mode slideseq \
-      --barcode_flavor slideseq_14bc \
+      --puck slide_seq \
+      --run_mode slide_seq \
+      --barcode_flavor slide_seq_14bc \
       --puck_barcode_file <path_to_puck_barcode_file>
 
-Above we add a new Slide-seq project with the ``puck, run_mode`` will be set to ``slideseq``
+Above we add a new Slide-seq project with the ``puck, run_mode`` will be set to ``slide_seq``
 which are pre-defined settings for Slide-seq samples.
 
 .. note::
@@ -94,21 +94,19 @@ which are pre-defined settings for Slide-seq samples.
    - ``xcoord`` or ``x_pos`` for x-positions
    - ``ycoord`` or ``y_pos`` for y-positions
 
-In this example ``barcode_flavor`` will be set to ``slideseq_14bc``,
+In this example ``barcode_flavor`` will be set to ``slide_seq_14bc``,
 a pre-defined ``barcode_flavor`` in spacemake, where the ``cell_barcode`` comes from the first 14nt of Read1, and the ``UMI`` comes from nt 13-22 (remaining 9 nt). 
-The other pre-defined ``barcode_flavor`` for Slide-seq is ``slideseq_15bc``: here ``cell_barcode`` again comes from the first 14nt of Read1, but the ``UMI`` comes from nt 14-22 (remaining 8) of Read1.
+The other pre-defined ``barcode_flavor`` for Slide-seq is ``slide_seq_15bc``: here ``cell_barcode`` again comes from the first 14nt of Read1, but the ``UMI`` comes from nt 14-22 (remaining 8) of Read1.
 
 To see the values of these predefined variables checkout the :ref:`configuration:Configuration`.
 
-**To add several slideseq projects at once, follow** :ref:`the tutorial here <add-several-samples>`
+**To add several slide_seq projects at once, follow** :ref:`the tutorial here <add-several-samples>`
 
-Drop-seq quick start
--------------------
+Seq-scope quick start
+---------------------
 
-spacemake was written as a spatial-transcriptomics pipeline, however it will also work for
-single-cell experiments, where there is no spatial information available. 
-
-To add a Drop-seq sample, simply type::
+Adding a `Seq-scope <https://www.sciencedirect.com/science/article/pii/S0092867421006279>`_ sample 
+is similar to Slide-seq::
 
    spacemake projects add_sample \
       --project_id <project_id> \
@@ -116,18 +114,67 @@ To add a Drop-seq sample, simply type::
       --R1 <path_to_R1.fastq.gz> \
       --R2 <path_to_R2.fastq.gz> \
       --species <species> \
-      --run_mode scRNAseq
+      --puck seq_scope \
+      --run_mode seq_scope \
+      --barcode_flavor seq_scope \
+      --puck_barcode_file <path_to_puck_barcode_file>
+
+Here we used the pre-defined variables for ``puck``, ``barcode_flavor`` and ``run_mode`` all set to ``seq_scope``.
+
+The ``seq_scope`` ``puck`` has 1000 micron width and bead size set to 1 micron.
+
+The ``seq_scope`` ``barcode_flavor`` describes how the ``cell_barcode`` and he ``UMI`` should be extracted. 
+As described in the `Seq-scope paper<https://www.sciencedirect.com/science/article/pii/S0092867421006279>`_
+``cell_barcode`` comes from nt 1-20 of Read1, and ``UMI`` comes from 1-9nt of Read2.
+
+The ``seq_scope`` ``run_mode`` has its settings as follows:
+
+.. code-bloc:: yaml
+
+    seq_scope:
+        clean_dge: false
+        count_intronic_reads: false
+        count_mm_reads: false
+        detect_tissue: false
+        mesh_data: true
+        mesh_spot_diameter_um: 10
+        mesh_type: hexagon
+        n_beads: 1000
+        umi_cutoff:
+        - 100
+        - 300
+
+The most important thing to notice here that by default, we create a hexagonal mesh with
+the ``seq_scope`` ``run_mode``. This means that downstream rather than with working with
+the 1 micron beads, spaceame will create a mesh of adjascent, equal hexagons with 10 micron
+sides.
+
+scRNA-seq quick start
+---------------------
+
+spacemake was written as a spatial-transcriptomics pipeline, however it will also work for
+single-cell experiments, where there is no spatial information available. 
+
+To add a scRNA-seq sample, simply type::
+
+   spacemake projects add_sample \
+      --project_id <project_id> \
+      --sample_id <sample_id> \
+      --R1 <path_to_R1.fastq.gz> \
+      --R2 <path_to_R2.fastq.gz> \
+      --species <species> \
+      --run_mode scRNA_seq
 
 As seen above, we define fewer variables as before: only ``species`` and ``run_mode`` are needed.
 
 Behind the scenes, the ``barcode_flavor`` will be set to ``default``, which by default contains 
-the Drop-seq barcoding strategy (``cell_barcode`` is 1-12nt of Read1, ``UMI`` is 13-20 nt of Read1).
+the scRNA-seq barcoding strategy (``cell_barcode`` is 1-12nt of Read1, ``UMI`` is 13-20 nt of Read1).
 
 For 10X samples either the ``sc_10x_v2`` (10X Chromium Single Cell 3' V2)
-or ``visium`` (10X Chromium Single Cell 3' V3, same as visium) would had to be used as
+or ``visium`` (10X Chromium Single Cell 3' V3, same as visium) should be be used as
 ``barcode_flavor``. Both are pre-defined in spacemake.
 
-By setting ``run_mode`` to ``scRNAseq`` we used the pre-defined ``run_mode`` settings tailored for single-cell experiments: expected number of beads will be 10k, introns will be counted, UMI cutoff will be at 500, multi-mappers will not be counted and polyA and adapter sequences will be trimmed from Read2. 
+By setting ``run_mode`` to ``scRNA_seq`` we used the pre-defined ``run_mode`` settings tailored for single-cell experiments: expected number of beads will be 10k, introns will be counted, UMI cutoff will be at 500, multi-mappers will not be counted and polyA and adapter sequences will be trimmed from Read2. 
 
 Of course, running single-cell samples with other ``run_mode`` settings is also possible. 
 
