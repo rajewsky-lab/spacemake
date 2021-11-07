@@ -496,8 +496,9 @@ cat('## Spatial QC {.tabset}\n\n')
 run_mode_info <- dge_summary %>%
     select(run_mode) %>%
     summarise(n_cells=n()) %>%
-    mutate(def_plot_bead_size = ifelse(n_cells > 5000, 0.5, 1)) %>%
-    mutate(def_plot_bead_size = ifelse(n_cells > 10000, 0.1, def_plot_bead_size))
+    mutate(def_plot_bead_size = ifelse(n_cells > 5000, 0.4, 0.75)) %>%
+    mutate(def_plot_bead_size = ifelse(n_cells > 10000, 0.1, def_plot_bead_size)) %>%
+    mutate(def_plot_bead_size = ifelse(n_cells > 25000, 0.05, def_plot_bead_size))
 
 plot_bead_size <- run_mode_settings %>%
     filter(variable_name %in% c('mesh_data', 'mesh_spot_diameter_um')) %>%

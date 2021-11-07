@@ -148,8 +148,9 @@ n_cells <- obs_df %>%
     unique %>%
     nrow()
 
-def_plot_bead_size <- ifelse(n_cells > 5000, 0.5, 1)
+def_plot_bead_size <- ifelse(n_cells > 5000, 0.4, 0.75)
 def_plot_bead_size <- ifelse(n_cells > 10000, 0.1, def_plot_bead_size)
+def_plot_bead_size <- ifelse(n_cells > 25000, 0.05, def_plot_bead_size)
 
 obs_colnames <- colnames(obs_df)
 
