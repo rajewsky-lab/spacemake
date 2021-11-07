@@ -37,8 +37,6 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 global_tmp = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
 spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
-# create puck_data root directory from pattern
-config['puck_data']['root'] = config['microscopy_out']
 
 # set root dir where the processed_data goes
 project_dir = os.path.join(config['root_dir'], 'projects/{project}')
@@ -100,7 +98,6 @@ fastqc_ext = ['zip', 'html']
 # UNIQUE PIPELINE VARS #
 ########################
 # set the tool script directories
-picard_tools = config['external_bin']['picard_tools']
 dropseq_tools = config['external_bin']['dropseq_tools']
 
 reports_dir = complete_data_root + '/reports'

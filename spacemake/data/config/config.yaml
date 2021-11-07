@@ -1,9 +1,3 @@
-microscopy_out: '/data/rajewsky/slide_seq_microscopy/qc/'
-
-external_bin:
-    dropseq_tools: '/data/rajewsky/shared_bins/Drop-seq_tools-2.4.0'
-    picard_tools: '/data/rajewsky/shared_bins/picard-tools-2.9.0/picard.jar'
-
 puck_data:
     barcode_file: 'predictions_ml.csv'
     root: 'puck_data'
@@ -19,6 +13,9 @@ pucks:
     seq_scope:
         width_um: 1000
         spot_diameter_um: 1
+    slide_seq:
+        width_um: 3000
+        spot_diameter_um: 10
 
 run_modes:
     default:

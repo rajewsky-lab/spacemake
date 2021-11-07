@@ -56,10 +56,10 @@ Spacemake provides the following barcode\_flavors out of the box:
     default:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
-    slideseq_14bc:
+    slide_seq_14bc:
         cell: "r1[0:14]"
         UMI: "r1[14:23]"
-    slideseq_15bc:
+    slide_seq_15bc:
         cell: "r1[0:14]"
         UMI: "r1[15:23]"
     visium:
@@ -68,6 +68,9 @@ Spacemake provides the following barcode\_flavors out of the box:
     sc_10x_v2:
         cell: "r1[0:16]"
         UMI: "r1[16:26]"
+    seq_scope:
+        UMI: "r2[0:9]"
+        cell: "r1[0:20]"
 
 To list the currently available ``barcode_flavor``-s, type::
    
@@ -169,25 +172,38 @@ Provided run\_mode(s)
         mesh_spot_diameter_um: 55
         mesh_spot_distance_um: 100
     visium:
-        n_beads: 5000
+        n_beads: 10000
         umi_cutoff: [1000]
         clean_dge: False
         detect_tissue: True
         polyA_adapter_trimming: False
         count_intronic_reads: False
         count_mm_reads: True
-    slideseq:
+    slide_seq:
         n_beads: 100000
         umi_cutoff: [50]
         clean_dge: False
         detect_tissue: False
-    scRNAseq:
+    scRNA_seq:
         n_beads: 10000
         umi_cutoff: [500]
         detect_tissue: False
         polyA_adapter_trimming: True
         count_intronic_reads: True
         count_mm_reads: False
+    seq_scope:
+        clean_dge: false
+        count_intronic_reads: false
+        count_mm_reads: false
+        detect_tissue: false
+        mesh_data: true
+        mesh_spot_diameter_um: 10
+        mesh_spot_distance_um: 15
+        mesh_type: hexagon
+        n_beads: 1000
+        umi_cutoff:
+        - 100
+        - 300
 
 .. note::
    If a sample has no ``run_mode`` provided, the ``default`` will be used
@@ -202,13 +218,13 @@ To list the currently available ``run_mode``-s, type::
 Add a new run\_mode
 ^^^^^^^^^^^^^^^^^^^
 
+See the :ref:`variable descriptions <configure-run_mode>` above.
+
 .. code-block::
 
    spacemake config add_run_mode \
-      --name NAME \        # name of the run_mode to be added
+      --name NAME \ 
       --parent_run_mode PARENT_RUN_MODE \
-                           # Name of the parent run_mode.
-                           # All run_modes will fall back to 'default'
       --umi_cutoff UMI_CUTOFF [UMI_CUTOFF ...] \
       --n_beads N_BEADS \
       --clean_dge {True,true,False,false} \
@@ -257,9 +273,12 @@ Provided pucks
         barcodes: 'puck_data/visium_barcode_positions.csv'
         width_um: 6500
         spot_diameter_um: 55
-    seqscope:
+    seq_scope:
         width_um: 1000
         spot_diameter_um: 1
+    slide_seq:
+        width_um: 3000
+        spot_diameter_um: 10
 
 as you can see, the ``visium`` puck comes with a ``barcodes`` variable, which points to
 ``puck_data/visium_barcode_positions.csv``. Upon initiation, this file will automatically placed 

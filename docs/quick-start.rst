@@ -62,7 +62,7 @@ sample in the same way as `spaceranger <https://support.10xgenomics.com/spatial-
 
    The important thing is to always keep the order consistent between the two mates.
 
-To see the values of these predefined variables checkout the :ref:`configuration<Configuration>` docs.
+To see the values of these predefined variables checkout the :ref:`configuration <Configuration>` docs.
 
 **To add several visium samples at once, follow** :ref:`the tutorial here <add-several-samples>`
 
@@ -98,7 +98,7 @@ In this example ``barcode_flavor`` will be set to ``slide_seq_14bc``,
 a pre-defined ``barcode_flavor`` in spacemake, where the ``cell_barcode`` comes from the first 14nt of Read1, and the ``UMI`` comes from nt 13-22 (remaining 9 nt). 
 The other pre-defined ``barcode_flavor`` for Slide-seq is ``slide_seq_15bc``: here ``cell_barcode`` again comes from the first 14nt of Read1, but the ``UMI`` comes from nt 14-22 (remaining 8) of Read1.
 
-To see the values of these predefined variables checkout the :ref:`configuration:Configuration`.
+To see the values of these predefined variables checkout the :ref:`configuration <Configuration>` docs.
 
 **To add several slide_seq projects at once, follow** :ref:`the tutorial here <add-several-samples>`
 
@@ -111,8 +111,8 @@ is similar to Slide-seq::
    spacemake projects add_sample \
       --project_id <project_id> \
       --sample_id <sample_id> \
-      --R1 <path_to_R1.fastq.gz> \
-      --R2 <path_to_R2.fastq.gz> \
+      --R1 <path_to_R1.fastq.gz> \ # single R1 or several R1 files
+      --R2 <path_to_R2.fastq.gz> \ # single R2 or several R2 files
       --species <species> \
       --puck seq_scope \
       --run_mode seq_scope \
@@ -124,12 +124,12 @@ Here we used the pre-defined variables for ``puck``, ``barcode_flavor`` and ``ru
 The ``seq_scope`` ``puck`` has 1000 micron width and bead size set to 1 micron.
 
 The ``seq_scope`` ``barcode_flavor`` describes how the ``cell_barcode`` and he ``UMI`` should be extracted. 
-As described in the `Seq-scope paper<https://www.sciencedirect.com/science/article/pii/S0092867421006279>`_
+As described in the `Seq-scope paper <https://www.sciencedirect.com/science/article/pii/S0092867421006279>`_
 ``cell_barcode`` comes from nt 1-20 of Read1, and ``UMI`` comes from 1-9nt of Read2.
 
 The ``seq_scope`` ``run_mode`` has its settings as follows:
 
-.. code-bloc:: yaml
+.. code-block:: yaml
 
     seq_scope:
         clean_dge: false
@@ -160,8 +160,8 @@ To add a scRNA-seq sample, simply type::
    spacemake projects add_sample \
       --project_id <project_id> \
       --sample_id <sample_id> \
-      --R1 <path_to_R1.fastq.gz> \
-      --R2 <path_to_R2.fastq.gz> \
+      --R1 <path_to_R1.fastq.gz> \ # single R1 or several R1 files
+      --R2 <path_to_R2.fastq.gz> \ # single R2 or several R2 files
       --species <species> \
       --run_mode scRNA_seq
 
@@ -178,7 +178,7 @@ By setting ``run_mode`` to ``scRNA_seq`` we used the pre-defined ``run_mode`` se
 
 Of course, running single-cell samples with other ``run_mode`` settings is also possible. 
 
-To see the values of these predefined variables checkout the :ref:`configuration:Configuration`.
+To see the values of these predefined variables checkout the :ref:`configuration <Configuration>` docs.
 
 **To add several single-cell projects at once, follow** :ref:`the tutorial here <add-several-samples>`
 
