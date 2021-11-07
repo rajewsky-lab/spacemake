@@ -133,7 +133,7 @@ def spacemake_init(args):
     cf.variables["temp_dir"] = args["temp_dir"]
 
     cf.variables['external_bin'] = {
-        'dropseq_tools' = args['dropseq_tools']
+        'dropseq_tools' : args['dropseq_tools']
     }
 
     cf.variables['microscopy_out'] = args.get('microscopy_out', '')

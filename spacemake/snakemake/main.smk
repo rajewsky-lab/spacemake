@@ -50,7 +50,7 @@ project_df = ProjectDF(config['project_df'], ConfigFile.from_yaml('config.yaml')
 raw_data_root = project_dir + '/raw_data'
 raw_data_illumina = raw_data_root + '/illumina'
 raw_data_illumina_reads = raw_data_illumina + '/reads/raw'
-raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
+raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/bc_umi_tagged'
 processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
@@ -360,7 +360,7 @@ rule zcat_pipe:
     threads: 2
     shell: "unpigz --keep --processes {threads} --stdout $(readlink {input}) >> {output}"
 
-rule reverse_first_mate:
+rule tag_reads_bc_umi:
     input:
         # these implicitly depend on the raw reads via zcat_pipes
         R1 = raw_reads_mate_1,
@@ -453,7 +453,7 @@ rule create_spatial_barcodes:
     input:
         unpack(get_puck_file)
     output:
-        temp(spatial_barcodes),
+        spatial_barcodes,
         parsed_spatial_barcodes
     run:
         bc = parse_barcode_file(input[0])
