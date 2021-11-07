@@ -7,7 +7,7 @@
  <a href="https://pepy.tech/project/spacemake">
    <img src="https://pepy.tech/badge/spacemake" / ></a>
 
-# spacemake: pipeline for processing and analyzing sequencing based spatial-transcriptomics data
+# spacemake: processing and analysis of large-scale spatial transcriptomics data
 
 <img src="docs/graphical_abstract_twitter.png" alt="graphical_abstract" width="500"/>
 
