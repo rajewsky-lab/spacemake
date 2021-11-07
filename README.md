@@ -9,6 +9,6 @@
 
 # spacemake: pipeline for processing and analyzing sequencing based spatial-transcriptomics data
 
-<img src="docs/graphical_abstract_twitter.png" alt="graphical_abstract" width="300"/>
+<img src="docs/graphical_abstract_twitter.png" alt="graphical_abstract" width="500"/>
 
 Documentation can be found [here](https://spacemake.readthedocs.io/en/latest/).
