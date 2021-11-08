@@ -25,9 +25,13 @@ Too activate the newly created environment type::
 Installing spacemake
 --------------------
 
-Right now, the most up to date version of the code can be found on the `dev` branch. To install it, type::
+After creating the environment (as described above) spacemake can be installed via ``pip``::
 
-   pip install git+https://github.com/rajewsky-lab/spacemake.git@dev
+   pip install spacemake
 
 This will install spacemake, you should be good to go :)
+
+To install the developmental version of spacemake (``dev`` branch from github) type the following command::
+
+   pip install git+https://github.com/rajewsky-lab/spacemake.git@dev
 

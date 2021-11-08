@@ -37,8 +37,6 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 global_tmp = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
 spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
-# create puck_data root directory from pattern
-config['puck_data']['root'] = config['microscopy_out']
 
 # set root dir where the processed_data goes
 project_dir = os.path.join(config['root_dir'], 'projects/{project}')
@@ -52,7 +50,7 @@ project_df = ProjectDF(config['project_df'], ConfigFile.from_yaml('config.yaml')
 raw_data_root = project_dir + '/raw_data'
 raw_data_illumina = raw_data_root + '/illumina'
 raw_data_illumina_reads = raw_data_illumina + '/reads/raw'
-raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/reversed'
+raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/bc_umi_tagged'
 processed_data_root = project_dir + '/processed_data/{sample}'
 processed_data_illumina = processed_data_root + '/illumina'
 
@@ -100,7 +98,6 @@ fastqc_ext = ['zip', 'html']
 # UNIQUE PIPELINE VARS #
 ########################
 # set the tool script directories
-picard_tools = config['external_bin']['picard_tools']
 dropseq_tools = config['external_bin']['dropseq_tools']
 
 reports_dir = complete_data_root + '/reports'
@@ -363,7 +360,7 @@ rule zcat_pipe:
     threads: 2
     shell: "unpigz --keep --processes {threads} --stdout $(readlink {input}) >> {output}"
 
-rule reverse_first_mate:
+rule tag_reads_bc_umi:
     input:
         # these implicitly depend on the raw reads via zcat_pipes
         R1 = raw_reads_mate_1,
@@ -456,7 +453,7 @@ rule create_spatial_barcodes:
     input:
         unpack(get_puck_file)
     output:
-        temp(spatial_barcodes),
+        spatial_barcodes,
         parsed_spatial_barcodes
     run:
         bc = parse_barcode_file(input[0])

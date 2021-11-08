@@ -15,3 +15,5 @@ build
 
 spacemake.egg-info
 scratch
+
+*.icloud
