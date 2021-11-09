@@ -9,8 +9,7 @@
 
 # spacemake: processing and analysis of large-scale spatial transcriptomics data
 
-<img src="docs/graphical_abstract_twitter.png" alt="graphical abstract" width="400"/>
+![graphical abstract](https://raw.githubusercontent.com/rajewsky-lab/spacemake/master/docs/graphical_abstract_twitter.png|width=500)
 
 Documentation can be found [here](https://spacemake.readthedocs.io/en/latest/).
 
-![graphical abstract](https://raw.githubusercontent.com/rajewsky-lab/spacemake/master/docs/graphical_abstract_twitter.png)
