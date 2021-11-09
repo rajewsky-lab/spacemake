@@ -318,7 +318,8 @@ def message_aggregation(
     class MessageHandler(logging.NullHandler):
         def handle(this, record):
             if record.name == log_listen:
-                message_buffer.append(record.msg)
+                #message_buffer.append(record.msg)
+                print(record.msg)
 
     log.addHandler(MessageHandler())
 
@@ -336,7 +337,6 @@ def message_aggregation(
 
     except SpacemakeError as e:
         print(e)
-
 
 def str_to_list(value):
     # if list in string representation, return the list

@@ -49,7 +49,7 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         required=required,
         nargs=nargs,
         default=default,
-        help=f"{project_argument}. {help_extra}",
+        help=f"{project_argument} {help_extra}",
     )
 
     parser.add_argument(
@@ -58,7 +58,7 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         required=required,
         nargs=nargs,
         default=default,
-        help=f"{sample_argument}. {help_extra}",
+        help=f"{sample_argument} {help_extra}",
     )
 
     return parser
