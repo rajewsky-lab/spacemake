@@ -23,6 +23,7 @@ dependencies:
     - r-hexbin
     - r-scales
     - pysam>=0.16.0.1
+    - pot
     - pip:
         - pandas>=1.3.0
         - scanpy>=1.8.1
@@ -34,3 +35,4 @@ dependencies:
         - scikit-misc>=0.1.3
         - scikit-learn>=0.23.1
         - squidpy>=1.0.0
+        - novosparc

@@ -294,7 +294,7 @@ umi_cutoff_plot <- function(metric, y_log_transform = F, legend_pos='none'){
                   legend.title = element_blank(), legend.margin = margin(t=0.5, b=0.5,l=0.5,
                                                                          r=0.5, unit = 'cm'),
                   legend.spacing = unit(0, 'cm'), plot.margin = unit(c(1,1,1,1), "lines")) +
-            labs(color='', linetype='', y=paste0(y_label, '\nper spatial-unit'), x='minimum UMI') +
+            labs(color='', linetype='', y=paste0(y_label, '\nper spatial unit'), x='minimum UMI') +
             guides(linetype = guide_legend(override.aes = list(size = 1), ncol=2),
                    color = guide_legend(override.aes = list(size = 2)))
 
@@ -353,7 +353,7 @@ metric_plot <- function(run_mode_in, metric, legend_pos='none'){
             scale_fill_manual(values=clrs) +
             labs(fill='', x=paste0('# of ', y_label),
                  y=paste0('# of\n',
-                          'spatial-units')) +
+                          'spatial units')) +
             theme(legend.position = legend_pos, strip.background=element_rect(fill='white'),
                   text = element_text(size =18 ))
 
@@ -496,8 +496,9 @@ cat('## Spatial QC {.tabset}\n\n')
 run_mode_info <- dge_summary %>%
     select(run_mode) %>%
     summarise(n_cells=n()) %>%
-    mutate(def_plot_bead_size = ifelse(n_cells > 5000, 0.5, 1)) %>%
-    mutate(def_plot_bead_size = ifelse(n_cells > 10000, 0.1, def_plot_bead_size))
+    mutate(def_plot_bead_size = ifelse(n_cells > 5000, 0.4, 0.75)) %>%
+    mutate(def_plot_bead_size = ifelse(n_cells > 10000, 0.1, def_plot_bead_size)) %>%
+    mutate(def_plot_bead_size = ifelse(n_cells > 25000, 0.05, def_plot_bead_size))
 
 plot_bead_size <- run_mode_settings %>%
     filter(variable_name %in% c('mesh_data', 'mesh_spot_diameter_um')) %>%
@@ -579,14 +580,14 @@ qc_var_info <- dge_summary %>%
     colnames() %>%
     tibble(qc_vars = .) %>%
     inner_join(tibble(qc_vars = qc_vars,
-               ttl = c('# beads joined\nper spatial-unit',
-                       '# of reads\nper spatial-unit',
-                       '# of genes\nper spatial-unit',
-                       '# of UMIs\nper spatial-unit',
-                       'reads / UMIs\nper spatial-unit',
-                       '% mt counts\nper spatial-unit',
-                       'Shannon\nentropy\nper spatial-unit',
-                       'barcode length\nafter\ncompression\nper spatial-unit'),
+               ttl = c('# beads joined\nper spatial unit',
+                       '# of reads\nper spatial unit',
+                       '# of genes\nper spatial unit',
+                       '# of UMIs\nper spatial unit',
+                       'reads / UMIs\nper spatial unit',
+                       '% mt counts\nper spatial unit',
+                       'Shannon\nentropy\nper spatial unit',
+                       'barcode length\nafter\ncompression\nper spatial unit'),
                cut_dist = c(F, T, T, T, T, T, F, F),
                min_value = c(0, 0, 0, 0, 1, 0, 0, 0)),
                by='qc_vars') %>%

@@ -56,7 +56,7 @@ def get_run_parser():
     )
     parser.add_argument(
         "--with_fastqc",
-        "-qfqc",
+        "-wfqc",
         action="store_true",
         help="Run also fastqc as part of the spacemake run",
     )
@@ -89,9 +89,6 @@ def setup_init_parser(parent_parser):
         "--dropseq_tools",
         help="absolute path to dropseq_tools directory",
         required=True,
-    )
-    parser_init.add_argument(
-        "--picard_tools", help="absolute path to `picard.jar` file", required=True
     )
     parser_init.set_defaults(func=spacemake_init)
 
@@ -130,8 +127,16 @@ def spacemake_init(args):
     cf = ConfigFile.from_yaml(initial_config)
     # update the file path
     cf.set_file_path(config_path)
+
+    # add variables from args
     cf.variables["root_dir"] = args["root_dir"]
     cf.variables["temp_dir"] = args["temp_dir"]
+
+    cf.variables['external_bin'] = {
+        'dropseq_tools' : args['dropseq_tools']
+    }
+
+    cf.variables['microscopy_out'] = args.get('microscopy_out', '')
 
     if args["download_species"]:
         species_data_config_file = os.path.join(
