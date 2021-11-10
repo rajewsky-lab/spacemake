@@ -111,8 +111,55 @@ def setup_run_parser(parent_parser):
     )
     downsampling_parser.set_defaults(downsample=True, func=spacemake_run)
 
-    return parser_run
+    parser_novosparc = parser_run_subparsers.add_parser(
+        'novosparc',
+        help='reconstruct the 2-d tissue with novosparc',
+        parents=[
+            get_run_parser(),
+            get_project_sample_parser(
+                    allow_multiple = False,
+                    help_extra = ' of sample to reconstruct',
+                 ),
+        ],
+    )
+        
+    parser_novosparc.add_argument(
+        '--run_mode', type=str, help='the run_mode to be used for this sample ' +
+        'for reconstruction. If left empty, the first run_mode for this ' +
+        'sample will be used', required=False,
+    )
 
+    parser_novosparc.add_argument(
+        '--umi_cutoff', type=str, help='umi_cutoff to be used for this sample ' +
+        'for reconstruction. If left empty, the smallest umi_cutoff of a given ' +
+        'run_mode will be used', required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_project_id', type=str, help='project_id of the reference atlas.' +
+        'Has to be spatial, otherwise error will be raised', required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_sample_id', type=str, help='sample_id of the reference atlas.' +
+        'Has to be spatial, otherwise error will be raised', required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_run_mode', type=str, help='the run_mode to be used for the ' +
+        'reference sample. If empty, the first run_mode for the reference will be used',
+        required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_umi_cutoff', type=str, help='the umi_cutoff to be used for this ' +
+        'reference sample. If empty, the smallest umi_cutoff of the given run_mode ' +
+        'will be used.', required=False,
+    )
+
+    parser_novosparc.set_defaults(reconstruct_novosparc=True, func=spacemake_run)
+    
+    return parser_run
 
 @message_aggregation(logger_name)
 def spacemake_init(args):
