@@ -488,6 +488,9 @@ def main_extract(args):
             ) = annotation.extract_cDNA(
                 qname, after_oligo=args.cDNA_after, distal=args.distal
             )
+            if not cDNA.strip() or (cDNA_end - cDNA_start <= 0):
+                continue
+
             bc = barcodes[qname]
             if bc not in known:
                 bc = bc.lower()
@@ -862,6 +865,11 @@ def prepare_parser():
 
     xt_parser = subparsers.add_parser(
         "extract", help="extract sequences from the long read"
+    )
+    xt_parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
     )
     xt_parser.add_argument(
         "--barcode-after",
