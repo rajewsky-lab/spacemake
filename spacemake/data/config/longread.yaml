@@ -43,4 +43,15 @@ signatures:
         intact_bead: "chr_bead_start,polyT,chr_TSO_RC"
         bead_related: "chr_bead_start"
 
+    combv1:
+        prio: 10
+        label: "comb_2seg_pilot"
+        read1_primer: bead_start
+        read2_primer: N70X
+        CB: "r1[0:12]"
+        UMI: "r2[0:8]"
+        color: "blue"
+        intact_bead: "P5,bead_start,OP1,OP2_2s,polyT,N70X"
+        bead_related: "bead_start"
+
 default: "withUMI"
