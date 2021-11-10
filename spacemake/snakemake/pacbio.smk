@@ -14,6 +14,7 @@ pb_ann_dir = pb_root + "/annotation/"
 pb_stats_dir = pb_root + "/stats/"
 pb_report_dir = pb_root + "/reports/"
 pb_examples_dir = pb_root + "/examples/"
+pb_cDNA_dir = pb_root + "/cDNA/"
 
 # targets
 pb_ann = pb_ann_dir + "{sample}.annotation.tsv"
@@ -21,6 +22,9 @@ pb_stats = pb_stats_dir + "{sample}.stats.tsv"
 pb_report = pb_report_dir + "{sample}.donuts.pdf"
 pb_report_stats = pb_stats_dir + "{sample}.report.tsv"
 pb_edits = pb_report_dir + "{sample}.oligo_edits.pdf"
+pb_cDNA = pb_cDNA_dir + "{sample}.fa"
+pb_cDNA_log = pb_cDNA_dir + "{sample}.log"
+pb_cDNA_bam = pb_cDNA_dir + "{sample}.bam"
 pb_examples = pb_examples_dir + "{sample}.txt"
 
 # pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf'
@@ -66,7 +70,13 @@ def get_longread_output():
                     pb_edits,
                     project=index[0],
                     sample=index[1],
+                ) + \
+                expand(
+                    pb_cDNA_bam,
+                    project=index[0],
+                    sample=index[1],
                 )
+
                 PB_RAW_FILES[index[1]] = row.longreads
                 PB_SIGNATURE[index[1]] = row.longread_signature
 
@@ -99,6 +109,50 @@ python -m spacemake.longread \
     {params.args} \
 """
 
+
+rule map_cDNA:
+    input: pb_cDNA
+    output:
+        bam=pb_cDNA_bam,
+        tmp=temp(directory(pb_cDNA_dir + 'tmp/'))
+    params:
+        index = lambda wc : get_star_index(wc)['index'],
+        annotation = lambda wc: get_species_genome_annotation(wc)['annotation'],
+        star_prefix = pb_cDNA_dir + 'tmp/',
+    threads: 64
+    shell:
+        """
+        mkdir -p {params.star_prefix}
+        STARlong \
+            --runThreadN {threads} \
+            --genomeDir  {params.index} \
+            --genomeLoad NoSharedMemory \
+            --readFilesIn {input} \
+            --readFilesType Fastx \
+            --outSAMtype BAM Unsorted \
+            --outSAMunmapped Within \
+            --outSAMattributes All \
+            --outSAMprimaryFlag AllBestScore \
+            --outStd BAM_Unsorted \
+            --outFilterMultimapScoreRange 2 \
+            --outFilterScoreMin 0 \
+            --outFilterScoreMinOverLread 0 \
+            --outFilterMatchNminOverLread 0 \
+            --outFilterMatchNmin 30 \
+            --outFilterMismatchNmax 1000 \
+            --winAnchorMultimapNmax 200 \
+            --seedSearchStartLmax 12 \
+            --seedPerReadNmax 100000 \
+            --seedPerWindowNmax 100 \
+            --alignTranscriptsPerReadNmax 100000 \
+            --alignTranscriptsPerWindowNmax 10000 \
+            --outFileNamePrefix {output.tmp} | \
+            {dropseq_tools}/TagReadWithGeneFunction \
+            I=/dev/stdin \
+            O={output.bam} \
+            ANNOTATIONS_FILE={params.annotation}
+        """       
+
 rule cmd_overview:
     input:
         reports=lambda wc: PB_REPORT_STATS
@@ -118,6 +172,18 @@ rule cmd_report:
         args=get_args
     threads: 1
     shell: longread_cmd + " report"
+
+rule cmd_extract:
+    input: 
+        fname = lambda wc: PB_RAW_FILES[wc.sample],
+        ann = pb_ann
+    output: pb_cDNA
+    params:
+        args=get_args
+    log: pb_cDNA_log
+    # params:
+    #     known_barcodes = lambda wc: known_barcodes.get(wc.name,"")
+    shell: longread_cmd + " extract {input.fname} 2> {log} > {output}"
 
 rule cmd_edits:
     input: 
