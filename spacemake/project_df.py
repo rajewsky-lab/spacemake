@@ -714,6 +714,9 @@ class ProjectDF:
             ],
         ]
 
+        self.logger.debug(
+            f"project_id={project_id} sample_id={sample_id} R1,2={bool(data.R1 and data.R2)} basecall={(data.basecalls_dir and data.sample_sheet)} longreads={bool(data.longreads)} dge={bool(data.dge)} is_merged={bool(data.is_merged)}"
+        )
         if (
             (data.R1 and data.R2)
             or (data.basecalls_dir and data.sample_sheet)
@@ -725,8 +728,10 @@ class ProjectDF:
         elif data.dge:
             return True
         else:
-            raise SpacemakeError(f'Sample with id (project_id, sample_id)=' +
-                f'({project_id}, {sample_id}) is invalid.')
+            raise SpacemakeError(
+                f"Sample with id (project_id, sample_id)="
+                + f"({project_id}, {sample_id}) is invalid."
+            )
 
     def has_dge(self, project_id: str, sample_id: str) -> bool:
         """Returns True if a has dge. for Pacbio only samples returns False.
@@ -762,9 +767,10 @@ class ProjectDF:
         elif data.longreads:
             return False
         else:
-            raise SpacemakeError(f'Sample with id (project_id, sample_id)=' +
-                f'({project_id}, {sample_id}) is invalid.')
-            
+            raise SpacemakeError(
+                f"Sample with id (project_id, sample_id)="
+                + f"({project_id}, {sample_id}) is invalid."
+            )
 
     def is_spatial(self, project_id: str, sample_id: str) -> bool:
         """Returns true if a sample with index (project_id, sample_id) is spatial,
@@ -1337,7 +1343,7 @@ class ProjectDF:
                 )
 
         # after all checks, log that we are merging
-        self.logger.info(f'Merging samples {ix_list} together\n')
+        self.logger.info(f"Merging samples {ix_list} together\n")
         variables_to_deduce = ["investigator", "experiment", "sequencing_date"]
 
         for variable in variables_to_deduce:
