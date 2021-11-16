@@ -3,6 +3,7 @@ import novosparc
 
 from anndata import AnnData
 from spacemake.util import message_aggregation
+from numpy import ndarray
 
 logger_name = 'spacemake.spatial.novosparc_reconstruction'
 logger = logging.getLogger(logger_name)
@@ -33,17 +34,20 @@ def get_parser():
     return parser
 
 # copy of a yet-to-be-pushed novosparc function
-def quantify_clusters_spatially(tissue, cluster_key='clusters'):
+def quantify_clusters_spatially(tissue: novosparc.cm.Tissue, cluster_key: str='clusters') -> ndarray:
     """Maps the annotated clusters obtained from the scRNA-seq analysis onto
     the tissue space.
-    Args:
-        tissue: the novosparc tissue object containing the gene expression data,
-                the clusters annotation and the spatial reconstruction. Assumes
-                that the cluster annotation exists in the underlying anndata object.
-    Returns:
-        [numpy array]: An array of the cluster annotation per tissue position.
+
+    :param tissue:    the novosparc tissue object containing the gene expression data,
+                      the clusters annotation and the spatial reconstruction. Assumes
+                      that the cluster annotation exists in the underlying anndata object.
+    :type tissue: novosparc.cm.Tissue
+    :param cluster_key: the key of the clustering to be used for deduction
+    :type cluster_key: str
+    rtype: numpy.ndarray
     """
     import numpy as np
+
     clusters = tissue.dataset.obs[cluster_key].to_numpy().flatten()
     cluster_names = np.unique(clusters)
     ixs = np.array(
@@ -58,8 +62,8 @@ def quantify_clusters_spatially(tissue, cluster_key='clusters'):
     
 def novosparc_denovo(
         adata: AnnData,
-        num_spatial_locations: int=1000,
-        num_input_cells: int=1000,
+        num_spatial_locations: int=5000,
+        num_input_cells: int=30000,
         locations=None,
     ) -> novosparc.cm.Tissue:
     """reconstruct spatial information de-novo with novosparc.
@@ -71,7 +75,7 @@ def novosparc_denovo(
     :param num_input_cells:
     :type num_input_cells: int
     :param locations: Numpy array of (x,y) locations (optional)
-    :type locations: ndarray
+    :type locations: numpy.ndarray
     :rtype: novosparc.cm.Tissue
     """
     import numpy as np
@@ -143,12 +147,14 @@ def novosparc_mapping(sc_adata: AnnData, st_adata: AnnData) -> novosparc.cm.Tiss
     from scanpy._utils import check_nonnegative_integers
     from scipy.sparse import csc_matrix
 
+    logger.info('Mapping single-cell data onto spatial data with novosparc')
+
     if (check_nonnegative_integers(sc_adata.X)
         or check_nonnegative_integers(st_adata.X)
     ):
         # if any of the inputs is count-data, raise error
-        raise SpacemakeError(f'External dge seems to contain values '+
-            'which are already normalised. Raw-count matrix expected.')
+        raise SpacemakeError(f'External dge seems to contain raw counts. '+
+            'Normalised values are expected for both sc_adata and st_adata.')
 
     # calculate top 500 variable genes for both
     sc.pp.highly_variable_genes(sc_adata, n_top_genes=500)
@@ -158,6 +164,9 @@ def novosparc_mapping(sc_adata: AnnData, st_adata: AnnData) -> novosparc.cm.Tiss
     st_adata_hv = st_adata.var_names[st_adata.var.highly_variable].to_list()
 
     markers = list(set(sc_adata_hv).intersection(st_adata_hv))
+
+    logger.info(f'{len(markers)} number of common markers found. Using them' +
+        ' for reconstruction')
 
     # save sc dge as a pandas dataframe
     dge_rep = sc_adata.to_df()[sc_adata_hv]
@@ -192,6 +201,7 @@ def novosparc_mapping(sc_adata: AnnData, st_adata: AnnData) -> novosparc.cm.Tiss
 def save_novosparc_res(tissue, adata_original) -> AnnData:
     import anndata
     import pandas as pd
+    import numpy as np
 
     from scipy.sparse import csc_matrix
 
@@ -199,7 +209,13 @@ def save_novosparc_res(tissue, adata_original) -> AnnData:
         csc_matrix(tissue.sdge.T),
         var = pd.DataFrame(index=tissue.dataset.var_names))
 
+    logger.info('Scaling mapped data to original data...')
+
+    adata_reconst.X = np.sum(adata_original.X) * adata_reconst.X / np.sum(adata_reconst.X)
+
     adata_reconst.obsm['spatial'] = tissue.locations
+
+    logger.info('Transferring original cluster labels...')
 
     for res_key in adata_original.obs.columns[adata_original.obs.columns.str.startswith('leiden_')]:
         adata_reconst.obs[f'novosparc_{res_key}'] = quantify_clusters_spatially(tissue, res_key)
@@ -219,11 +235,14 @@ def cmdline():
     if args.spatial_dataset is not None:
         # make mapping
         st_adata = sc.read(args.spatial_dataset)
+
+        tissue_reconst = novosparc_mapping(sc_adata, st_adata)
+        adata = save_novosparc_res(tissue_reconst, sc_adata)
     else:
         tissue_reconst = novosparc_denovo(sc_adata)  
         adata = save_novosparc_res(tissue_reconst, sc_adata)
 
-        adata.write(args.output)
+    adata.write(args.output)
 
 if __name__ == "__main__":
     cmdline()
