@@ -30,9 +30,9 @@ pb_examples = pb_examples_dir + "{sample_id}.txt"
 
 # pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf'
 # print(config)
-pb_overview = os.path.join(config['root_dir'], 'pacbio_overview')
-pb_overview_csv = pb_overview + '/pacbio_overview.csv'
-pb_overview_pdf = pb_overview + '/pacbio_overview.pdf'
+pb_overview_dir = os.path.join(config['root_dir'], 'pacbio_overview/')
+pb_overview_csv = pb_overview_dir + 'overview.csv'
+pb_overview_pdf = pb_overview_dir + 'fidelity.pdf'
 
 # pb_run_summary = processed_data_pacbio + "/{sample}.examples.txt"
 # # pb_rRNA_out = processed_data_pacbio + "/{sample}.rRNA.txt"
@@ -172,10 +172,12 @@ rule cmd_overview:
     input:
         reports=lambda wc: PB_REPORT_STATS
     output:
-        pb_overview_pdf
+        pdf=pb_overview_pdf,
+        csv=pb_overview_csv,
     params:
+        out_path=lambda wc: pb_overview_dir.format(**wc),
         args=""
-    shell: longread_cmd + " overview {input.reports}"
+    shell: longread_cmd + " overview --output {params.out_path} {input.reports} "
 
 rule cmd_report:
     input:
