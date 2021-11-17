@@ -8,7 +8,7 @@ __email__ = ['marvin.jens@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.
 ##################
 # include pacbio #
 ##################
-pb_root = project_dir + "/processed_data/{sample}/pacbio"
+pb_root = project_dir + "/processed_data/{sample_id}/pacbio"
 pb_cache_dir = pb_root + "/cache/"
 pb_ann_dir = pb_root + "/annotation/"
 pb_stats_dir = pb_root + "/stats/"
@@ -17,15 +17,16 @@ pb_examples_dir = pb_root + "/examples/"
 pb_cDNA_dir = pb_root + "/cDNA/"
 
 # targets
-pb_ann = pb_ann_dir + "{sample}.annotation.tsv"
-pb_stats = pb_stats_dir + "{sample}.stats.tsv"
-pb_report = pb_report_dir + "{sample}.donuts.pdf"
-pb_report_stats = pb_stats_dir + "{sample}.report.tsv"
-pb_edits = pb_report_dir + "{sample}.oligo_edits.pdf"
-pb_cDNA = pb_cDNA_dir + "{sample}.fa"
-pb_cDNA_log = pb_cDNA_dir + "{sample}.log"
-pb_cDNA_bam = pb_cDNA_dir + "{sample}.bam"
-pb_examples = pb_examples_dir + "{sample}.txt"
+pb_ann = pb_ann_dir + "{sample_id}.annotation.tsv"
+pb_stats = pb_stats_dir + "{sample_id}.stats.tsv"
+pb_report = pb_report_dir + "{sample_id}.donuts.pdf"
+pb_report_stats = pb_stats_dir + "{sample_id}.report.tsv"
+pb_edits = pb_report_dir + "{sample_id}.oligo_edits.pdf"
+pb_cDNA = pb_cDNA_dir + "{sample_id}.fa"
+pb_cDNA_log = pb_cDNA_dir + "{sample_id}.log"
+pb_cDNA_oligo_analysis = pb_cDNA_dir + "{sample_id}.oligo_analysis.csv"
+pb_cDNA_bam = pb_cDNA_dir + "{sample_id}.bam"
+pb_examples = pb_examples_dir + "{sample_id}.txt"
 
 # pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf'
 # print(config)
@@ -58,23 +59,28 @@ def get_longread_output():
         #     run_mode_variables = project_df.config.get_run_mode(run_mode).variables
             if row.longreads:
                 PB_REPORT_STATS.extend(
-                    expand(pb_report_stats, project=index[0], sample=index[1])
+                    expand(pb_report_stats, project_id=index[0], sample_id=index[1])
                 )
                 out_files += \
                 expand(
                     pb_report,
-                    project=index[0],
-                    sample=index[1],
+                    project_id=index[0],
+                    sample_id=index[1],
                 ) + \
                 expand(
                     pb_edits,
-                    project=index[0],
-                    sample=index[1],
+                    project_id=index[0],
+                    sample_id=index[1],
                 ) + \
                 expand(
                     pb_cDNA_bam,
-                    project=index[0],
-                    sample=index[1],
+                    project_id=index[0],
+                    sample_id=index[1],
+                ) + \
+                expand(
+                    pb_cDNA_oligo_analysis,
+                    project_id=index[0],
+                    sample_id=index[1],
                 )
 
                 PB_RAW_FILES[index[1]] = row.longreads
@@ -95,9 +101,9 @@ def get_args(wc):
     --stats-out={pb_stats_dir} \
     --report-out={pb_report_dir} \
     --examples-out={pb_examples_dir} \
-    --sample={wc.sample} \
-    --signature={PB_SIGNATURE[wc.sample]} \
-    """.format(sample=wc.sample, project=wc.project)
+    --sample={wc.sample_id} \
+    --signature={PB_SIGNATURE[wc.sample_id]} \
+    """.format(sample_id=wc.sample_id, project_id=wc.project_id)
     return args
 
 # Use {root_dir}/longread.yaml to set intact_bead layout and other settings that only make sense for
@@ -108,7 +114,6 @@ python -m spacemake.longread \
     --config=longread.yaml \
     {params.args} \
 """
-
 
 rule map_cDNA:
     input: pb_cDNA
@@ -153,6 +158,16 @@ rule map_cDNA:
             ANNOTATIONS_FILE={params.annotation}
         """       
 
+rule cmd_alnstats:
+    input:
+        rules.map_cDNA.output.bam
+    output:
+        oligo_csv=pb_cDNA_oligo_analysis,
+    params:
+        out = lambda wc: pb_cDNA_dir.format(**wc),
+    shell:
+        "alnstats --parse-oligos --out-csv={params.out} --out-pdf={params.out} --out-png={params.out} {input}"
+
 rule cmd_overview:
     input:
         reports=lambda wc: PB_REPORT_STATS
@@ -175,7 +190,7 @@ rule cmd_report:
 
 rule cmd_extract:
     input: 
-        fname = lambda wc: PB_RAW_FILES[wc.sample],
+        fname = lambda wc: PB_RAW_FILES[wc.sample_id],
         ann = pb_ann
     output: pb_cDNA
     params:
@@ -187,7 +202,7 @@ rule cmd_extract:
 
 rule cmd_edits:
     input: 
-        fname = lambda wc: PB_RAW_FILES[wc.sample],
+        fname = lambda wc: PB_RAW_FILES[wc.sample_id],
         stats = pb_stats
     output: pb_edits
     params:
@@ -197,7 +212,7 @@ rule cmd_edits:
 
 rule cmd_annotate:
     input:
-        fname = lambda wc: PB_RAW_FILES[wc.sample],
+        fname = lambda wc: PB_RAW_FILES[wc.sample_id],
         ann = pb_ann
     output: pb_stats
     params:
@@ -207,7 +222,7 @@ rule cmd_annotate:
 
 rule cmd_align:
     input: 
-        fname = lambda wc: PB_RAW_FILES[wc.sample]
+        fname = lambda wc: PB_RAW_FILES[wc.sample_id]
     output: pb_ann
     params:
         args=get_args
