@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import logging
 import matplotlib
@@ -111,6 +112,78 @@ def make_colors_explode(
         ex[i] = 0.1
         colors[i] = hicolor
     return ex, colors
+
+
+def overview_plots(df, path=".", bead=[], concatenation=[], repriming=[]):
+    def make_bars(
+        ax, df, kinds, labels, cmap=plt.get_cmap("tab10"), w=0.9, colors=None
+    ):
+        n = len(kinds)
+        if colors is None:
+            colors = cmap(np.linspace(0, 1, n))
+
+        x = np.arange(len(df)) - w / 2.0
+        y0 = np.zeros(len(x), dtype=float)
+        for kind, label, color in zip(kinds, labels, colors):
+            y = np.nan_to_num(df[kind], nan=0.0)
+            # print(kind)
+            # print(y)
+            ax.bar(x, y, bottom=y0, label=label, width=w, color=color)
+            y0 += y
+
+        ax.set_ylabel("fraction of library")
+        ax.set_xticks(x)
+        labels = df["sample"]  # [clean(fq) for fq in df['qfa']]
+        ax.set_xticklabels(labels, rotation=90)
+        ax.set_ylim(0, 100)
+
+    marie = [
+        "non_bead",
+        "incomplete",
+        "dropseq",
+        "complete",
+    ]
+    marie_colors = ["gray", "royalblue", "green", "gold"]
+
+    ## First plot: fidelity.pdf
+    w = max(8 / 25.0 * len(df), 5)
+    fig, (ax1, ax2) = plt.subplots(2, figsize=(w, 8), sharex=True)
+
+    make_bars(
+        ax1,
+        df,
+        marie,
+        labels=marie,
+        colors=marie_colors,
+    )
+    ax1.legend(title="Marie-stats", ncol=len(marie))
+    make_bars(ax2, df, ["fidelity"], labels=["bead fidelity"])
+
+    ax2.set_ylabel("bead fidelity")
+    fig.tight_layout()
+    fig.savefig(os.path.join(path, "fidelity.pdf"))
+
+    ## Second plot: artifacts.pdf
+    fig, (ax1, ax2, ax3) = plt.subplots(3, figsize=(w, 10), sharex=True)
+    make_bars(ax1, df, bead, labels=bead)
+    ax1.legend(title="bead-related", ncol=len(bead))
+
+    # print("repriming events", repriming)
+    make_bars(
+        ax2,
+        df,
+        repriming,
+        labels=[r.split(",")[0] for r in repriming],
+        cmap=plt.get_cmap("tab20c"),
+    )
+    ax2.legend(title="repriming", ncol=len(repriming))
+
+    # print("concat events", concatenation)
+    make_bars(ax3, df, concatenation, labels=concatenation, cmap=plt.get_cmap("tab20b"))
+    ax3.legend(title="concatamers", ncol=len(concatenation))
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(path, "artifacts.pdf"))
 
 
 def plot_results(

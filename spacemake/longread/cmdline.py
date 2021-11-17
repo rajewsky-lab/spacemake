@@ -39,81 +39,33 @@ def load_results(path, fname, logger, **kw):
     return df
 
 
-class SignatureDB:
-    def __init__(self, intact={}, related={}, color={}, label={}, prio={}):
-        self.intact = intact
-        self.related = related
-        self.color = color
-        self.label = label
-        self.prio = prio
+def setup_namespace(args, need_sample_name=True):
+    """
+    perform initialization code common to more than one sub-command.
+    Augments the args object returned from argparse module with additional
+    variables that are used by multiple sub-commands.
 
-    @classmethod
-    def from_YAML(cls, fname="samples.yaml"):
-        import yaml
-
-        logger = logging.getLogger("spacemake.longread.SampleDB.from_YAML")
-        logger.info(f"reading longread signature definitions from '{fname}'")
-
-        groups = yaml.load(open(fname), Loader=yaml.SafeLoader)
-        grp = groups["signatures"]
-        default = grp[groups["default"]]
-        # print("default THING", default)
-
-        intact_lkup = defaultdict(lambda: default["intact_bead"])
-        brelated_lkup = defaultdict(lambda: default["bead_related"])
-        color_lkup = defaultdict(lambda: default["color"])
-        label_lkup = defaultdict(lambda: default["label"])
-        prio_lkup = defaultdict(lambda: default["prio"])
-        for name, d in groups["signatures"].items():
-            # print(f"name={name} d={d}")
-            intact_lkup[name] = d["intact_bead"]
-            brelated_lkup[name] = d["bead_related"]
-            color_lkup[name] = d["color"]
-            label_lkup[name] = d["label"]
-            prio_lkup[name] = d["prio"]
-
-        # print(color_lkup)
-        # print("DEFAULT COLOR", color_lkup["TEST"])
-        logger.info(
-            f"found {len(intact_lkup)} signature definitions: {sorted(intact_lkup.keys())}."
-        )
-        return cls(intact_lkup, brelated_lkup, color_lkup, label_lkup, prio_lkup)
-
-    def sort_samples(self, samples, signatures):
-        return sorted(
-            zip(samples, signatures), key=lambda x: (self.prio.get(x[1], np.inf), x[0])
-        )
-
-
-def get_signature_db(args):
-    if os.access(args.config, os.R_OK):
-        cfg = args.config
-    else:
-        cfg = os.path.join(os.path.dirname(__file__), "../data/config/longread.yaml")
-
-    return SignatureDB.from_YAML(cfg)
-
-
-def setup_namespace(args):
-    "perform initialization code common to more than one sub-command"
+    :param args: cmdline parser args
+    :type args: Namespace
+    :return: augmented namespace
+    :rtype: SimpleNamespace
+    """
     d = vars(args)
-    sample = detect_sample(args)
-    d["sample_name"] = sample
+    if need_sample_name:
+        sample = detect_sample(args)
+        d["sample_name"] = sample
 
-    db = get_signature_db(args)
+    from spacemake.longread.signature import get_signature_db
+
+    db = get_signature_db(args.config)
+
     d["signature_db"] = db
-
     intact_bead = db.intact[args.signature]
     d["intact_bead"] = intact_bead
     d["sig_intact"] = intact_bead.split(",")
     d["sig_core"], d["sig_core_order"] = util.process_intact_signature(intact_bead)
 
     d["bead_related"] = db.related[args.signature]
-    # bead_related = args.bead_related
-    # if bead_related is None:
-    #     sig_intact = tuple(args.intact_bead.split(","))
-    #     bead_related = sig_intact[0]
-
     d["logger"] = logging.getLogger(f"spacemake.longread.cmd.{args.subcmd}")
     d["blocks"] = util.load_oligos(args.blocks)
 
@@ -122,7 +74,8 @@ def setup_namespace(args):
     return SimpleNamespace(**d)
 
 
-def aln_main(args):
+## Subcommand 'align'
+def cmd_align(args):
     args = setup_namespace(args)
 
     cache.fill_caches(
@@ -144,7 +97,19 @@ def aln_main(args):
     )
 
 
-def ann_main(args):
+def prepare_align_parser(subparsers):
+    parser = subparsers.add_parser("align", help="align PacBio reads against oligos")
+    parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
+    )
+    parser.set_defaults(func=cmd_align)
+    return parser
+
+
+## subcommand 'annotate'
+def cmd_annotate(args):
     args = setup_namespace(args)
     args.logger.info(
         f"analyzing {args.sample_name} for intact signature {args.sig_intact}"
@@ -276,6 +241,25 @@ def ann_main(args):
                 )
 
 
+def prepare_annotate_parser(subparsers):
+    parser = subparsers.add_parser(
+        "annotate", help="create annotation from detected oligo matches"
+    )
+    parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
+    )
+    parser.add_argument(
+        "--polyT",
+        help="name of oligo-block that matches polyT (default='polyT')",
+        default="polyT",
+    )
+    parser.set_defaults(func=cmd_annotate)
+    return parser
+
+
+## subcommand 'report'
 def get_synth_rates(found_part_counts, all_parts, n_total):
     rates = []
 
@@ -292,7 +276,7 @@ def get_synth_rates(found_part_counts, all_parts, n_total):
     return np.array(rates)
 
 
-def rep_main(args):
+def cmd_report(args):
     args = setup_namespace(args)
     args.logger.info(f"generating report plots for '{args.sample_name}'")
     args.logger.debug(f"'bead-related' if we detect: '{args.bead_related}'")
@@ -379,7 +363,14 @@ def rep_main(args):
     )
 
 
-def main_edits(args):
+def prepare_report_parser(subparsers):
+    parser = subparsers.add_parser("report", help="create PDF/PNG reports")
+    parser.set_defaults(func=cmd_report)
+    return parser
+
+
+## subcommand 'edits'
+def cmd_edits(args):
     args = setup_namespace(args)
 
     annotation = ann.AnnotatedSequences(
@@ -422,7 +413,35 @@ def main_edits(args):
     )
 
 
-def main_extract(args):
+def prepare_edits_parser(subparsers):
+    parser = subparsers.add_parser(
+        "edits", help="gather mismatch and indel stats for oligo matches"
+    )
+    parser.add_argument(
+        "--n-samples",
+        type=int,
+        default=1000,
+        help="number of sample alignments to gather edit statistics from (default=1000)",
+    )
+    parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
+    )
+    parser.add_argument(
+        "--min-score",
+        default=0.6,
+        type=float,
+        help="minimal match alignment score to consider a match for edit extraction, relative to its size (default=0.6)",
+    )
+    parser.set_defaults(func=cmd_edits)
+    return parser
+
+
+## subcommand 'extract'
+def cmd_extract(args):
+    args = setup_namespace(args)
+    # TODO: clean up and actually implement
     sample_name = detect_sample(args)
     blocks = util.load_oligos(args.blocks)
 
@@ -506,7 +525,71 @@ def main_extract(args):
             print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
 
 
-def main_overview(args):
+def prepare_extract_parser(subparsers):
+    parser = subparsers.add_parser(
+        "extract", help="extract sequences from the long read"
+    )
+    parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
+    )
+    parser.add_argument(
+        "--barcode-after",
+        type=str,
+        default="bead_start",
+        help="name of anchor match after which the barcodes follow (default='bead_start')",
+    )
+    parser.add_argument(
+        "--CB",
+        type=str,
+        default="8,20",
+        help="bases downstream of anchor match at which the cell barcode starts and ends. Default='8,20'",
+    )
+    parser.add_argument(
+        "--UMI",
+        type=str,
+        default="0,8",
+        help="bases downstream of anchor match at which the UMI starts and ends. Default='0,8'",
+    )
+    parser.add_argument(
+        "--cDNA-after",
+        type=str,
+        default="bead_start",
+        help="excise sequence between this oligo and the last oligo match (if it exists)",
+    )
+    parser.add_argument(
+        "--sig-include",
+        type=str,
+        default="",
+        help="extract cDNA only from long reads INCLUDING this substring in the signature",
+    )
+    parser.add_argument(
+        "--sig-exclude",
+        type=str,
+        default="",
+        help="extract cDNA only from long reads EXCLUDING this substring in the signature",
+    )
+    parser.add_argument(
+        "--distal",
+        default=150,
+        type=int,
+        help="number of nt from end of sequence that are considered for oligo matches when extracting cDNA",
+    )
+    parser.add_argument(
+        "--top-barcodes",
+        type=str,
+        default="",
+        help="path to text file with known barcodes (e.g. from Illumina)",
+    )
+    parser.set_defaults(func=cmd_extract)
+    return parser
+
+
+## subcommand 'overview'
+def cmd_overview(args):
+    args = setup_namespace(args, need_sample_name=False)
+
     dfs = []
     for fname in list(args.reports):
         print(f"loading {fname}")
@@ -555,207 +638,42 @@ def main_overview(args):
     df["fidelity"] = 100 * df["complete"] / df["bead-related"]
     df = df.fillna(0)
     # print(df)
-    if args.csv_out:
-        df.to_csv(args.csv_out, float_format="%.2f", sep="\t")
 
-    def clean(txt):
-        txt = os.path.basename(txt)
-        t = (
-            txt.replace("source/", "")
-            .replace("sts_", "")
-            .replace("pb_", "")
-            .replace("ds_", "")
-            .replace(".fq", "")
-            .replace(".bam", "")
-            .replace("lima.", "")
-        )
-
-        if t.count("_") > 1:
-            t = "_".join(t.split("_")[:2])
-
-        return t
-
-    df = df.reset_index()
-    # df = df.sort_values('bead_related')
-    df = df.sort_values("sample")
-
-    def guess_rRNA_file(path):
-        # print("guessrRNA raw path", path)
-        name = os.path.basename(path).replace(".summary", ".rRNA")
-
-        if args.rRNA_same_place:
-            place = os.path.dirname(path)
-        else:
-            place = args.rRNA
-
-        return [
-            os.path.join(place, name.replace(".fq", ".txt")),
-            os.path.join(place, name.replace(".fq", ".txt")).replace(
-                ".rRNA.tsv", ".txt"
-            ),
-            os.path.join(place, name.replace(".fq", ".txt")).replace(
-                ".rRNA.tsv", ".rRNA.txt"
-            ),
-            os.path.join(place, name.replace(".bam", ".txt").replace("lima.", "")),
-            os.path.join(
-                place, name.replace(".bam", ".txt").replace("lima.", "")
-            ).replace(".rRNA.tsv", ".txt"),
-            os.path.join(
-                place, name.replace(".bam", ".txt").replace("lima.", "")
-            ).replace(".rRNA.tsv", ".rRNA.txt"),
-        ]
-
-    # rRNA_fracs = []
-    # for row in df[["stats_file", "N_reads"]].itertuples():
-    #     rcount = np.nan
-    #     for fname in guess_rRNA_file(row.stats_file):
-    #         print(fname)
-    #         try:
-    #             rcount = int(open(fname).read())
-    #         except (FileNotFoundError, ValueError):
-    #             pass
-    #         else:
-    #             break
-    #     if rcount == np.nan:
-    #         raise ValueError
-
-    #     rRNA_fracs.append(100.0 * rcount / row.N_reads)
-
-    # df["rRNA"] = rRNA_fracs
-    # print(df[['qfa', 'rRNA']])
-
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    plt.rcParams.update({"font.size": 8})
-
-    def make_bars(
-        ax, df, kinds, labels, cmap=plt.get_cmap("tab10"), w=0.9, colors=None
-    ):
-        n = len(kinds)
-        if colors is None:
-            colors = cmap(np.linspace(0, 1, n))
-
-        x = np.arange(len(df)) - w / 2.0
-        y0 = np.zeros(len(x), dtype=float)
-        for kind, label, color in zip(kinds, labels, colors):
-            y = np.nan_to_num(df[kind], nan=0.0)
-            # print(kind)
-            # print(y)
-            ax.bar(x, y, bottom=y0, label=label, width=w, color=color)
-            y0 += y
-
-        ax.set_ylabel("fraction of library")
-        ax.set_xticks(x)
-        labels = df["sample"]  # [clean(fq) for fq in df['qfa']]
-        ax.set_xticklabels(labels, rotation=90)
-        ax.set_ylim(0, 100)
-
-    marie = [
-        "non_bead",
-        "incomplete",
-        "dropseq",
-        "complete",
-    ]
-    marie_colors = ["gray", "royalblue", "green", "gold"]
-
-    w = max(8 / 25.0 * len(df), 5)
-    if args.multi_page:
-        pdf = PdfPages(args.breakdown)
-        fig, ax1 = plt.subplots(1, figsize=(w, 8))
-    else:
-        fig, (ax1, ax2) = plt.subplots(2, figsize=(w, 8), sharex=True)
-
-    make_bars(
-        ax1,
+    df = df.reset_index().sort_values("sample")
+    store_results(
         df,
-        marie,
-        labels=marie,
-        colors=marie_colors,
+        args.output,
+        "overview.csv",
+        float_format="%.2f",
+        logger=args.logger,
     )
-    ax1.legend(title="Marie-stats", ncol=len(marie))
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        plt.close()
-        fig, ax2 = plt.subplots(1, figsize=(w, 4))
-
-    make_bars(ax2, df, ["fidelity"], labels=["bead fidelity"])
-    ax2.set_ylabel("bead fidelity")
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        pdf.close()
-    else:
-        fig.tight_layout()
-        plt.savefig(args.breakdown)
-
-    plt.close()
-
-    if args.multi_page:
-        pdf = PdfPages(args.output)
-        fig, ax1 = plt.subplots(1, figsize=(w, 4))
-    else:
-        fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, figsize=(w, 12), sharex=True)
-
-    # print("bead related", bead)
-    make_bars(ax1, df, bead, labels=bead)
-    ax1.legend(title="bead-related", ncol=len(bead))
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        plt.close()
-        fig, ax2 = plt.subplots(1, figsize=(w, 4))
-
-    # print("repriming events", repriming)
-    make_bars(
-        ax2,
+    report.overview_plots(
         df,
-        repriming,
-        labels=[r.split(",")[0] for r in repriming],
-        cmap=plt.get_cmap("tab20c"),
+        path=args.output,
+        bead=bead,
+        concatenation=concatenation,
+        repriming=repriming,
     )
-    ax2.legend(title="repriming", ncol=len(repriming))
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        plt.close()
-        fig, ax3 = plt.subplots(1, figsize=(w, 4))
 
-    # print("concat events", concatenation)
-    make_bars(ax3, df, concatenation, labels=concatenation, cmap=plt.get_cmap("tab20b"))
-    ax3.legend(title="concatamers", ncol=len(concatenation))
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        plt.close()
-        fig, ax4 = plt.subplots(1, figsize=(w, 4))
-
-    # make_bars(
-    #     ax4,
-    #     df,
-    #     [
-    #         "rRNA",
-    #     ],
-    #     labels=["rRNA"],
-    #     cmap=plt.get_cmap("tab20c"),
-    # )
-    ax4.legend(title="human rRNA", ncol=1)
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        pdf.close()
-    else:
-        fig.tight_layout()
-        plt.savefig(args.output)
-
-    plt.close()
     return df
 
 
-def prepare_parser():
+def prepare_overview_parser(subparsers):
+    parser = subparsers.add_parser(
+        "overview", help="make overview plots across samples"
+    )
+    parser.add_argument("reports", nargs="+", help="sample reports to aggregate")
+    parser.add_argument(
+        "--output",
+        default=".",
+        help="path for detailed report PDFs and CSV overview table",
+    )
+    parser.set_defaults(func=cmd_overview)
+    return parser
+
+
+## main commandline interface
+def prepare_toplevel_parser():
     parser = argparse.ArgumentParser(prog="longread")
     parser.add_argument(
         "--sample",
@@ -817,162 +735,35 @@ def prepare_parser():
     )
 
     ## sub-parser setup ##
-    subparsers = parser.add_subparsers(help="sub-command help", dest="subcmd")
-    aln_parser = subparsers.add_parser(
-        "align", help="align PacBio reads against oligos"
-    )
-    aln_parser.add_argument(
-        "fname",
-        default=None,
-        help="file with pacbio reads (FASTQ or BAM format)",
-    )
-    ann_parser = subparsers.add_parser(
-        "annotate", help="create annotation from detected oligo matches"
-    )
-    ann_parser.add_argument(
-        "fname",
-        default=None,
-        help="file with pacbio reads (FASTQ or BAM format)",
-    )
-    ann_parser.add_argument(
-        "--polyT",
-        help="name of oligo-block that matches polyT (default='polyT')",
-        default="polyT",
-    )
-
-    rep_parser = subparsers.add_parser("report", help="create PDF/PNG reports")
-
-    ed_parser = subparsers.add_parser(
-        "edits", help="gather mismatch and indel stats for oligo matches"
-    )
-    ed_parser.add_argument(
-        "--n-samples",
-        type=int,
-        default=1000,
-        help="number of sample alignments to gather edit statistics from (default=1000)",
-    )
-    ed_parser.add_argument(
-        "fname",
-        default=None,
-        help="file with pacbio reads (FASTQ or BAM format)",
-    )
-    ed_parser.add_argument(
-        "--min-score",
-        default=0.6,
-        type=float,
-        help="minimal match alignment score to consider a match for edit extraction, relative to its size (default=0.6)",
-    )
-
-    xt_parser = subparsers.add_parser(
-        "extract", help="extract sequences from the long read"
-    )
-    xt_parser.add_argument(
-        "fname",
-        default=None,
-        help="file with pacbio reads (FASTQ or BAM format)",
-    )
-    xt_parser.add_argument(
-        "--barcode-after",
-        type=str,
-        default="bead_start",
-        help="name of anchor match after which the barcodes follow (default='bead_start')",
-    )
-    xt_parser.add_argument(
-        "--CB",
-        type=str,
-        default="8,20",
-        help="bases downstream of anchor match at which the cell barcode starts and ends. Default='8,20'",
-    )
-    xt_parser.add_argument(
-        "--UMI",
-        type=str,
-        default="0,8",
-        help="bases downstream of anchor match at which the UMI starts and ends. Default='0,8'",
-    )
-    xt_parser.add_argument(
-        "--cDNA-after",
-        type=str,
-        default="bead_start",
-        help="excise sequence between this oligo and the last oligo match (if it exists)",
-    )
-    xt_parser.add_argument(
-        "--sig-include",
-        type=str,
-        default="",
-        help="extract cDNA only from long reads INCLUDING this substring in the signature",
-    )
-    xt_parser.add_argument(
-        "--sig-exclude",
-        type=str,
-        default="",
-        help="extract cDNA only from long reads EXCLUDING this substring in the signature",
-    )
-    xt_parser.add_argument(
-        "--distal",
-        default=150,
-        type=int,
-        help="number of nt from end of sequence that are considered for oligo matches when extracting cDNA",
-    )
-    xt_parser.add_argument(
-        "--top-barcodes",
-        type=str,
-        default="",
-        help="path to text file with known barcodes (e.g. from Illumina)",
-    )
-
-    ov_parser = subparsers.add_parser(
-        "overview", help="make overview plots across samples"
-    )
-    ov_parser.add_argument("reports", nargs="+", help="sample reports to aggregate")
-    ov_parser.add_argument(
-        "--output", default="pb_overview.pdf", help="path/name of detailed report PDF"
-    )
-    ov_parser.add_argument(
-        "--csv-out", default="all_pb_stats.csv", help="path/name of detailed report PDF"
-    )
-    ov_parser.add_argument(
-        "--breakdown",
-        default="bead_overview.pdf",
-        help="path/name of bead report (Marie style) PDF",
-    )
-    # ov_parser.add_argument(
-    #     "--rRNA",
-    #     default="rRNA/",
-    #     help="path to search for rRNA counts corresponding to samples",
-    # )
-    # ov_parser.add_argument(
-    #     "--rRNA-same-place",
-    #     default=False,
-    #     action="store_true",
-    #     help="If set, look for rRNA txt file with same sample name in same directory",
-    # )
-    ov_parser.add_argument(
-        "--multi-page",
-        default=False,
-        action="store_true",
-        help="If set, generate multiple PDF pages instead of subplots",
-    )
+    sp = parser.add_subparsers(help="sub-command help", dest="subcmd")
+    prepare_align_parser(sp)
+    prepare_annotate_parser(sp)
+    prepare_edits_parser(sp)
+    prepare_extract_parser(sp)
+    prepare_report_parser(sp)
+    prepare_overview_parser(sp)
 
     parser.set_defaults(func=lambda args: parser.print_help())
-    aln_parser.set_defaults(func=aln_main)
-    ann_parser.set_defaults(func=ann_main)
-    rep_parser.set_defaults(func=rep_main)
-    ed_parser.set_defaults(func=main_edits)
-    xt_parser.set_defaults(func=main_extract)
-    ov_parser.set_defaults(func=main_overview)
 
     return parser
 
 
 def cmdline():
+    """
+    Commandline interface to handle long-read (PacBio, nanopore, ...)
+    annotation and analysis.
+
+    :return: depends on sub-command used
+    :rtype: depends on sub-command used
+    """
     import logging
 
     logging.basicConfig(level=logging.INFO)
 
-    parser = prepare_parser()
+    parser = prepare_toplevel_parser()
     args = parser.parse_args()
     return args.func(args)
 
 
 if __name__ == "__main__":
-    cmdline()
+    result = cmdline()
