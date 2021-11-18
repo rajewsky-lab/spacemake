@@ -31,6 +31,9 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 # this file should contain all sample information, sample name etc.
 ####
 # configfile should be loaded from command line
+# populate if not exists
+config['samples'] = config.get('samples', [])
+config['projects'] = config.get('projects', [])
 
 ###############
 # Global vars #
