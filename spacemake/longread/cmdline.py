@@ -15,7 +15,7 @@ from collections import defaultdict
 
 def detect_sample(args):
     if args.sample is None:
-        if not hasattr(args.fname):
+        if not hasattr(args, "fname"):
             raise ValueError("please provide a sample-identifier via --sample")
 
         sample_name, _ = os.path.splitext(os.path.basename(args.fname))
@@ -443,7 +443,7 @@ def cmd_extract(args):
     args = setup_namespace(args)
     # TODO: clean up and actually implement
     sample_name = detect_sample(args)
-    blocks = util.load_oligos(args.blocks)
+    blocks = args.blocks
 
     annotation = ann.AnnotatedSequences(
         args.fname,
