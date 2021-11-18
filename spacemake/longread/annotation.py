@@ -328,7 +328,7 @@ class AnnotatedSequences:
         # print(ends)
         # print(scores)
         for oligo, start, end in zip(names, starts, ends):
-            buf[start : end + 1] = render_label(oligo, start, end + 1)
+            buf[start:end] = render_label(oligo, start, end)
         #
         return f"# qname={qname} oligo_matches={names} match_scores={scores}\n{seq}\n{''.join(buf)}"
 

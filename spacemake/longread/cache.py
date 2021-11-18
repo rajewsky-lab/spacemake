@@ -70,7 +70,6 @@ class CachedAlignments:
         concurrently align different oligos against the same reads.
         """
         self.logger = logging.getLogger("CachedAlignments")
-        self.logger.info(f"initializing for sample={sample_name} oligo={oligo_name}")
         self.sample_name = sample_name
         self.oligo_name = oligo_name
         self.oligo_seq = oligo_seq
@@ -79,6 +78,9 @@ class CachedAlignments:
             self.oli_lengths[oli] = float(len(seq))
 
         self.sname = os.path.join(ensure_path(path), f"{sample_name}__{oligo_name}")
+        self.logger.info(
+            f"initializing for sample={sample_name} oligo={oligo_name} -> {self.sname}"
+        )
         self.shelf = shelve.open(self.sname)
         self.logger.info(f"found {len(self.shelf)} cached entries")
 
@@ -105,13 +107,16 @@ class MultiAlignments:
         self.logger = logging.getLogger("MultiAlignments")
         self.sample_name = sample_name
         self.oligo_dict = oligo_dict
-        self.oligo_names = sorted(oligo_dict.keys())
+        # sort oligos by length and accept longer oligo match only if score is at least 2 matches better (+4)
+        self.oligo_names = sorted(
+            oligo_dict.keys(), key=lambda k: len(self.oligo_dict[k])
+        )
         self.aln_caches = {}
         for o in self.oligo_names:
             aln = CachedAlignments(sample_name, o, self.oligo_dict[o])
             self.aln_caches[o] = aln
 
-    def annotate(self, seq_name, seq, min_size=7):
+    def annotate(self, seq_name, seq, min_size=7, score_gap=3):
         """
         Iterates over all oligo matches for a desired read sequence and yields
         (start, end, label, score) annotations
@@ -125,11 +130,29 @@ class MultiAlignments:
 
         for i, o in enumerate(self.oligo_names):
             aln = self.aln_caches[o]
+            # print("INVESTIGATING", o, len(self.oligo_dict[o]))
             for start, end, score in aln.align_or_load(seq_name, seq):
+                # print(f"hit: {start}-{end} score={score}")
                 scores = hit_scores[start:end]
+                # print(f"len(scores)={len(scores)}, end -start={end-start}")
+                # print("scores before", scores)
+
                 hits = oli_hits[start:end]
-                oli_hits[start:end] = np.where(scores < score, i + 1, hits)
-                hit_scores[start:end] = np.where(scores < score, score, scores)
+                # print("assignments before", hits)
+                # print([self.oligo_names[h] for h in sorted(set(hits))])
+
+                if scores.max() + score_gap < score:
+                    oli_hits[start:end] = i + 1
+                    hit_scores[start:end] = score
+                # oli_hits[start : end + 1] = np.where(
+                #     scores + score_gap < score, i + 1, hits
+                # )
+                # hit_scores[start : end + 1] = np.where(
+                #     scores + score_gap < score, score, scores
+                # )
+                # print("scores after", scores)
+                # print("assignments after", hits)
+                # print([labels[h] for h in sorted(set(hits))])
 
         positions = (oli_hits > 0).nonzero()[0]
         if len(positions):
@@ -144,7 +167,7 @@ class MultiAlignments:
                         score = hit_scores[
                             start:last
                         ].max()  # * (last - start) / self.oli_lengths[label]
-                        yield start, last, label, score
+                        yield start, i, label, score
                     start = i
                 last = i
                 prev = curr
@@ -154,7 +177,7 @@ class MultiAlignments:
                 score = hit_scores[
                     start:last
                 ].max()  # * (last - start) / self.oli_lengths[label]
-                yield start, last, labels[prev], score
+                yield start, i, labels[prev], score
 
 
 def align_one_oligo_one_read(oligo_seq, qname, qseq):
@@ -162,10 +185,10 @@ def align_one_oligo_one_read(oligo_seq, qname, qseq):
     return qname, hits
 
 
-def align_one_oligo(oligo_name, oligo_seq, sample_name, fastq_path, n_proc=None):
+def align_one_oligo(oligo_name, oligo_seq, sample_name, fastq_path, n_proc=None, **kw):
     import multiprocessing as mp
 
-    aln = CachedAlignments(sample_name, oligo_name, oligo_seq)
+    aln = CachedAlignments(sample_name, oligo_name, oligo_seq, **kw)
     n = 0
     job_list = []
     for name, seq, qual in read_fq(fastq_path):
@@ -192,9 +215,7 @@ def align_one_oligo(oligo_name, oligo_seq, sample_name, fastq_path, n_proc=None)
     return sample_name, oligo_name, n
 
 
-def fill_caches(
-    fastq_path, sample_name, oligo_dict, path="./cache/", n_proc=None
-):
+def fill_caches(fastq_path, sample_name, oligo_dict, path="./cache/", n_proc=None):
     """
     Utility function to fill the shelves by running alignments of different oligos.
     Not parallelized
@@ -202,7 +223,7 @@ def fill_caches(
     # import multiprocessing as mp
     for oligo_name, oligo_seq in sorted(oligo_dict.items()):
         sample_name, oligo_name, n_reads = align_one_oligo(
-            oligo_name, oligo_seq, sample_name, fastq_path, n_proc=n_proc
+            oligo_name, oligo_seq, sample_name, fastq_path, n_proc=n_proc, path=path
         )
         print(f"{sample_name}: aligned {n_reads} against {oligo_name}")
 
@@ -218,3 +239,32 @@ def annotate(fastq_path, sample_name, oligo_dict, path="./cache/"):
         data, columns=["sample_name", "qname", "L", "oligo", "start", "end", "score"]
     )
     return df
+
+
+if __name__ == "__main__":
+    import spacemake.longread.util as util
+
+    oligo_dict = util.load_oligos("")
+
+    seq = "CGCGGAAGCAGTGGTATCAACGCAGAGTACAAAA"
+    print(oligo_dict.keys())
+    for oli_name in ["bead_start", "chr_TSO", "chrV2_RT_PRIMER"]:
+        oli_seq = oligo_dict[oli_name]
+        print(f"oli_name={oli_name} oli_seq={oli_seq}")
+        for aln in align(seq, oli_seq):
+            print_aln(aln)
+            print(aln.start, aln.end)
+
+        print("testing non-overlapping hits")
+        for x in non_overlapping_hits(seq, oli_seq):
+            print(x)
+
+    m = MultiAlignments("test", oligo_dict)
+    for hit in m.annotate(
+        "test1",
+        seq,
+        score_gap=3,
+    ):
+        print(hit)
+        start, end, label, score = hit
+        print(seq[start:end])
