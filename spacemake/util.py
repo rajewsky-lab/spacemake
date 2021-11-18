@@ -340,7 +340,10 @@ def str_to_list(value):
         return None
 
     if type(value) is str and value.startswith("["):
-        return eval(value)
+        if value == "[nan]":
+            return []
+        else:
+            return eval(value)
     # else create a list
     else:
         return [value]
