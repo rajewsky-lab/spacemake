@@ -5,9 +5,6 @@ __version__ = '0.2'
 __author__ = ['Marvin Jens', 'Tamas Ryszard Sztanka-Toth']
 __email__ = ['marvin.jens@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
-##################
-# include pacbio #
-##################
 pb_root = project_dir + "/processed_data/{sample_id}/pacbio"
 pb_cache_dir = pb_root + "/cache/"
 pb_ann_dir = pb_root + "/annotation/"
@@ -28,20 +25,9 @@ pb_cDNA_oligo_analysis = pb_cDNA_dir + "{sample_id}.oligo_analysis.csv"
 pb_cDNA_bam = pb_cDNA_dir + "{sample_id}.bam"
 pb_examples = pb_examples_dir + "{sample_id}.txt"
 
-# pacbio_overview = '/data/rajewsky/projects/slide_seq/.config/pacbio_overview.pdf'
-# print(config)
 pb_overview_dir = os.path.join(config['root_dir'], 'pacbio_overview/')
-pb_overview_csv = pb_overview_dir + 'overview.csv'
 pb_overview_pdf = pb_overview_dir + 'fidelity.pdf'
-
-# pb_run_summary = processed_data_pacbio + "/{sample}.examples.txt"
-# # pb_rRNA_out = processed_data_pacbio + "/{sample}.rRNA.txt"
-# pb_overview = "/data/rajewsky/projects/slide_seq/.config/pb_overview.pdf"
-# pb_overview_csv = "/data/rajewsky/projects/slide_seq/.config/pb_overview.csv"
-
-# pb_bead_overview = (
-#     "/data/rajewsky/projects/slide_seq/.config/pb_bead_overview.pdf"
-# )
+pb_overview_csv = pb_overview_dir + 'overview.csv'
 
 PB_RAW_FILES = {}
 PB_SIGNATURE = {}
