@@ -112,7 +112,7 @@ def get_reads(wildcards):
     reads = project_df.get_metadata(
         "R" + wildcards.mate, sample_id=wildcards.sample_id, project_id=wildcards.project_id
     )
-    if reads is None:
+    if reads is None or reads == []:
         return ["none"]
     else:
         # reads already
@@ -236,7 +236,8 @@ def get_species_genome_annotation(wildcards):
 
     files = project_df.config.get_variable("species", name=species)
 
-    return files
+    return {'genome': files['genome'],
+            'annotation': files['annotation']}
 
 
 def get_star_index(wildcards):
@@ -254,7 +255,7 @@ def get_star_index(wildcards):
 
 
 def get_rRNA_genome(wildcards):
-    files = project_df.config.get_variable("species", name=species)
+    files = project_df.config.get_variable("species", name=wildcards.species)
 
     return [files["rRNA_genome"]]
 
@@ -266,7 +267,7 @@ def get_bt2_rRNA_index(wildcards):
 
     files = project_df.config.get_variable("species", name=species)
 
-    if "rRNA_genomes" in files:
+    if "rRNA_genome" in files:
         return {"index": expand(bt2_rRNA_index_dir, species=species)[0]}
 
     return []

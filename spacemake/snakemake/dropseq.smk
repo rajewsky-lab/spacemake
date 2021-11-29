@@ -90,6 +90,7 @@ rule map_reads_final_bam:
             --outSAMunmapped Within \
             --outStd BAM_Unsorted \
             --outSAMtype BAM Unsorted \
+            --limitOutSJcollapsed 5000000 \
             --runThreadN {threads} | \
             python {repo_dir}/scripts/fix_bam_header.py \
                 --in-bam-star /dev/stdin \
