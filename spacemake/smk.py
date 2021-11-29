@@ -95,11 +95,11 @@ def setup_init_parser(parent_parser):
     return parser_init
 
 
-def setup_run_parser(parent_parser):
+def setup_run_parser(pdf, parent_parser):
     parser_run = parent_parser.add_parser(
         "run", help="run spacemake", parents=[get_run_parser()]
     )
-    parser_run.set_defaults(func=spacemake_run)
+    parser_run.set_defaults(func=lambda args: spacemake_run(pdf, args))
 
     # create subparsers
     parser_run_subparsers = parser_run.add_subparsers()
@@ -109,10 +109,59 @@ def setup_run_parser(parent_parser):
         help="run downsampling analysis for a list of projects/samples",
         parents=[get_project_sample_parser(allow_multiple=True), get_run_parser()],
     )
-    downsampling_parser.set_defaults(downsample=True, func=spacemake_run)
+    downsampling_parser.set_defaults(downsample=True,
+        func=lambda args: spacemake_run(pdf, args))
 
+    parser_novosparc = parser_run_subparsers.add_parser(
+        'novosparc',
+        help='reconstruct the 2-d tissue with novosparc',
+        parents=[
+            get_run_parser(),
+            get_project_sample_parser(
+                    allow_multiple = False,
+                    help_extra = ' of sample to reconstruct',
+                 ),
+        ],
+    )
+        
+    parser_novosparc.add_argument(
+        '--run_mode', type=str, help='the run_mode to be used for this sample ' +
+        'for reconstruction. If left empty, the first run_mode for this ' +
+        'sample will be used', required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--umi_cutoff', type=str, help='umi_cutoff to be used for this sample ' +
+        'for reconstruction. If left empty, the smallest umi_cutoff of a given ' +
+        'run_mode will be used', required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_project_id', type=str, help='project_id of the reference atlas.' +
+        'Has to be spatial, otherwise error will be raised', required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_sample_id', type=str, help='sample_id of the reference atlas.' +
+        'Has to be spatial, otherwise error will be raised', required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_run_mode', type=str, help='the run_mode to be used for the ' +
+        'reference sample. If empty, the first run_mode for the reference will be used',
+        required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_umi_cutoff', type=str, help='the umi_cutoff to be used for this ' +
+        'reference sample. If empty, the smallest umi_cutoff of the given run_mode ' +
+        'will be used.', required=False,
+    )
+
+    parser_novosparc.set_defaults(novosparc_reconstruct=True,
+        func=lambda args: spacemake_run(pdf, args))
+    
     return parser_run
-
 
 @message_aggregation(logger_name)
 def spacemake_init(args):
@@ -206,9 +255,66 @@ def spacemake_init(args):
     # save
     cf.dump()
 
+def get_novosparc_variables(pdf, args):
+    # assert that sample exists
+    pdf.assert_sample(args['project_id'], args['sample_id'])
+
+    def populate_variables_from_args(pdf, args, arg_prefix=''):
+        # get sample info
+        sample_info = pdf.get_sample_info(
+            project_id=args[f'{arg_prefix}project_id'],
+            sample_id=args[f'{arg_prefix}sample_id']
+        )
+
+        # populate return dictionary
+        ret = {
+            f'{arg_prefix}project_id': args[f'{arg_prefix}project_id'],
+            f'{arg_prefix}sample_id': args[f'{arg_prefix}sample_id'],
+        }
+
+        # get run mode
+        if f'{arg_prefix}run_mode' in args:
+            ret[f'{arg_prefix}run_mode'] = args[f'{arg_prefix}run_mode']
+        else:
+            run_mode_name = sample_info['run_mode'][0]
+            ret[f'{arg_prefix}run_mode'] = run_mode_name
+            logger.info(f"No run_mode provided, using {run_mode_name}")
+
+        run_mode = pdf.config.get_run_mode(ret[f'{arg_prefix}run_mode'])
+
+        if f'{arg_prefix}umi_cutoff' not in args:
+            umi_cutoff = run_mode.variables['umi_cutoff'][0]
+            ret[f'{arg_prefix}umi_cutoff'] = umi_cutoff
+            logger.info(f"No umi_cutoff provided, using {umi_cutoff}")
+
+        return ret
+    
+    ret = populate_variables_from_args(pdf, args)
+
+    if 'reference_project_id' not in args or 'reference_sample_id' not in args:
+        logger.info('No reference_project_id or reference_sample_id provided,' +
+            ' running novosparc de-novo...')
+        ret['reference_project_id'] = ''
+        ret['reference_sample_id'] = ''
+        ret['reference_umi_cutoff'] = ''
+        ret['reference_run_mode'] = ''
+    else:
+        pdf.assert_sample(args['reference_project_id'],
+            args['reference_sample_id'])
+
+        logger.info("Using (project_id, sample_id)="+
+            f"({args['reference_project_id']}, {args['reference_sample_id']})" +
+            " reference, running novosparc with reference...")
+
+        novosparc_ret = populate_variables_from_args(pdf, args,
+            arg_prefix='reference_')
+
+        ret = {**ret, **novosparc_ret}
+
+    return ret
 
 @message_aggregation(logger_name)
-def spacemake_run(args):
+def spacemake_run(pdf, args):
     if not os.path.isfile(config_path):
         msg = "spacemake has not been initalised yet.\n"
         msg += "please run `spacemake init` to start a new project"
@@ -217,15 +323,33 @@ def spacemake_run(args):
 
     samples = []
     projects = []
-    targets = None
+    targets = ['all']
     with_fastqc = args.get("with_fastqc", False)
 
     downsample = args.get("downsample", False)
+    novosparc_reconstruct = args.get('novosparc_reconstruct', False)
 
     if downsample:
         targets = ["downsample"]
         samples = args.get("sample_id_list", [])
         projects = args.get("project_id_list", [])
+
+    if novosparc_reconstruct:
+        targets = ["novosparc"]
+        novosparc_variables = get_novosparc_variables(pdf, args)
+    else:
+        novosparc_variables = {}
+
+    config_variables = {
+        "project_df": pdf.file_path,
+        "samples": samples,
+        "projects": projects,
+        "with_fastqc": with_fastqc,
+    }
+
+    # join config_variables and novosparc_variables
+    # to flatten the directory
+    config_variables = {**config_variables, **novosparc_variables}
 
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
@@ -240,12 +364,7 @@ def spacemake_run(args):
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
-        config={
-            "project_df": project_df,
-            "samples": samples,
-            "projects": projects,
-            "with_fastqc": with_fastqc,
-        },
+        config=config_variables,
     )
 
     if run_successful is False:
@@ -301,8 +420,7 @@ if os.path.isfile(config_path):
     #################
     # SPACEMAKE RUN #
     #################
-    parser_run = setup_run_parser(subparsers)
-
+    parser_run = setup_run_parser(pdf, subparsers)
 
 def cmdline():
     args = main_parser.parse_args()

@@ -49,7 +49,7 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         required=required,
         nargs=nargs,
         default=default,
-        help=f"{project_argument}. {help_extra}",
+        help=f"{project_argument} {help_extra}",
     )
 
     parser.add_argument(
@@ -58,7 +58,7 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         required=required,
         nargs=nargs,
         default=default,
-        help=f"{sample_argument}. {help_extra}",
+        help=f"{sample_argument} {help_extra}",
     )
 
     return parser
@@ -92,8 +92,80 @@ def get_add_sample_sheet_parser():
 
     return parser
 
+def get_sample_main_variables_parser(
+        species_required=False,
+        main_variables=['barcode_flavor', 'species', 'puck', 'run_mode']
+    ):
+    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
 
-def get_sample_extra_arguments_parser(species_required=False, reads_required=False):
+    if 'barcode_flavor' in main_variables:
+        parser.add_argument(
+            "--barcode_flavor", type=str, help="barcode flavor for this sample"
+        )
+
+    if 'species' in main_variables:
+        parser.add_argument(
+            "--species",
+            type=str,
+            help="add the name of the species for this sample",
+            required=species_required,
+        )
+
+    if 'puck' in main_variables:
+        parser.add_argument(
+            "--puck",
+            type=str,
+            help="name of the puck for this sample. if puck contains a \n"
+            + "`barcodes` path to a coordinate file, those coordinates\n"
+            + " will be used when processing this sample. if \n"
+            + " not provided, a default puck will be used with \n"
+            + "width_um=3000, spot_diameter_um=10",
+        )
+
+        parser.add_argument(
+            "--puck_id", type=str, help="puck_id of the sample to be added/update"
+        )
+
+    parser.add_argument(
+        "--puck_barcode_file",
+        type=str,
+        help="the path to the file contining (x,y) positions of the barcodes",
+    )
+
+
+    if 'run_mode' in main_variables:
+        parser.add_argument(
+            "--run_mode",
+            type=str,
+            nargs="+",
+            help="run_mode names for this sample.\n"
+            + "the sample will be processed using the provided run_modes.\n"
+            + "for merged samples, if left empty, the run_modes of the \n"
+            + "merged (input) samples will be intersected.\n",
+        )
+
+    return parser
+
+def get_sample_extra_info_parser():
+    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
+
+    parser.add_argument(
+        "--investigator",
+        type=str,
+        help="add the name of the investigator(s) responsible for this sample",
+    )
+
+    parser.add_argument("--experiment", type=str, help="description of the experiment")
+
+    parser.add_argument(
+        "--sequencing_date",
+        type=datetime.date.fromisoformat,
+        help="sequencing date of the sample. format: YYYY-MM-DD",
+    )
+
+    return parser
+
+def get_data_parser(reads_required=False):
     """
     Returns a parser which contain extra arguments for a given sample.
     The returned parser will contain the --R1, --R2, --longreads,
@@ -138,65 +210,11 @@ def get_sample_extra_arguments_parser(species_required=False, reads_required=Fal
         help="fastq(.gz)|fq(.gz)|bam file path to pacbio long reads for library debugging",
         required=reads_required,
     )
+
     parser.add_argument(
         "--longread-signature",
         type=str,
         help="identify the expected longread signature (see longread.yaml)",
-    )
-
-    parser.add_argument(
-        "--barcode_flavor", type=str, help="barcode flavor for this sample"
-    )
-
-    parser.add_argument(
-        "--species",
-        type=str,
-        help="add the name of the species for this sample",
-        required=species_required,
-    )
-
-    parser.add_argument(
-        "--puck",
-        type=str,
-        help="name of the puck for this sample. if puck contains a \n"
-        + "`barcodes` path to a coordinate file, those coordinates\n"
-        + " will be used when processing this sample. if \n"
-        + " not provided, a default puck will be used with \n"
-        + "width_um=3000, spot_diameter_um=10",
-    )
-
-    parser.add_argument(
-        "--puck_id", type=str, help="puck_id of the sample to be added/update"
-    )
-
-    parser.add_argument(
-        "--puck_barcode_file",
-        type=str,
-        help="the path to the file contining (x,y) positions of the barcodes",
-    )
-
-    parser.add_argument(
-        "--investigator",
-        type=str,
-        help="add the name of the investigator(s) responsible for this sample",
-    )
-
-    parser.add_argument("--experiment", type=str, help="description of the experiment")
-
-    parser.add_argument(
-        "--sequencing_date",
-        type=datetime.date.fromisoformat,
-        help="sequencing date of the sample. format: YYYY-MM-DD",
-    )
-
-    parser.add_argument(
-        "--run_mode",
-        type=str,
-        nargs="+",
-        help="run_mode names for this sample.\n"
-        + "the sample will be processed using the provided run_modes.\n"
-        + "for merged samples, if left empty, the run_modes of the \n"
-        + "merged (input) samples will be intersected.\n",
     )
 
     return parser
@@ -258,8 +276,10 @@ def get_action_sample_parser(parent_parser, action, func):
         parser_name = "merge_samples"
         msg = "merge samples"
         parents = [
-            get_project_sample_parser(prepend="merged_"),
-            get_project_sample_parser(allow_multiple=True),
+            get_project_sample_parser(prepend="merged_",
+                help_extra='of the newly created merged sample'),
+            get_project_sample_parser(allow_multiple=True,
+                help_extra='of the samples to be merged'),
         ]
     else:
         parser_name = f"{action}_sample"
@@ -267,13 +287,43 @@ def get_action_sample_parser(parent_parser, action, func):
         parents = [get_project_sample_parser()]
 
     if action == "add":
+        # add arguments for species, run_mode, barcode_flavor and puck
         parents.append(
-            get_sample_extra_arguments_parser(
-                species_required=True, reads_required=False
+            get_sample_main_variables_parser(
+                species_required=True,
             )
         )
-    elif action == "update" or action == "merge":
-        parents.append(get_sample_extra_arguments_parser())
+        # add arguments for R1/R1, dge, longread
+        parents.append(
+            get_data_parser()
+        )
+        # add arguments for extra sample info
+        parents.append(
+            get_sample_extra_info_parser()
+        )
+    elif action == 'update':
+        # add main variables parser
+        parents.append(
+            get_sample_main_variables_parser()
+        )
+
+        # add possibility to add extra info
+        parents.append(
+            get_sample_extra_info_parser()
+        )
+    elif action == "merge":
+        # add main variables parser
+        # when merging, only let the user overwrite puck and run_mode
+        parents.append(
+            get_sample_main_variables_parser(
+                main_variables=['run_mode', 'puck'],
+            )
+        )
+
+        # add possibility to add extra info
+        parents.append(
+            get_sample_extra_info_parser()
+        )
 
     sample_parser = parent_parser.add_parser(
         parser_name, description=msg, help=msg, parents=parents
@@ -1300,9 +1350,13 @@ class ProjectDF:
         # check for variable inconsistency
         # raise error if variable different between samples
         for variable in consistent_variables:
-            if variable in kwargs:
+            if (variable in kwargs and
+                variable not in ['species', 'barcode_flavor']):
                 # if variable provided from command line, skip
+                self.logger.info(f'{variable} provided, skipping deduction...')
                 continue
+            
+            self.logger.info(f'{variable} not provided. deducing from merged samples...')
 
             variable_val = self.df.loc[ix, variable].to_list()
 

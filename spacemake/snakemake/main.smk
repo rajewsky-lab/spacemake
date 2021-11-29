@@ -20,6 +20,7 @@ from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
 from spacemake.spatial import create_meshed_adata
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
+from spacemake.errors import SpacemakeError
 
 ################
 # Shell prefix #
@@ -30,6 +31,9 @@ shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 # this file should contain all sample information, sample name etc.
 ####
 # configfile should be loaded from command line
+# populate if not exists
+config['samples'] = config.get('samples', [])
+config['projects'] = config.get('projects', [])
 
 ###############
 # Global vars #
@@ -39,7 +43,7 @@ repo_dir = os.path.dirname(workflow.snakefile)
 spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
 
 # set root dir where the processed_data goes
-project_dir = os.path.join(config['root_dir'], 'projects/{project}')
+project_dir = os.path.join(config['root_dir'], 'projects/{project_id}')
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
 project_df = ProjectDF(config['project_df'], ConfigFile.from_yaml('config.yaml'))
@@ -51,7 +55,7 @@ raw_data_root = project_dir + '/raw_data'
 raw_data_illumina = raw_data_root + '/illumina'
 raw_data_illumina_reads = raw_data_illumina + '/reads/raw'
 raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/bc_umi_tagged'
-processed_data_root = project_dir + '/processed_data/{sample}'
+processed_data_root = project_dir + '/processed_data/{sample_id}'
 processed_data_illumina = processed_data_root + '/illumina'
 
 reports_root = os.path.join(config['root_dir'], 'reports')
@@ -60,7 +64,7 @@ project_df_file = reports_root + '/project_df.csv'
 sample_overview_file = reports_root + '/sample_overview.html'
 sample_read_metrics_db = reports_root + '/sample_read_metrics_db.tsv'
 
-illumina_root = project_dir + '/processed_data/{sample}/illumina'
+illumina_root = project_dir + '/processed_data/{sample_id}/illumina'
 complete_data_root = illumina_root + '/complete_data'
 data_root = illumina_root + '/{data_root_type}{downsampling_percentage}'
 downsampled_data_prefix = illumina_root + '/downsampled_data'
@@ -79,19 +83,19 @@ demux_indicator = demux_dir_pattern + '/indicator.log'
 ####################################
 reads_suffix = '.fastq.gz'
 
-raw_reads_prefix = raw_data_illumina_reads + '/{sample}_R'
+raw_reads_prefix = raw_data_illumina_reads + '/{sample_id}_R'
 raw_reads_pattern = raw_reads_prefix + '{mate}' + reads_suffix
 raw_reads_mate_1 = raw_reads_prefix + '1' + reads_suffix
 raw_reads_mate_2 = raw_reads_prefix + '2' + reads_suffix
 
-reverse_reads_prefix = raw_data_illumina_reads_reversed + '/{sample}_reversed_R'
+reverse_reads_prefix = raw_data_illumina_reads_reversed + '/{sample_id}_reversed_R'
 reverse_reads_mate_1 = reverse_reads_prefix + '1' + reads_suffix
 
 ###############
 # Fastqc vars #
 ###############
 fastqc_root = raw_data_illumina + '/fastqc'
-fastqc_pattern = fastqc_root + '/{sample}_R{mate}_fastqc.{ext}'
+fastqc_pattern = fastqc_root + '/{sample_id}_R{mate}_fastqc.{ext}'
 fastqc_ext = ['zip', 'html']
 
 ########################
@@ -122,7 +126,7 @@ split_reads_read_type = split_reads_root + 'read_type_num.txt'
 # post dropseq and QC #
 #######################
 
-qc_sheet = data_root +'/qc_sheet_{sample}_{puck}.html'
+qc_sheet = data_root +'/qc_sheet_{sample_id}_{puck_id}.html'
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = '{polyA_adapter_trimmed}.txt.gz'
 barcode_readcounts = complete_data_root + '/out_readcounts' + barcode_readcounts_suffix
@@ -165,15 +169,15 @@ kmer_stats_file = complete_data_root + '/kmer_stats/{kmer_len}mer_counts.csv'
 
 # map paired-end to check errors
 paired_end_prefix = complete_data_root + '/mapped_paired_end/'
-paired_end_sam = paired_end_prefix + '{sample}_paired_end.sam'
-paired_end_bam = paired_end_prefix + '{sample}_paired_end.bam'
-paired_end_flagstat = paired_end_prefix + '{sample}_paired_end_flagstat.txt'
-paired_end_log = paired_end_prefix + '{sample}_paired_end.log'
-paired_end_mapping_stats = paired_end_prefix + '{sample}_paired_end_mapping_stats.txt'
+paired_end_sam = paired_end_prefix + '{sample_id}_paired_end.sam'
+paired_end_bam = paired_end_prefix + '{sample_id}_paired_end.bam'
+paired_end_flagstat = paired_end_prefix + '{sample_id}_paired_end_flagstat.txt'
+paired_end_log = paired_end_prefix + '{sample_id}_paired_end.log'
+paired_end_mapping_stats = paired_end_prefix + '{sample_id}_paired_end_mapping_stats.txt'
 
 # automated analysis
 automated_analysis_root = data_root + '/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}'
-automated_report = automated_analysis_root + '/{sample}_{puck}_illumina_automated_report.html'
+automated_report = automated_analysis_root + '/{sample_id}_{puck_id}_illumina_automated_report.html'
 
 automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
 
@@ -189,9 +193,10 @@ automated_analysis_processed_data_files = {key: automated_analysis_root + value 
 
 # novosparc
 novosparc_root = automated_analysis_root + '/novosparc'
-novosparc_h5ad = novosparc_root + '/novosparc.h5ad'
-novosparc_obs_df = novosparc_root + '/novosparc_obs_df.csv'
-novosparc_var_df = novosparc_root + '/novosparc_var_df.csv'
+novosparc_wildcards = '/with_reference_rp_{reference_project_id}_' \
+    + 'rs_{reference_sample_id}_rr_{reference_run_mode}_ru_{reference_umi_cutoff}'
+novosparc_denovo_h5ad = novosparc_root + '/denovo.h5ad'
+novosparc_with_reference_h5ad = novosparc_root + novosparc_wildcards + '.h5ad'
 
 # in silico repo depletion
 ribo_depletion_log = complete_data_root + '/ribo_depletion_log.txt'
@@ -225,7 +230,7 @@ final_bam_mm_included_pipe = complete_data_root + '/final' + bam_mm_included_pip
 # downsampled bam
 downsampled_bam = downsampled_data_root + '/final_downsampled{polyA_adapter_trimmed}.bam'
 downsampled_bam_mm_included_pipe = downsampled_data_root + '/final_downsampled' + bam_mm_included_pipe_suffix
-downsample_saturation_analysis = downsampled_data_prefix + '/{project}_{sample}_saturation_analysis.html'
+downsample_saturation_analysis = downsampled_data_prefix + '/{project_id}_{sample_id}_saturation_analysis.html'
 
 # index settings
 star_index = 'species_data/{species}/star_index'
@@ -247,17 +252,18 @@ include: 'pacbio.smk'
 
 # global wildcard constraints
 wildcard_constraints:
-    dge_cleaned='|.cleaned',
+    umi_cutoff = '\d+',
+    dge_cleaned='|\.cleaned',
     dge_type = '|'.join(dge_types),
     pacbio_ext = 'fq|fastq|bam',
-    polyA_adapter_trimmed = '|.polyA_adapter_trimmed',
-    mm_included = '|.mm_included',
+    polyA_adapter_trimmed = '|\.polyA_adapter_trimmed',
+    mm_included = '|\.mm_included',
     n_beads = '[0-9]+|spatial|external',
-    is_external = '|.external',
+    is_external = '|\.external',
     spot_diameter_um = '[0-9]+',
     spot_distance_um = '[0-9]+|hexagon',
     data_root_type = 'complete_data|downsampled_data',
-    downsampling_percentage = '\/[0-9]+|'
+    downsampling_percentage = '\/[0-9]+|',
 
 #############
 # Main rule #
@@ -288,6 +294,13 @@ rule downsample:
         get_output_files(downsample_saturation_analysis,
             samples = config['samples'],
             projects = config['projects'])
+
+#############
+# NOVOSPARC #
+#############
+rule novosparc:
+    input:
+        *get_novosparc_input_files(config)
 
 #################
 # MERGE SAMPLES #
@@ -330,14 +343,14 @@ rule link_demultiplexed_reads:
         raw_reads_pattern
     params:
         demux_dir = lambda wildcards: expand(demux_dir_pattern,
-            demux_dir = project_df.get_metadata('demux_dir', sample_id = wildcards.sample,
-                                     project_id = wildcards.project)),
+            demux_dir = project_df.get_metadata('demux_dir', sample_id = wildcards.sample_id,
+                                     project_id = wildcards.project_id)),
         reads_folder = raw_data_illumina_reads
     shell:
         """
         mkdir -p {params.reads_folder}
 
-        find {params.demux_dir} -type f -wholename '*/{wildcards.sample}/*R{wildcards.mate}*.fastq.gz' -exec ln -sr {{}} {output} \; 
+        find {params.demux_dir} -type f -wholename '*/{wildcards.sample_id}/*R{wildcards.mate}*.fastq.gz' -exec ln -sr {{}} {output} \; 
         """
 
 rule link_raw_reads:
@@ -376,7 +389,7 @@ rule tag_reads_bc_umi:
     threads: 4
     shell:
         "python {spacemake_dir}/preprocess/cmdline.py "
-        "--sample={wildcards.sample} "
+        "--sample={wildcards.sample_id} "
         "--read1={input.R1} "
         "--read2={input.R2} "
         "--parallel={threads} "
@@ -423,8 +436,8 @@ rule get_barcode_readcounts:
         barcode_readcounts
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.project,
-            sample_id = wildcards.sample)['{cell}'],
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id)['{cell}'],
     shell:
         """
         {dropseq_tools}/BamTagHistogram \
@@ -474,11 +487,11 @@ rule create_dge:
         dge_root = dge_root,
         dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.project,
-            sample_id = wildcards.sample)['{cell}'],
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id)['{cell}'],
         umi_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.project,
-            sample_id = wildcards.sample)['{UMI}']
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id)['{UMI}']
     shell:
         """
         mkdir -p {params.dge_root}
@@ -523,8 +536,8 @@ rule create_mesh_spatial_dge:
         dge_spatial_mesh_obs
     params:
         puck_data = lambda wildcards: project_df.get_puck_variables(
-            project_id = wildcards.project,
-            sample_id = wildcards.sample)
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id)
     run:
         adata = sc.read(input[0])
         if wildcards.spot_distance_um == 'hexagon':
@@ -554,14 +567,14 @@ rule create_qc_sheet:
         ribo_log=parsed_ribo_depletion_log
     params:
         sample_info = lambda wildcards: project_df.get_sample_info(
-            wildcards.project, wildcards.sample),
+            wildcards.project_id, wildcards.sample_id),
         puck_variables = lambda wildcards:
-            project_df.get_puck_variables(wildcards.project, wildcards.sample,
+            project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
                 return_empty=True),
         is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project, wildcards.sample),
+            project_df.is_spatial(wildcards.project_id, wildcards.sample_id),
         run_modes = lambda wildcards: get_run_modes_from_sample(
-            wildcards.project, wildcards.sample)
+            wildcards.project_id, wildcards.sample_id)
     output:
         qc_sheet
     script:
@@ -574,27 +587,34 @@ rule run_automated_analysis:
         automated_analysis_result_file
     params:
         is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project, wildcards.sample),
+            project_df.is_spatial(wildcards.project_id, wildcards.sample_id),
         run_mode_variables = lambda wildcards:
             project_df.config.get_run_mode(wildcards.run_mode).variables
     script:
         'scripts/automated_analysis.py'
 
-#rule run_novosparc_analysis:
-#    input:
-#        automated_analysis_result_file
-#    output:
-#        novosparc_h5ad,
-#        novosparc_obs_df,
-#        novosparc_var_df
-#    threads: 4
-#    run:
-#        adata = sc.read(input[0])
-#        adata = run_novosparc(adata)
-#
-#        adata.write(output[0])
-#        adata.obs.to_csv(output[1])
-#        adata.var.to_csv(output[2])
+rule run_novosparc_denovo:
+    input:
+        automated_analysis_result_file
+    output:
+        novosparc_denovo_h5ad
+    threads: 4
+    shell:
+        "python {spacemake_dir}/spatial/novosparc_reconstruction.py"
+        " --single_cell_dataset {input.sc_adata}"
+        " --output {output}"
+
+rule run_novosparc_with_reference:
+    input:
+        unpack(get_novosparc_with_reference_input_files),
+        sc_adata=automated_analysis_result_file
+    output:
+        novosparc_with_reference_h5ad
+    shell:
+        "python {spacemake_dir}/spatial/novosparc_reconstruction.py"
+        " --single_cell_dataset {input.sc_adata}"
+        " --spatial_dataset {input.st_adata}"
+        " --output {output}"
 
 rule create_automated_analysis_processed_data_files:
     input:
@@ -603,14 +623,13 @@ rule create_automated_analysis_processed_data_files:
         **automated_analysis_processed_data_files
     params:
         is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project, wildcards.sample),
+            project_df.is_spatial(wildcards.project_id, wildcards.sample_id),
     script:
         'scripts/automated_analysis_create_processed_data_files.py'
         
 rule create_automated_report:
     input:
         #star_log=star_log_file,
-        #unpack(get_novosparc_if_spatial),
         unpack(get_parsed_puck_file),
         **automated_analysis_processed_data_files,
     # spawn at most 4 automated analyses
@@ -621,10 +640,10 @@ rule create_automated_report:
         run_mode_variables = lambda wildcards:
             project_df.config.get_run_mode(wildcards.run_mode).variables,
         puck_variables = lambda wildcards:
-            project_df.get_puck_variables(wildcards.project, wildcards.sample,
+            project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
                 return_empty=True),
         is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project, wildcards.sample),
+            project_df.is_spatial(wildcards.project_id, wildcards.sample_id),
         r_shared_scripts= repo_dir + '/scripts/shared_functions.R'
     script:
         'scripts/automated_analysis_create_report.Rmd'
@@ -679,8 +698,8 @@ rule map_to_rRNA:
         ribo_depletion_log
     params:
         species=lambda wildcards: project_df.get_metadata(
-            'species', project_id = wildcards.project,
-            sample_id = wildcards.sample)
+            'species', project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id)
     run:
         if 'index' in input.keys():
             shell("bowtie2 -x {input.index}/{params.species}_rRNA -U {input.reads} -p 20 --very-fast-local > /dev/null 2> {output}")

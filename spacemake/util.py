@@ -318,25 +318,21 @@ def message_aggregation(
     class MessageHandler(logging.NullHandler):
         def handle(this, record):
             if record.name == log_listen:
-                message_buffer.append(record.msg)
+                if print_logger:
+                    print(f"{log_listen}: {record.msg}")
+                else:
+                    print(record.msg)
 
     log.addHandler(MessageHandler())
 
     try:
         yield True
-        if print_logger:
-            msg = f"{log_listen}: ".join([m + "\n" for m in message_buffer])
-        else:
-            msg = "\n".join(message_buffer)
 
         if print_success:
-            msg = f"{msg}\n{LINE_SEPARATOR}SUCCESS!"
-
-        print(msg)
+            print(f"{LINE_SEPARATOR}SUCCESS!")
 
     except SpacemakeError as e:
         print(e)
-
 
 def str_to_list(value):
     # if list in string representation, return the list
@@ -344,7 +340,10 @@ def str_to_list(value):
         return None
 
     if type(value) is str and value.startswith("["):
-        return eval(value)
+        if value == "[nan]":
+            return []
+        else:
+            return eval(value)
     # else create a list
     else:
         return [value]

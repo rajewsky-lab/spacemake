@@ -52,8 +52,6 @@ readStarLog <- function(log_file){
 		
         tibble(observation=names(out), value=unlist(unname(out)))
 	}
-#snakemake <- read_rds('qc_sheet.rds')
-write_rds(snakemake, '/data/rajewsky/home/tsztank/projects/spatial/sts-paper/qc_sheet.rds')
 ```
 
 ```{r read_sample_information_tables, echo = F}
