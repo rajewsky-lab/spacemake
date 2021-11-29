@@ -104,6 +104,21 @@ nucl_clrs = c('A'='#F5C900',
               'T'='#3AA861',
               'G'='#7772F5',
               'N'='#999999')
+
+# loading the dge summaries
+dge_summary <- tibble(run_mode = run_mode_names,
+                      obs_df = snakemake@input[paste0(run_mode, '.dge_summary')]) %>%
+    unnest(obs_df) %>%
+    mutate(dat = map(obs_df, ~ read_csv(.) %>%
+        mutate(cell_bc = as.character(cell_bc)))) %>%
+    unnest(dat) %>%
+    select(-obs_df) %>%
+    rename(pcr = reads_per_counts,
+           umis = total_counts,
+           genes = n_genes_by_counts,
+           reads = n_reads) %>%
+    group_by(run_mode) %>%
+    filter(grepl('^[0-9]+|^[ACTGAN]+$', cell_bc))
 ```
 
 ## Overview {.tabset}
@@ -198,6 +213,29 @@ read_stats %>%
     footnote(general ='All values, except avg_mapped_length, shown in millions')
 ```
 
+### Summarised metrics over beads
+
+```{r calculate_summarised_metrics_over_beads, echo = F}
+col_names_to_show <- colnames(run_mode_settings)[-1]
+
+dge_summary %>%
+    group_by(run_mode) %>%
+    summarise(sum_reads = sum(reads, na.rm=T),
+              median_reads = median(reads, na.rm=T),
+              median_umis = median(umis, na.rm=T),
+              median_pcr = median(pcr, na.rm=T),
+              median_genes = median(genes, na.rm=T),
+              n_beads = n()) %>%
+    mutate(sum_reads = paste0(round(sum_reads / 1e6, 2), ' (1e6)')) %>%
+    gather('obs', 'value', -run_mode) %>%
+    spread(run_mode, value) %>%
+    kbl(col.names = c('', col_names_to_show)) %>%
+    kable_classic_2(full_width=F, position='left') %>%
+    add_header_above(c(" ", "Run modes" = length(col_names_to_show))) %>%
+    column_spec(1, border_right=T) %>%
+    row_spec(0, bold=T)
+
+```
 
 ## QC plots
 
@@ -208,21 +246,6 @@ Each of the QC plots we show on a per run mode basis, to see if there are any do
 Below we plot a so called 'Knee-plot': on the y-axis is the Cummulative sum of reads, on the x-axis are the bead barcodes sorted by number of reads. For single-cell samples, this plot tells you roughly how many beads are in the sample.
 
 ```{r knee_plot, echo = F, fig.height=4, fig.width=7, results='asis'}
-dge_summary <- tibble(run_mode = run_mode_names,
-                      obs_df = snakemake@input[paste0(run_mode, '.dge_summary')]) %>%
-    unnest(obs_df) %>%
-    mutate(dat = map(obs_df, ~ read_csv(.) %>%
-        mutate(cell_bc = as.character(cell_bc)))) %>%
-    unnest(dat) %>%
-    select(-obs_df) %>%
-    rename(pcr = reads_per_counts,
-           umis = total_counts,
-           genes = n_genes_by_counts,
-           reads = n_reads) %>%
-    group_by(run_mode) %>%
-    filter(grepl('^[ACTGAN]+$', cell_bc))
-
-
 read_counts <- dge_summary %>%
     select(run_mode, cell_bc, reads) %>%
     mutate(reads_cumsum = cumsum(reads),
@@ -515,23 +538,25 @@ plot_bead_size <- run_mode_settings %>%
 x_limits <- dge_summary$x_pos %>% {c(min(.), max(.))}
 y_limits <- dge_summary$y_pos %>% {c(min(.), max(.))}
 
+
 ratio <- (x_limits[2] - x_limits[1] ) / (y_limits[2] - y_limits[1])
 
-mm_dist <- max(1000, round(snakemake@params$puck_variables$width_um / 3, digits =-3))
+puck_width_um <- snakemake@params$puck_variables$width_um
+scale_factor <- ifelse(puck_width_um < 3000, 2, 3)
+mm_dist <- max(10^scale_factor, round(puck_width_um/3, digits =-scale_factor))
 mm_diff <- mm_dist / 1000
 
-x_mm_breaks <- seq(0, snakemake@params$puck_variables$width_um, mm_dist)
+x_mm_breaks <- seq(0, puck_width_um, mm_dist)
 x_mm_breaks <- paste0(x_mm_breaks * mm_diff / mm_dist, 'mm')
-y_mm_breaks <- seq(0, snakemake@params$puck_variables$width_um / ratio, mm_dist)
+y_mm_breaks <- seq(0, puck_width_um / ratio, mm_dist)
 y_mm_breaks <- paste0(y_mm_breaks * mm_diff / mm_dist, 'mm')
 
-px_to_mm <- (x_limits[2] - x_limits[1]) / snakemake@params$puck_variables$width_um * mm_dist
+px_to_um <- (x_limits[2] - x_limits[1]) / snakemake@params$puck_variables$width_um
 
-x_breaks <- seq(x_limits[1], x_limits[2], px_to_mm)
-y_breaks <- seq(y_limits[1], y_limits[2], px_to_mm)
+x_breaks <- seq(x_limits[1], x_limits[2], px_to_um * mm_dist)
+y_breaks <- seq(y_limits[1], y_limits[2], px_to_um * mm_dist)
 
-
-plot_spatial_qc <- function(variable, dat_in, plot_bead_size=0.1, ttl='', cut_dist=T, min_value=0){
+plot_spatial_qc <- function(variable, dat_in, plot_bead_size=0.1, ttl='', cut_dist=T, min_value=0, is_hexagonal=F){
     spatial_qc_dat <- dat_in %>%
         mutate(qnt = quantile(val, 0.9, na.rm=T)) %>%
         arrange(val)
@@ -543,25 +568,42 @@ plot_spatial_qc <- function(variable, dat_in, plot_bead_size=0.1, ttl='', cut_di
 
     limits <- c(min_value, quantile(spatial_qc_dat$val, 0.91, na.rm=T))
 
-    pl <- spatial_qc_dat %>%
-        ggplot(aes(x_pos, y_pos, color = val)) +
-            geom_point(size=plot_bead_size) + 
-            scale_x_continuous(labels = x_mm_breaks, breaks = x_breaks) +
-            scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks) +
-            coord_fixed()+
-            guides(color = guide_colorbar(barheight = 10)) + 
-            labs(color=ttl, x='', y='') + 
-            theme(panel.background = element_rect(fill = 'gray95'), 
-                 legend.spacing = unit(0.1, 'cm'),
-                axis.line = element_line(color = 'black'),
-                text = element_text(color='black', size=18))
-    if(cut_dist){
-        pl <- pl +
-            scale_color_viridis_c(option =  "magma", limits = limits)
-    } else {
-        pl <- pl + 
-            scale_color_viridis_c(option =  "magma") 
+    if(is_hexagonal){
+        pl <- spatial_qc_dat %>%
+            ggplot(aes(x_pos, y_pos, fill = val, group=1)) +
+                geom_hex(stat='identity', color='gray95') +
+                guides(fill = guide_colorbar(barheight = 10)) + 
+                labs(fill=ttl, x='', y='')
+        if(cut_dist){
+            pl <- pl +
+                scale_fill_viridis_c(option =  "magma", limits = limits)
+        } else {
+            pl <- pl + 
+                scale_fill_viridis_c(option =  "magma") 
+        }
+    } else{
+        pl <- spatial_qc_dat %>%
+            ggplot(aes(x_pos, y_pos, color = val)) +
+                geom_point(size=plot_bead_size) + 
+                guides(color = guide_colorbar(barheight = 10)) + 
+                labs(color=ttl, x='', y='')
+        if(cut_dist){
+            pl <- pl +
+                scale_color_viridis_c(option =  "magma", limits = limits)
+        } else {
+            pl <- pl + 
+                scale_color_viridis_c(option =  "magma") 
+        }
     }
+
+    pl <- pl + 
+        scale_x_continuous(labels = x_mm_breaks, breaks = x_breaks, limits=x_limits) +
+        scale_y_continuous(labels = y_mm_breaks, breaks = y_breaks, limits=y_limits) +
+        coord_fixed()+
+        theme(panel.background = element_rect(fill = 'gray95'), 
+             legend.spacing = unit(0.1, 'cm'),
+            axis.line = element_line(color = 'black'),
+            text = element_text(color='black', size=18))
 
     return(pl)
 }
@@ -593,7 +635,7 @@ qc_var_info <- dge_summary %>%
 ```
 
 
-```{r plot_per_run_mode, echo =F, results='asis', fig.width=6, fig.height=4, eval=is_spatial, dpi=300}
+```{r plot_per_run_mode, echo =F, results='asis', fig.width=7, fig.height=6, eval=is_spatial, dpi=300}
 for (run_mode_name in run_mode_names){
     cat(paste0('\n\n### ', run_mode_name, '\n\n'))
 
@@ -616,7 +658,8 @@ for (run_mode_name in run_mode_names){
                        plot_bead_size = pbs,
                        ttl = .$ttl,
                        cut_dist = .$cut_dist,
-                       min_value = .$min_value)
+                       min_value = .$min_value,
+                       is_hexagonal=snakemake@params$run_modes[[run_mode_name]]$mesh_type == 'hexagon')
                 } %>%
                 print()
         }

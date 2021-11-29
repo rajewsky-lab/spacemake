@@ -286,6 +286,8 @@ def get_novosparc_variables(pdf, args):
             umi_cutoff = run_mode.variables['umi_cutoff'][0]
             ret[f'{arg_prefix}umi_cutoff'] = umi_cutoff
             logger.info(f"No umi_cutoff provided, using {umi_cutoff}")
+        else:
+            ret[f'{arg_prefix}umi_cutoff'] = args[f'{arg_prefix}umi_cutoff']
 
         return ret
     
@@ -439,7 +441,6 @@ def cmdline():
     # else print help
     else:
         if args.subcommand is not None:
-            print(args.subcommand)
             parser_dict[args.subcommand].print_help()
         else:
             parser_dict["main"].print_help()

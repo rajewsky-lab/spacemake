@@ -324,16 +324,19 @@ rule demultiplex_data:
     threads: 8
     shell:
         """
-        bcl2fastq \
+        retVal=$(bcl2fastq \
             --no-lane-splitting --fastq-compression-level=9 \
             --mask-short-adapter-reads 15 \
             --barcode-mismatch {params.demux_barcode_mismatch} \
             --output-dir {params.output_dir} \
             --sample-sheet {params.sample_sheet} \
             --runfolder-dir {input} \
-            -p {threads}            
-
+            -p {threads})
+        
+        if [ $retVAL==0 ]; then
             echo "demux finished: $(date)" > {output}
+        fi
+        exit $retVal
         """
 
 rule link_demultiplexed_reads:
@@ -440,7 +443,7 @@ rule get_barcode_readcounts:
             sample_id = wildcards.sample_id)['{cell}'],
     shell:
         """
-        {dropseq_tools}/BamTagHistogram \
+        {dropseq_tools}/BamTagHistogram -m 32g \
         I= {input} \
         O= {output}\
         TAG={params.cell_barcode_tag}
@@ -601,7 +604,7 @@ rule run_novosparc_denovo:
     threads: 4
     shell:
         "python {spacemake_dir}/spatial/novosparc_reconstruction.py"
-        " --single_cell_dataset {input.sc_adata}"
+        " --single_cell_dataset {input}"
         " --output {output}"
 
 rule run_novosparc_with_reference:
