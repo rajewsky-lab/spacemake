@@ -126,7 +126,7 @@ split_reads_read_type = split_reads_root + 'read_type_num.txt'
 # post dropseq and QC #
 #######################
 
-qc_sheet = data_root +'/qc_sheet_{sample_id}_{puck_id}.html'
+qc_sheet = data_root +'/qc_sheet_{sample_id}_{puck_barcode_file_id}.html'
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = '{polyA_adapter_trimmed}.txt.gz'
 barcode_readcounts = complete_data_root + '/out_readcounts' + barcode_readcounts_suffix
@@ -136,28 +136,28 @@ strand_info = split_reads_strand_type
 top_barcodes_suffix = '{polyA_adapter_trimmed}.{n_beads}_beads.txt'
 top_barcodes = complete_data_root + '/topBarcodes' + top_barcodes_suffix
 top_barcodes_clean = complete_data_root + '/topBarcodesClean' + top_barcodes_suffix
-spatial_barcodes = complete_data_root + '/spatialBarcodes.txt'
-parsed_spatial_barcodes = complete_data_root + '/spatial_barcodes.csv'
+spatial_barcodes = complete_data_root + '/spatialBarcodes_{puck_barcode_file_id}.txt'
+parsed_spatial_barcodes = complete_data_root + '/spatial_barcodes_{puck_barcode_file_id}.csv'
 
 # dge creation
 dge_root = data_root + '/dge'
 dge_out_prefix = dge_root + '/dge'
 dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}'
-dge_out = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.txt.gz'
-dge_out_summary = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads.summary.txt'
+dge_out = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads_{puck_barcode_file_id}.txt.gz'
+dge_out_summary = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads_{puck_barcode_file_id}.summary.txt'
 
 # processed dge
 h5ad_dge_suffix = '{is_external}.h5ad'
 h5ad_dge_obs_suffix = '{is_external}.obs.csv'
-dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads' + h5ad_dge_suffix
-dge_out_h5ad_obs = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads' + h5ad_dge_obs_suffix
+dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads_{puck_barcode_file_id}' + h5ad_dge_suffix
+dge_out_h5ad_obs = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads_{puck_barcode_file_id}' + h5ad_dge_obs_suffix
 
 # spatial dge
-dge_spatial = dge_out_prefix + dge_out_suffix + '.spatial_beads' + h5ad_dge_suffix
-dge_spatial_obs = dge_out_prefix + dge_out_suffix + '.spatial_beads' + h5ad_dge_obs_suffix
+dge_spatial = dge_out_prefix + dge_out_suffix + '.spatial_beads_{puck_barcode_file_id}' + h5ad_dge_suffix
+dge_spatial_obs = dge_out_prefix + dge_out_suffix + '.spatial_beads_{puck_barcode_file_id}' + h5ad_dge_obs_suffix
 
 # spatial + meshed dge
-dge_spatial_mesh_suffix = '.spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}'
+dge_spatial_mesh_suffix = '.spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}_{puck_barcode_file_id}'
 dge_spatial_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_mesh_suffix
 dge_spatial_mesh = dge_spatial_mesh_prefix + h5ad_dge_suffix
 dge_spatial_mesh_obs = dge_spatial_mesh_prefix + h5ad_dge_obs_suffix
@@ -177,19 +177,19 @@ paired_end_mapping_stats = paired_end_prefix + '{sample_id}_paired_end_mapping_s
 
 # automated analysis
 automated_analysis_root = data_root + '/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}'
-automated_report = automated_analysis_root + '/{sample_id}_{puck_id}_illumina_automated_report.html'
-
-automated_analysis_result_file = automated_analysis_root + '/results.h5ad'
+automated_report_prefix = automated_analysis_root + '/{sample_id}_{puck_barcode_file_id}_'
+automated_report = automated_report_prefix + 'automated_report.html'
+automated_analysis_result_file = automated_report_prefix + 'results.h5ad'
 
 automated_analysis_processed_data_files = {
-    'cluster_markers': '/top10_cluster_markers.csv',
-    'nhood_enrichment': '/nhood_enrichment.csv',
-    'obs_df': '/obs_df.csv',
-    'var_df': '/var_df.csv'
+    'cluster_markers': 'top10_cluster_markers.csv',
+    'nhood_enrichment': 'nhood_enrichment.csv',
+    'obs_df': 'obs_df.csv',
+    'var_df': 'var_df.csv'
     }
 
 # prepend automated_result_root
-automated_analysis_processed_data_files = {key: automated_analysis_root + value for key, value in automated_analysis_processed_data_files.items()}
+automated_analysis_processed_data_files = {key: automated_report_prefix + value for key, value in automated_analysis_processed_data_files.items()}
 
 # novosparc
 novosparc_root = automated_analysis_root + '/novosparc'
@@ -224,7 +224,7 @@ star_tmp_dir = star_prefix + 'tmp'
 # final bam file
 final_bam_suffix = '/final{polyA_adapter_trimmed}'
 final_bam = complete_data_root + final_bam_suffix + '.bam'
-bam_mm_included_pipe_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam'
+bam_mm_included_pipe_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included_{puck_barcode_file_id}.bam'
 final_bam_mm_included_pipe = complete_data_root + '/final' + bam_mm_included_pipe_suffix
 
 # downsampled bam

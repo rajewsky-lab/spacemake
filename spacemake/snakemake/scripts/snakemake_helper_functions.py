@@ -51,7 +51,7 @@ def get_output_files(
                 pattern,
                 project_id=index[0],
                 sample_id=index[1],
-                puck_id=row["puck_id"],
+                puck_barcode_file_id=row["puck_barcode_file_id"],
                 run_mode=run_mode,
                 umi_cutoff=run_mode_variables["umi_cutoff"],
                 **kwargs,
@@ -473,6 +473,8 @@ def get_dge_from_run_mode(
             is_external=external_wildcard,
             data_root_type=data_root_type,
             downsampling_percentage=downsampling_percentage,
+            puck_barcode_file_id=project_df.get_metadata('puck_barcode_file_id',
+                project_id = project_id, sample_id = sample_id),
         )
         for key, pattern in out_files_pattern.items()
     }
@@ -554,10 +556,12 @@ def get_bam_tag_names(project_id, sample_id):
 
 
 def get_puck_file(wildcards):
-    if not project_df.is_spatial(
-        project_id=wildcards.project_id, sample_id=wildcards.sample_id
-    ):
+    puck_barcode_file = project_df.get_puck_barcode_file(
+        project_id=wildcards.project_id,
+        sample_id=wildcards.sample_id,
+        puck_barcode_file_id=wildcards.puck_barcode_file_id)
 
+    if puck_barcode_file is None:
         return []
 
     puck_barcode_file = project_df.get_metadata(

@@ -115,7 +115,7 @@ def get_sample_main_variables_parser(
         parser.add_argument(
             "--puck",
             type=str,
-            help="name of the puck for this sample. if puck contains a \n"
+            help="name of the puck for this sample. if puck_type contains a \n"
             + "`barcodes` path to a coordinate file, those coordinates\n"
             + " will be used when processing this sample. if \n"
             + " not provided, a default puck will be used with \n"
@@ -123,12 +123,15 @@ def get_sample_main_variables_parser(
         )
 
         parser.add_argument(
-            "--puck_id", type=str, help="puck_id of the sample to be added/update"
+            "--puck_barcode_file_id",
+            type=str, help="puck_barcode_file_id of the sample to be added/update",
+            nargs='+',
         )
 
     parser.add_argument(
         "--puck_barcode_file",
         type=str,
+        nargs='+',
         help="the path to the file contining (x,y) positions of the barcodes",
     )
 
@@ -169,7 +172,7 @@ def get_data_parser(reads_required=False):
     """
     Returns a parser which contain extra arguments for a given sample.
     The returned parser will contain the --R1, --R2, --longreads,
-    --longread-signature, --barcode_flavor, --species, --puck,  --puck_id,
+    --longread-signature, --barcode_flavor, --species, --puck,  --puck_barcode_file_id,
     --puck_barcode_file, --investigator, --experiment, --sequencing_date,
     --run_mode arguments.
 
@@ -371,7 +374,7 @@ def setup_project_parser(pdf, attach_to):
     # LIST PROJECTS
     # always show these variables
     always_show = [
-        "puck_id",
+        "puck_barcode_file_id",
         "species",
         "investigator",
         "sequencing_date",
@@ -573,7 +576,7 @@ class ProjectDF:
 
     # default values of the project dataframe columns
     project_df_default_values = {
-        "puck_id": "no_optical_puck",
+        "puck_barcode_file_id": "no_spatial_data",
         "sample_sheet": None,
         "species": None,
         "demux_barcode_mismatch": 1,
@@ -616,9 +619,18 @@ class ProjectDF:
             # replacing NaN with None
             df = df.where(pd.notnull(df), None)
 
+            # rename puck_id to puck_barcode_file_id
+            df.rename(
+                columns={"puck_id":"puck_barcode_file_id"},
+                inplace=True,
+            )
+
             # convert R1/R2 to list, if they are stored as string
             df.R1 = df.R1.apply(str_to_list)
             df.R2 = df.R2.apply(str_to_list)
+
+            df.puck_barcode_file_id = df.puck_barcode_file_id.apply(str_to_list)
+            df.puck_barcode_file = df.puck_barcode_file.apply(str_to_list)
 
             project_list = []
             # required if upgrading from pre-longread tree
@@ -683,11 +695,11 @@ class ProjectDF:
         """
         return sum(c1 != c2 for c1, c2 in zip(string1, string2))
 
-    def find_barcode_file(self, puck_id: str) -> str:
-        """Tries to find path of a barcode file, using the puck_id.
+    def find_barcode_file(self, puck_barcode_file_id: str) -> str:
+        """Tries to find path of a barcode file, using the puck_barcode_file_id.
 
-        :param puck_id: puck_id of the puck we are looking for.
-        :type puck_id: str
+        :param puck_barcode_file_id: puck_barcode_file_id of the puck we are looking for.
+        :type puck_barcode_file_id: str
         :return: path of the puck file, containing barcodes, or None
         :rtype: str
         """
@@ -714,7 +726,7 @@ class ProjectDF:
                 if name in dirs:
                     return os.path.join(root, name)
 
-        puck_dir = find_dir(puck_id, self.config.puck_data["root"])
+        puck_dir = find_dir(puck_barcode_file_id, self.config.puck_data["root"])
         path = None
 
         if puck_dir is not None:
@@ -842,6 +854,45 @@ class ProjectDF:
         else:
             return False
 
+    def get_puck_barcode_file(
+        self, project_id: str,
+        sample_id: str,
+        puck_barcode_file_id: str
+    ) -> str:
+        if not self.is_spatial(project_id, sample_id):
+            return None
+        else:
+            ids = self.get_metadata('puck_barcode_file_id',
+                sample_id = sample_id,
+                project_id = project_id)
+
+            puck_barcode_files = self.get_metadata('puck_barcode_file',
+                sample_id = sample_id,
+                project_id = project_id)
+
+            # if no puck_barcode_file is provided, it means that barcode
+            # file has to be fetched from the puck itself
+            if puck_barcode_files is None:
+                puck_name = self.get_metadata(
+                    "puck",
+                    project_id=project_id,
+                    sample_id=sample_id
+                )
+                
+                puck = self.config.get_puck(puck_name)
+
+                return puck.variables['barcodes']
+            # else we fetch the barcodes from the list
+            else:
+                for pid, pbf in zip(ids, puck_barcode_files):
+                    if pid == puck_barcode_file_id:
+                        return pbf
+
+                # if execution reaches here, there was no match found.
+                raise SpacemakeError(f'puck with puck_barcode_file_id='
+                    + f'{puck_barcode_file_id} not found for'
+                    + f' (project_id, sample_id)=({project_id}, {sample_id}).')
+
     def get_puck_variables(
         self, project_id: str, sample_id: str, return_empty=False
     ) -> Dict:
@@ -917,7 +968,7 @@ class ProjectDF:
         # rename columns
         to_rename = {
             "Sample_ID": "sample_id",
-            "Sample_Name": "puck_id",
+            "Sample_Name": "puck_barcode_file_id",
             "Sample_Project": "project_id",
             "Description": "experiment",
             "index": "index",
@@ -939,7 +990,7 @@ class ProjectDF:
         df["demux_dir"] = (
             df["sample_sheet"].str.split("/").str[-1].str.split(".").str[0]
         )
-        df["puck_barcode_file"] = df.puck_id.apply(self.find_barcode_file)
+        df["puck_barcode_file"] = df.puck_barcode_file_id.apply(self.find_barcode_file)
         df.set_index(["project_id", "sample_id"], inplace=True)
 
         for ix, row in df.iterrows():
@@ -990,6 +1041,8 @@ class ProjectDF:
         basecalls_dir=None,
         is_merged=False,
         return_series=False,
+        puck_barcode_file=None,
+        puck_barcode_file_id=None,
         **kwargs,
     ):
         """add_update_sample.
@@ -1122,6 +1175,29 @@ class ProjectDF:
         kwargs["sample_sheet"] = sample_sheet
         kwargs["basecalls_dir"] = basecalls_dir
         kwargs["is_merged"] = is_merged
+
+        # populate puck_barcode_file
+        # TODO check here for duplication, length etc...
+        if puck_barcode_file is not None and isinstance(puck_barcode_file, str):
+            puck_barcode_file = [puck_barcode_file]
+
+        if puck_barcode_file_id is not None and isinstance(puck_barcode_file_id, str):
+            puck_barcode_file_id = [puck_barcode_file_id]
+
+        # if puck barcode files and id's provided
+        if (puck_barcode_file_id is not None and
+            puck_barcode_file is not None):
+            kwargs['puck_barcode_file_id'] = puck_barcode_file_id
+            kwargs['puck_barcode_file'] = puck_barcode_file
+        # if not
+        else:
+            puck_name = kwargs.get('puck', None)
+
+            if puck_name is not None:
+                puck = self.config.get_puck(puck_name)
+
+                if puck.has_barcodes:
+                    kwargs['puck_barcode_file_id'] = [puck_name]
 
         if sample_exists:
             new_project = self.df.loc[ix].copy()
