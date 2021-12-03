@@ -1224,14 +1224,16 @@ class ProjectDF:
         :param project_id:
         :param sample_id:
         """
-        if self.sample_exists(project_id, sample_id):
+        ix = (project_id, sample_id)
+
+        if self.sample_exists(*ix):
+            element = self.df.loc[ix]
+
             self.logger.info(
                 f"Deleting sample: {ix}, with the following"
                 + f" with the following variables:\n{element}"
             )
 
-            ix = (project_id, sample_id)
-            element = self.df.loc[ix]
             self.df.drop(ix, inplace=True)
             return element
         else:
