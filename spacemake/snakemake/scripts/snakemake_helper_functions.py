@@ -563,19 +563,6 @@ def get_puck_file(wildcards):
 
     if puck_barcode_file is None:
         return []
-
-    puck_barcode_file = project_df.get_metadata(
-        "puck_barcode_file", project_id=wildcards.project_id, sample_id=wildcards.sample_id
-    )
-
-    puck_name = project_df.get_metadata(
-        "puck", project_id=wildcards.project_id, sample_id=wildcards.sample_id
-    )
-    
-    puck = project_df.config.get_puck(puck_name)
-
-    if puck_barcode_file is None:
-        return {"barcode_file": puck.variables['barcodes']}
     else:
         return {"barcode_file": puck_barcode_file}
 
