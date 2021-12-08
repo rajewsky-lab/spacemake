@@ -502,6 +502,37 @@ def get_dge_from_run_mode(
 
     return out_files
 
+def get_all_barcode_readcounts(wildcards):
+    # returns all available barcode readcounts
+    project_id = wildcards.project_id
+    sample_id = wildcards.sample_id
+
+    is_merged = project_df.get_metadata(
+        "is_merged", project_id=wildcards.project_id, sample_id=wildcards.sample_id
+    )
+
+    run_modes = get_run_modes_from_sample(wildcards.project_id, wildcards.sample_id)
+
+    is_polyA_adapter_trimmed = set(
+        [x["polyA_adapter_trimming"] for x in run_modes.values()]
+    )
+
+    # if sample has both polyA trimmed and untrimmed mapped bam files
+    if len(is_polyA_adapter_trimmed) == 2:
+        polyA_adapter_trimmed_wildcard = ["", ".polyA_adapter_trimmed"]
+    elif True in is_polyA_adapter_trimmed:
+        polyA_adapter_trimmed_wildcard = [".polyA_adapter_trimmed"]
+    elif False in is_polyA_adapter_trimmed:
+        polyA_adapter_trimmed_wildcard = [""]
+
+    extra_args = {
+        "sample_id": wildcards.sample_id,
+        "project_id": wildcards.project_id,
+        "polyA_adapter_trimmed": polyA_adapter_trimmed_wildcard,
+    }
+
+    return {'bc_readcounts' : expand(barcode_readcounts, **extra_args)}
+
 
 def get_qc_sheet_input_files(wildcards):
     # returns star_log, reads_type_out, strand_info

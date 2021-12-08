@@ -449,7 +449,7 @@ rule get_barcode_readcounts:
         TAG={params.cell_barcode_tag}
         """
 
-rule create_top_barcodes:
+rule create_top_barcode_whitelist:
     input:
         barcode_readcounts
     output:
@@ -465,25 +465,41 @@ rule clean_top_barcodes:
     script:
         'scripts/clean_top_barcodes.py'
 
-rule create_spatial_barcodes:
+rule create_spatial_barcode_file:
     input:
         unpack(get_puck_file),
-#        bc_readcounts=barcode_readcounts
+        unpack(get_all_barcode_readcounts)
     output:
-        temp(spatial_barcodes),
         parsed_spatial_barcodes
     run:
-#        bc_readcounts=pd.read_table(input[1], skiprows=1,
-#            names=['read_n', 'cell_bc'])
+        # load all readcounts
+        bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
+            names=['read_n', 'cell_bc']) for bc_rc in input['bc_readcounts']]
+
+        # join them together
+        bc_readcounts = pd.concat(bc_readcounts)
+
+        # remove duplicates
+        bc_readcounts.drop_duplicates(subset='cell_bc', keep='first',
+            inplace=True)
+
+        # load barcode file and parse it
         bc = parse_barcode_file(input[0])
-        bc['cell_bc'] = bc.index
+        bc.reset_index(level=0, inplace=True)
         # inner join to get rid of barcode without any data
-#        bc = pd.merge(bc, bc_readcounts, how='inner', on='cell_bc')
-#        bc = bc[['cell_bc', 'x_pos', 'y_pos']]
+        bc = pd.merge(bc, bc_readcounts, how='inner', on='cell_bc')
+        bc = bc[['cell_bc', 'x_pos', 'y_pos']]
 
+        bc.to_csv(output[0], index=False)
+
+rule create_spatial_barcode_whitelist:
+    input: parsed_spatial_barcodes
+    output: temp(spatial_barcodes)
+    run:
+        bc = pd.read_csv(input[0])
+        # save both the whitelist and the beads in a separate file
         bc[['cell_bc']].to_csv(output[0], header=False, index=False)
-        bc.to_csv(output[1], index=False)
-
+        
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
     # topBarcodesClean.txt file or just the regular topBarcodes.txt
