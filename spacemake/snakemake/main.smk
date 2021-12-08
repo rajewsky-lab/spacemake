@@ -467,13 +467,20 @@ rule clean_top_barcodes:
 
 rule create_spatial_barcodes:
     input:
-        unpack(get_puck_file)
+        unpack(get_puck_file),
+#        bc_readcounts=barcode_readcounts
     output:
-        spatial_barcodes,
+        temp(spatial_barcodes),
         parsed_spatial_barcodes
     run:
+#        bc_readcounts=pd.read_table(input[1], skiprows=1,
+#            names=['read_n', 'cell_bc'])
         bc = parse_barcode_file(input[0])
         bc['cell_bc'] = bc.index
+        # inner join to get rid of barcode without any data
+#        bc = pd.merge(bc, bc_readcounts, how='inner', on='cell_bc')
+#        bc = bc[['cell_bc', 'x_pos', 'y_pos']]
+
         bc[['cell_bc']].to_csv(output[0], header=False, index=False)
         bc.to_csv(output[1], index=False)
 
@@ -575,7 +582,8 @@ rule create_qc_sheet:
             project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
                 return_empty=True),
         is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project_id, wildcards.sample_id),
+            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
+                puck_barcode_file_id=wildcards.puck_barcode_file_id),
         run_modes = lambda wildcards: get_run_modes_from_sample(
             wildcards.project_id, wildcards.sample_id)
     output:
@@ -590,7 +598,8 @@ rule run_automated_analysis:
         automated_analysis_result_file
     params:
         is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project_id, wildcards.sample_id),
+            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
+                puck_barcode_file_id=wildcards.puck_barcode_file_id),
         run_mode_variables = lambda wildcards:
             project_df.config.get_run_mode(wildcards.run_mode).variables
     script:
@@ -626,13 +635,13 @@ rule create_automated_analysis_processed_data_files:
         **automated_analysis_processed_data_files
     params:
         is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project_id, wildcards.sample_id),
+            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
+                puck_barcode_file_id=wildcards.puck_barcode_file_id),
     script:
         'scripts/automated_analysis_create_processed_data_files.py'
         
 rule create_automated_report:
     input:
-        #star_log=star_log_file,
         unpack(get_parsed_puck_file),
         **automated_analysis_processed_data_files,
     # spawn at most 4 automated analyses
@@ -646,7 +655,8 @@ rule create_automated_report:
             project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
                 return_empty=True),
         is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project_id, wildcards.sample_id),
+            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
+                puck_barcode_file_id=wildcards.puck_barcode_file_id),
         r_shared_scripts= repo_dir + '/scripts/shared_functions.R'
     script:
         'scripts/automated_analysis_create_report.Rmd'

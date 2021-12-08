@@ -748,9 +748,11 @@ class ProjectDF:
         :rtype: Dict
         """
         # returns sample info from the projects df
-        out_dict = self.df.loc[(project_id, sample_id)].to_dict()
+        cols_to_select = ['species', 'sequencing_date',
+            'investigator', 'experiment']
+        out_dict = self.df.loc[(project_id, sample_id)][cols_to_select]
 
-        return out_dict
+        return out_dict.to_dict()
 
     def is_external(self, project_id: str, sample_id: str) -> bool:
         """is_external.
@@ -828,7 +830,12 @@ class ProjectDF:
                 f'({project_id}, {sample_id}) is invalid.')
             
 
-    def is_spatial(self, project_id: str, sample_id: str) -> bool:
+    def is_spatial(
+        self,
+        project_id: str,
+        sample_id: str,
+        puck_barcode_file_id: str
+    ) -> bool:
         """Returns true if a sample with index (project_id, sample_id) is spatial,
         meaning that it has spatial barcodes attached.
 
@@ -839,17 +846,12 @@ class ProjectDF:
         :rtype: bool
         """
         self.assert_sample(project_id, sample_id)
-        puck_barcode_file = self.get_metadata(
-            "puck_barcode_file", project_id=project_id, sample_id=sample_id
-        )
+        puck_barcode_file = self.get_puck_barcode_file(
+            project_id=project_id,
+            sample_id=sample_id,
+            puck_barcode_file_id=puck_barcode_file_id)
 
-        puck_name = self.get_metadata(
-            "puck", project_id=project_id, sample_id=sample_id
-        )
-
-        puck = self.config.get_puck(puck_name, return_empty=True)
-
-        if puck_barcode_file is not None or puck.has_barcodes:
+        if puck_barcode_file is not None:
             return True
         else:
             return False
@@ -859,7 +861,8 @@ class ProjectDF:
         sample_id: str,
         puck_barcode_file_id: str
     ) -> str:
-        if not self.is_spatial(project_id, sample_id):
+        if (puck_barcode_file_id == self.project_df_default_values['puck_barcode_file_id']):
+            # if sample is not spatial, or we request the non-spatial puck
             return None
         else:
             ids = self.get_metadata('puck_barcode_file_id',
@@ -1137,13 +1140,6 @@ class ProjectDF:
                     + f"# of R2 files = {len(R2)}"
                 )
 
-        is_spatial = assert_file(
-            kwargs.get(
-                "puck_barcode_file", self.project_df_default_values["puck_barcode_file"]
-            ),
-            default_value=self.project_df_default_values["puck_barcode_file"],
-        )
-
         if "run_mode" in kwargs and isinstance(kwargs["run_mode"], str):
             # if a single run mode is provided as a string
             # create a list manually
@@ -1177,19 +1173,54 @@ class ProjectDF:
         kwargs["is_merged"] = is_merged
 
         # populate puck_barcode_file
-        # TODO check here for duplication, length etc...
-        if puck_barcode_file is not None and isinstance(puck_barcode_file, str):
-            puck_barcode_file = [puck_barcode_file]
+        if puck_barcode_file is not None:
+            if isinstance(puck_barcode_file, str):
+                puck_barcode_file = [puck_barcode_file]
 
-        if puck_barcode_file_id is not None and isinstance(puck_barcode_file_id, str):
-            puck_barcode_file_id = [puck_barcode_file_id]
+            # if there are duplicates, raise error
+            if len(puck_barcode_file) != len(set(puck_barcode_file)):
+                raise SpacemakeError('Duplicate files provided for '
+                    + '--puck_barcode_file. \n'
+                    + f'files provided: {puck_barcode_file}')
+
+        if puck_barcode_file_id is not None:
+            if isinstance(puck_barcode_file_id, str):
+                puck_barcode_file_id = [puck_barcode_file_id]
+
+            if len(puck_barcode_file_id) != len(set(puck_barcode_file_id)):
+                raise SpacemakeError('Duplicate ids provided for '
+                    + '--puck_barcode_file_id. \n'
+                    + f'ids provided: {puck_barcode_file_id}')
 
         # if puck barcode files and id's provided
         if (puck_barcode_file_id is not None and
             puck_barcode_file is not None):
+            # checklist
+            # check if the lengths are the same
+            if len(puck_barcode_file_id) != len(puck_barcode_file):
+                raise SpacemakeError('Unmatching number of arguments provided'
+                    + ' for --puck_barcode_file and --puck_barcode_file_id.\n'
+                    + 'The provided number of elements should be the same')
+
             kwargs['puck_barcode_file_id'] = puck_barcode_file_id
             kwargs['puck_barcode_file'] = puck_barcode_file
-        # if not
+        elif puck_barcode_file_id is None and puck_barcode_file is not None:
+            # if the user only provided puck_barcode_files
+            self.logger.info('No --puck_barcode_file_id provided. Generating'
+                + ' ids from filename')
+
+            puck_barcode_file_id = [os.path.basename(path).split('.')[0]
+                for path in puck_barcode_file]
+
+            # if duplicates detected here: different files but same basename
+            # this can happen if the file extensions are different
+            if len(puck_barcode_file_id) != len(set(puck_barcode_file_id)):
+                for i in range(len(puck_barcode_file_id)):
+                    puck_barcode_file_id[i] = f'{puck_barcode_file_id[i]}_{i}'
+
+            kwargs['puck_barcode_file_id'] = puck_barcode_file_id
+            kwargs['puck_barcode_file'] = puck_barcode_file
+
         else:
             puck_name = kwargs.get('puck', None)
 
@@ -1205,10 +1236,6 @@ class ProjectDF:
             new_project.update(pd.Series(kwargs))
             self.df.loc[ix] = new_project
         else:
-            # if sample is spatial, and puck not provided, assign 'default'
-            if is_spatial and "puck" not in kwargs:
-                kwargs["puck"] = "default"
-
             new_project = pd.Series(self.project_df_default_values)
             new_project.name = ix
             new_project.update(kwargs)

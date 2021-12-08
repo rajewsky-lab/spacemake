@@ -46,6 +46,14 @@ def get_output_files(
 
         for run_mode in row["run_mode"]:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
+            puck_barcode_file_ids = row['puck_barcode_file_id']
+            
+            # add non-spatial as well to every sample
+            non_spatial_pbf_id = project_df.project_df_default_values[
+                'puck_barcode_file_id']
+
+            if non_spatial_pbf_id not in puck_barcode_file_ids:
+                puck_barcode_file_ids.append(non_spatial_pbf_id)
 
             out_files = out_files + expand(
                 pattern,
@@ -65,17 +73,28 @@ def get_all_dges(wildcards):
     dges = []
 
     for index, row in df.iterrows():
+        puck_barcode_file_ids = row['puck_barcode_file_id']
+        
+        # add non-spatial as well to every sample
+        non_spatial_pbf_id = project_df.project_df_default_values[
+            'puck_barcode_file_id']
+
+        if non_spatial_pbf_id not in puck_barcode_file_ids:
+            puck_barcode_file_ids.append(non_spatial_pbf_id)
+
         for run_mode in row["run_mode"]:
             if project_df.has_dge(project_id=index[0], sample_id=index[1]):
-                dges.append(
-                    get_dge_from_run_mode(
-                        project_id=index[0],
-                        sample_id=index[1],
-                        run_mode=run_mode,
-                        data_root_type="complete_data",
-                        downsampling_percentage="",
-                    )["dge"],
-                )
+                for pbf_id in puck_barcode_file_ids:
+                    dges.append(
+                        get_dge_from_run_mode(
+                            project_id=index[0],
+                            sample_id=index[1],
+                            run_mode=run_mode,
+                            data_root_type="complete_data",
+                            downsampling_percentage="",
+                            puck_barcode_file_id=pbf_id,
+                        )["dge"],
+                    )
 
     return dges
 
@@ -376,7 +395,8 @@ def get_top_barcodes(wildcards):
 
 def get_parsed_puck_file(wildcards):
     is_spatial = project_df.is_spatial(
-        project_id=wildcards.project_id, sample_id=wildcards.sample_id
+        project_id=wildcards.project_id, sample_id=wildcards.sample_id,
+        puck_barcode_file_id=wildcards.puck_barcode_file_id
     )
 
     if is_spatial:
@@ -386,7 +406,8 @@ def get_parsed_puck_file(wildcards):
 
 
 def get_dge_from_run_mode(
-    project_id, sample_id, run_mode, data_root_type, downsampling_percentage
+    project_id, sample_id, run_mode, data_root_type, downsampling_percentage,
+    puck_barcode_file_id
 ):
     has_dge = project_df.has_dge(
         project_id=project_id, sample_id=sample_id)
@@ -396,7 +417,8 @@ def get_dge_from_run_mode(
             f'Sample with id (project_id, sample_id)={project_id}, {sample_id})' +
             f' does not have a DGE')
 
-    is_spatial = project_df.is_spatial(project_id=project_id, sample_id=sample_id)
+    is_spatial = project_df.is_spatial(project_id=project_id, sample_id=sample_id,
+        puck_barcode_file_id = puck_barcode_file_id)
 
     is_external = project_df.is_external(project_id=project_id, sample_id=sample_id)
 
@@ -473,8 +495,7 @@ def get_dge_from_run_mode(
             is_external=external_wildcard,
             data_root_type=data_root_type,
             downsampling_percentage=downsampling_percentage,
-            puck_barcode_file_id=project_df.get_metadata('puck_barcode_file_id',
-                project_id = project_id, sample_id = sample_id),
+            puck_barcode_file_id=puck_barcode_file_id,
         )
         for key, pattern in out_files_pattern.items()
     }
@@ -531,6 +552,7 @@ def get_qc_sheet_input_files(wildcards):
             run_mode,
             data_root_type=wildcards.data_root_type,
             downsampling_percentage=wildcards.downsampling_percentage,
+            puck_barcode_file_id=wildcards.puck_barcode_file_id
         )
 
         to_return[f"{run_mode}.dge_summary"] = run_mode_dge["dge_summary"]
@@ -579,6 +601,7 @@ def get_automated_analysis_dge_input(wildcards):
             run_mode=wildcards.run_mode,
             data_root_type=wildcards.data_root_type,
             downsampling_percentage=wildcards.downsampling_percentage,
+            puck_barcode_file_id=wildcards.puck_barcode_file_id,
         )["dge"]
     ]
 
