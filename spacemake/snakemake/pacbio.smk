@@ -76,8 +76,6 @@ def get_longread_output():
     if out_files:
         out_files.append(pb_overview_pdf)
 
-    # print("PACBIO OUTPUT FILES", out_files)
-    # print("PB_REPORT_STATS", PB_REPORT_STATS)
     return out_files
 
 def get_args(wc):
@@ -93,7 +91,7 @@ def get_args(wc):
     return args
 
 # Use {root_dir}/longread.yaml to set intact_bead layout and other settings that only make sense for
-# pacbio
+# long reads
 longread_cmd = """
 python -m spacemake.longread \
     --parallel={threads} \

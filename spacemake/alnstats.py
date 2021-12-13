@@ -210,17 +210,21 @@ def scan_bam(fname, skim=0, intact_signature="", parse_oligos=False):
     return res
 
 
-def make_plots(res):
+def make_plots(res, required_aln_types=["unmapped", "mapped", "multimapper", "unique"]):
     import matplotlib.pyplot as plt
 
     # preparing count dictionaries for the donut plots (pie charts)
     aln_types_d, _ = rep.count_dict_collapse_misc(
         res.aln_types, total=res.N_total, add_up="N_reads"
     )
+    # ensure that these keys are always present!
+    for t in required_aln_types:
+        aln_types_d[t] = res.aln_types.get(t, 0)
+
     # cig_types_d, _ = rep.count_dict_collapse_misc(res.cigar_types, total=res.N_total)
     tag_types_d, _ = rep.count_dict_collapse_misc(res.tag_types, total=res.N_total)
     utag_types_d, _ = rep.count_dict_collapse_misc(
-        res.uniq_tag_types, total=aln_types_d["unique"]
+        res.uniq_tag_types, total=res.aln_types["unique"]
     )
 
     # preparing the plot
@@ -463,7 +467,7 @@ def cmdline():
         intact_signature=args.intact_signature,
         parse_oligos=args.parse_oligos,
     )
-
+    # print(res.aln_types)
     if args.parse_oligos:
         df = oligo_analysis(res)
         df["sample"] = sample_name

@@ -10,6 +10,7 @@ import spacemake.longread.util as util
 import spacemake.longread.report as report
 import spacemake.longread.cache as cache
 import spacemake.longread.annotation as ann
+from spacemake.longread.signature import get_signature_db
 from collections import defaultdict
 
 
@@ -54,8 +55,6 @@ def setup_namespace(args, need_sample_name=True):
     if need_sample_name:
         sample = detect_sample(args)
         d["sample_name"] = sample
-
-    from spacemake.longread.signature import get_signature_db
 
     db = get_signature_db(args.config)
 
