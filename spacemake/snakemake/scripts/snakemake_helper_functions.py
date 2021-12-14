@@ -7,6 +7,7 @@ def get_output_files(
     samples=[],
     filter_merged=False,
     run_on_external=True,
+    puck_barcode_file_matching_type='none',
     **kwargs,
 ):
     out_files = []
@@ -27,12 +28,14 @@ def get_output_files(
         df = df.loc[~df.is_merged]
 
     for index, row in df.iterrows():
+        project_id, sample_id = index
+
         is_external = project_df.is_external(
-            project_id=index[0], sample_id=index[1]
+            project_id=project_id, sample_id=sample_id
         )
 
         has_dge = project_df.has_dge(
-            project_id=index[0], sample_id=index[1]
+            project_id=project_id, sample_id=sample_id
         )
 
         if not has_dge:
@@ -43,25 +46,51 @@ def get_output_files(
             # if we do not want to run this on external samples
             # and sample is external, skip
             continue
+            
+
+        # get puck files
+        puck_barcode_file_ids = row['puck_barcode_file_id']
+
+        non_spatial_pbf_id = project_df.project_df_default_values[
+            'puck_barcode_file_id']
+
+        if non_spatial_pbf_id not in puck_barcode_file_ids:
+            puck_barcode_file_ids.append(non_spatial_pbf_id)
+
+        if puck_barcode_file_matching_type == 'none':
+            # reset to empty string
+            puck_barcode_file_ids = []
+        elif puck_barcode_file_matching_type == 'all':
+            # add non-spatial as well to every sample
+            pass
+        elif puck_barcode_file_matching_type == 'spatial':
+            # get only spatial
+            puck_barcode_file_ids = project_df.get_puck_barcode_file_ids_and_files(
+                project_id, sample_id)[0]
+        elif puck_barcode_file_matching_type == 'spatial_matching':
+            puck_barcode_file_ids = project_df.get_matching_puck_barcode_file_ids(
+                project_id = project_id,
+                sample_id = sample_id)
 
         for run_mode in row["run_mode"]:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
-            puck_barcode_file_ids = row['puck_barcode_file_id']
             
-            # add non-spatial as well to every sample
-            non_spatial_pbf_id = project_df.project_df_default_values[
-                'puck_barcode_file_id']
-
-            if non_spatial_pbf_id not in puck_barcode_file_ids:
-                puck_barcode_file_ids.append(non_spatial_pbf_id)
+            if 'polyA_adapter_trimmed' in kwargs:
+                polyA_adapter_trimmed = kwargs['polyA_adapter_trimmed']
+            else:
+                if run_mode_variables['polyA_adapter_trimming']:
+                    polyA_adapter_trimmed = '.polyA_adapter_trimmed'
+                else:
+                    polyA_adapter_trimmed = ''
 
             out_files = out_files + expand(
                 pattern,
-                project_id=index[0],
-                sample_id=index[1],
-                puck_barcode_file_id=row["puck_barcode_file_id"],
+                project_id=project_id,
+                sample_id=sample_id,
+                puck_barcode_file_id=puck_barcode_file_ids,
                 run_mode=run_mode,
                 umi_cutoff=run_mode_variables["umi_cutoff"],
+                polyA_adapter_trimmed = polyA_adapter_trimmed,
                 **kwargs,
             )
 
@@ -73,22 +102,21 @@ def get_all_dges(wildcards):
     dges = []
 
     for index, row in df.iterrows():
-        puck_barcode_file_ids = row['puck_barcode_file_id']
-        
-        # add non-spatial as well to every sample
-        non_spatial_pbf_id = project_df.project_df_default_values[
-            'puck_barcode_file_id']
-
-        if non_spatial_pbf_id not in puck_barcode_file_ids:
-            puck_barcode_file_ids.append(non_spatial_pbf_id)
+        project_id, sample_id = index
+        puck_barcode_file_ids = project_df.get_matching_puck_barcode_file_ids(
+            project_id = project_id,
+            sample_id = sample_id)
 
         for run_mode in row["run_mode"]:
-            if project_df.has_dge(project_id=index[0], sample_id=index[1]):
+            if project_df.has_dge(
+                project_id=project_id,
+                sample_id=sample_id
+            ):
                 for pbf_id in puck_barcode_file_ids:
                     dges.append(
                         get_dge_from_run_mode(
-                            project_id=index[0],
-                            sample_id=index[1],
+                            project_id=project_id,
+                            sample_id=sample_id,
                             run_mode=run_mode,
                             data_root_type="complete_data",
                             downsampling_percentage="",
@@ -607,7 +635,6 @@ def get_bam_tag_names(project_id, sample_id):
 
     return tag_names
 
-
 def get_puck_file(wildcards):
     puck_barcode_file = project_df.get_puck_barcode_file(
         project_id=wildcards.project_id,
@@ -619,6 +646,22 @@ def get_puck_file(wildcards):
     else:
         return {"barcode_file": puck_barcode_file}
 
+def get_barcode_files_matching_summary_input(wildcards):
+    pbf_ids, pbfs = project_df.get_puck_barcode_ids_and_files(
+        project_id = wildcards.project_id,
+        sample_id = wildcards.sample_id)
+
+    parsed_spatial_barcode_files = [
+        expand(parsed_spatial_barcodes,
+               project_id = wildcards.project_id,
+               sample_id = wildcards.sample_id,
+               puck_barcode_file_id = pbf_id)[0]
+        for pbf_id in pbf_ids]
+
+    return {
+        'puck_barcode_files': pbfs,
+        'parsed_spatial_barcode_files': parsed_spatial_barcode_files
+    }
 
 def get_automated_analysis_dge_input(wildcards):
     # there are three options:

@@ -22,6 +22,9 @@ from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
 from spacemake.errors import SpacemakeError
 
+# load root dir_variable
+project_root = config['root_dir']
+
 ################
 # Shell prefix #
 ################
@@ -42,61 +45,10 @@ global_tmp = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
 spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
 
-# set root dir where the processed_data goes
-project_dir = os.path.join(config['root_dir'], 'projects/{project_id}')
-
-# moved barcode_flavor assignment here so that additional samples/projects are equally processed
-project_df = ProjectDF(config['project_df'], ConfigFile.from_yaml('config.yaml'))
-
-#################
-# DIRECTORY STR #
-#################
-raw_data_root = project_dir + '/raw_data'
-raw_data_illumina = raw_data_root + '/illumina'
-raw_data_illumina_reads = raw_data_illumina + '/reads/raw'
-raw_data_illumina_reads_reversed = raw_data_illumina + '/reads/bc_umi_tagged'
-processed_data_root = project_dir + '/processed_data/{sample_id}'
-processed_data_illumina = processed_data_root + '/illumina'
-
-reports_root = os.path.join(config['root_dir'], 'reports')
-
-project_df_file = reports_root + '/project_df.csv'
-sample_overview_file = reports_root + '/sample_overview.html'
-sample_read_metrics_db = reports_root + '/sample_read_metrics_db.tsv'
-
-illumina_root = project_dir + '/processed_data/{sample_id}/illumina'
-complete_data_root = illumina_root + '/complete_data'
-data_root = illumina_root + '/{data_root_type}{downsampling_percentage}'
-downsampled_data_prefix = illumina_root + '/downsampled_data'
-downsampled_data_root = downsampled_data_prefix + '{downsampling_percentage}'
-
-##############
-# Demux vars #
-##############
-# Undetermined files pattern
-# they are the output of bcl2fastq, and serve as an indicator to see if the demultiplexing has finished
-demux_dir_pattern = os.path.join(config['root_dir'], 'raw_data/demultiplex_data/{demux_dir}')
-demux_indicator = demux_dir_pattern + '/indicator.log'
-
-####################################
-# FASTQ file linking and reversing #
-####################################
-reads_suffix = '.fastq.gz'
-
-raw_reads_prefix = raw_data_illumina_reads + '/{sample_id}_R'
-raw_reads_pattern = raw_reads_prefix + '{mate}' + reads_suffix
-raw_reads_mate_1 = raw_reads_prefix + '1' + reads_suffix
-raw_reads_mate_2 = raw_reads_prefix + '2' + reads_suffix
-
-reverse_reads_prefix = raw_data_illumina_reads_reversed + '/{sample_id}_reversed_R'
-reverse_reads_mate_1 = reverse_reads_prefix + '1' + reads_suffix
-
-###############
-# Fastqc vars #
-###############
-fastqc_root = raw_data_illumina + '/fastqc'
-fastqc_pattern = fastqc_root + '/{sample_id}_R{mate}_fastqc.{ext}'
-fastqc_ext = ['zip', 'html']
+#######################
+# DIRECTORY STRUCTURE #
+#######################
+include: 'variables.py'
 
 ########################
 # UNIQUE PIPELINE VARS #
@@ -107,135 +59,9 @@ dropseq_tools = config['external_bin']['dropseq_tools']
 reports_dir = complete_data_root + '/reports'
 smart_adapter = config['adapters']['smart']
 
-###
-# splitting the reads
-###
 
-split_reads_root = complete_data_root + '/split_reads{polyA_adapter_trimmed}/'
-
-split_reads_sam_names = ['plus_plus', 'plus_minus', 'minus_minus', 'minus_plus', 'plus_AMB', 'minus_AMB']
-split_reads_sam_pattern = split_reads_root + '{file_name}.sam'
-split_reads_bam_pattern = split_reads_root + '{file_name}.bam'
-
-split_reads_sam_files = [split_reads_root + x + '.sam' for x in split_reads_sam_names]
-
-split_reads_strand_type = split_reads_root + 'strand_type_num.txt'
-split_reads_read_type = split_reads_root + 'read_type_num.txt'
-
-#######################
-# post dropseq and QC #
-#######################
-
-qc_sheet = data_root +'/qc_sheet_{sample_id}_{puck_barcode_file_id}.html'
-reads_type_out = split_reads_read_type
-barcode_readcounts_suffix = '{polyA_adapter_trimmed}.txt.gz'
-barcode_readcounts = complete_data_root + '/out_readcounts' + barcode_readcounts_suffix
-strand_info = split_reads_strand_type
-
-# united final.bam
-top_barcodes_suffix = '{polyA_adapter_trimmed}.{n_beads}_beads.txt'
-top_barcodes = complete_data_root + '/topBarcodes' + top_barcodes_suffix
-top_barcodes_clean = complete_data_root + '/topBarcodesClean' + top_barcodes_suffix
-spatial_barcodes = complete_data_root + '/spatialBarcodes_{puck_barcode_file_id}.txt'
-parsed_spatial_barcodes = complete_data_root + '/spatial_barcodes_{puck_barcode_file_id}.csv'
-
-# dge creation
-dge_root = data_root + '/dge'
-dge_out_prefix = dge_root + '/dge'
-dge_out_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}'
-dge_out = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads_{puck_barcode_file_id}.txt.gz'
-dge_out_summary = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads_{puck_barcode_file_id}.summary.txt'
-
-# processed dge
-h5ad_dge_suffix = '{is_external}.h5ad'
-h5ad_dge_obs_suffix = '{is_external}.obs.csv'
-dge_out_h5ad = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads_{puck_barcode_file_id}' + h5ad_dge_suffix
-dge_out_h5ad_obs = dge_out_prefix + dge_out_suffix + '.{n_beads}_beads_{puck_barcode_file_id}' + h5ad_dge_obs_suffix
-
-# spatial dge
-dge_spatial = dge_out_prefix + dge_out_suffix + '.spatial_beads_{puck_barcode_file_id}' + h5ad_dge_suffix
-dge_spatial_obs = dge_out_prefix + dge_out_suffix + '.spatial_beads_{puck_barcode_file_id}' + h5ad_dge_obs_suffix
-
-# spatial + meshed dge
-dge_spatial_mesh_suffix = '.spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}_{puck_barcode_file_id}'
-dge_spatial_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_mesh_suffix
-dge_spatial_mesh = dge_spatial_mesh_prefix + h5ad_dge_suffix
-dge_spatial_mesh_obs = dge_spatial_mesh_prefix + h5ad_dge_obs_suffix
-
-dge_types = ['.exon', '.intron', '.all', '.Reads_exon', '.Reads_intron', '.Reads_all', '']
-
-# kmer stats per position
-kmer_stats_file = complete_data_root + '/kmer_stats/{kmer_len}mer_counts.csv'
-
-# map paired-end to check errors
-paired_end_prefix = complete_data_root + '/mapped_paired_end/'
-paired_end_sam = paired_end_prefix + '{sample_id}_paired_end.sam'
-paired_end_bam = paired_end_prefix + '{sample_id}_paired_end.bam'
-paired_end_flagstat = paired_end_prefix + '{sample_id}_paired_end_flagstat.txt'
-paired_end_log = paired_end_prefix + '{sample_id}_paired_end.log'
-paired_end_mapping_stats = paired_end_prefix + '{sample_id}_paired_end_mapping_stats.txt'
-
-# automated analysis
-automated_analysis_root = data_root + '/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}'
-automated_report_prefix = automated_analysis_root + '/{sample_id}_{puck_barcode_file_id}_'
-automated_report = automated_report_prefix + 'automated_report.html'
-automated_analysis_result_file = automated_report_prefix + 'results.h5ad'
-
-automated_analysis_processed_data_files = {
-    'cluster_markers': 'top10_cluster_markers.csv',
-    'nhood_enrichment': 'nhood_enrichment.csv',
-    'obs_df': 'obs_df.csv',
-    'var_df': 'var_df.csv'
-    }
-
-# prepend automated_result_root
-automated_analysis_processed_data_files = {key: automated_report_prefix + value for key, value in automated_analysis_processed_data_files.items()}
-
-# novosparc
-novosparc_root = automated_analysis_root + '/novosparc'
-novosparc_wildcards = '/with_reference_rp_{reference_project_id}_' \
-    + 'rs_{reference_sample_id}_rr_{reference_run_mode}_ru_{reference_umi_cutoff}'
-novosparc_denovo_h5ad = novosparc_root + '/denovo.h5ad'
-novosparc_with_reference_h5ad = novosparc_root + novosparc_wildcards + '.h5ad'
-
-# in silico repo depletion
-ribo_depletion_log = complete_data_root + '/ribo_depletion_log.txt'
-parsed_ribo_depletion_log = complete_data_root + '/parsed_ribo_depletion_log.txt'
-
-# #########################
-#  dropseq rules and vars #
-# #########################
-tagged_bam = complete_data_root + '/unaligned_bc_tagged.bam'
-unassigned = complete_data_root + '/unaligned_bc_unassigned.bam'
-
-# trim smart adapter from the reads
-tagged_trimmed_bam = complete_data_root + '/unaligned_bc_tagged_trimmed.bam'
-
-# trim polyA overheang if exists
-tagged_polyA_adapter_trimmed_bam = complete_data_root + '/unaligned_bc_tagged.polyA_adapter_trimmed.bam'
-
-tagged_bam_pattern = complete_data_root + '/unaligned_bc_tagged{polyA_adapter_trimmed}.bam'
-
-# mapped reads
-star_prefix  = complete_data_root + '/star{polyA_adapter_trimmed}.'
-star_log_file = star_prefix + 'Log.final.out'
-star_tmp_dir = star_prefix + 'tmp'
-
-# final bam file
-final_bam_suffix = '/final{polyA_adapter_trimmed}'
-final_bam = complete_data_root + final_bam_suffix + '.bam'
-bam_mm_included_pipe_suffix = '{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included_{puck_barcode_file_id}.bam'
-final_bam_mm_included_pipe = complete_data_root + '/final' + bam_mm_included_pipe_suffix
-
-# downsampled bam
-downsampled_bam = downsampled_data_root + '/final_downsampled{polyA_adapter_trimmed}.bam'
-downsampled_bam_mm_included_pipe = downsampled_data_root + '/final_downsampled' + bam_mm_included_pipe_suffix
-downsample_saturation_analysis = downsampled_data_prefix + '/{project_id}_{sample_id}_saturation_analysis.html'
-
-# index settings
-star_index = 'species_data/{species}/star_index'
-bt2_rRNA_index_dir = 'species_data/{species}/bt2_rRNA_index'
-bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'
+# moved barcode_flavor assignment here so that additional samples/projects are equally processed
+project_df = ProjectDF(config['project_df'], ConfigFile.from_yaml('config.yaml'))
 
 ####################
 # HELPER FUNCTIONS #
@@ -268,39 +94,51 @@ wildcard_constraints:
 #############
 # Main rule #
 #############
-rule all:
+rule run_analysis:
     input:
         # create fastq
-        unpack(
-            lambda wildcards: get_output_files(
-                    fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
-                    data_root_type = 'complete_data', downsampling_percentage = '',
-                    filter_merged=True) 
-                if config['with_fastqc'] else []
-        ),
+        #unpack(
+        #    lambda wildcards: get_output_files(
+        #            fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
+        #            data_root_type = 'complete_data', downsampling_percentage = '',
+        #            filter_merged=True) 
+        #        if config['with_fastqc'] else []
+        #),
         unpack(get_all_dges),
         # this will also create the clean dge
         get_output_files(automated_report, data_root_type = 'complete_data',
-            downsampling_percentage=''),
+            downsampling_percentage='', puck_barcode_file_matching_type='spatial_matching'),
         get_output_files(qc_sheet, data_root_type = 'complete_data',
-            downsampling_percentage='', run_on_external=False),
+            downsampling_percentage='', run_on_external=False,
+            puck_barcode_file_matching_type='spatial_matching'),
         get_longread_output()
+
+rule get_whitelist_barcodes:
+    input:
+        get_output_files(barcode_readcounts,
+            data_root_type='complete_data',
+            downsampling_percentage='',
+            run_on_external=False,
+        ),
+        get_output_files(puck_barcode_files_summary,
+            data_root_type = 'complete_data',
+            downsampling_percentage='', run_on_external=False)
 
 ##############
 # DOWNSAMPLE #
 ##############
-rule downsample:
-    input:
-        get_output_files(downsample_saturation_analysis,
-            samples = config['samples'],
-            projects = config['projects'])
+#rule downsample:
+#    input:
+#        get_output_files(downsample_saturation_analysis,
+#            samples = config['samples'],
+#            projects = config['projects'])
 
 #############
 # NOVOSPARC #
 #############
-rule novosparc:
-    input:
-        *get_novosparc_input_files(config)
+#rule novosparc:
+#    input:
+#        *get_novosparc_input_files(config)
 
 #################
 # MERGE SAMPLES #
@@ -445,8 +283,9 @@ rule get_barcode_readcounts:
         """
         {dropseq_tools}/BamTagHistogram -m 32g \
         I= {input} \
-        O= {output}\
-        TAG={params.cell_barcode_tag}
+        O= {output} \
+        TAG={params.cell_barcode_tag} \
+        READ_MQ=0
         """
 
 rule create_top_barcode_whitelist:
@@ -497,6 +336,9 @@ rule create_spatial_barcode_whitelist:
     output: temp(spatial_barcodes)
     run:
         bc = pd.read_csv(input[0])
+        bc = bc[['cell_bc']]
+        bc = bc.append({'cell_bc': 'NNNNNNNNNNNN'}, ignore_index=True)
+
         # save both the whitelist and the beads in a separate file
         bc[['cell_bc']].to_csv(output[0], header=False, index=False)
         
@@ -518,6 +360,8 @@ rule create_dge:
         umi_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{UMI}']
+    # at most 8 dges will be created the same time
+    threads: max(workflow.cores * 0.125, 1)
     shell:
         """
         mkdir -p {params.dge_root}
@@ -563,7 +407,11 @@ rule create_mesh_spatial_dge:
     params:
         puck_data = lambda wildcards: project_df.get_puck_variables(
             project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)
+            sample_id = wildcards.sample_id),
+        pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id,
+            puck_barcode_file_id = wildcards.puck_barcode_file_id)
     run:
         adata = sc.read(input[0])
         if wildcards.spot_distance_um == 'hexagon':
@@ -574,7 +422,7 @@ rule create_mesh_spatial_dge:
             mesh_type = 'circle'
             spot_distance_um = float(wildcards.spot_distance_um)
         adata = create_meshed_adata(adata,
-            width_um = params['puck_data']['width_um'],
+            px_by_um = params['pbf_metrics']['px_by_um'],
             bead_diameter_um = params['puck_data']['spot_diameter_um'],
             spot_diameter_um = float(wildcards.spot_diameter_um),
             spot_distance_um = spot_distance_um,
@@ -597,6 +445,10 @@ rule create_qc_sheet:
         puck_variables = lambda wildcards:
             project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
                 return_empty=True),
+        pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id,
+            puck_barcode_file_id = wildcards.puck_barcode_file_id),
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
                 puck_barcode_file_id=wildcards.puck_barcode_file_id),
@@ -670,6 +522,10 @@ rule create_automated_report:
         puck_variables = lambda wildcards:
             project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
                 return_empty=True),
+        pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id,
+            puck_barcode_file_id = wildcards.puck_barcode_file_id),
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
                 puck_barcode_file_id=wildcards.puck_barcode_file_id),
@@ -734,3 +590,65 @@ rule map_to_rRNA:
             shell("bowtie2 -x {input.index}/{params.species}_rRNA -U {input.reads} -p 20 --very-fast-local > /dev/null 2> {output}")
         else:
             shell("echo 'no_rRNA_index' > {output}")
+
+rule create_barcode_files_matching_summary:
+    input:
+        unpack(get_barcode_files_matching_summary_input)
+    output:
+        puck_barcode_files_summary
+    params:
+        pbf_ids = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id)[0],
+        puck_variables = lambda wildcards:
+            project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
+                return_empty=True)
+    run:
+        out_df = pd.DataFrame(columns=[
+            'puck_barcode_file_id',
+            'n_barcodes',
+            'n_matching',
+            'matching_ratio', 
+            'x_pos_min_px',
+            'x_pos_max_px',
+            'y_pos_min_px',
+            'y_pos_max_px',
+            'px_by_um'])
+
+        if ('puck_barcode_files' in input.keys() and
+            'parsed_spatial_barcode_files' in input.keys()):
+            for pbf_id, pbf, parsed_barcode_file in zip(
+                    params['pbf_ids'],
+                    input['puck_barcode_files'],
+                    input['parsed_spatial_barcode_files'],
+                ):
+                pbf_df = parse_barcode_file(pbf)
+                n_barcodes = pbf_df.shape[0]
+                n_matching = pd.read_csv(parsed_barcode_file).shape[0]
+                matching_ratio = round(float(n_matching)/n_barcodes, 2)
+
+                # calculate puck metrics
+                x_pos_min_px = pbf_df.x_pos.min()
+                x_pos_max_px = pbf_df.x_pos.max()
+                y_pos_min_px = pbf_df.y_pos.min()
+                y_pos_max_px = pbf_df.y_pos.max()
+
+                px_by_um = (x_pos_max_px - x_pos_min_px) 
+                px_by_um = px_by_um / params['puck_variables']['width_um']
+                
+                out_df = out_df.append({
+                    'puck_barcode_file_id': pbf_id,
+                    'n_barcodes': n_barcodes,
+                    'n_matching': n_matching,
+                    'matching_ratio': matching_ratio,
+                    'x_pos_min_px': x_pos_min_px,
+                    'x_pos_max_px': x_pos_max_px,
+                    'y_pos_min_px': y_pos_min_px,
+                    'y_pos_max_px': y_pos_max_px,
+                    'px_by_um': px_by_um,
+                }, ignore_index=True)
+
+            out_df.to_csv(output[0], index=False)
+        else:
+            # save empty file
+            out_df.to_csv(output[0], index=False)

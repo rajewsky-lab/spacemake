@@ -325,7 +325,7 @@ def spacemake_run(pdf, args):
 
     samples = []
     projects = []
-    targets = ['all']
+    #targets = ['all']
     with_fastqc = args.get("with_fastqc", False)
 
     downsample = args.get("downsample", False)
@@ -356,12 +356,30 @@ def spacemake_run(pdf, args):
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
     # run snakemake
-    run_successful = snakemake.snakemake(
+    # TODO: downsampling and novosparc
+    preprocess_finished = snakemake.snakemake(
         snakefile,
         configfiles=[config_path],
         cores=args["cores"],
         dryrun=args["dryrun"],
-        targets=targets,
+        targets=['get_whitelist_barcodes'],
+        touch=args["touch"],
+        force_incomplete=args["rerun_incomplete"],
+        keepgoing=args["keep_going"],
+        printshellcmds=args["printshellcmds"],
+        config=config_variables,
+    )
+    
+    if preprocess_finished is False:
+        raise SpacemakeError("an error occurred while snakemake() ran")
+
+    # run spacemake downstream
+    analysis_finished = snakemake.snakemake(
+        snakefile,
+        configfiles=[config_path],
+        cores=args["cores"],
+        dryrun=args["dryrun"],
+        targets=['run_analysis'],
         touch=args["touch"],
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
@@ -369,9 +387,8 @@ def spacemake_run(pdf, args):
         config=config_variables,
     )
 
-    if run_successful is False:
+    if analysis_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
-
 
 #################
 # DEFINE PARSER #

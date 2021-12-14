@@ -111,7 +111,7 @@ def create_mesh(
     return xy
 
 def create_meshed_adata(adata,
-        width_um,
+        px_by_um,
         spot_diameter_um = 55,
         spot_distance_um = 100,
         bead_diameter_um = 10,
@@ -142,7 +142,8 @@ def create_meshed_adata(adata,
     # capture area width
     spot_radius_um = spot_diameter_um / 2
 
-    um_by_px = width_um/width_px
+    um_by_px = 1.0 / px_by_um
+    width_um = um_by_px * width_px
     spot_diameter_px = spot_diameter_um / um_by_px
     spot_radius_px = spot_radius_um / um_by_px
     spot_distance_px = spot_distance_um / um_by_px

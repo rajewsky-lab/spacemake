@@ -89,6 +89,4 @@ if nrow > 100 and ncol >= 1000:
         except ZeroDivisionError as e:
             pass
 
-
-
 adata.write(snakemake.output[0])

@@ -10,6 +10,7 @@ import logging
 from spacemake.errors import *
 from spacemake.config import ConfigFile
 from spacemake.util import message_aggregation, assert_file, str_to_list
+from spacemake.snakemake.variables import puck_barcode_files_summary
 from typing import List, Dict
 
 logger_name = "spacemake.project_df"
@@ -609,12 +610,27 @@ class ProjectDF:
         self.config = config
 
         if os.path.isfile(file_path):
-            df = pd.read_csv(
-                file_path,
-                index_col=["project_id", "sample_id"],
-                converters={"run_mode": eval, "merged_from": eval},
-                na_values=["None", "none"],
-            )
+            attempts = 0
+            failed = False
+
+            while not failed:
+                try:
+                    df = pd.read_csv(
+                        file_path,
+                        index_col=["project_id", "sample_id"],
+                        converters={"run_mode": eval, "merged_from": eval},
+                        na_values=["None", "none"],
+                    )
+                    failed=True
+                except Exception as e:
+                    if attempts < 5:
+                        attempts = attempts + 1
+                        continue
+                    else:
+                        raise e
+                        failed=True
+
+
 
             # replacing NaN with None
             df = df.where(pd.notnull(df), None)
@@ -891,10 +907,74 @@ class ProjectDF:
                     if pid == puck_barcode_file_id:
                         return pbf
 
-                # if execution reaches here, there was no match found.
-                raise SpacemakeError(f'puck with puck_barcode_file_id='
-                    + f'{puck_barcode_file_id} not found for'
-                    + f' (project_id, sample_id)=({project_id}, {sample_id}).')
+                return None
+    
+    def get_puck_barcode_ids_and_files(self,
+        project_id: str,
+        sample_id: str,
+    ) -> str:
+        puck_barcode_file_ids = self.get_metadata('puck_barcode_file_id',
+            project_id = project_id,
+            sample_id = sample_id)
+
+        puck_barcode_files = [self.get_puck_barcode_file(
+            project_id = project_id,
+            sample_id = sample_id,
+            puck_barcode_file_id = pbf_id)
+            for pbf_id in puck_barcode_file_ids]
+
+        out_puck_barcode_files = []
+        out_puck_barcode_file_ids = []
+
+        # return only id-file pairs, for which file is not none
+        for pbf_id, pbf in zip(puck_barcode_file_ids, puck_barcode_files):
+            if pbf is not None:
+                out_puck_barcode_files.append(pbf)
+                out_puck_barcode_file_ids.append(pbf_id)
+
+        return out_puck_barcode_file_ids, out_puck_barcode_files
+    
+    def get_matching_puck_barcode_file_ids(self,
+        project_id: str,
+        sample_id: str,
+    ):
+        summary_file = puck_barcode_files_summary.format(
+            project_id = project_id,
+            sample_id = sample_id)
+
+        if not os.path.isfile(summary_file):
+            return [self.project_df_default_values['puck_barcode_file_id']]
+
+        df = pd.read_csv(summary_file)
+
+        df = df.loc[(df.n_matching > 500) & (df.matching_ratio > 0.1)]
+
+        pdf_ids = df.puck_barcode_file_id.to_list()
+        
+        pdf_ids.append(self.project_df_default_values['puck_barcode_file_id'])
+
+        return pdf_ids
+
+    def get_puck_barcode_file_metrics(self,
+        project_id: str,
+        sample_id: str,
+        puck_barcode_file_id: str,
+    ):
+        summary_file = puck_barcode_files_summary.format(
+            project_id = project_id,
+            sample_id = sample_id)
+
+        if not os.path.isfile(summary_file):
+            return None
+
+        df = pd.read_csv(summary_file)
+
+        df = df.loc[df.puck_barcode_file_id == puck_barcode_file_id]
+
+        if df.empty:
+            return None
+        else:
+            return df.iloc[0].to_dict()
 
     def get_puck_variables(
         self, project_id: str, sample_id: str, return_empty=False
