@@ -622,15 +622,13 @@ class ProjectDF:
                         na_values=["None", "none"],
                     )
                     failed=True
-                except Exception as e:
+                except pd.errors.EmptyDataError as e:
                     if attempts < 5:
                         attempts = attempts + 1
                         continue
                     else:
                         raise e
                         failed=True
-
-
 
             # replacing NaN with None
             df = df.where(pd.notnull(df), None)

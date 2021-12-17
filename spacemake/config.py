@@ -167,7 +167,7 @@ def get_variable_action_subparsers(config, parent_parser, variable):
         'list': f'list {variable} and their settings',
         'delete': f'delete {variable_singular}',
         'add': f'add a new {variable_singular}',
-        'update': f'update an existing barcode_flavor'
+        'update': f'update an existing {variable_singular}'
     }
 
     # list command
