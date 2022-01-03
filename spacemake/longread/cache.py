@@ -113,7 +113,7 @@ class MultiAlignments:
         )
         self.aln_caches = {}
         for o in self.oligo_names:
-            aln = CachedAlignments(sample_name, o, self.oligo_dict[o])
+            aln = CachedAlignments(sample_name, o, self.oligo_dict[o], path=path)
             self.aln_caches[o] = aln
 
     def annotate(self, seq_name, seq, min_size=7, score_gap=3):
@@ -167,7 +167,7 @@ class MultiAlignments:
                         score = hit_scores[
                             start:last
                         ].max()  # * (last - start) / self.oli_lengths[label]
-                        yield start, i, label, score
+                        yield start, last + 1, label, score
                     start = i
                 last = i
                 prev = curr
@@ -177,10 +177,11 @@ class MultiAlignments:
                 score = hit_scores[
                     start:last
                 ].max()  # * (last - start) / self.oli_lengths[label]
-                yield start, i, labels[prev], score
+                yield start, last + 1, labels[prev], score
 
 
 def align_one_oligo_one_read(oligo_seq, qname, qseq):
+    # logging.debug(f"{oligo_seq} vs {qname} (len={len(qseq)})")
     hits = list(non_overlapping_hits(qseq, oligo_seq))
     return qname, hits
 
