@@ -54,4 +54,25 @@ signatures:
         intact_bead: "P5,bead_start,OP1,OP2_2s,polyT,N70X"
         bead_related: "bead_start"
 
+    hybridv1:
+        prio: 20
+        label: "comb_hybrid"
+        read1_primer: bead_start
+        read2_primer: N70X
+        CB: "r1[0:8]+r1[31:39]"
+        color: "lightblue"
+        intact_bead: "P5,bead_start,OP2,OP3,polyT,N70X"
+        bead_related: "bead_start"
+
+    scsmrna:
+        prio: -1
+        label: "smallRNA"
+        read1_primer: bead_start
+        read2_primer: TSO
+        CB: "r1[0:12]"
+        UMI: "r2[0:8]"
+        color: "red"
+        intact_bead: "P5,bead_start,polyT,sc_primer_RC,N70X"
+        bead_related: "bead_start"
+
 default: "withUMI"
