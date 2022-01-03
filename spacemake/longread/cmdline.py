@@ -675,6 +675,9 @@ def prepare_overview_parser(subparsers):
 def prepare_toplevel_parser():
     parser = argparse.ArgumentParser(prog="longread")
     parser.add_argument(
+        "--debug", default=False, action="store_true", help="activate debug output"
+    )
+    parser.add_argument(
         "--sample",
         help="sample name (default=autodetect from fname)",
         default=None,
@@ -729,9 +732,6 @@ def prepare_toplevel_parser():
         type=float,
         help="minimal match alignment score to consider a match for annotation, relative to its size (default=0.6)",
     )
-    parser.add_argument(
-        "--debug", default=False, action="store_true", help="activate debug output"
-    )
 
     ## sub-parser setup ##
     sp = parser.add_subparsers(help="sub-command help", dest="subcmd")
@@ -757,10 +757,13 @@ def cmdline():
     """
     import logging
 
-    logging.basicConfig(level=logging.INFO)
-
     parser = prepare_toplevel_parser()
     args = parser.parse_args()
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+
     return args.func(args)
 
 
