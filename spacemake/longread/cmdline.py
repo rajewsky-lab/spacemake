@@ -61,6 +61,7 @@ def setup_namespace(args, need_sample_name=True):
     d["signature_db"] = db
     intact_bead = db.intact[args.signature]
     d["intact_bead"] = intact_bead
+    d["ignore_matches"] = db.ignore[args.signature]
     d["sig_intact"] = intact_bead.split(",")
     d["sig_core"], d["sig_core_order"] = util.process_intact_signature(intact_bead)
 
@@ -77,15 +78,21 @@ def setup_namespace(args, need_sample_name=True):
 def cmd_align(args):
     args = setup_namespace(args)
 
-    cache.fill_caches(
+    if args.fill_caches:
+        cache.fill_caches(
+            args.fname,
+            args.sample_name,
+            args.blocks,
+            path=util.ensure_path(args.cache),
+            n_proc=args.parallel,
+        )
+
+    df = cache.annotate(
         args.fname,
         args.sample_name,
         args.blocks,
         path=util.ensure_path(args.cache),
-        n_proc=args.parallel,
-    )
-    df = cache.annotate(
-        args.fname, args.sample_name, args.blocks, path=util.ensure_path(args.cache)
+        ignore_matches=args.ignore_matches,
     )
     df.to_csv(
         os.path.join(
@@ -103,6 +110,13 @@ def prepare_align_parser(subparsers):
         default=None,
         help="file with pacbio reads (FASTQ or BAM format)",
     )
+    parser.add_argument(
+        "--fill-caches",
+        default=False,
+        action="store_true",
+        help="parallelize initial Smith & Waterman alignments (default=False)",
+    )
+
     parser.set_defaults(func=cmd_align)
     return parser
 
@@ -119,6 +133,7 @@ def cmd_annotate(args):
         args.sample_name,
         args.blocks,
         min_score=args.min_score,
+        ignore_matches=args.ignore_matches,
         orient_by=args.bead_related,
     )
     n_total = len(annotation.raw_sequences)
@@ -229,12 +244,17 @@ def cmd_annotate(args):
 
     with open(eo_fname, "wt") as eo:
         for signame, sigcount in sorted(sig_counts.items(), key=lambda x: -x[1]):
-            try:
-                qname, _, _ = next(
-                    annotation.filter_signatures(tuple(signame.split(",")))
+            i = None
+            for i, (qname, _, _) in enumerate(
+                annotation.filter_signatures(tuple(signame.split(",")))
+            ):
+                eo.write(
+                    f"# example={i} {signame} n={sigcount}\n{annotation.fmt(qname)}\n"
                 )
-                eo.write(f"# {signame} n={sigcount}\n{annotation.fmt(qname)}\n")
-            except StopIteration:
+                if i >= 10:
+                    break
+
+            if i is None:
                 args.logger.warning(
                     f"unable to find any reads with signature {signame}"
                 )
