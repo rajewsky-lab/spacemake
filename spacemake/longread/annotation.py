@@ -45,6 +45,7 @@ class AnnotatedSequences:
         sample_name,
         blocks,
         min_score=0,
+        ignore_matches=[],
         orient_by="bead_start",
     ):
         self.sample_name = sample_name
@@ -54,9 +55,18 @@ class AnnotatedSequences:
         self.raw_sequences = self.load_raw_sequences(fastq_path)
         self.oligo_blocks = blocks
         self.min_oligo_scores = {}
+        self.ignore_matches = set(ignore_matches)
+        for m in ignore_matches:
+            # ignore reverse-complement hits of an oligo set to ignore
+            # as well!
+            self.ignore_matches.add(f"{m}_RC".replace("_RC_RC", ""))
+
         for name, seq in blocks.items():
             self.min_oligo_scores[name] = (2 * len(seq)) * min_score
 
+        self.logger.info(
+            f"ignoring matches for {sorted(self.ignore_matches)} or under {min_score} align score"
+        )
         self.ann_db = self.load_annotation(ann_path)
         # self.ann_db = self.cleanup_overlaps(self.ann_db)
 
@@ -78,7 +88,11 @@ class AnnotatedSequences:
         )
         df = pd.read_csv(ann_path, sep="\t")
         df["min_score"] = df["oligo"].apply(lambda x: self.min_oligo_scores.get(x, 22))
-        df = df.query(f"score > min_score")
+        # df = df.query(f"score > min_score")
+        mask = df["score"] > df["min_score"]
+        mask &= ~df["oligo"].isin(self.ignore_matches)
+        df = df.loc[mask]
+
         qdata = {}
         for qname, grp in df.groupby("qname"):
             qdata[qname] = (
@@ -99,9 +113,13 @@ class AnnotatedSequences:
             lnames = list(names)
             fw_start = lnames.count(self.orient_by)
             rc_start = lnames.count(self.orient_by_RC)
+            fw_nrc = lnames.count("_RC")
+            rc_nrc = len(lnames) - fw_nrc
 
-            if (fw_start < rc_start) or (
-                (fw_start == rc_start) and names[0].endswith("_RC")
+            if (
+                (fw_start < rc_start)
+                or ((fw_start == rc_start) and names[0].endswith("_RC"))
+                or ((fw_start == rc_start) and (fw_nrc > rc_nrc))
             ):
                 # reverse complement the whole thing
                 names = tuple([(n + "_RC").replace("_RC_RC", "") for n in names[::-1]])

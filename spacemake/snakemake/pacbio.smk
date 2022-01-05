@@ -213,4 +213,5 @@ rule cmd_align:
     params:
         args=get_args
     threads: 64
+    # shell: longread_cmd + " align --fill-caches {input.fname}"
     shell: longread_cmd + " align {input.fname}"

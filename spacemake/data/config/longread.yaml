@@ -9,6 +9,7 @@ signatures:
         color: "blue"
         intact_bead: "P5,bead_start,OP1,polyT,N70X"
         bead_related: "bead_start"
+        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER", "OP1", "OP2", "OP2_2s", "OP3"]
 
     noUMI:
         label: "noUMI"
@@ -20,6 +21,7 @@ signatures:
         color: "darkgray"
         intact_bead: "P5,bead_start,OP1,polyT,N70X"
         bead_related: "bead_start"
+        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER", "OP1", "OP2", "OP2_2s", "OP3"]
 
     dropseq:
         prio: -1
@@ -31,6 +33,7 @@ signatures:
         color: "gray"
         intact_bead: "P5,bead_start,polyT,N70X"
         bead_related: "bead_start"
+        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER", "OP1", "OP2", "OP2_2s", "OP3"]
 
     chromium:
         prio: -1
@@ -42,6 +45,7 @@ signatures:
         color: "gray"
         intact_bead: "chr_bead_start,polyT,chr_TSO_RC"
         bead_related: "chr_bead_start"
+        ignore_matches: ["bead_start","TSO"]
 
     combv1:
         prio: 10
@@ -53,6 +57,7 @@ signatures:
         color: "blue"
         intact_bead: "P5,bead_start,OP1,OP2_2s,polyT,N70X"
         bead_related: "bead_start"
+        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER"]
 
     hybridv1:
         prio: 20
@@ -63,6 +68,7 @@ signatures:
         color: "lightblue"
         intact_bead: "P5,bead_start,OP2,OP3,polyT,N70X"
         bead_related: "bead_start"
+        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER"]
 
     scsmrna:
         prio: -1
@@ -74,5 +80,6 @@ signatures:
         color: "red"
         intact_bead: "P5,bead_start,polyT,sc_primer_RC,N70X"
         bead_related: "bead_start"
+        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER", "OP1", "OP2", "OP2_2s", "OP3"]
 
 default: "withUMI"
