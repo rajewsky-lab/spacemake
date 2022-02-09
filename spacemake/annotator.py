@@ -14,8 +14,13 @@ from collections import defaultdict, OrderedDict, deque
 
 logging.basicConfig(level=logging.DEBUG)
 
-## reading the GTF
+
 def attr_to_dict(attr_str):
+    """
+    Helper for reading the GTF. Parsers the attr_str found in the GTF
+    attribute column (col 9). Returns a dictionary from the key, value
+    pairs.
+    """
     d = {}
     for match in re.finditer(r"(\w+) \"(\S+)\";", attr_str):
         key, value = match.groups()
@@ -27,7 +32,7 @@ def attr_to_dict(attr_str):
 def load_GTF(
     src,
     attributes=["gene_id", "gene_type", "gene_name"],
-    features=["transcript", "exon", "CDS", "UTR"],
+    features=["exon", "CDS", "UTR"],
 ):
     if type(src) is str:
         if src.endswith(".gz"):
@@ -60,18 +65,18 @@ def load_GTF(
 
 ## Annotation classification matrix
 default_map = {
-    # CDS   UTR    exon   transcript
-    (True, False, True, True): "CDS",
-    (True, True, True, True): "CDS",
-    (False, True, True, True): "UTR",
-    (False, False, True, True): "non-coding",
-    (True, False, False, True): "intron",
-    (False, True, False, True): "intron",
-    (False, False, False, True): "intron",
+    # CDS   UTR    exon -> ga gf tag values
+    (True, False, True): "CDS",  # CODING
+    (True, True, True): "CDS",  # CODING
+    (False, True, True): "UTR",  # UTR
+    (False, False, True): "non-coding",  # CODING
+    (True, False, False): "intron",  # INTRONIC
+    (False, True, False): "intron",  # INTRONIC
+    (False, False, False): "intron",  # INTRONIC
 }
 
 
-class Classifier:
+class GTFClassifier:
     def __init__(
         self,
         df,
@@ -88,20 +93,21 @@ class Classifier:
             "CDS": 0,
             "UTR": 1,
             "exon": 2,
-            "transcript": 3,
+            # "transcript": 3,
         }
         df["feature_idx"] = df["feature"].apply(lambda x: feat2idx[x])
         self.df = df.values
 
     def process(self, ids):
-        gene_features = defaultdict(lambda: np.zeros(4))
+        gene_features = defaultdict(lambda: np.zeros(3, dtype=bool))
         gene_names = {}
         gene_types = {}
         # iterate over the overlapping GTF features only once.
         # sort by gene_id as we go
         for i in ids:
             row = self.df[i][5:]
-            (gene_id, gene_type, gene_name, feature_idx) = row
+            # print(row)
+            (strand, gene_id, gene_type, gene_name, feature_idx) = row
             gene_names[gene_id] = gene_name
             gene_types[gene_id] = gene_type
             # feature_idx encodes CDS, UTR, exon, transcript records
@@ -113,10 +119,16 @@ class Classifier:
         gn_by_prio = defaultdict(list)
         gf_by_prio = defaultdict(list)
         gt_by_prio = defaultdict(list)
+        gs_by_prio = defaultdict(list)
 
         for gene_id, feature_flags in gene_features.items():
             # here the boolean vector is converted to a tuple
             # which can serve as a key for lookup
+            if not feature_flags[-1]:
+                print(gene_id)
+                for i in ids:
+                    print(self.df[i])
+
             cls = self.feature_map[tuple(feature_flags)]
             # print(tx_id, gene, gene_id, gene_type, features, cls)
             prio = self.prio[cls]
@@ -124,8 +136,62 @@ class Classifier:
             gn_by_prio[prio].append(gene_names[gene_id])
             gf_by_prio[prio].append(cls)
             gt_by_prio[prio].append(gene_types[gene_id])
+            gs_by_prio[prio].append(strand)
 
-        return gf_by_prio[top_prio], gn_by_prio[top_prio], gt_by_prio[top_prio]
+        return (
+            gf_by_prio[top_prio],
+            gn_by_prio[top_prio],
+            gs_by_prio[top_prio],
+            gt_by_prio[top_prio],
+        )
+
+
+class CompiledClassifier:
+    def __init__(self, df, classifications):
+        self.cid_table = df["cid"].values
+        self.classifications = np.array(classifications, dtype=object)
+
+    @staticmethod
+    def get_filenames(path):
+        cdf_path = os.path.join(path, "non_overlapping.csv")
+        cclass_path = os.path.join(path, "classifications.npy")
+
+        return cdf_path, cclass_path
+
+    @staticmethod
+    def files_exist(path):
+        cdf_path, cclass_path = CompiledClassifier.get_filenames(path)
+        return os.access(cdf_path, os.R_OK) and os.access(cclass_path, os.R_OK)
+
+    # The only piece of work left is merging multiple pre-classified annotations
+    def joiner(self, cidx):
+        # we want to report each combination only once
+        # Note: This code path is executed rarely
+        seen = set()
+        gf = []
+        gn = []
+        gs = []
+        gt = []
+        for i in tuple(cidx):
+            cid = self.cid_table[i]
+            for ann in zip(*self.classifications[cid]):
+                if not ann in seen:
+                    seen.add(ann)
+                    gf.append(ann[0])
+                    gn.append(ann[1])
+                    gs.append(ann[2])
+                    gt.append(ann[3])
+
+        return gf, gn, gs, gt
+
+    def process(self, cidx):
+        # fast path
+        if len(cidx) == 1:
+            # fast path
+            idx = tuple(cidx)[0]
+            return self.classifications[self.cid_table[idx]]
+
+        return self.joiner(cidx)
 
 
 ## Helper functions for working with NCLS
@@ -190,23 +256,38 @@ def decompose(nc):
                 break
 
 
-## NCLS-based lookup of genome annotation
 class GenomeAnnotation:
-    def __init__(self, df, processor):
-        self.logger = logging.getLogger("GenomeAnnotation")
-        self.df = df
+    """
+    NCLS-based lookup of genome annotation
+    """
+
+    logger = logging.getLogger("GenomeAnnotation")
+
+    def __init__(self, df, processor, is_compiled=False):
+        """
+        [summary]
+
+        :param df: Annotation data of either raw GTF features or pre-classified combinations
+        :type df: DataFrame with at least the following columns: chrom, strand, start, end
+        :param processor: evaluates indices into df and returns annotation
+            the indices point into the dataframe to all
+            overlapping features
+        :type processor: function that takes frozenset(indices) as sole argument
+        """
+        # self.df = df
         self.processor = processor
 
         # find all unique combinations of chrom + strand
         strands = df[["chrom", "strand"]].drop_duplicates().values
         self.strand_keys = [tuple(s) for s in strands]
         self.strand_map = {}
+        self.empty = frozenset([])
 
         t0 = time()
         for strand_key in sorted(self.strand_keys):
             chrom, strand = strand_key
 
-            d = self.df.query(f"chrom == '{chrom}' and strand == '{strand}'")
+            d = df.query(f"chrom == '{chrom}' and strand == '{strand}'")
             nested_list = ncls.NCLS(d["start"], d["end"], d.index)
             self.strand_map[strand_key] = nested_list
 
@@ -214,11 +295,64 @@ class GenomeAnnotation:
         self.logger.info(
             f"constructed nested lists of {len(df)} features on {len(self.strand_keys)} strands in {dt:.3f}s"
         )
+        self.is_compiled = is_compiled
+
+    @classmethod
+    def from_compiled_index(cls, path):
+        cdf_path, cclass_path = CompiledClassifier.get_filenames(path)
+        t0 = time()
+        cdf = pd.read_csv(cdf_path, sep="\t")
+        classifications = np.load(cclass_path, allow_pickle=True)
+        dt = time() - t0
+        cls.logger.info(
+            f"re-read compiled annotation index with {len(cdf)} original GTF feature combinations and {len(classifications)} in {dt:.3f} seconds"
+        )
+        ## Create a secondary Annotator which uses the non-overlapping combinations
+        ## and the pre-classified annotations for the actual tagging
+        cl = CompiledClassifier(cdf, classifications)
+        gc = cls(cdf, lambda idx: cl.process(idx), is_compiled=True)
+        return gc
+
+    @classmethod
+    def from_GTF(cls, gtf, df_cache=""):
+        # load GTF the first time. Need to build compiled annotation
+        t0 = time()
+        df = load_GTF(gtf)
+        dt = time() - t0
+        cls.logger.info(f"loaded {len(df)} GTF records in {dt:.3f} seconds")
+        if df_cache:
+            df.to_csv(df_cache, sep="\t")
+
+        ## Build NCLS with original GTF features
+        cl = GTFClassifier(df)
+        ga = cls(df, lambda idx: cl.process(idx))
+        return ga
+
+    @classmethod
+    def from_uncompiled_df(cls, path):
+        t0 = time()
+        df = pd.read_csv(path, sep="\t")
+        dt = time() - t0
+        cls.logger.info(f"loaded {len(df)} tabular records in {dt:.3f} seconds")
+
+        ## Build NCLS with original GTF features
+        cl = GTFClassifier(df)
+        ga = cls(df, lambda idx: cl.process(idx))
+        return ga
+
+    def sanity_check(self, df):
+        for strand, nc in self.strand_map.items():
+            starts, ends, idx = np.array(nc.intervals()).T
+            self.logger.debug(
+                f"checking {strand} with starts from {starts.min()}-{starts.max()} and idx from {idx.min()}-{idx.max()}"
+            )
+
+            assert idx.max() < len(df)
 
     def query_idx(self, chrom, start, end, strand):
         strand_key = (chrom, strand)
         if not strand_key in self.strand_map:
-            return []
+            return self.empty
 
         nested_list = self.strand_map[strand_key]
         return query(nested_list, start, end)
@@ -237,7 +371,7 @@ class GenomeAnnotation:
         idx = self.query_idx_blocks(chrom, strand, blocks)
         return self.processor(idx)
 
-    def compile(self):
+    def compile(self, path=""):
         chroms = []
         strands = []
         cstarts = []
@@ -246,6 +380,7 @@ class GenomeAnnotation:
         cidx = []
         cid_lkup = {}
 
+        t0 = time()
         for strand_key, nc in self.strand_map.items():
             chrom, strand = strand_key
             self.logger.info(f"decomposing {chrom} {strand}")
@@ -265,70 +400,86 @@ class GenomeAnnotation:
         cdf = pd.DataFrame(
             dict(chrom=chroms, strand=strands, start=cstarts, end=cends, cid=cids)
         )
-        return cdf, cidx
-
-
-# The only piece of work left is merging multiple pre-classified annotations
-def joiner(idx):
-    if len(idx) == 1:
-        # fast path
-        return classifications[tuple(idx)]
-
-    # we want to report each combination only once
-    # Note: This code path is executed rarely
-    seen = set()
-    gf = []
-    gn = []
-    gt = []
-    for i in idx:
-        for ann in zip(*classifications[i]):
-            if not ann in seen:
-                seen.add(ann)
-                gf.append(ann[0])
-                gn.append(ann[1])
-                gt.append(ann[2])
-
-    return gf, gn, gt
-
-
-def annotate_BAM(ga, src, out):
-    import pysam
-
-    bam = pysam.AlignmentFile(src)
-    out = pysam.AlignmentFile(out, "wbu", template=bam)
-    t0 = time()
-    T = 5
-    for n, read in enumerate(bam.fetch(until_eof=True)):
-        if not read.is_unmapped:
-            chrom = bam.get_reference_name(read.tid)
-            strand = "-" if read.is_reverse else "+"
-            gf, gn, gt = ga.query_blocks(chrom, strand, read.get_blocks())
-            if len(gf):
-                read.tags += [
-                    ("gf", ",".join(gf)),
-                    ("gn", ",".join(gn)),
-                    ("gt", ",".join(gt)),
-                ]
-            else:
-                read.tags += [("gf", "INTERGENIC")]
-
-        out.write(read)
         dt = time() - t0
-        if dt > T:
-            print(f"processed {n} reads in {dt:.2f} seconds ({n/dt:.2f} reads/second)")
-            T += 5
+        self.logger.debug(f"decomposed original GTF annotation in {dt:.3f} seconds")
 
+        # pre-classify all unique feature combinations
+        classifications = []
+        t0 = time()
+        for n, idx in enumerate(cidx):
+            res = self.processor(idx)
+            classifications.append(res)
 
-def has_compiled_annotation(args):
-    cdf_path = os.path.join(args.compiled, "non_overlapping.csv")
-    cclass_path = os.path.join(args.compiled, "classifications.npy")
+        ## Turn into np.array to turn lookup into super-fast array index operation
+        classifications = np.array(classifications, dtype=object)
+        dt = time() - t0
+        self.logger.debug(
+            f"pre-classified {n} feature combinations in {dt:.3f} seconds"
+        )
 
-    if os.access(cdf_path, os.R_OK) and os.access(cclass_path, os.R_OK):
-        found = True
-    else:
-        found = False
+        if path:
+            cdf_path, cclass_path = CompiledClassifier.get_filenames(path)
+            ## Store the compiled DataFrame and pre-classifications
+            t0 = time()
+            cdf.to_csv(cdf_path, sep="\t", index=False)
+            np.save(cclass_path, classifications)
+            dt = time() - t0
+            self.logger.debug(f"stored compiled annotation index in {dt:.3f} seconds")
 
-    return found, cdf_path, cclass_path
+        ## Create a secondary Annotator which uses the non-overlapping combinations
+        ## and the pre-classified annotations for the actual tagging
+        cl = CompiledClassifier(cdf, classifications)
+        gc = GenomeAnnotation(cdf, lambda idx: cl.process(idx), is_compiled=True)
+
+        return gc
+
+    def annotate_BAM(self, src, out, antisense=False, interval=5):
+        import pysam
+
+        as_strand = {"+": "-", "-": "+"}
+        self.logger.info(
+            f"beginning BAM annotation: {src} -> {out}. is_compiled={self.is_compiled}"
+        )
+        bam = pysam.AlignmentFile(src)
+        out = pysam.AlignmentFile(out, "wbu", template=bam)
+        t0 = time()
+        T = interval
+        for n, read in enumerate(bam.fetch(until_eof=True)):
+            if not read.is_unmapped:
+                chrom = bam.get_reference_name(read.tid)
+                strand = "-" if read.is_reverse else "+"
+
+                gf, gn, gs, gt = self.query_blocks(chrom, strand, read.get_blocks())
+                if antisense:
+                    gf_as, gn_as, gs_as, gt_as = self.query_blocks(
+                        chrom, as_strand[strand], read.get_blocks()
+                    )
+                    gf += gf_as
+                    gn += gn_as
+                    gs += gs_as
+                    gt += gt_as
+
+                if len(gf):
+                    read.tags += [
+                        ("gF", ",".join(gf)),
+                        ("gN", ",".join(gn)),
+                        ("gS", ",".join(gs)),
+                        ("gT", ",".join(gt)),
+                    ]
+                else:
+                    read.tags += [("gF", "INTERGENIC")]
+
+            out.write(read)
+            dt = time() - t0
+            if dt > T:
+                self.logger.info(
+                    f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
+                )
+                T += interval
+
+        self.logger.info(
+            f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
+        )
 
 
 if __name__ == "__main__":
@@ -339,10 +490,33 @@ if __name__ == "__main__":
         help="path to the original annotation (e.g. gencodev38.gtf.gz)",
     )
     parser.add_argument(
+        "--tabular",
+        default="",
+        help="path to tabular version of the relevant features only (e.g. gencodev38.tsv)",
+    )
+    parser.add_argument(
         "--compiled",
-        required=True,
         help="path to keep a compiled version of the GTF in (used as cache)",
     )
+    parser.add_argument(
+        "--use-compiled",
+        default=False,
+        action="store_true",
+        help="enable using the compiled version of GenomeAnnotation (faster)",
+    )
+    parser.add_argument(
+        "--antisense",
+        default=False,
+        action="store_true",
+        help="enable annotating against the opposite strand (antisense to the alignment) as well",
+    )
+    parser.add_argument(
+        "--dropseqtools",
+        default=False,
+        action="store_true",
+        help="emulate dropseqtools behavior",
+    )
+
     parser.add_argument("--bam-in", help="path for the input BAM to be tagged")
     parser.add_argument(
         "--bam-out",
@@ -350,58 +524,17 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    found, cdf_path, cclass_path = has_compiled_annotation(args)
-    if found:
-        ## re-read the compiled index
-        t0 = time()
-        cdf = pd.read_csv(cdf_path, sep="\t")
-        classifications = np.load(cclass_path, allow_pickle=True)
-        dt = time() - t0
-        print(f"re-read compiled annotation index in {dt:.3f} seconds")
+    if CompiledClassifier.files_exist(args.compiled) and args.use_compiled:
+        ga = GenomeAnnotation.from_compiled_index(args.compiled)
+
+    elif args.tabular and os.access(args.tabular, os.R_OK):
+        ga = GenomeAnnotation.from_uncompiled_df(args.tabular)
 
     else:
-        # load GTF the first time. Need to build compiled annotation
-        t0 = time()
-        df = load_GTF(args.gtf)
-        dt = time() - t0
-        print(f"loaded {len(df)} records in {dt:.3f} seconds")
+        ga = GenomeAnnotation.from_GTF(args.gtf, df_cache=args.tabular)
 
-        ## Build NCLS with original GTF features
-        cl = Classifier(df)
-        ga = GenomeAnnotation(df, lambda idx: cl.process(idx))
-        t0 = time()
-        ## Compile into non-overlapping, unique combinations of GTF features
-        cdf, idx_combinations = ga.compile()
-        dt = time() - t0
-        print(
-            f"decomposed complete original GTF annotation overlaps in {dt:.3f} seconds"
-        )
-        # print(cdf, len(idx_combinations))
+    # perform compilation if that's what we want
+    if not ga.is_compiled and args.use_compiled:
+        ga = ga.compile(args.compiled)
 
-        ## pre-classify each unique combination of GTF features
-        classifications = []
-        t0 = time()
-        for n, idx in enumerate(idx_combinations):
-            res = ga.processor(idx)
-            classifications.append(res)
-
-        ## Turn into np.array to turn lookup into super-fast array index operation
-        classifications = np.array(classifications, dtype=object)
-        dt = time() - t0
-        print(f"processed {n} feature combinations in {dt:.3f} seconds")
-
-        ## Store the compiled DataFrame and pre-classifications
-        t0 = time()
-        cdf.to_csv(cdf_path, sep="\t", index=False)
-        np.save(cclass_path, classifications)
-        dt = time() - t0
-        print(f"stored compiled annotation index in {dt:.3f} seconds")
-
-    ## Create a secondary Annotator which uses the non-overlapping combinations
-    ## and the pre-classified annotations for the actual tagging
-    gc = GenomeAnnotation(cdf, joiner)
-
-    t0 = time()
-    annotate_BAM(gc, args.bam_in, args.bam_out)
-    dt = time() - t0
-    print(f"{dt:.3f} seconds. ")
+    ga.annotate_BAM(args.bam_in, args.bam_out, antisense=args.antisense)
