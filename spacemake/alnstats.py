@@ -252,6 +252,13 @@ def make_plots(res, required_aln_types=["unmapped", "mapped", "multimapper", "un
     utaglabels, utagcolors = rep.donut_plot(
         axes[2], utag_types_d, title="annotation (uniq only)", cmap="Dark2"
     )
+    mean_lens_d = {}
+    for mapstat, lens in res.read_lengths_by_mapstat.items():
+        # print(mapstat, lens)
+        l, f = np.array(list(lens.items())).T
+        mean_lens_d[mapstat] = (l * f).sum() / f.sum()
+
+    print(mean_lens_d)
 
     # Second row: histograms
     rep.len_plot(
@@ -354,7 +361,7 @@ def make_plots(res, required_aln_types=["unmapped", "mapped", "multimapper", "un
 
     # axes[3].axis("off")
 
-    return fig, (aln_types_d, tag_types_d, utag_types_d)  # cig_types_d,
+    return fig, (aln_types_d, tag_types_d, utag_types_d, mean_lens_d)  # cig_types_d,
 
 
 def oligo_analysis(res):
@@ -481,7 +488,7 @@ def cmdline():
 
     matplotlib.use("Agg")
 
-    fig, (aln_counts, tag_counts, utag_counts) = make_plots(res)
+    fig, (aln_counts, tag_counts, utag_counts, mean_lens_d) = make_plots(res)
     if args.intact_signature:
         fig.suptitle(f"{sample_name} ({args.intact_signature})")
     else:
@@ -536,6 +543,17 @@ def cmdline():
         ],
         ignore_index=True,
     )
+    for mapstat, meanlen in mean_lens_d.items():
+        df = df.append(
+            dict(
+                name=mapstat,
+                count=meanlen,
+                fraction=1.0,
+                kind="mean_readlen",
+            ),
+            ignore_index=True,
+        )
+
     df.to_csv(f"{args.out_csv}/{sample_name}.csv", sep="\t")
 
 
