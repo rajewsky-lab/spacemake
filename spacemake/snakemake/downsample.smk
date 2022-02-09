@@ -42,14 +42,14 @@ def get_saturation_analysis_input(wildcards):
     # create dictionary with the right downsampling files where  the key
     files = {}
 
-    run_modes = get_run_modes_from_sample(wildcards.project, wildcards.sample)
+    run_modes = get_run_modes_from_sample(wildcards.project_id, wildcards.sample_id)
 
     for run_mode in run_modes:
         for ratio in downsampled_ratios:
         # dge_files contains dge/summary file paths per run_mode
             dge_summary = get_dge_from_run_mode(
-                project_id = wildcards.project,
-                sample_id = wildcards.sample,
+                project_id = wildcards.project_id,
+                sample_id = wildcards.sample_id,
                 run_mode = run_mode,
                 data_root_type = 'downsampled_data',
                 downsampling_percentage = '/' + str(ratio))['dge_summary']
@@ -57,8 +57,8 @@ def get_saturation_analysis_input(wildcards):
             files[f'downsampled_dge_summary.{run_mode}.{ratio}'] = dge_summary
 
         files[f'downsampled_dge_summary.{run_mode}.100'] = get_dge_from_run_mode(
-            project_id = wildcards.project,
-            sample_id = wildcards.sample,
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id,
             run_mode = run_mode,
             data_root_type = 'complete_data',
             downsampling_percentage = '')['dge_summary']
@@ -72,8 +72,8 @@ rule create_saturation_analysis:
         downsample_saturation_analysis
     params:
         sample_info = lambda wildcards: project_df.get_sample_info(
-            wildcards.project, wildcards.sample),
+            wildcards.project_id, wildcards.sample_id),
         run_modes = lambda wildcards: get_run_modes_from_sample(
-            wildcards.project, wildcards.sample)
+            wildcards.project_id, wildcards.sample_id)
     script:
         "scripts/saturation_analysis.Rmd"

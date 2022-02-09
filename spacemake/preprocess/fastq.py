@@ -681,6 +681,9 @@ def process_dropseq(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
         Ns = stat_lists[0]
         Ns.append(N)
 
+        cb_counts = stat_lists[1]
+        cb_counts.append(out.raw_cb_counts)
+
 
 def main_dropseq(args):
     # queues for communication between processes
@@ -695,9 +698,10 @@ def main_dropseq(args):
     abort_flag = mp.Value("b")
     abort_flag.value = False
     Ns = manager.list()
-    stat_lists = [Ns]
+    cb_counts = manager.list()
+    stat_lists = [Ns, cb_counts]
 
-    with ExceptionLogging("main_combinatorial", exc_flag=abort_flag) as el:
+    with ExceptionLogging("main_dropseq", exc_flag=abort_flag) as el:
 
         # read FASTQ in chunks and put them in Qfq
         dispatcher = mp.Process(
@@ -762,21 +766,19 @@ def main_dropseq(args):
             el.logger.info(f"Run completed, {N['total']} reads processed.")
         else:
             el.logger.error("No reads were processed!")
+        # el.logger.debug(print(str(N.keys())[:200]))
+        cb_count = count_dict_sum(cb_counts)
+        if args.save_cell_barcodes:
+            el.logger.info(
+                f"writing {len(cb_count)} barcode counts to '{args.save_cell_barcodes}'"
+            )
+            import gzip
 
-        # N = defaultdict(int)
-        # out = Output(args)
+            with gzip.open(args.save_cell_barcodes, "wt") as f:
+                f.write("cell_bc\traw_read_count\n")
+                for bc, count in sorted(cb_count.items()):
+                    f.write(f"{bc}\t{count}\n")
 
-        # # iterate query sequences
-        # for n, (qname, r1, r2_qname, r2, r2_qual) in enumerate(read_source(args)):
-        #     N["total"] += 1
-        #     out.write(True, qname=qname, r1=r1, r2_qname=r2_qname, r2=r2, r2_qual=r2_qual)
-
-        #     if n and n % 100000 == 0:
-        #         report_stats(N)
-
-        # out.close()
-
-        # report_stats(N)
         if args.save_stats:
             with open(args.save_stats, "w") as f:
                 for k, v in sorted(N.items()):
@@ -802,6 +804,8 @@ class Output:
 
         self.fq_qual = args.fq_qual
         self.bc_na = args.na
+        self.raw_cb_counts = defaultdict(int)
+        self.count_cb = bool(args.save_cell_barcodes)
 
         self.tags = []
         for tag in args.bam_tags.split(","):
@@ -860,6 +864,9 @@ class Output:
         a.flag = 4
         a.query_qualities = pysam.qualitystring_to_array(kw["r2_qual"])
         a.tags = [(name, templ.format(**kw)) for name, templ in self.tags]
+        if self.count_cb:
+            self.raw_cb_counts[kw["cell"]] += 1
+
         return a.to_string()
 
     def make_fastq_record(self, **kw):
@@ -993,6 +1000,11 @@ def parse_args():
         "--save-stats",
         default="preprocessing_stats.txt",
         help="store statistics in this file",
+    )
+    parser.add_argument(
+        "--save-cell-barcodes",
+        default="",
+        help="store (raw) cell barcode counts in this file. Numbers add up to number of total raw reads.",
     )
     parser.add_argument(
         "--log-file",
