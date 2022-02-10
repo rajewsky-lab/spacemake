@@ -1,27 +1,41 @@
 def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
     import scanpy as sc
     import pandas as pd
-    # calculate mitochondrial gene percentage
-    adata.var['mt'] = adata.var_names.str.startswith('Mt-') |\
-            adata.var_names.str.startswith('mt-') |\
-            adata.var_names.str.startswith('MT-')
 
-    sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
-    
+    # calculate mitochondrial gene percentage
+    adata.var["mt"] = (
+        adata.var_names.str.startswith("Mt-")
+        | adata.var_names.str.startswith("mt-")
+        | adata.var_names.str.startswith("MT-")
+    )
+
+    sc.pp.calculate_qc_metrics(
+        adata, qc_vars=["mt"], percent_top=None, log1p=False, inplace=True
+    )
+
     add_reads = False
     if dge_summary_path is not None:
-        dge_summary = pd.read_csv(dge_summary_path, skiprows=7, sep ='\t', index_col = 'cell_bc', names = ['cell_bc', 'n_reads', 'n_umi', 'n_genes'])
+        dge_summary = pd.read_csv(
+            dge_summary_path,
+            skiprows=7,
+            sep="\t",
+            index_col="cell_bc",
+            names=["cell_bc", "n_reads", "n_umi", "n_genes"],
+        )
 
-        adata.obs = pd.merge(adata.obs, dge_summary[['n_reads']], left_index=True, right_index=True)
+        adata.obs = pd.merge(
+            adata.obs, dge_summary[["n_reads"]], left_index=True, right_index=True
+        )
 
         add_reads = True
 
     if n_reads is not None:
-        adata.obs['n_reads'] = n_reads
+        adata.obs["n_reads"] = n_reads
         add_reads = True
 
     if add_reads:
-        adata.obs['reads_per_counts'] = adata.obs.n_reads / adata.obs.total_counts
+        adata.obs["reads_per_counts"] = adata.obs.n_reads / adata.obs.total_counts
+
 
 def calculate_shannon_entropy_scompression(adata):
     import math
@@ -31,28 +45,43 @@ def calculate_shannon_entropy_scompression(adata):
 
     def compute_shannon_entropy(barcode):
         prob, length = Counter(barcode), float(len(barcode))
-        return -sum( count/length * math.log(count/length, 2) for count in prob.values())
+        return -sum(
+            count / length * math.log(count / length, 2) for count in prob.values()
+        )
 
     def compute_string_compression(barcode):
-        compressed_barcode = ''.join(
-                letter + str(len(list(group)))
-                for letter, group in itertools.groupby(barcode))
+        compressed_barcode = "".join(
+            letter + str(len(list(group)))
+            for letter, group in itertools.groupby(barcode)
+        )
 
         return len(compressed_barcode)
 
     bc = adata.obs.index.to_numpy()
     bc_len = len(bc[0])
-    theoretical_barcodes = np.random.choice(['A','C', 'T', 'G'],
-        size = (bc.shape[0], bc_len))
+    theoretical_barcodes = np.random.choice(
+        ["A", "C", "T", "G"], size=(bc.shape[0], bc_len)
+    )
 
-    adata.obs['exact_entropy'] = np.round(np.array(
-        [compute_shannon_entropy(cell_bc) for cell_bc in bc]), 2)
-    adata.obs['theoretical_entropy'] = np.round(np.array(
-        [compute_shannon_entropy(cell_bc) for cell_bc in theoretical_barcodes]), 2)
-    adata.obs['exact_compression'] = np.round(np.array(
-        [compute_string_compression(cell_bc) for cell_bc in bc]), 2)
-    adata.obs['theoretical_compression'] = np.round(np.array(
-        [compute_string_compression(cell_bc) for cell_bc in theoretical_barcodes]), 2)
+    adata.obs["exact_entropy"] = np.round(
+        np.array([compute_shannon_entropy(cell_bc) for cell_bc in bc]), 2
+    )
+    adata.obs["theoretical_entropy"] = np.round(
+        np.array(
+            [compute_shannon_entropy(cell_bc) for cell_bc in theoretical_barcodes]
+        ),
+        2,
+    )
+    adata.obs["exact_compression"] = np.round(
+        np.array([compute_string_compression(cell_bc) for cell_bc in bc]), 2
+    )
+    adata.obs["theoretical_compression"] = np.round(
+        np.array(
+            [compute_string_compression(cell_bc) for cell_bc in theoretical_barcodes]
+        ),
+        2,
+    )
+
 
 def dge_to_sparse_adata(dge_path, dge_summary_path):
     import anndata
@@ -66,9 +95,9 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
     matrices = []
     gene_names = []
 
-    with gzip.open(dge_path, 'rt') as dge:
-        first_line = dge.readline().strip().split('\t')
-
+    with gzip.open(dge_path, "rt") as dge:
+        first_line = dge.readline().strip().split("\t")
+        has_mt = False
         barcodes = first_line[1:]
         ncol = len(barcodes)
 
@@ -82,16 +111,19 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
         # first row: contains CELL BARCODEs
         # each next row contains one gene name, and the counts of that gene
         for line in dge:
-            vals = line.strip().split('\t')
+            vals = line.strip().split("\t")
             # first element contains the gene name
             # append gene name to gene_names
             gene_names.append(vals[0])
+            if vals[0].lower().startswith("mt-"):
+                has_mt = True
+
             vals = vals[1:]
 
             # store counts as np.array
             vals = np.array(vals, dtype=np.int64)
 
-            # update the 1000xcell_number matrix 
+            # update the 1000xcell_number matrix
             M[ix] = vals
 
             if ix % 1000 == 999:
@@ -112,16 +144,23 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
         matrices.append(csr_matrix(M))
 
         # sparse expression matrix
-        X = vstack(matrices, format='csr')
-        
+        X = vstack(matrices, format="csr")
+        if not has_mt:
+            # ensure we have an entry for mitochondrial transcripts even if it's just all zeros
+            print(
+                "need to add mt-missing because no mitochondrial stuff was among the genes for annotation"
+            )
+            gene_names.append("mt-missing")
+            X = vstack([X, np.zeros(X.shape[1])]).tocsr()
+
         # create anndata object, but we get the transpose of X, so matrix will
         # be in CSC format
-        adata = anndata.AnnData(X.T,
-                obs = pd.DataFrame(index=barcodes),
-                var = pd.DataFrame(index=gene_names))
+        adata = anndata.AnnData(
+            X.T, obs=pd.DataFrame(index=barcodes), var=pd.DataFrame(index=gene_names)
+        )
 
         # name the index
-        adata.obs.index.name = 'cell_bc'
+        adata.obs.index.name = "cell_bc"
 
         # attach metrics such as: total_counts, pct_mt_counts, etc
         # also attach n_genes, and calculate pcr
@@ -131,6 +170,7 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
         calculate_shannon_entropy_scompression(adata)
 
         return adata
+
 
 def load_external_dge(dge_path):
     import anndata
@@ -143,14 +183,16 @@ def load_external_dge(dge_path):
     adata = sc.read(dge_path)
 
     if not check_nonnegative_integers(adata.X):
-        raise SpacemakeError(f'External dge seems to contain values '+
-            'which are already normalised. Raw-count matrix expected.')
+        raise SpacemakeError(
+            f"External dge seems to contain values "
+            + "which are already normalised. Raw-count matrix expected."
+        )
 
     if not issparse(adata.X):
         adata.X = csc_matrix(adata.X)
 
     # name the index
-    adata.obs.index.name = 'cell_bc'
+    adata.obs.index.name = "cell_bc"
 
     # attach metrics such as: total_counts, pct_mt_counts, etc
     # also attach n_genes, and calculate pcr
@@ -158,21 +200,32 @@ def load_external_dge(dge_path):
 
     return adata
 
+
 def parse_barcode_file(barcode_file):
     import pandas as pd
 
-    bc = pd.read_csv(barcode_file, sep='[,|\t]', engine='python')
+    bc = pd.read_csv(barcode_file, sep="[,|\t]", engine="python")
 
     # rename columns
-    bc = bc.rename(columns={'xcoord':'x_pos', 'ycoord':'y_pos','barcodes':'cell_bc', 'barcode':'cell_bc'})\
-        .set_index('cell_bc')\
-        .loc[:, ['x_pos', 'y_pos']]
+    bc = (
+        bc.rename(
+            columns={
+                "xcoord": "x_pos",
+                "ycoord": "y_pos",
+                "barcodes": "cell_bc",
+                "barcode": "cell_bc",
+            }
+        )
+        .set_index("cell_bc")
+        .loc[:, ["x_pos", "y_pos"]]
+    )
 
-    bc = bc.loc[~bc.index.duplicated(keep='first')]
+    bc = bc.loc[~bc.index.duplicated(keep="first")]
 
-    bc = bc.loc[~bc.index.duplicated(keep='first')]
+    bc = bc.loc[~bc.index.duplicated(keep="first")]
 
     return bc
+
 
 def attach_barcode_file(adata, barcode_file):
     import pandas as pd
@@ -180,10 +233,9 @@ def attach_barcode_file(adata, barcode_file):
     bc = parse_barcode_file(barcode_file)
 
     # new obs has only the indices of the exact barcode matches
-    new_obs = adata.obs.merge(bc, left_index=True, right_index=True, how='inner')
+    new_obs = adata.obs.merge(bc, left_index=True, right_index=True, how="inner")
     adata = adata[new_obs.index, :]
     adata.obs = new_obs
-    adata.obsm['spatial'] = adata.obs[['x_pos', 'y_pos']].to_numpy()
+    adata.obsm["spatial"] = adata.obs[["x_pos", "y_pos"]].to_numpy()
 
     return adata
-
