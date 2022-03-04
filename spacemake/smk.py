@@ -18,7 +18,6 @@ project_df = "project_df.csv"
 logger_name = "spacemake.main"
 logger = logging.getLogger(logger_name)
 
-
 def get_run_parser():
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
 
@@ -63,7 +62,6 @@ def get_run_parser():
 
     return parser
 
-
 def setup_init_parser(parent_parser):
     parser_init = parent_parser.add_parser(
         "init",
@@ -93,7 +91,6 @@ def setup_init_parser(parent_parser):
     parser_init.set_defaults(func=spacemake_init)
 
     return parser_init
-
 
 def setup_run_parser(pdf, parent_parser):
     parser_run = parent_parser.add_parser(
@@ -372,7 +369,6 @@ def spacemake_run(pdf, args):
     if run_successful is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
 
-
 #################
 # DEFINE PARSER #
 #################
@@ -454,6 +450,6 @@ def cmdline():
 
     func(args)
 
-
 if __name__ == "__main__":
     cmdline()
+

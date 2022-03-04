@@ -1,19 +1,12 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[318]:
-
-
 import pandas as pd
 import numpy as np
 import cv2
 import scanpy as sc
-from sklearn.mixture import GaussianMixture
 
-
-def create_visium_bead_img(adata):
-    width = height = 6500
-    bead_diameter = 55
+def create_visium_bead_img(adata,
+    width=6500,
+    bead_diameter=55
+):
     width = width + bead_diameter
     height = height + bead_diameter
     
@@ -29,8 +22,6 @@ def create_visium_bead_img(adata):
         #if row['tissue']:
         cv2.circle(bead_img, (int(row['y_pos']), int(row['x_pos'])), int(bead_diameter/2), (255,255,255), -1)
         
-    cv2.imwrite('tmp.png', bead_img)
-     
     bead_img = 255 - bead_img
     
     bead_img = cv2.resize(bead_img, (1000, 1000), cv2.INTER_AREA)
@@ -38,7 +29,6 @@ def create_visium_bead_img(adata):
     bead_img[bead_img<255] = 0
     
     return bead_img
-
 
 def create_seq_scope_bead_img(adata, filter_percentage=70):
     seq_scope_df = adata.obs.copy()
@@ -53,10 +43,11 @@ def create_seq_scope_bead_img(adata, filter_percentage=70):
     
     scale_f = int(img.shape[0]/500)
     
+    # creating a 500x500 pixel image
     img_scaled=np.add.reduceat(img, range(0, img.shape[0],scale_f))
     img_scaled=np.add.reduceat(img_scaled, range(0, img.shape[1],scale_f), axis=1)
 
-    # get only top 20%
+    # get only top 30%, by default
     filter_val = np.percentile(img_scaled.flatten(), filter_percentage)
     
     img_scaled_bw = img_scaled.copy()
@@ -99,7 +90,6 @@ def fill_image(X, n_neighbors=3, infer_square_side=3):
 
     return Y
 
-
 def fill_holes_by_neighbors(dat, dist=2):
     top = np.zeros(dat.shape, dtype=np.uint8)
     bottom = np.zeros(dat.shape, dtype=np.uint8)
@@ -134,9 +124,6 @@ def match_he_img(he_path, bead_img, bw_threshold=None, use_bw=True):
                                  bead_img_cnt[1].min():bead_img_cnt[1].max()]
     
     he, he_gray, he_bw = load_he_img(he_path, bw_threshold=bw_threshold)
-    cv2.imwrite('he_gray.png', he_gray)
-    cv2.imwrite('he_bw.png', he_bw)
-    cv2.imwrite('he.png', he)
     
     he_orig = he.copy()
     
@@ -248,16 +235,6 @@ def match_he_img(he_path, bead_img, bw_threshold=None, use_bw=True):
 
     return highest_cor, he, he_orig, top_left, bottom_right
 
-
-# In[ ]:
-
-
-
-
-
-# In[319]:
-
-
 def match_he_visium(adata, he_path):
     bead_img = create_visium_bead_img(adata)
 
@@ -295,317 +272,6 @@ def match_he_visium(adata, he_path):
     
     return he_orig, he_match
 
-
-# In[ ]:
-
-
-
-
-
-# In[320]:
-
-
-from spacemake.config import ConfigFile
-from spacemake.project_df import ProjectDF
-
-class SpaceMake:
-    def __init__(self, root):
-        self.root = root
-        self.config = ConfigFile.from_yaml(f'{root}/config.yaml')
-        self.project_df = ProjectDF(f'{root}/project_df.csv', config=self.config)
-    
-    def load_processed_adata(self,
-        project,
-        sample,
-        run_mode_name,
-        umi_cutoff 
-    ):
-        run_mode = self.config.get_run_mode(run_mode_name)
-        
-        adata = sc.read(f'{self.root}/projects/{project}/processed_data/{sample}/'                   f'illumina/complete_data/automated_analysis/{run_mode_name}/'                   f'umi_cutoff_{umi_cutoff}/results.h5ad')
-        
-        adata.uns['run_mode_variables'] = run_mode.variables
-        adata.uns['puck_variables'] = self.project_df.get_puck_variables(
-            project_id = project,
-            sample_id = sample)
-        
-        return adata
-    
-    def load_raw_spatial_adata(
-        self,
-        project,
-        sample,
-        run_mode_name
-    ):
-        run_mode = self.config.get_run_mode(run_mode_name)
-
-        dge_type = ""
-        dge_cleaned = ""
-        polyA_adapter_trimmed = ""
-        mm_included = ""
-
-        if run_mode.variables["polyA_adapter_trimming"]:
-            polyA_adapter_trimmed = ".polyA_adapter_trimmed"
-
-        if run_mode.variables["count_intronic_reads"]:
-            dge_type = ".all"
-        else:
-            dge_type = ".exon"
-
-        if run_mode.variables["count_mm_reads"]:
-            mm_included = ".mm_included"
-
-        if run_mode.variables["clean_dge"]:
-            dge_cleaned = ".cleaned"
-
-        adata = sc.read(f'{self.root}/projects/{project}/processed_data/{sample}/'            f'illumina/complete_data/dge/dge{dge_type}{dge_cleaned}'            f'{polyA_adapter_trimmed}{mm_included}.spatial_beads.h5ad')
-        
-        adata.uns['run_mode_variables'] = run_mode.variables
-        adata.uns['puck_variables'] = self.project_df.get_puck_variables(
-            project_id = project,
-            sample_id = sample)
-        
-        return adata
-
-
-# In[ ]:
-
-
-
-
-
-# In[321]:
-
-
-def attach_he_adata(
-    adata,
-    matched_he,
-    adata_raw=None,
-    push_by_bead_diameter=True,
-):
-    import math
-    # get the width of the puck
-    puck_width_um = adata.uns['puck_variables']['width_um']
-    bead_diameter_um = adata.uns['puck_variables']['spot_diameter_um']
-    
-    if adata.uns['run_mode_variables']['mesh_data']:
-        bead_diameter_um = math.sqrt(3) * adata.uns['run_mode_variables']['mesh_spot_diameter_um']
-    
-    if adata_raw is None:
-        adata_raw = adata
-    
-    bead_width = adata_raw.obsm['spatial'].max(axis=0)[0] - adata_raw.obsm['spatial'].min(axis=0)[0]
-
-    bead_distance_um = puck_width_um / bead_width
-
-
-    # get the width of the processed adata
-    adata_width_um = bead_distance_um *        (adata.obsm['spatial'].max(axis=0)[0] - adata.obsm['spatial'].min(axis=0)[0])
-
-    # rotate he to align with coordinate system of scanpy
-    rotated_he = cv2.flip(cv2.rotate(matched_he, cv2.ROTATE_90_CLOCKWISE), 1)
-    
-    h_px, w_px = rotated_he.shape[:2]
-
-    px_per_um = w_px / adata_width_um 
-
-    # convert so that origin at 0, 0
-    locations = adata.obsm['spatial']
-    locations = locations - locations.min(axis=0)
-
-    bead_diameter_px = bead_diameter_um * px_per_um
-
-    locations = locations * [(w_px ) / locations.max(axis=0)[0],
-                             (h_px ) / locations.max(axis=0)[1]]
-    
-    if push_by_bead_diameter:
-        locations = [bead_diameter_px, bead_diameter_px] + locations
-        
-    locations = locations.astype('int')
-
-    adata.uns['spatial']={
-        'img': {'images': {
-                    'hires': rotated_he
-                    },
-                'scalefactors': {'tissue_hires_scalef': 1,
-                                 'spot_diameter_fullres': bead_diameter_px}} 
-    }
-    adata.obsm['spatial'] = locations
-    
-    return adata
-
-
-# In[322]:
-
-
-import scanpy as sc
-sc.set_figure_params(dpi=300)
-
-spmk = SpaceMake('/data/rajewsky/home/tsztank/projects/spatial/sts-paper')
-
-cluster_clrs = ["#0000FF","#FF0000","#00FF00","#000033","#FF00B6","#005300","#FFD300",
-"#009FFF","#9A4D42","#00FFBE","#783FC1","#1F9698","#FFACFD","#B1CC71",
-"#F1085C","#FE8F42","#DD00FF","#201A01","#720055","#766C95","#02AD24",
-"#C8FF00","#886C00","#FFB79F","#858567","#A10300","#14F9FF","#00479E",
-"#DC5E93","#93D4FF","#004CFF","#F2F318"]
-
-cluster_clrs = {str(i): cluster_clrs[i] for i in range(len(cluster_clrs))}
-
-adata = spmk.load_processed_adata(
-    project = 'visium',
-    sample = 'public_1',
-    run_mode_name = 'exon',
-    umi_cutoff = 10000
-)
-adata_raw = spmk.load_raw_spatial_adata(
-    'visium', 'public_1', 'exon'
-)
-
-he, matched_he = match_he_visium(adata, './V1_Adult_Mouse_Brain_image_small.tif')
-cv2.imwrite('mouse_coronal.png', he)
-
-adata = attach_he_adata(adata, matched_he, adata_raw)
-
-
-# In[ ]:
-
-
-plt = sc.pl.spatial(adata, color='leiden_1.2', palette=cluster_clrs, return_fig=True, show=False, title='')
-                 
-plt[0].invert_yaxis()
-plt[0].figure
-plt[0].set_xlabel('')
-plt[0].set_ylabel('')
-ticks = [x * 19.5 for x in range(1, 7, 2)]
-ticks_labels = ['2mm', '4mm', '6mm']
-
-ticks_x = [x * 7 for x in ticks]
-ticks_y = [x * 6.5 for x in ticks]
-plt[0].set_xticks(ticks_x)
-plt[0].set_xticklabels(ticks_labels)
-plt[0].set_yticks(ticks_y)
-plt[0].set_yticklabels(ticks_labels)
-plt[0].grid(False)
-
-
-# In[ ]:
-
-
-
-
-plt = sc.pl.spatial(adata, color='leiden_1.2', groups=['21', '22', '23'],  palette=cluster_clrs, return_fig=True,
-                   show = False, title='')
-plt[0].invert_yaxis()
-plt[0].figure
-
-plt[0].set_xlabel('')
-plt[0].set_ylabel('')
-ticks = [x * 19.5 for x in range(1, 7, 2)]
-ticks_labels = ['2mm', '4mm', '6mm']
-
-ticks_x = [x * 7 for x in ticks]
-ticks_y = [x * 6.5 for x in ticks]
-plt[0].set_xticks(ticks_x)
-plt[0].set_xticklabels(ticks_labels)
-plt[0].set_yticks(ticks_y)
-plt[0].set_yticklabels(ticks_labels)
-plt[0].grid(False)
-
-
-# In[ ]:
-
-
-plt = sc.pl.spatial(adata, color='leiden_1.2', palette=cluster_clrs,
-              return_fig=True, show=False, title='', img_key=None)
-
-plt[0].set_facecolor((240/256,240/256,240/256))
-plt[0].invert_yaxis()
-plt[0].figure
-plt[0].set_xlabel('')
-plt[0].set_ylabel('')
-ticks = [x * 19.5 for x in range(1, 7, 2)]
-ticks_labels = ['2mm', '4mm', '6mm']
-
-ticks_x = [x * 7 for x in ticks]
-ticks_y = [x * 6.5 for x in ticks]
-plt[0].set_xticks(ticks_x)
-plt[0].set_xticklabels(ticks_labels)
-plt[0].set_yticks(ticks_y)
-plt[0].set_yticklabels(ticks_labels)
-plt[0].grid(False)
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-xs
-
-
-# In[ ]:
-
-
-px_to_pos = adata.obsm['spatial'].max(axis=0)[1]/(tmp.obs.y_pos.max() - tmp.obs.y_pos.min())
-px_to_pos
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-adata = spmk.load_processed_adata(
-    project = 'visium',
-    sample = 'visium_mouse_brain_sagittal_anterior',
-    run_mode_name = 'exon_mm',
-    umi_cutoff = 12000
-)
-
-adata_raw = spmk.load_raw_spatial_adata(
-    'visium', 'visium_mouse_brain_sagittal_anterior', 'exon_mm'
-)
-
-he, matched_he = match_he_visium(adata, './V1_Mouse_Brain_Sagittal_Anterior_image_sm.tif')
-cv2.imwrite('mouse_saggital.png', matched_he)
-
-adata = attach_he_adata(adata, matched_he, adata_raw)
-
-sc.pl.spatial(adata, color='leiden_1.2', palette=cluster_clrs)
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-adata = load_processed_adata(
-    root = root,
-    project = 'visium',
-    sample = 'visium_mouse_kidney',
-    run_mode = 'exon_mm',
-    umi_cutoff = 12000
-)
-
-matched_he = match_he_visium(adata, './V1_Mouse_Kidney_image_sm.tif')
-cv2.imwrite('mouse_kidney.png', matched_he)
-
-
-# In[340]:
-
-
 def match_he_seq_scope(adata, he_path, suffix='',
                        bw_threshold=200, filter_percentage=70,
                        box_size=0.5):
@@ -620,20 +286,15 @@ def match_he_seq_scope(adata, he_path, suffix='',
 
     # save intermediate files
     tmp_img = cv2.cvtColor(bead_img.copy(), cv2.COLOR_GRAY2BGR)
-    cv2.imwrite(f'bead_img_{suffix}.png', tmp_img)
     cv2.rectangle(tmp_img, bottom_right, top_left, (180, 233, 86), 2)
-    cv2.imwrite(f'bead_img_box_{suffix}.png', tmp_img)
     
     tmp_img = cv2.cvtColor(bead_img_bw.copy(), cv2.COLOR_GRAY2BGR)
-    cv2.imwrite(f'bead_img_bw_{suffix}.png', tmp_img)
     cv2.rectangle(tmp_img, bottom_right, top_left, (180, 233, 86), 2)
-    cv2.imwrite(f'bead_img_bw_box_{suffix}.png', tmp_img)
 
     img= bead_img_bw[
         top_left[1]:bottom_right[1],
         top_left[0]:bottom_right[0]    
     ]
-
 
     highest_cor, he_res, he_orig, tl, br = match_he_img(
         he_path,
@@ -684,79 +345,59 @@ def match_he_seq_scope(adata, he_path, suffix='',
     
     return he_orig, he_match
 
+def attach_he_adata(
+    adata,
+    matched_he,
+    adata_raw=None,
+    push_by_bead_diameter=True,
+):
+    import math
+    # get the width of the puck
+    puck_width_um = adata.uns['puck_variables']['width_um']
+    bead_diameter_um = adata.uns['puck_variables']['spot_diameter_um']
+    
+    if adata.uns['run_mode_variables']['mesh_data']:
+        bead_diameter_um = math.sqrt(3) * adata.uns['run_mode_variables']['mesh_spot_diameter_um']
+    
+    if adata_raw is None:
+        adata_raw = adata
+    
+    bead_width = adata_raw.obsm['spatial'].max(axis=0)[0] - adata_raw.obsm['spatial'].min(axis=0)[0]
 
-# In[ ]:
+    bead_distance_um = puck_width_um / bead_width
 
+    # get the width of the processed adata
+    adata_width_um = bead_distance_um *        (adata.obsm['spatial'].max(axis=0)[0] - adata.obsm['spatial'].min(axis=0)[0])
 
-adata = load_raw_spatial_adata(root,
-    'seq_scope', 'seq_scope_liver_2105', 'seq_scope')
+    # rotate he to align with coordinate system of scanpy
+    rotated_he = cv2.flip(cv2.rotate(matched_he, cv2.ROTATE_90_CLOCKWISE), 1)
+    
+    h_px, w_px = rotated_he.shape[:2]
 
+    px_per_um = w_px / adata_width_um 
 
-# In[ ]:
+    # convert so that origin at 0, 0
+    locations = adata.obsm['spatial']
+    locations = locations - locations.min(axis=0)
 
+    bead_diameter_px = bead_diameter_um * px_per_um
 
-spmk.project_df.get_metadata(
-            "puck", project_id='seq_scope', sample_id='seq_scope_liver_2105'
-        )
+    locations = locations * [(w_px ) / locations.max(axis=0)[0],
+                             (h_px ) / locations.max(axis=0)[1]]
+    
+    if push_by_bead_diameter:
+        locations = [bead_diameter_px, bead_diameter_px] + locations
+        
+    locations = locations.astype('int')
 
-
-# In[343]:
-
-
-adata = spmk.load_processed_adata(
-    project = 'seq_scope',
-    sample = 'seq_scope_liver_2106',
-    run_mode_name = 'seq_scope',
-    umi_cutoff = 300
-)
-
-adata_raw = spmk.load_raw_spatial_adata(
-    'seq_scope', 'seq_scope_liver_2106', 'seq_scope'
-)
-
-he, matched_he = match_he_seq_scope(adata_raw,
-                                './wt_4X_1.jpg',
-                                '2106', bw_threshold=180, box_size=0.7)
-
-cv2.imwrite('matched_he_2106.png', he)
-
-
-# In[ ]:
-
-
-matched_he.shape
-
-
-# In[ ]:
-
-
-#adata = attach_he_adata(adata, matched_he, adata_raw)
-sc.pl.spatial(adata,color='total_counts',palette=cluster_clrs)
-sc.pl.spatial(adata,palette=cluster_clrs)
-
-
-# In[ ]:
-
-
-adata = load_raw_adata(root, 'seq_scope', 'seq_scope_liver_2106')
-
-matched_he = match_he_seq_scope(adata,
-                                './wt_4X_1.jpg',
-                                '2106',
-                                bw_threshold=190,
-                                box_size=0.7)
-cv2.imwrite('matched_he_2106.png', matched_he)
-
-
-# In[ ]:
-
-
-adata = load_raw_adata(root, 'seq_scope', 'seq_scope_liver_2107')
-
-matched_he = match_he_seq_scope(adata,
-                                './wt_4X_1.jpg',
-                                '2107',
-                                bw_threshold=200,
-                                box_size=0.6)
-cv2.imwrite('matched_he_2107.png', matched_he)
+    adata.uns['spatial']={
+        'img': {'images': {
+                    'hires': rotated_he
+                    },
+                'scalefactors': {'tissue_hires_scalef': 1,
+                                 'spot_diameter_fullres': bead_diameter_px}} 
+    }
+    adata.obsm['spatial'] = locations
+    
+    return adata
 
