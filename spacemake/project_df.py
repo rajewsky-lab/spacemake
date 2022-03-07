@@ -14,7 +14,6 @@ from typing import List, Dict
 
 logger_name = "spacemake.project_df"
 
-
 def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
     """
     Return a parser for project_id's and sample_id's
@@ -736,6 +735,7 @@ class ProjectDF:
         :rtype: Dict
         """
         # returns sample info from the projects df
+        self.assert_sample(project_id, sample_id)
         out_dict = self.df.loc[(project_id, sample_id)].to_dict()
 
         return out_dict
@@ -975,6 +975,14 @@ class ProjectDF:
             raise ProjectSampleNotFoundError(
                 "(project_id, sample_id)", (project_id, sample_id)
             )
+    
+    def assert_run_mode(self, project_id, sample_id, run_mode_name):
+        variables = self.get_sample_info(project_id, sample_id)
+
+        if run_mode_name not in variables['run_mode']:
+            raise SpacemakeError(f'(project_id, sample_id)=({project_id},' +
+                f'{sample_id}) has no run_mode={run_mode_name}')
+        
 
     def add_update_sample(
         self,

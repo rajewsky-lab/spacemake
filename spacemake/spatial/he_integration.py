@@ -2,6 +2,10 @@ import pandas as pd
 import numpy as np
 import cv2
 import scanpy as sc
+import logging
+
+logger_name = "spacemake.spatial"
+logger = logging.getLogger(logger_name)
 
 def create_visium_bead_img(adata,
     width=6500,
@@ -30,7 +34,7 @@ def create_visium_bead_img(adata,
     
     return bead_img
 
-def create_seq_scope_bead_img(adata, filter_percentage=70):
+def create_grayscale_expression_img(adata, filter_percentage=70):
     seq_scope_df = adata.obs.copy()
     # load the clusters in their places as per coordinates
     max_x = seq_scope_df.x_pos.max()
@@ -275,7 +279,7 @@ def match_he_visium(adata, he_path):
 def match_he_seq_scope(adata, he_path, suffix='',
                        bw_threshold=200, filter_percentage=70,
                        box_size=0.5):
-    bead_img, bead_img_bw = create_seq_scope_bead_img(adata, filter_percentage)
+    bead_img, bead_img_bw = create_grayscale_expression_img(adata, filter_percentage)
 
     h, w = bead_img.shape
 
