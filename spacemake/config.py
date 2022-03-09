@@ -589,8 +589,7 @@ class ConfigFile:
     def add_variable(self, variable, name, **kwargs):
         if not self.variable_exists(variable, name):
             values = self.process_variable_args(variable, **kwargs)
-            print(values)
-            #self.variables[variable][name] = values
+            self.variables[variable][name] = values
         else:
             if variable in ['run_modes', 'pucks', 'barcode_flavors']:
                 # drop the last s
