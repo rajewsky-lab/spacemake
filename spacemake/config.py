@@ -564,7 +564,7 @@ class ConfigFile:
         puck = {}
 
         if width_um is not None:
-            puck['width_um'] = float(width_um),
+            puck['width_um'] = float(width_um)
 
         if spot_diameter_um is not None:
             puck['spot_diameter_um'] = float(spot_diameter_um)
@@ -589,7 +589,8 @@ class ConfigFile:
     def add_variable(self, variable, name, **kwargs):
         if not self.variable_exists(variable, name):
             values = self.process_variable_args(variable, **kwargs)
-            self.variables[variable][name] = values
+            print(values)
+            #self.variables[variable][name] = values
         else:
             if variable in ['run_modes', 'pucks', 'barcode_flavors']:
                 # drop the last s
