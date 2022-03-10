@@ -37,3 +37,4 @@ dependencies:
         - scikit-learn>=0.23.1
         - squidpy>=1.0.0
         - novosparc
+        - opencv-python

@@ -1,8 +1,10 @@
 from ..config import ConfigFile
 from ..project_df import ProjectDF
 
-from .he_integration import create_grayscale_expression_img
+from .he_integration import create_aggregated_expression_img, \
+    create_bead_expression_img
 from ..util import message_aggregation, bool_in_str, str2bool
+from ..errors import SpacemakeError
 
 import argparse
 import logging
@@ -22,12 +24,21 @@ def get_expression_img_parser(with_umi_cutoff = False):
     parser.add_argument('--run_mode', type=str,
         required=True)
 
-    if with_umi_cutoff:
-        parser.add_argument('--umi_cutoff', type=int,
-            required=True)
+    parser.add_argument('--umi_cutoff', type=int,
+        required=False)
 
     parser.add_argument('--filter_percentage',
         type=int, required=False, default=70)
+
+    parser.add_argument('--binary', type=str,
+        required=False, default='False')
+
+    parser.add_argument('--processed_data', type=str,
+        required=False, default='False')
+
+    parser.add_argument('--out_img',
+        type=str,
+        required=True)
 
     return parser
 
@@ -37,29 +48,49 @@ def setup_spatial_parser(spmk, attach_to):
 
     subparsers = parser.add_subparsers()
 
-    grayscale_img_parser = subparsers.add_parser(
-        'generate_grayscale_expression_img',
+    aggregated_img_parser = subparsers.add_parser(
+        'create_aggregated_expression_img',
         parents=[get_expression_img_parser()])
 
-    grayscale_img_parser.add_argument('--out_img',
-        type=str,
-        required=True)
+    aggregated_img_parser.set_defaults(
+        func=lambda args: create_expression_img_cmdline(spmk, args,
+            'aggregated'))
 
-    grayscale_img_parser.set_defaults(
-        func=lambda args: generate_grayscale_expression_img_cmdline(spmk, args))
+    bead_img_parser = subparsers.add_parser(
+        'create_bead_expression_img',
+        parents=[get_expression_img_parser()])
+
+    bead_img_parser.set_defaults(
+        func=lambda args: create_expression_img_cmdline(spmk, args,
+            'bead'))
 
 @message_aggregation(logger_name)
-def generate_grayscale_expression_img_cmdline(spmk, args):
+def create_expression_img_cmdline(spmk, args, img_type):
     import cv2 
 
-    logger.info('Loading raw dge file...')
-    adata_raw = spmk.load_raw_spatial_adata(
-        project_id = args['project_id'],
-        sample_id = args['sample_id'],
-        run_mode_name = args['run_mode'])
+    logger.info('Loading dge file...')
 
-    logger.info('Generating grayscale image...')
-    img, img_be = create_grayscale_expression_img(adata_raw,
-        filter_percentage=args['filter_percentage'])
+    if str2bool(args['processed_data']):
+        if not 'umi_cutoff' in args:
+            raise SpacemakeError('When creating image from processed data,'
+                ' a --umi_cutoff value must be provided') 
+
+        adata = spmk.load_processed_adata(
+            project_id = args['project_id'],
+            sample_id = args['sample_id'],
+            run_mode_name = args['run_mode'],
+            umi_cutoff = args['umi_cutoff'])
+
+    else:
+        adata = spmk.load_raw_spatial_adata(
+            project_id = args['project_id'],
+            sample_id = args['sample_id'],
+            run_mode_name = args['run_mode'])
+
+    logger.info(f'Generating {img_type} expression image...')
+    if img_type == 'bead':
+        img = create_bead_expression_img(adata,
+            binary=str2bool(args['binary']))
+
 
     cv2.imwrite(args['out_img'], img)

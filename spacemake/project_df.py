@@ -981,7 +981,8 @@ class ProjectDF:
 
         if run_mode_name not in variables['run_mode']:
             raise SpacemakeError(f'(project_id, sample_id)=({project_id},' +
-                f'{sample_id}) has no run_mode={run_mode_name}')
+                f'{sample_id}) has no run_mode={run_mode_name}\n' +
+                f'run_mode has to be one of {variables["run_mode"]}')
         
 
     def add_update_sample(

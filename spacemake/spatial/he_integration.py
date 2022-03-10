@@ -4,49 +4,78 @@ import cv2
 import scanpy as sc
 import logging
 
+from spacemake.errors import SpacemakeError
+
 logger_name = "spacemake.spatial"
 logger = logging.getLogger(logger_name)
 
-def create_visium_bead_img(adata,
-    width=6500,
-    bead_diameter=55
-):
+def create_bead_expression_img(
+        adata,
+        binary=True,
+    ):
+    df = adata.obs.copy()
+    x_pos_max = df.x_pos.max()
+    y_pos_max = df.y_pos.max()
+    coord_by_um = adata.uns['puck_variables']['coord_by_um']
+
+    width = int(x_pos_max / coord_by_um)
+    height = int(y_pos_max / coord_by_um)
+
+    bead_diameter = int(adata.uns['puck_variables']['spot_diameter_um'])
+
     width = width + bead_diameter
     height = height + bead_diameter
     
     bead_img = np.zeros((height, width), np.uint8)
+
+    df.total_counts = df.total_counts * 255 / df.total_counts.max()
     
-    max_x_pos = adata.obs.x_pos.max()
-    max_y_pos = adata.obs.y_pos.max()
+    df.x_pos = df.x_pos * height / x_pos_max + int(bead_diameter/2)
+    df.y_pos = df.y_pos * width / y_pos_max + int(bead_diameter/2)
     
-    adata.obs.x_pos = adata.obs.x_pos * height / max_x_pos + int(bead_diameter/2)
-    adata.obs.y_pos = adata.obs.y_pos * width / max_y_pos + int(bead_diameter/2)
-    
-    for i, row in adata.obs.iterrows():
+    for i, row in df.iterrows():
         #if row['tissue']:
-        cv2.circle(bead_img, (int(row['y_pos']), int(row['x_pos'])), int(bead_diameter/2), (255,255,255), -1)
+        if binary:
+            color = 255
+        else:
+            color = int(row['total_counts'])
+
+        # draw the circle
+        cv2.circle(bead_img,
+                   (int(row['y_pos']), int(row['x_pos'])),
+                   int(bead_diameter/2),
+                   (color, color, color), -1)
         
     bead_img = 255 - bead_img
     
     bead_img = cv2.resize(bead_img, (1000, 1000), cv2.INTER_AREA)
     
-    bead_img[bead_img<255] = 0
+    if binary:
+        bead_img[bead_img<255] = 0
     
     return bead_img
 
-def create_grayscale_expression_img(adata, filter_percentage=70):
-    seq_scope_df = adata.obs.copy()
+def create_aggregated_expression_img(adata, filter_percentage=70):
+    df = adata.obs.copy()
     # load the clusters in their places as per coordinates
-    max_x = seq_scope_df.x_pos.max()
-    max_y = seq_scope_df.y_pos.max()
+    df.x_pos = df.x_pos.astype('int')
+    df.y_pos = df.y_pos.astype('int')
 
-    img = np.zeros((int(max_x)+1, int(max_y)+1), np.uint8)
+    max_x = df.x_pos.max()
+    max_y = df.y_pos.max()
 
-    img[seq_scope_df.x_pos, seq_scope_df.y_pos] = seq_scope_df.total_counts
+    img = np.zeros((max_x+1, max_y+1), np.uint8)
+
+    img[df.x_pos, df.y_pos] = df.total_counts
     
-    
+    if max_x <= 500 or max_y <= 500:
+        raise SpacemakeError('Underlying spatial coordinates cannot be aggregated\n'+
+            'Only coordinates with maximum values for x_pos and y_pos ' +
+            'both higher than 500 can be aggregated\n' +
+            'Use `spacemake spatial create_bead_expression_img` instead')
+
     scale_f = int(img.shape[0]/500)
-    
+
     # creating a 500x500 pixel image
     img_scaled=np.add.reduceat(img, range(0, img.shape[0],scale_f))
     img_scaled=np.add.reduceat(img_scaled, range(0, img.shape[1],scale_f), axis=1)
@@ -239,8 +268,8 @@ def match_he_img(he_path, bead_img, bw_threshold=None, use_bw=True):
 
     return highest_cor, he, he_orig, top_left, bottom_right
 
-def match_he_visium(adata, he_path):
-    bead_img = create_visium_bead_img(adata)
+def match_he_bead_img(adata, he_path):
+    bead_img = create_expression_bead_img(adata)
 
     bead_img_cnt = np.where(bead_img < 255)
     bead_img = bead_img[bead_img_cnt[0].min():bead_img_cnt[0].max(),
@@ -279,7 +308,7 @@ def match_he_visium(adata, he_path):
 def match_he_seq_scope(adata, he_path, suffix='',
                        bw_threshold=200, filter_percentage=70,
                        box_size=0.5):
-    bead_img, bead_img_bw = create_grayscale_expression_img(adata, filter_percentage)
+    bead_img, bead_img_bw = create_aggregated_expression_img(adata, filter_percentage)
 
     h, w = bead_img.shape
 
@@ -354,6 +383,7 @@ def attach_he_adata(
     matched_he,
     adata_raw=None,
     push_by_bead_diameter=True,
+    raw_matched=False
 ):
     import math
     # get the width of the puck
@@ -366,12 +396,13 @@ def attach_he_adata(
     if adata_raw is None:
         adata_raw = adata
     
-    bead_width = adata_raw.obsm['spatial'].max(axis=0)[0] - adata_raw.obsm['spatial'].min(axis=0)[0]
+    bead_width = adata_raw.obsm['spatial'].max(axis=0)[0]
 
     bead_distance_um = puck_width_um / bead_width
 
     # get the width of the processed adata
-    adata_width_um = bead_distance_um *        (adata.obsm['spatial'].max(axis=0)[0] - adata.obsm['spatial'].min(axis=0)[0])
+    adata_width_um = bead_distance_um *\
+        (adata.obsm['spatial'].max(axis=0)[0])
 
     # rotate he to align with coordinate system of scanpy
     rotated_he = cv2.flip(cv2.rotate(matched_he, cv2.ROTATE_90_CLOCKWISE), 1)
@@ -381,12 +412,19 @@ def attach_he_adata(
     px_per_um = w_px / adata_width_um 
 
     # convert so that origin at 0, 0
+    locations_raw = adata_raw.obsm['spatial']
     locations = adata.obsm['spatial']
-    locations = locations - locations.min(axis=0)
+    
+    if not raw_matched:
+        locations = locations - locations.min(axis=0)
 
     bead_diameter_px = bead_diameter_um * px_per_um
 
-    locations = locations * [(w_px ) / locations.max(axis=0)[0],
+    if raw_matched:
+        locations = locations * [(w_px ) / locations_raw.max(axis=0)[0],
+                             (h_px ) / locations_raw.max(axis=0)[1]]
+    else:
+        locations = locations * [(w_px ) / locations.max(axis=0)[0],
                              (h_px ) / locations.max(axis=0)[1]]
     
     if push_by_bead_diameter:
@@ -404,4 +442,3 @@ def attach_he_adata(
     adata.obsm['spatial'] = locations
     
     return adata
-

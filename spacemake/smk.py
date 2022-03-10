@@ -33,16 +33,25 @@ class Spacemake:
         run_mode_name,
         umi_cutoff 
     ):
+        self.project_df.assert_run_mode(project_id, sample_id, run_mode_name)
         run_mode = self.config.get_run_mode(run_mode_name)
-        
+
+        if not int(umi_cutoff) in [int(uc)
+            for uc in run_mode.variables['umi_cutoff']]:
+            raise SpacemakeError(f'run_mode={run_mode} has no ' + 
+                f'umi_cutoff={umi_cutoff}')
+
+        adata_raw = self.load_raw_spatial_adata(
+            project_id = project_id,
+            sample_id = sample_id,
+            run_mode_name = run_mode_name)
+
         adata = sc.read(f'{self.root}/projects/{project_id}/processed_data/{sample_id}/'+
                 f'illumina/complete_data/automated_analysis/{run_mode_name}/' +
                 f'umi_cutoff_{umi_cutoff}/results.h5ad')
         
         adata.uns['run_mode_variables'] = run_mode.variables
-        adata.uns['puck_variables'] = self.project_df.get_puck_variables(
-            project_id = project_id,
-            sample_id = sample_id)
+        adata.uns['puck_variables'] = adata_raw.uns['puck_variables']
         
         return adata
     
@@ -82,7 +91,15 @@ class Spacemake:
         adata.uns['puck_variables'] = self.project_df.get_puck_variables(
             project_id = project_id,
             sample_id = sample_id)
+
+        x_pos_max, y_pos_max = tuple(adata.obsm['spatial'].max(axis=0))
+        width_um = adata.uns['puck_variables']['width_um']
+        coord_by_um = x_pos_max / width_um
+        height_um = int(y_pos_max / coord_by_um)
         
+        adata.uns['puck_variables']['height_um'] = height_um
+        adata.uns['puck_variables']['coord_by_um'] = coord_by_um
+
         return adata
 
 def get_run_parser():

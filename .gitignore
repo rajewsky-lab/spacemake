@@ -1,6 +1,12 @@
 dist
+projects
 config.yaml
 samples.yaml
+*.ipynb
+*.tif
+*.jpg
+*.jpeg
+*.png
 *.rds
 *.html
 *.csv
@@ -17,3 +23,4 @@ spacemake.egg-info
 scratch
 
 *.icloud
+*.h5ad
