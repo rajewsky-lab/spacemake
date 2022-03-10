@@ -6,6 +6,7 @@ import argparse
 import datetime
 import re
 import logging
+import time
 
 from spacemake.errors import *
 from spacemake.config import ConfigFile
@@ -624,6 +625,8 @@ class ProjectDF:
                     failed=True
                 except pd.errors.EmptyDataError as e:
                     if attempts < 5:
+                        # wait 5 seconds before retrying
+                        time.sleep(5)
                         attempts = attempts + 1
                         continue
                     else:
@@ -664,9 +667,6 @@ class ProjectDF:
             self.df = pd.concat(project_list, axis=1).T
             self.df.is_merged = self.df.is_merged.astype(bool)
             self.df.index.names = ["project_id", "sample_id"]
-
-            # dump the result
-            self.dump()
         else:
             index = pd.MultiIndex(
                 names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
