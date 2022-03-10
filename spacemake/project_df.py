@@ -6,6 +6,7 @@ import argparse
 import datetime
 import re
 import logging
+import time
 
 from spacemake.errors import *
 from spacemake.config import ConfigFile
@@ -605,12 +606,27 @@ class ProjectDF:
         self.config = config
 
         if os.path.isfile(file_path):
-            df = pd.read_csv(
-                file_path,
-                index_col=["project_id", "sample_id"],
-                converters={"run_mode": eval, "merged_from": eval},
-                na_values=["None", "none"],
-            )
+            attempts = 0
+            failed = False
+
+            while not failed:
+                try:
+                    df = pd.read_csv(
+                        file_path,
+                        index_col=["project_id", "sample_id"],
+                        converters={"run_mode": eval, "merged_from": eval},
+                        na_values=["None", "none"],
+                    )
+                    failed=True
+                except pd.errors.EmptyDataError as e:
+                    if attempts < 5:
+                        # wait 5 seconds before retrying
+                        time.sleep(5)
+                        attempts = attempts + 1
+                        continue
+                    else:
+                        raise e
+                        failed=True
 
             # replacing NaN with None
             df = df.where(pd.notnull(df), None)
@@ -637,9 +653,6 @@ class ProjectDF:
             self.df = pd.concat(project_list, axis=1).T
             self.df.is_merged = self.df.is_merged.astype(bool)
             self.df.index.names = ["project_id", "sample_id"]
-
-            # dump the result
-            self.dump()
         else:
             index = pd.MultiIndex(
                 names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]

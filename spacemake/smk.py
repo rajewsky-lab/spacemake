@@ -453,6 +453,9 @@ def spacemake_run(pdf, args):
     if run_successful is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
 
+    # at the very end dump the project_data_frame
+    pdf.dump()
+
 #################
 # DEFINE PARSER #
 #################
