@@ -2,7 +2,7 @@ from ..config import ConfigFile
 from ..project_df import ProjectDF
 
 from .he_integration import create_aggregated_expression_img, \
-    create_bead_expression_img
+    create_spot_expression_img
 from ..util import message_aggregation, bool_in_str, str2bool
 from ..errors import SpacemakeError
 
@@ -56,13 +56,13 @@ def setup_spatial_parser(spmk, attach_to):
         func=lambda args: create_expression_img_cmdline(spmk, args,
             'aggregated'))
 
-    bead_img_parser = subparsers.add_parser(
-        'create_bead_expression_img',
+    spot_img_parser = subparsers.add_parser(
+        'create_spot_expression_img',
         parents=[get_expression_img_parser()])
 
-    bead_img_parser.set_defaults(
+    spot_img_parser.set_defaults(
         func=lambda args: create_expression_img_cmdline(spmk, args,
-            'bead'))
+            'spot'))
 
 @message_aggregation(logger_name)
 def create_expression_img_cmdline(spmk, args, img_type):
@@ -88,9 +88,14 @@ def create_expression_img_cmdline(spmk, args, img_type):
             run_mode_name = args['run_mode'])
 
     logger.info(f'Generating {img_type} expression image...')
-    if img_type == 'bead':
-        img = create_bead_expression_img(adata,
+    if img_type == 'spot':
+        img = create_spot_expression_img(adata,
             binary=str2bool(args['binary']))
+    elif img_type == 'aggregated':
+        img, img_bw = create_aggregated_expression_img(
+            adata, filter_percentage=int(args['filter_percentage']))
 
+        if str2bool(args['binary']):
+            img = img_bw
 
     cv2.imwrite(args['out_img'], img)

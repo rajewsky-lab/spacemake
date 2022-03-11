@@ -9,7 +9,7 @@ from spacemake.errors import SpacemakeError
 logger_name = "spacemake.spatial"
 logger = logging.getLogger(logger_name)
 
-def create_bead_expression_img(
+def create_spot_expression_img(
         adata,
         binary=True,
     ):
@@ -21,17 +21,17 @@ def create_bead_expression_img(
     width = int(x_pos_max / coord_by_um)
     height = int(y_pos_max / coord_by_um)
 
-    bead_diameter = int(adata.uns['puck_variables']['spot_diameter_um'])
+    spot_diameter = int(adata.uns['puck_variables']['spot_diameter_um'])
 
-    width = width + bead_diameter
-    height = height + bead_diameter
+    width = width + spot_diameter
+    height = height + spot_diameter
     
-    bead_img = np.zeros((height, width), np.uint8)
+    spot_img = np.zeros((height, width), np.uint8)
 
     df.total_counts = df.total_counts * 255 / df.total_counts.max()
     
-    df.x_pos = df.x_pos * height / x_pos_max + int(bead_diameter/2)
-    df.y_pos = df.y_pos * width / y_pos_max + int(bead_diameter/2)
+    df.x_pos = df.x_pos * height / x_pos_max + int(spot_diameter/2)
+    df.y_pos = df.y_pos * width / y_pos_max + int(spot_diameter/2)
     
     for i, row in df.iterrows():
         #if row['tissue']:
@@ -41,19 +41,19 @@ def create_bead_expression_img(
             color = int(row['total_counts'])
 
         # draw the circle
-        cv2.circle(bead_img,
+        cv2.circle(spot_img,
                    (int(row['y_pos']), int(row['x_pos'])),
-                   int(bead_diameter/2),
+                   int(spot_diameter/2),
                    (color, color, color), -1)
         
-    bead_img = 255 - bead_img
+    spot_img = 255 - spot_img
     
-    bead_img = cv2.resize(bead_img, (1000, 1000), cv2.INTER_AREA)
+    spot_img = cv2.resize(spot_img, (1000, 1000), cv2.INTER_AREA)
     
     if binary:
-        bead_img[bead_img<255] = 0
+        spot_img[spot_img<255] = 0
     
-    return bead_img
+    return spot_img
 
 def create_aggregated_expression_img(adata, filter_percentage=70):
     df = adata.obs.copy()
@@ -72,7 +72,7 @@ def create_aggregated_expression_img(adata, filter_percentage=70):
         raise SpacemakeError('Underlying spatial coordinates cannot be aggregated\n'+
             'Only coordinates with maximum values for x_pos and y_pos ' +
             'both higher than 500 can be aggregated\n' +
-            'Use `spacemake spatial create_bead_expression_img` instead')
+            'Use `spacemake spatial create_spot_expression_img` instead')
 
     scale_f = int(img.shape[0]/500)
 
@@ -150,24 +150,24 @@ def load_he_img(he_path, bw_threshold=None):
         
     return he, he_gray, he_bw
 
-def match_he_img(he_path, bead_img, bw_threshold=None, use_bw=True):
-    # get contour of bead_img
-    bead_img_cnt = np.where(bead_img < 255)
-    bead_img_cropped = bead_img[bead_img_cnt[0].min():bead_img_cnt[0].max(),
-                                 bead_img_cnt[1].min():bead_img_cnt[1].max()]
+def match_he_img(he_path, spot_img, bw_threshold=None, use_bw=True):
+    # get contour of spot_img
+    spot_img_cnt = np.where(spot_img < 255)
+    spot_img_cropped = spot_img[spot_img_cnt[0].min():spot_img_cnt[0].max(),
+                                 spot_img_cnt[1].min():spot_img_cnt[1].max()]
     
     he, he_gray, he_bw = load_he_img(he_path, bw_threshold=bw_threshold)
     
     he_orig = he.copy()
     
     # find the scale by which we resize the images
-    bead_img_cropped_height, bead_img_cropped_width = bead_img_cropped.shape
+    spot_img_cropped_height, spot_img_cropped_width = spot_img_cropped.shape
     he_height, he_width = he_gray.shape
     
     max_zoom = 3
     
-    height_ratio = he_height / (max_zoom*bead_img_cropped_height)
-    width_ratio = he_width / (max_zoom*bead_img_cropped_width)
+    height_ratio = he_height / (max_zoom*spot_img_cropped_height)
+    width_ratio = he_width / (max_zoom*spot_img_cropped_width)
     
     resize_type = cv2.INTER_NEAREST if use_bw else cv2.INTER_AREA
     
@@ -191,18 +191,15 @@ def match_he_img(he_path, bead_img, bw_threshold=None, use_bw=True):
         else:
             scale_f = height_ratio
         
-        bead_img_cropped = cv2.resize(bead_img_cropped,
-                                      (int(bead_img_cropped_width*scale_f),
-                                       int(bead_img_cropped_height*scale_f)),
+        spot_img_cropped = cv2.resize(spot_img_cropped,
+                                      (int(spot_img_cropped_width*scale_f),
+                                       int(spot_img_cropped_height*scale_f)),
                                       resize_type)
     
     he_bw = ~he_bw
     
     for i in range(10):
-        he_bw = fill_holes_by_neighbors(he_bw, int(max(he_bw.shape)/200) )
-        
-    #for i in range(2):
-        #he_bw = he_bw | fill_image(he_bw, 25, 10)
+        he_bw = fill_holes_by_neighbors(he_bw, int(max(he_bw.shape)/200))
     
     he_bw = ~he_bw
     
@@ -232,7 +229,7 @@ def match_he_img(he_path, bead_img, bw_threshold=None, use_bw=True):
                            int(he_bw.shape[0] * scale_y))
                     
                     he_scaled = cv2.resize(he_rotated, dim, 0,0, resize_type)
-                    m_res = cv2.matchTemplate(he_scaled, bead_img_cropped, cv2.TM_CCOEFF_NORMED)
+                    m_res = cv2.matchTemplate(he_scaled, spot_img_cropped, cv2.TM_CCOEFF_NORMED)
                     
                     if m_res.max() > highest_cor:
                         highest_cor = m_res.max()
@@ -244,11 +241,11 @@ def match_he_img(he_path, bead_img, bw_threshold=None, use_bw=True):
     # find the boundaries of the match
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(match_res)
     top_left = max_loc
-    bottom_right = (top_left[0] + bead_img_cropped.shape[1],
-                    top_left[1] + bead_img_cropped.shape[0])
+    bottom_right = (top_left[0] + spot_img_cropped.shape[1],
+                    top_left[1] + spot_img_cropped.shape[0])
     
-    #bead_img_cropped[bead_img_cropped > 0] = 255
-    bead_img_cropped_clr = cv2.cvtColor(bead_img_cropped, cv2.COLOR_GRAY2BGR)
+    #spot_img_cropped[spot_img_cropped > 0] = 255
+    spot_img_cropped_clr = cv2.cvtColor(spot_img_cropped, cv2.COLOR_GRAY2BGR)
     
     if flip:
         he = cv2.flip(he, 0)
@@ -268,16 +265,16 @@ def match_he_img(he_path, bead_img, bw_threshold=None, use_bw=True):
 
     return highest_cor, he, he_orig, top_left, bottom_right
 
-def match_he_bead_img(adata, he_path):
-    bead_img = create_expression_bead_img(adata)
+def match_he_spot_img(adata, he_path):
+    spot_img = create_expression_spot_img(adata)
 
-    bead_img_cnt = np.where(bead_img < 255)
-    bead_img = bead_img[bead_img_cnt[0].min():bead_img_cnt[0].max(),
-                        bead_img_cnt[1].min():bead_img_cnt[1].max()]
+    spot_img_cnt = np.where(spot_img < 255)
+    spot_img = spot_img[spot_img_cnt[0].min():spot_img_cnt[0].max(),
+                        spot_img_cnt[1].min():spot_img_cnt[1].max()]
 
     highest_cor, he_res, he_orig, tl, br = match_he_img(
         he_path,
-        bead_img = bead_img,
+        spot_img = spot_img,
         use_bw = True)
 
     he_res_ratio = he_res.shape[1] / he_res.shape[0]
@@ -292,11 +289,11 @@ def match_he_bead_img(adata, he_path):
     box_tl = int(tl[0] * horizontal_ratio), int(tl[1] * vertical_ratio)
     box_br = int(br[0] * horizontal_ratio), int(br[1] * vertical_ratio)
 
-    bead_img_resized = cv2.resize(bead_img,
+    spot_img_resized = cv2.resize(spot_img,
                                   (box_br[0] - box_tl[0], box_br[1] - box_tl[1]),
                                    cv2.INTER_NEAREST)
 
-    match_bw = cv2.cvtColor(bead_img_resized, cv2.COLOR_GRAY2BGR)
+    match_bw = cv2.cvtColor(spot_img_resized, cv2.COLOR_GRAY2BGR)
 
     he_match = he_orig[box_tl[1]:box_br[1], box_tl[0]:box_br[0]].copy()
     he_orig[box_tl[1]:box_br[1], box_tl[0]:box_br[0]] &= match_bw
@@ -305,12 +302,14 @@ def match_he_bead_img(adata, he_path):
     
     return he_orig, he_match
 
-def match_he_seq_scope(adata, he_path, suffix='',
-                       bw_threshold=200, filter_percentage=70,
-                       box_size=0.5):
-    bead_img, bead_img_bw = create_aggregated_expression_img(adata, filter_percentage)
+def match_he_aggregated_img(
+        adata, he_path,
+        bw_threshold=200, filter_percentage=70,
+        box_size=0.5
+    ):
+    spot_img, spot_img_bw = create_aggregated_expression_img(adata, filter_percentage)
 
-    h, w = bead_img.shape
+    h, w = spot_img.shape
 
     bottom_right = (int(w * ((1+box_size)/2)),
                     int(h * ((1+box_size)/2)))
@@ -318,20 +317,20 @@ def match_he_seq_scope(adata, he_path, suffix='',
                 int(h * ((1-box_size) / 2)))
 
     # save intermediate files
-    tmp_img = cv2.cvtColor(bead_img.copy(), cv2.COLOR_GRAY2BGR)
+    tmp_img = cv2.cvtColor(spot_img.copy(), cv2.COLOR_GRAY2BGR)
     cv2.rectangle(tmp_img, bottom_right, top_left, (180, 233, 86), 2)
     
-    tmp_img = cv2.cvtColor(bead_img_bw.copy(), cv2.COLOR_GRAY2BGR)
+    tmp_img = cv2.cvtColor(spot_img_bw.copy(), cv2.COLOR_GRAY2BGR)
     cv2.rectangle(tmp_img, bottom_right, top_left, (180, 233, 86), 2)
 
-    img= bead_img_bw[
+    img= spot_img_bw[
         top_left[1]:bottom_right[1],
         top_left[0]:bottom_right[0]    
     ]
 
     highest_cor, he_res, he_orig, tl, br = match_he_img(
         he_path,
-        bead_img=img,
+        spot_img=img,
         bw_threshold=bw_threshold,
         use_bw = True
     )
@@ -360,11 +359,11 @@ def match_he_seq_scope(adata, he_path, suffix='',
     box_br = (int(box_br[0] * horizontal_ratio),
               int(box_br[1] * vertical_ratio))
 
-    bead_img_resized = cv2.resize(bead_img_bw,
+    spot_img_resized = cv2.resize(spot_img_bw,
                                   (box_br[0] - box_tl[0], box_br[1] - box_tl[1]),
                                    cv2.INTER_NEAREST)
 
-    match_bw = cv2.cvtColor(bead_img_resized, cv2.COLOR_GRAY2BGR)
+    match_bw = cv2.cvtColor(spot_img_resized, cv2.COLOR_GRAY2BGR)
 
     he_match = he_orig[box_tl[1]:box_br[1], box_tl[0]:box_br[0]].copy()
 
@@ -382,26 +381,26 @@ def attach_he_adata(
     adata,
     matched_he,
     adata_raw=None,
-    push_by_bead_diameter=True,
+    push_by_spot_diameter=True,
     raw_matched=False
 ):
     import math
     # get the width of the puck
     puck_width_um = adata.uns['puck_variables']['width_um']
-    bead_diameter_um = adata.uns['puck_variables']['spot_diameter_um']
+    spot_diameter_um = adata.uns['puck_variables']['spot_diameter_um']
     
     if adata.uns['run_mode_variables']['mesh_data']:
-        bead_diameter_um = math.sqrt(3) * adata.uns['run_mode_variables']['mesh_spot_diameter_um']
+        spot_diameter_um = math.sqrt(3) * adata.uns['run_mode_variables']['mesh_spot_diameter_um']
     
     if adata_raw is None:
         adata_raw = adata
     
-    bead_width = adata_raw.obsm['spatial'].max(axis=0)[0]
+    spot_width = adata_raw.obsm['spatial'].max(axis=0)[0]
 
-    bead_distance_um = puck_width_um / bead_width
+    spot_distance_um = puck_width_um / spot_width
 
     # get the width of the processed adata
-    adata_width_um = bead_distance_um *\
+    adata_width_um = spot_distance_um *\
         (adata.obsm['spatial'].max(axis=0)[0])
 
     # rotate he to align with coordinate system of scanpy
@@ -418,7 +417,7 @@ def attach_he_adata(
     if not raw_matched:
         locations = locations - locations.min(axis=0)
 
-    bead_diameter_px = bead_diameter_um * px_per_um
+    spot_diameter_px = spot_diameter_um * px_per_um
 
     if raw_matched:
         locations = locations * [(w_px ) / locations_raw.max(axis=0)[0],
@@ -427,8 +426,8 @@ def attach_he_adata(
         locations = locations * [(w_px ) / locations.max(axis=0)[0],
                              (h_px ) / locations.max(axis=0)[1]]
     
-    if push_by_bead_diameter:
-        locations = [bead_diameter_px, bead_diameter_px] + locations
+    if push_by_spot_diameter:
+        locations = [spot_diameter_px, spot_diameter_px] + locations
         
     locations = locations.astype('int')
 
@@ -437,7 +436,7 @@ def attach_he_adata(
                     'hires': rotated_he
                     },
                 'scalefactors': {'tissue_hires_scalef': 1,
-                                 'spot_diameter_fullres': bead_diameter_px}} 
+                                 'spot_diameter_fullres': spot_diameter_px}} 
     }
     adata.obsm['spatial'] = locations
     
