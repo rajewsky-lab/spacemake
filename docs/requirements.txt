@@ -15,3 +15,6 @@ scipy
 scikit-misc
 scikit-learn
 opencv-python
+nbsphinx>=0.4
+spacemake
+novosparc

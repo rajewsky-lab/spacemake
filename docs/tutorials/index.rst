@@ -3,4 +3,4 @@ Tutorials
 
 .. toctree::
 
-    he_integration/index
+    he_integration
