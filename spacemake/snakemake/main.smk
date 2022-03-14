@@ -237,6 +237,9 @@ star_index = 'species_data/{species}/star_index'
 bt2_rRNA_index_dir = 'species_data/{species}/bt2_rRNA_index'
 bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'
 
+species_genome = 'species_data/{species}/genome.fa'
+species_annotation = 'species_data/{species}/annotation.gtf'
+
 ####################
 # HELPER FUNCTIONS #
 ####################
@@ -675,6 +678,29 @@ rule split_reads_sam_to_bam:
     threads: 2
     shell:
         "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
+
+rule create_species_genome:
+	input:
+		unpack(get_species_genome)
+	output:
+		species_genome	
+	run:
+		print(type(input[0]))
+		if input[0].endswith('.fa.gz'):
+			shell('unpigz -c {input} > {output}')
+		else:
+			shell('ln -s {input} {output}')
+
+rule create_species_annotation:
+	input:
+		unpack(get_species_annotation)
+	output:
+		species_annotation
+	run:
+		if input[0].endswith('.gtf.gz'):
+			shell('unpigz -c {input} > {output}')
+		else:
+			shell('ln -s {input} {output}')
 
 rule create_rRNA_index:
     input:

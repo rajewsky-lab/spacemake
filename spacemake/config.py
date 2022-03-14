@@ -537,9 +537,9 @@ class ConfigFile:
         rRNA_genome = None,
         STAR_index_dir = None,
     ):
-        assert_file(genome, default_value=None, extension = '.fa')
-        assert_file(annotation, default_value=None, extension = '.gtf')
-        assert_file(rRNA_genome, default_value = None, extension = '.fa')
+        assert_file(genome, default_value=None, extension = ['.fa', '.fa.gz'])
+        assert_file(annotation, default_value=None, extension = ['.gtf', '.gtf.gz'])
+        assert_file(rRNA_genome, default_value = None, extension = ['.fa'])
 
         species = {}
 
