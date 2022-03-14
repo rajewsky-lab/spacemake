@@ -9,8 +9,8 @@ Accessing spacemake objects from python
 .. autoclass:: spacemake.Spacemake
     :members:
 
-H&E integration
----------------
+he\_integration module
+----------------------
 
 .. autofunction:: spacemake.spatial.he_integration.match_he_spot_img
 
