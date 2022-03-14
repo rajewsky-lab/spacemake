@@ -21,4 +21,5 @@ Contents
    config
    projects
    run
-   api
+   tutorials/index
+   api/index

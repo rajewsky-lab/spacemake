@@ -4,10 +4,15 @@ __author__ = ["Marvin Jens"]
 __license__ = "GPL"
 __email__ = ["marvin.jens@mdc-berlin.de"]
 
-from spacemake.preprocess.fastq import parse_args, setup_logging,\
-    main_combinatorial, main_dropseq
+from spacemake.preprocess.fastq import (
+    parse_args,
+    setup_logging,
+    main_combinatorial,
+    main_dropseq,
+)
 
 from spacemake.parallel import ExceptionLogging
+
 
 def cmdline():
     with ExceptionLogging("main"):
