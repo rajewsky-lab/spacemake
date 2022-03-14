@@ -5,6 +5,9 @@ import snakemake
 import argparse
 import yaml
 import logging
+import scanpy as sc
+import pandas as pd
+
 
 from shutil import copyfile
 from spacemake.project_df import ProjectDF, get_project_sample_parser
@@ -18,6 +21,103 @@ project_df = "project_df.csv"
 logger_name = "spacemake.main"
 logger = logging.getLogger(logger_name)
 
+class Spacemake:
+    def __init__(self, root):
+        """__init__.
+
+        :param root:
+        """
+        self.root = root
+        self.config = ConfigFile.from_yaml(f'{root}/config.yaml')
+        self.project_df = ProjectDF(f'{root}/project_df.csv', config=self.config)
+    
+    def load_processed_adata(self,
+        project_id,
+        sample_id,
+        run_mode_name,
+        umi_cutoff 
+    ):
+        """load_processed_adata.
+
+        :param project_id:
+        :param sample_id:
+        :param run_mode_name:
+        :param umi_cutoff:
+        """
+        self.project_df.assert_run_mode(project_id, sample_id, run_mode_name)
+        run_mode = self.config.get_run_mode(run_mode_name)
+
+        if not int(umi_cutoff) in [int(uc)
+            for uc in run_mode.variables['umi_cutoff']]:
+            raise SpacemakeError(f'run_mode={run_mode} has no ' + 
+                f'umi_cutoff={umi_cutoff}')
+
+        adata_raw = self.load_raw_spatial_adata(
+            project_id = project_id,
+            sample_id = sample_id,
+            run_mode_name = run_mode_name)
+
+        adata = sc.read(f'{self.root}/projects/{project_id}/processed_data/{sample_id}/'+
+                f'illumina/complete_data/automated_analysis/{run_mode_name}/' +
+                f'umi_cutoff_{umi_cutoff}/results.h5ad')
+        
+        adata.uns['run_mode_variables'] = run_mode.variables
+        adata.uns['puck_variables'] = adata_raw.uns['puck_variables']
+        
+        return adata
+    
+    def load_raw_spatial_adata(
+        self,
+        project_id,
+        sample_id,
+        run_mode_name
+    ):
+        """load_raw_spatial_adata.
+
+        :param project_id:
+        :param sample_id:
+        :param run_mode_name:
+        """
+        self.project_df.assert_run_mode(project_id, sample_id, run_mode_name)
+        run_mode = self.config.get_run_mode(run_mode_name)
+
+        dge_type = ""
+        dge_cleaned = ""
+        polyA_adapter_trimmed = ""
+        mm_included = ""
+
+        if run_mode.variables["polyA_adapter_trimming"]:
+            polyA_adapter_trimmed = ".polyA_adapter_trimmed"
+
+        if run_mode.variables["count_intronic_reads"]:
+            dge_type = ".all"
+        else:
+            dge_type = ".exon"
+
+        if run_mode.variables["count_mm_reads"]:
+            mm_included = ".mm_included"
+
+        if run_mode.variables["clean_dge"]:
+            dge_cleaned = ".cleaned"
+
+        adata = sc.read(f'{self.root}/projects/{project_id}/processed_data/{sample_id}/'+
+                f'illumina/complete_data/dge/dge{dge_type}{dge_cleaned}'+
+                f'{polyA_adapter_trimmed}{mm_included}.spatial_beads.h5ad')
+        
+        adata.uns['run_mode_variables'] = run_mode.variables
+        adata.uns['puck_variables'] = self.project_df.get_puck_variables(
+            project_id = project_id,
+            sample_id = sample_id)
+
+        x_pos_max, y_pos_max = tuple(adata.obsm['spatial'].max(axis=0))
+        width_um = adata.uns['puck_variables']['width_um']
+        coord_by_um = x_pos_max / width_um
+        height_um = int(y_pos_max / coord_by_um)
+        
+        adata.uns['puck_variables']['height_um'] = height_um
+        adata.uns['puck_variables']['coord_by_um'] = coord_by_um
+
+        return adata
 
 def get_run_parser():
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
@@ -63,7 +163,6 @@ def get_run_parser():
 
     return parser
 
-
 def setup_init_parser(parent_parser):
     parser_init = parent_parser.add_parser(
         "init",
@@ -93,7 +192,6 @@ def setup_init_parser(parent_parser):
     parser_init.set_defaults(func=spacemake_init)
 
     return parser_init
-
 
 def setup_run_parser(pdf, parent_parser):
     parser_run = parent_parser.add_parser(
@@ -131,7 +229,7 @@ def setup_run_parser(pdf, parent_parser):
     )
 
     parser_novosparc.add_argument(
-        '--umi_cutoff', type=str, help='umi_cutoff to be used for this sample ' +
+        '--umi_cutoff', type=int, help='umi_cutoff to be used for this sample ' +
         'for reconstruction. If left empty, the smallest umi_cutoff of a given ' +
         'run_mode will be used', required=False,
     )
@@ -372,6 +470,8 @@ def spacemake_run(pdf, args):
     if run_successful is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
 
+    # at the very end dump the project_data_frame
+    pdf.dump()
 
 #################
 # DEFINE PARSER #
@@ -424,6 +524,15 @@ if os.path.isfile(config_path):
     #################
     parser_run = setup_run_parser(pdf, subparsers)
 
+#####################
+# SPACEMAKE SPATIAL #
+#####################
+from .spatial.cmdline import setup_spatial_parser
+
+if os.path.isfile(config_path):
+    spmk = Spacemake('.')
+    parser_spatial = setup_spatial_parser(spmk, subparsers)
+
 def cmdline():
     args = main_parser.parse_args()
 
@@ -433,6 +542,7 @@ def cmdline():
         "projects": parser_projects,
         "run": parser_run,
         "main": main_parser,
+        "spatial": parser_spatial
     }
 
     # get the function to be run
@@ -453,7 +563,6 @@ def cmdline():
     args.pop("subcommand", None)
 
     func(args)
-
 
 if __name__ == "__main__":
     cmdline()

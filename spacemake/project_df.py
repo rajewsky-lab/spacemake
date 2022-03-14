@@ -6,6 +6,7 @@ import argparse
 import datetime
 import re
 import logging
+import time
 
 from spacemake.errors import *
 from spacemake.config import ConfigFile
@@ -13,7 +14,6 @@ from spacemake.util import message_aggregation, assert_file, str_to_list
 from typing import List, Dict
 
 logger_name = "spacemake.project_df"
-
 
 def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
     """
@@ -606,12 +606,27 @@ class ProjectDF:
         self.config = config
 
         if os.path.isfile(file_path):
-            df = pd.read_csv(
-                file_path,
-                index_col=["project_id", "sample_id"],
-                converters={"run_mode": eval, "merged_from": eval},
-                na_values=["None", "none"],
-            )
+            attempts = 0
+            failed = False
+
+            while not failed:
+                try:
+                    df = pd.read_csv(
+                        file_path,
+                        index_col=["project_id", "sample_id"],
+                        converters={"run_mode": eval, "merged_from": eval},
+                        na_values=["None", "none"],
+                    )
+                    failed=True
+                except pd.errors.EmptyDataError as e:
+                    if attempts < 5:
+                        # wait 5 seconds before retrying
+                        time.sleep(5)
+                        attempts = attempts + 1
+                        continue
+                    else:
+                        raise e
+                        failed=True
 
             # replacing NaN with None
             df = df.where(pd.notnull(df), None)
@@ -638,9 +653,6 @@ class ProjectDF:
             self.df = pd.concat(project_list, axis=1).T
             self.df.is_merged = self.df.is_merged.astype(bool)
             self.df.index.names = ["project_id", "sample_id"]
-
-            # dump the result
-            self.dump()
         else:
             index = pd.MultiIndex(
                 names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
@@ -736,6 +748,7 @@ class ProjectDF:
         :rtype: Dict
         """
         # returns sample info from the projects df
+        self.assert_sample(project_id, sample_id)
         out_dict = self.df.loc[(project_id, sample_id)].to_dict()
 
         return out_dict
@@ -975,6 +988,15 @@ class ProjectDF:
             raise ProjectSampleNotFoundError(
                 "(project_id, sample_id)", (project_id, sample_id)
             )
+    
+    def assert_run_mode(self, project_id, sample_id, run_mode_name):
+        variables = self.get_sample_info(project_id, sample_id)
+
+        if run_mode_name not in variables['run_mode']:
+            raise SpacemakeError(f'(project_id, sample_id)=({project_id},' +
+                f'{sample_id}) has no run_mode={run_mode_name}\n' +
+                f'run_mode has to be one of {variables["run_mode"]}')
+        
 
     def add_update_sample(
         self,

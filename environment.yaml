@@ -25,6 +25,7 @@ dependencies:
     - pysam>=0.16.0.1
     - pot
     - java-jdk>=8.0
+    - pigz
     - pip:
         - pandas>=1.3.0
         - scanpy>=1.8.1
@@ -37,3 +38,4 @@ dependencies:
         - scikit-learn>=0.23.1
         - squidpy>=1.0.0
         - novosparc
+        - opencv-python
