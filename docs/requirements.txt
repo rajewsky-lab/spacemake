@@ -14,3 +14,4 @@ biopython
 scipy
 scikit-misc
 scikit-learn
+opencv-python
