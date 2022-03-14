@@ -154,3 +154,15 @@ Add samples from illumina sample-sheet
 --------------------------------------
 
 Coming soon...
+
+Listing projects
+----------------
+
+To list projects, which are already configured and added, simply type::
+    
+    spacemake projects list
+
+It will show the main variables for each project in the ``project_df.csv``. 
+
+To view extra variables which are not shown, use the ``--variables`` option 
+to specify which extra variables to show.

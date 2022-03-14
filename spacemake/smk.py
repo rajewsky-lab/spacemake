@@ -23,6 +23,10 @@ logger = logging.getLogger(logger_name)
 
 class Spacemake:
     def __init__(self, root):
+        """__init__.
+
+        :param root:
+        """
         self.root = root
         self.config = ConfigFile.from_yaml(f'{root}/config.yaml')
         self.project_df = ProjectDF(f'{root}/project_df.csv', config=self.config)
@@ -33,6 +37,13 @@ class Spacemake:
         run_mode_name,
         umi_cutoff 
     ):
+        """load_processed_adata.
+
+        :param project_id:
+        :param sample_id:
+        :param run_mode_name:
+        :param umi_cutoff:
+        """
         self.project_df.assert_run_mode(project_id, sample_id, run_mode_name)
         run_mode = self.config.get_run_mode(run_mode_name)
 
@@ -61,6 +72,12 @@ class Spacemake:
         sample_id,
         run_mode_name
     ):
+        """load_raw_spatial_adata.
+
+        :param project_id:
+        :param sample_id:
+        :param run_mode_name:
+        """
         self.project_df.assert_run_mode(project_id, sample_id, run_mode_name)
         run_mode = self.config.get_run_mode(run_mode_name)
 

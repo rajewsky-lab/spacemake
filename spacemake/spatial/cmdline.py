@@ -57,7 +57,7 @@ def setup_spatial_parser(spmk, attach_to):
             'aggregated'))
 
     spot_img_parser = subparsers.add_parser(
-        'create_spot_expression_img',
+        'create_spot_expression_Img',
         parents=[get_expression_img_parser()])
 
     spot_img_parser.set_defaults(
