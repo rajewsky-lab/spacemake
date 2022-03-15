@@ -530,17 +530,14 @@ rule create_h5ad_dge:
         # attach barcodes
         if 'barcode_file' in input.keys() and wildcards.n_beads == 'spatial':
             adata = attach_barcode_file(adata, input['barcode_file'])
-
-			puck_variables = 
-
-			adata = attach_puck_variables(
-				adata,
-				project_df.get_puck_variables(
-					project_id = wildcards.project_id,
-					sample_id = wildcards.sample_id
-				)
-			)
-		
+            adata = attach_puck_variables(
+                adata,
+                project_df.get_puck_variables(
+                    project_id = wildcards.project_id,
+                    sample_id = wildcards.sample_id,
+                    return_empty=True
+                )
+            )
         adata.write(output[0])
         adata.obs.to_csv(output[1])
 
@@ -695,11 +692,10 @@ rule create_species_genome:
 	output:
 		species_genome	
 	run:
-		print(type(input[0]))
 		if input[0].endswith('.fa.gz'):
 			shell('unpigz -c {input} > {output}')
 		else:
-			shell('ln -s {input} {output}')
+			shell('ln -sr {input} {output}')
 
 rule create_species_annotation:
 	input:
@@ -710,7 +706,7 @@ rule create_species_annotation:
 		if input[0].endswith('.gtf.gz'):
 			shell('unpigz -c {input} > {output}')
 		else:
-			shell('ln -s {input} {output}')
+			shell('ln -sr {input} {output}')
 
 rule create_rRNA_index:
     input:

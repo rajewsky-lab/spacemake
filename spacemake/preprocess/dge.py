@@ -187,9 +187,7 @@ def attach_barcode_file(adata, barcode_file):
 
     return adata
 
-def attach_puck_variables(adata,
-        puck_variables,
-    ):
+def attach_puck_variables(adata,puck_variables):
     if 'spatial' not in adata.obsm.keys():
         raise SpacemakeError(f'this dataset has no spatial information '+
             'available. Please attach the spatial information using the ' +
