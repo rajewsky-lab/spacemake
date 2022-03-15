@@ -12,8 +12,8 @@ Accessing spacemake objects from python
 he\_integration module
 ----------------------
 
-.. autofunction:: spacemake.spatial.he_integration.match_he_spot_img
+.. autofunction:: spacemake.spatial.he_integration.align_he_spot_img
 
-.. autofunction:: spacemake.spatial.he_integration.match_he_aggregated_img
+.. autofunction:: spacemake.spatial.he_integration.align_he_aggregated_img
 
 .. autofunction:: spacemake.spatial.he_integration.attach_he_adata

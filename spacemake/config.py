@@ -648,5 +648,3 @@ class ConfigFile:
             else:
                 return Puck(name)
 
-
-

@@ -2,6 +2,5 @@ Tutorials
 =========
 
 .. toctree::
-    :titlesonly:
-
     he_integration
+    manual_he_integration

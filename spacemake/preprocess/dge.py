@@ -187,3 +187,21 @@ def attach_barcode_file(adata, barcode_file):
 
     return adata
 
+def attach_puck_variables(adata,puck_variables):
+    if 'spatial' not in adata.obsm.keys():
+        raise SpacemakeError(f'this dataset has no spatial information '+
+            'available. Please attach the spatial information using the ' +
+            'spacemake.preprocess.attach_barcode_file() function first')
+
+    adata.uns['puck_variables'] = puck_variables
+
+    x_pos_max, y_pos_max = tuple(adata.obsm['spatial'].max(axis=0))
+
+    width_um = adata.uns['puck_variables']['width_um']
+    coord_by_um = x_pos_max / width_um
+    height_um = int(y_pos_max / coord_by_um)
+    
+    adata.uns['puck_variables']['height_um'] = height_um
+    adata.uns['puck_variables']['coord_by_um'] = coord_by_um
+
+    return adata
