@@ -494,6 +494,7 @@ parser_run = None
 parser_projects = None
 parser_config = None
 parser_init = None
+parser_spatial = None
 
 ##################
 # SPACEMAKE INIT #

@@ -366,7 +366,7 @@ class ConfigFile:
                     Loader=yaml.FullLoader)
 
         if config_yaml_variables is not None:
-            cf.variables = config_yaml_variables
+            cf.variables.update(config_yaml_variables)
 
         cf.file_path = file_path
 
