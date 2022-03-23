@@ -1,4 +1,16 @@
 signatures:
+    visium:
+        label: "visium"
+        prio: 0
+        read1_primer: chr_bead_start
+        read2_primer: vTSO
+        CB: "r1[0:16]"
+        UMI: "r1[16:28]"
+        color: "pink"
+        intact_bead: "chr_bead_start,polyT,chr_TSO_RC"
+        bead_related: "chr_bead_start"
+        ignore_matches: ["bead_start", "TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER", "OP1", "OP2", "OP2_2s", "OP3"]
+
     withUMI:
         label: "withUMI"
         prio: 1
