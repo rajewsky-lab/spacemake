@@ -1,6 +1,9 @@
 Running spacemake
 =================
 
+Main modules
+------------
+
 After spacemake in configured with the ``spacemake config`` command, and projects/samples
 are added with the ``spacemake projects`` command, spacemake can be run with the 
 ``spacemake run`` command. It takes the following parameters::

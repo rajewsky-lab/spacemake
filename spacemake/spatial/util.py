@@ -115,7 +115,8 @@ def create_meshed_adata(adata,
         spot_diameter_um = 55,
         spot_distance_um = 100,
         bead_diameter_um = 10,
-        mesh_type = 'circle'
+        mesh_type = 'circle',
+        start_at_minimum=False
     ):
     import pandas as pd
     import scanpy as sc
@@ -134,7 +135,11 @@ def create_meshed_adata(adata,
 
     coords = adata.obsm['spatial']
 
-    top_left_corner = np.min(coords, axis=0)
+    if start_at_minimum:
+        top_left_corner = np.min(coords, axis=0)
+    else:
+        top_left_corner = [0, 0]
+
     bottom_right_corner = np.max(coords, axis=0)
     width_px = abs(top_left_corner[0] - bottom_right_corner[0])
     height_px = abs(top_left_corner[1] - bottom_right_corner[1])

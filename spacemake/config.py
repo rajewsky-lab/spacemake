@@ -424,7 +424,7 @@ class ConfigFile:
             config_yaml_variables = yaml.load(f, Loader=yaml.FullLoader)
 
         if config_yaml_variables is not None:
-            cf.variables = config_yaml_variables
+            cf.variables.update(config_yaml_variables)
 
         cf.file_path = file_path
 
@@ -604,9 +604,9 @@ class ConfigFile:
         rRNA_genome=None,
         STAR_index_dir=None,
     ):
-        assert_file(genome, default_value=None, extension=".fa")
-        assert_file(annotation, default_value=None, extension=".gtf")
-        assert_file(rRNA_genome, default_value=None, extension=".fa")
+        assert_file(genome, default_value=None, extension=[".fa", ".fa.gz"])
+        assert_file(annotation, default_value=None, extension=[".gtf", ".gtf.gz"])
+        assert_file(rRNA_genome, default_value=None, extension=[".fa"])
 
         species = {}
 

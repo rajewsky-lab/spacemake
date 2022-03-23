@@ -6,8 +6,8 @@ project = 'spacemake'
 copyright = '2021, Rajewsky lab'
 author = 'Tamas Ryszard Sztanka-Toth, Nikolaos Karaiskos, Marvin Jens, Nikolaus Rajewsky'
 
-release = '0.4.3'
-version = '0.4.3'
+release = '0.5.1'
+version = '0.5.1'
 
 # -- General configuration
 
@@ -17,7 +17,8 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
-    'sphinx.ext.autosectionlabel'
+    'sphinx.ext.autosectionlabel',
+    'nbsphinx'
 ]
 
 intersphinx_mapping = {

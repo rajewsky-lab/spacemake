@@ -222,6 +222,35 @@ def get_dge_input_bam(wildcards):
 
     return out
 
+def get_species_genome(wildcards):
+    # This function will return the genome of a sample
+    #    - annotation (.gtf file)
+    #    - genome (.fa file)
+    if "species" not in wildcards.keys():
+        species = project_df.get_metadata(
+            "species", project_id=wildcards.project_id, sample_id=wildcards.sample_id
+        )
+    else:
+        species = wildcards.species
+
+    files = project_df.config.get_variable("species", name=species)
+
+    return [files['genome']]
+
+def get_species_annotation(wildcards):
+    # This function will return the genome of a sample
+    #    - annotation (.gtf file)
+    #    - genome (.fa file)
+    if "species" not in wildcards.keys():
+        species = project_df.get_metadata(
+            "species", project_id=wildcards.project_id, sample_id=wildcards.sample_id
+        )
+    else:
+        species = wildcards.species
+
+    files = project_df.config.get_variable("species", name=species)
+
+    return [files['annotation']]
 
 def get_species_genome_annotation(wildcards):
     # This function will return 2 things required by STAR:
@@ -234,10 +263,8 @@ def get_species_genome_annotation(wildcards):
     else:
         species = wildcards.species
 
-    files = project_df.config.get_variable("species", name=species)
-
-    return {'genome': files['genome'],
-            'annotation': files['annotation']}
+    return {'genome': species_genome.format(species=species),
+            'annotation': species_annotation.format(species=species)}
 
 
 def get_star_index(wildcards):
@@ -252,7 +279,6 @@ def get_star_index(wildcards):
         return {'index': species_data['STAR_index_dir']}
     else:
         return {"index": expand(star_index, species=species)[0]}
-
 
 def get_rRNA_genome(wildcards):
     files = project_df.config.get_variable("species", name=wildcards.species)
