@@ -18,7 +18,7 @@ Contents
     install
     quick-start
     config
-    projects
+    projects/index
     run
     tutorials/index
     api/index
