@@ -16,7 +16,7 @@ Contents
 
 .. toctree::
     install
-    quick-start
+    quick-start/index.rst
     config
     projects/index
     run

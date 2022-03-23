@@ -4,9 +4,9 @@ Quick start guide
 The examples here are minimal code pieces how to start spacemake. It is assumed that spacemake
 has been instaled following the instructions :ref:`here <installation>`.
 
-.. include:: shared/spacemake_init.rst
+.. include:: ../shared/spacemake_init.rst
 
-.. include:: shared/shared_sample_variables.rst
+.. include:: ../shared/shared_sample_variables.rst
 
 As spacemake comes with no ``default`` value for ``species``, before anything can be done,
 a new species has to be added::
@@ -29,7 +29,10 @@ More info :ref:`here <configure-species>`.
 Visium quick start
 ------------------
 
-To add a visium sample, simply type::
+Step 1: add your Visium sample
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In terminal, simply type::
 
    spacemake projects add_sample \
       --project_id <project_id> \
@@ -65,6 +68,13 @@ sample in the same way as `spaceranger <https://support.10xgenomics.com/spatial-
 To see the values of these predefined variables checkout the :ref:`configuration <Configuration>` docs.
 
 **To add several visium samples at once, follow** :ref:`the tutorial here <add-several-samples>`
+
+.. _Run spacemake Visium:
+
+Step 2: Run spacemake
+^^^^^^^^^^^^^^^^^^^^^
+
+.. include:: run_spacemake.rst 
 
 Slide-seq quick start
 ---------------------
@@ -181,21 +191,4 @@ Of course, running single-cell samples with other ``run_mode`` settings is also 
 To see the values of these predefined variables checkout the :ref:`configuration <Configuration>` docs.
 
 **To add several single-cell projects at once, follow** :ref:`the tutorial here <add-several-samples>`
-
-Running spacemake
------------------
-
-After a sample is added, like in one of the examples above, spacemake can be run with::
-
-   spacemake run --cores <n_cores> --keep-going
-
-The ``--keep-going`` flag is optional, however it will ensure that spacemake runs all
-the jobs it can, even if one job fails (this logic is directly taken from snakemake).
-
-Listing projects
-----------------
-
-To list projects which were added so far, and their information, type::
-
-   spacemake projects list
 
