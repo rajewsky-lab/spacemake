@@ -20,10 +20,19 @@ Too activate the newly created environment type::
 
    conda activate spacemake
 
-Step 2: install spacemake
+Step 2: download Dropseq-tools
+------------------------------
+
+To work with spacemake, currently it is needed to download `Dropseq-tools from here <https://github.com/broadinstitute/Drop-seq>`_.
+This packages is a collection of processing tools originally written for `Drop-seq <https://www.cell.com/cell/fulltext/S0092-8674(15)00549-8>`_. Spacemake uses several functions from this package during pre-processing and processing and without it it is impossible to run spacemake.
+
+Simply download one of the releases (we recommend using `2.5.1 <https://github.com/broadinstitute/Drop-seq/releases/download/v2.5.1/Drop-seq_tools-2.5.1.zip>`_) and place it somewhere in your filesystem.
+
+
+Step 3: install spacemake
 -------------------------
 
-**After creating the conda environment** (as described above) spacemake can be installed via ``pip``::
+**After creating the conda environment and downloading Dropseq-tools** (as described above) spacemake can be installed via ``pip``::
 
    pip install spacemake
 
