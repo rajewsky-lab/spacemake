@@ -9,6 +9,7 @@ LINE_SEPARATOR = "-" * 50 + "\n"
 
 bool_in_str = ["True", "true", "False", "false"]
 
+
 def assert_file(file_path, default_value=None, extension=["all"]):
     if file_path == default_value:
         # file doesn't exist but has the default value,
@@ -75,6 +76,7 @@ def BAM_src(src):
 def read_fq(fname, skim=0):
     import gzip
 
+    logger = logging.getLogger("spacemake.util.read_fq")
     if fname.endswith(".gz"):
         src = FASTQ_src(gzip.open(fname, mode="rt"))
     elif fname.endswith(".bam"):
@@ -90,6 +92,8 @@ def read_fq(fname, skim=0):
         else:
             if (i % skim) == 0:
                 yield name, seq, qual
+
+    logger.info(f"processed {i} FASTQ records from '{fname}'")
 
 
 def dge_to_sparse(dge_path):
@@ -168,6 +172,7 @@ def compute_neighbors(adata, min_dist=None, max_dist=None):
 
     return neighbors
 
+
 COMPLEMENT = {
     "a": "t",
     "t": "a",
@@ -242,11 +247,7 @@ def fasta_chunks(lines, strip=True, fuse=True):
 
 
 @contextmanager
-def message_aggregation(
-    log_listen="spacemake",
-    print_logger=False,
-    print_success=True
-):
+def message_aggregation(log_listen="spacemake", print_logger=False, print_success=True):
     message_buffer = []
 
     log = logging.getLogger(log_listen)
@@ -271,6 +272,7 @@ def message_aggregation(
     except SpacemakeError as e:
         print(e)
 
+
 def str_to_list(value):
     # if list in string representation, return the list
     if value is None:
@@ -285,15 +287,18 @@ def str_to_list(value):
     else:
         return [value]
 
+
 def check_star_index_compatibility(star_index_dir):
     import os
-    
-    star_version = os.popen('STAR --version').read().strip()
 
-    with open(os.path.join(star_index_dir, 'Log.out'), 'r') as f:
+    star_version = os.popen("STAR --version").read().strip()
+
+    with open(os.path.join(star_index_dir, "Log.out"), "r") as f:
         first_line = f.readline().strip()
-        index_version = first_line.split('=')[-1].split('_')[-1]
+        index_version = first_line.split("=")[-1].split("_")[-1]
 
         if index_version != star_version:
-            raise SpacemakeError(f'STAR index version ({index_version}) is' +
-                f' incompatible with your STAR version ({star_version})')
+            raise SpacemakeError(
+                f"STAR index version ({index_version}) is"
+                + f" incompatible with your STAR version ({star_version})"
+            )

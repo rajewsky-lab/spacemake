@@ -130,8 +130,57 @@ Example
 -------
 
 Here is a full example using a small test data-set. We will download the test data, add the 
-sample to a spacemake project, run the analysis, and have a look at the output generated.
+sample to a spacemake project, run the analysis, and have a look at the output generated. We use ``wget`` 
+to download a small test data set. Alternatively, you can use 
+``git clone https://github.com/rajewsky-lab/spacemake-test-data.git`` to check out a collection of different
+test data. Here, we further assume that a species labelled ``human`` has already been set up for spacemake [TODO: add link].
 
-[TODO!]
+.. code-block::
+
+   wget https://github.com/rajewsky-lab/spacemake-test-data/raw/main/longread/SRR9008425_subsample.fastq.gz
+
+   spacemake projects add_sample --project_id=test --sample_id=test_longread --longreads=SRR9008425_subsample.fastq.gz --longread-signature=chromium --species=human
+   spacemake run -np --cores=8
+
+Spacemake lays out the following tasks to process our longread sample (shortened for brevity):
+
+.. code-block::
+
+    Job counts:
+            count   jobs
+            1       all
+            1       cmd_align
+            1       cmd_alnstats
+            1       cmd_annotate
+            1       cmd_edits
+            1       cmd_extract
+            1       cmd_overview
+            1       cmd_report
+            1       map_cDNA
+            9
+    This was a dry-run (flag -n). The order of jobs does not reflect the order of execution.
+
+    rule cmd_align:
+        python -m spacemake.longread --parallel=8 --config=longread.yaml --cache=projects/test/processed_data/test_longread/pacbio/cache/ --annotation-out=projects/test/processed_data/test_longread/pacbio/annotation/ --stats-out=projects/test/processed_data/test_longread/pacbio/stats/ --report-out=projects/test/processed_data/test_longread/pacbio/reports/ --examples-out=projects/test/processed_data/test_longread/pacbio/examples/ --sample=test_longread --signature=chromium align SRR9008425_subsample.fastq.gz 
+
+    rule cmd_extract:
+        python -m spacemake.longread --parallel=1 --config=longread.yaml --cache=projects/test/processed_data/test_longread/pacbio/cache/     --annotation-out=projects/test/processed_data/test_longread/pacbio/annotation/     --stats-out=projects/test/processed_data/test_longread/pacbio/stats/     --report-out=projects/test/processed_data/test_longread/pacbio/reports/     --examples-out=projects/test/processed_data/test_longread/pacbio/examples/ --sample=test_longread --signature=chromium extract SRR9008425_subsample.fastq.gz 2> projects/test/processed_data/test_longread/pacbio/cDNA/test_longread.log > projects/test/processed_data/test_longread/pacbio/cDNA/test_longread.fa
+
+    rule cmd_annotate:
+        python -m spacemake.longread --parallel=1 --config=longread.yaml --cache=projects/test/processed_data/test_longread/pacbio/cache/     --annotation-out=projects/test/processed_data/test_longread/pacbio/annotation/     --stats-out=projects/test/processed_data/test_longread/pacbio/stats/     --report-out=projects/test/processed_data/test_longread/pacbio/reports/     --examples-out=projects/test/processed_data/test_longread/pacbio/examples/ --sample=test_longread --signature=chromium annotate SRR9008425_subsample.fastq.gz
+    
+    rule map_cDNA:
+        mkdir -p projects/test/processed_data/test_longread/pacbio/cDNA/tmp/
+        STARlong             --runThreadN 8             --genomeDir  species_data/human/star_index             --genomeLoad NoSharedMemory             --readFilesIn projects/test/processed_data/test_longread/pacbio/cDNA/test_longread.fa             --readFilesType Fastx             --outSAMtype BAM Unsorted             --outSAMunmapped Within             --outSAMattributes All             --outSAMprimaryFlag AllBestScore             --outStd BAM_Unsorted --outFilterMultimapScoreRange 2 --outFilterScoreMin 0 --outFilterScoreMinOverLread 0             --outFilterMatchNminOverLread 0             --outFilterMatchNmin 30             --outFilterMismatchNmax 1000             --winAnchorMultimapNmax 200             --seedSearchStartLmax 12             --seedPerReadNmax 100000             --seedPerWindowNmax 100             --alignTranscriptsPerReadNmax 100000             --alignTranscriptsPerWindowNmax 10000             --outFileNamePrefix projects/test/processed_data/test_longread/pacbio/cDNA/tmp |             /data/rajewsky/shared_bins/Drop-seq_tools-2.4.0/TagReadWithGeneFunction             I=/dev/stdin             O=projects/test/processed_data/test_longread/pacbio/cDNA/test_longread.bam             ANNOTATIONS_FILE=species_data/human/annotation.gtf
+
+    rule cmd_report:
+        python -m spacemake.longread     --parallel=1     --config=longread.yaml          --cache=projects/test/processed_data/test_longread/pacbio/cache/     --annotation-out=projects/test/processed_data/test_longread/pacbio/annotation/     --stats-out=projects/test/processed_data/test_longread/pacbio/stats/     --report-out=projects/test/processed_data/test_longread/pacbio/reports/     --examples-out=projects/test/processed_data/test_longread/pacbio/examples/ --sample=test_longread --signature=chromium report
+
+    rule cmd_edits:
+        python -m spacemake.longread     --parallel=1     --config=longread.yaml          --cache=projects/test/processed_data/test_longread/pacbio/cache/     --annotation-out=projects/test/processed_data/test_longread/pacbio/annotation/     --stats-out=projects/test/processed_data/test_longread/pacbio/stats/     --report-out=projects/test/processed_data/test_longread/pacbio/reports/     --examples-out=projects/test/processed_data/test_longread/pacbio/examples/     --sample=test_longread     --signature=chromium       edits SRR9008425_subsample.fastq.gz
+
+    rule cmd_overview:
+        python -m spacemake.longread     --parallel=1     --config=longread.yaml       overview --output pacbio_overview/ projects/test/processed_data/test_longread/pacbio/stats/test_longread.report.tsv
 
 
+Ok, sounds good. Let's do this.

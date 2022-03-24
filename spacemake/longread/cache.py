@@ -92,14 +92,15 @@ class CachedAlignments:
         self.lookup = self.build_lookup(self.df)
 
     def load_df(self, fname):
+        self.logger.info(f"trying to load DataFrame from '{fname}'")
         if not os.access(fname, os.R_OK):
             self.logger.warning(f"'{fname}' not found, looking for shelf-db to convert")
             self.shelf_to_df()
 
         if not os.access(fname, os.R_OK):
-            df = pd.DataFrame(
-                [[], [], [], []], columns=["qname", "start", "end", "score"]
-            ).set_index("qname")
+            df = pd.DataFrame(columns=["qname", "start", "end", "score"]).set_index(
+                "qname"
+            )
             self.logger.info(f"starting '{fname}' from empty dataframe")
         else:
             df = pd.read_csv(fname, sep="\t").set_index("qname")
@@ -145,7 +146,7 @@ class CachedAlignments:
         import multiprocessing as mp
 
         self.logger.info(
-            "preparing to align {self.oligo_name} against raw reads in '{fastq_path}'"
+            f"preparing to align {self.oligo_name} against raw reads in '{fastq_path}'"
         )
         n = 0
         job_list = []
@@ -160,11 +161,16 @@ class CachedAlignments:
                 f"need to align {len(job_list)} reads using {n_proc} processes"
             )
             pool = mp.Pool(n_proc)
-            for qname, hits in pool.starmap(
-                align_one_oligo_one_read, job_list, chunksize=10
-            ):
-                self.df = self.df.append(self.df_from_hits(qname, hits))
+            new = [
+                self.df_from_hits(qname, hits)
+                for qname, hits in pool.starmap(
+                    align_one_oligo_one_read, job_list, chunksize=10
+                )
+            ]
+
+            if len(new):
                 self._df_modified = True
+                self.df = pd.concat([self.df] + new)
 
         else:
             logging.info(
@@ -174,22 +180,32 @@ class CachedAlignments:
         self.lookup = self.build_lookup(self.df)
 
     def shelf_to_df(self):
+        import dbm
+
         dfname = self.sname + ".tsv"
         data = []
-        shelf = shelve.open(self.sname)
+        try:
+            shelf = shelve.open(self.sname, flag="r")
+        except dbm.error:
+            return
+
         for qname in shelf.keys():
             for start, end, score in shelf[qname]:
                 data.append((qname, start, end, score))
 
-        df = pd.DataFrame(data, columns=["qname", "start", "end", "score"])
-        df.to_csv(dfname, sep="\t", index=False)
+        df = pd.DataFrame(data, columns=["qname", "start", "end", "score"]).set_index(
+            "qname"
+        )
+        df.to_csv(dfname, sep="\t")
         return df
 
     def sync(self):
         dfname = self.sname + ".tsv"
         if self._df_modified:
-            self.logger.info(f"sync: storing changed dataframe '{dfname}'")
-            self.df.to_csv(dfname, sep="\t", index=False)
+            self.logger.info(
+                f"sync: storing changed dataframe '{dfname}' with {len(self.df)} entries..."
+            )
+            self.df.to_csv(dfname, sep="\t")
         else:
             self.logger.info(f"sync: dataframe '{dfname}' has not been changed")
 
