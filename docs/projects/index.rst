@@ -1,5 +1,5 @@
-Managing projects and samples
-=============================
+Manage projects and samples
+===========================
 
 In spacemake each sample, and it's settings, are stored in the ``project_df.csv`` under the root
 directory of the spacemake project.
@@ -11,6 +11,9 @@ The spacemake class responsible for this back-end logic is the :ref:`ProjectDF<P
 
 Add a single sample
 -------------------
+
+Sample parameters
+^^^^^^^^^^^^^^^^^
 
 In spacemake each sample can have the folloing variables:
 
@@ -100,20 +103,86 @@ To add a single sample, we can use the following command::
    In case both the ``puck_barcode_file`` is provided and the sample's ``puck`` has the
    ``barcodes`` variable set, ``puck_barcode_file`` will be used for the spatial coordinates.
 
-Add a spatial sample
-^^^^^^^^^^^^^^^^^^^^
+Add a Visium/Seq-scope/Slide-seq sample
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Currently spacemake works out of the box with three spatial methods: `Visium <https://www.10xgenomics.com/products/spatial-gene-expression>`_, `Seq-scope <https://www.sciencedirect.com/science/article/abs/pii/S0092867421006279>`_ and `Slide-seq <https://pubmed.ncbi.nlm.nih.gov/33288904/>`_.
+
+* To add a Visium sample, follow the :ref:`quick start guide here <step 1: add a visium sample>`.
+* To add a Seq-scope sample, follow the :ref:`quick start guide here <step 1: add a seq-scope sample>`.
+* To add a Slide-seq sample, follow the :ref:`quick start guide here <step 1: add a slide-seq sample>`.
+
+Add a custom spatial sample
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In order to process a custom spatial sample with spacemake follow the step by step guide below.
+
+Step 1: specifying a puck
+"""""""""""""""""""""""""
+
+Each spatial sample will need a so-called puck to be configured first. By 'puck' we mean the physical properties of the underlying methods.
+Visium for instance works with 6.5mm by 6.5mm sized capture areas, where each spot has 55 microns diameter. To configure a custom puck :ref:`follow the guide here <configure pucks>`.
+
+.. warning::
+
+    If a puck is not specified, spacemake will still run but will use the ``default`` puck as specified :ref:`here <provided pucks>`.
+
+Step 2: formatting a custom puck_barcode_file
+"""""""""""""""""""""""""""""""""""""""""""""
+
+For all spatial samples we need to provide a ``puck_barcode_file``. This file needs to be a comma or tab separated, and it needs to have the following three (named) columns:
+
+   - ``cell_bc``, ``barcodes``  or ``barcode`` for cell-barcode
+   - ``xcoord`` or ``x_pos`` for x-positions
+   - ``ycoord`` or ``y_pos`` for y-positions
+
+Step 3: configure run\_mode(s), barcode\_flavor and species
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Before a custom sample is added the run\_mode(s), barcode\_flavor and species should be configured. The guides on how to do this can be found :ref:`here for run-modes <configure run\\_modes>`, :ref:`here for <configure barcode\\_flavors>` and :ref:`here for species <configure species>`.
+
+The configured run\_mode(s) will specify how a sample is processed downstream, and the barcode\_flavor will specify the barcoding strategy used (ie how many nucleotides are used for UMI, which nucleotides are used for the spot barcodes).
+
+.. warning::
+
+    If no run\_mode(s) are provided spacemake will use the ``default`` run\_mode as specified :ref:`here <provided run\\_mode(s)>`.
+
+    Similarily if there is no barcode\_flavor specified spacemake will use the ``default`` barcode\_flavor as specified :ref:`here <provided barcode\\_flavors>`.
+
+Step 4: add your sample
+"""""""""""""""""""""""
+
+Once everything is configured you can add your custom spatial sample with the following command::
+
+    spacemake projects add_sample \
+        # your sample's project_id \
+        --project_id PROJECT_ID \
+        # your sample's sample_id \
+        --sample_id SAMPLE_ID \
+        # one or more R1.fastq.gz files
+        --R1 R1 [R1 R1 ...] \
+        # one or more R2.fastq.gz files
+        --R2 R2 [R2 R2 ...] \
+        # name of the barcode\_flavor, configured in Step 3 \
+        --barcode_flavor BARCODE_FLAVOR \
+        # name of the species, configured in Step 3 \
+        --species SPECIES \
+        # name of the puck, configured in Step 1 \
+        --puck PUCK \
+        # path to your custom barcode file, configured in Step 2 \
+        --puck_barcode_file PUCK_BARCODE_FILE \
+        # name of the run\_mode(s), configured in Step 3 \
+        --run_mode RUN_MODE [RUN_MODE ...]
 
 Add a single-cell sample
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-Add a sample for long-read analysis
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. include:: add_longread_sample.rst
+To add a single-cell sample follow the :ref:`quick start guide here <step 1: add a single-cell rna-seq sample>`.
 
 Add a pre-processed count-matrix
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Coming soon!
 
 Add several samples at once
 ---------------------------
