@@ -1,6 +1,3 @@
-Shared sample-variables
------------------------
-
 One of the most important parts of spacemake are the so-called 'shared sample-variables'.
 These are reusable, user-definable variables, which we can assign to several samples.
 

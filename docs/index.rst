@@ -15,10 +15,14 @@ Contents
 --------
 
 .. toctree::
+    :maxdepth: 3
+
     install
-    quick-start
+    quick-start/index.rst
+    initialize
     config
-    projects
+    projects/index
     run
     tutorials/index
     api/index
+

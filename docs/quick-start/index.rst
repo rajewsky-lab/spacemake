@@ -1,12 +1,25 @@
+.. _Quick start guide main:
+
 Quick start guide
 =================
 
 The examples here are minimal code pieces how to start spacemake. It is assumed that spacemake
 has been instaled following the instructions :ref:`here <installation>`.
 
-.. include:: shared/spacemake_init.rst
+.. _Quick start guide initialize spacemake:
 
-.. include:: shared/shared_sample_variables.rst
+Initialize spacemake
+--------------------
+
+.. include:: ../shared/spacemake_init.rst
+
+
+.. _Quick start guide shared sample-variables:
+
+Shared sample-variables
+-----------------------
+
+.. include:: ../shared/shared_sample_variables.rst
 
 As spacemake comes with no ``default`` value for ``species``, before anything can be done,
 a new species has to be added::
@@ -29,7 +42,10 @@ More info :ref:`here <configure-species>`.
 Visium quick start
 ------------------
 
-To add a visium sample, simply type::
+Step 1: add a Visium sample
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In terminal, simply type::
 
    spacemake projects add_sample \
       --project_id <project_id> \
@@ -66,8 +82,18 @@ To see the values of these predefined variables checkout the :ref:`configuration
 
 **To add several visium samples at once, follow** :ref:`the tutorial here <add-several-samples>`
 
+.. _running spacemake Visium:
+
+Step 2: running spacemake
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. include:: run_spacemake.rst 
+
 Slide-seq quick start
 ---------------------
+
+Step 1: add a Slide-seq sample
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To add a Slide-seq sample, simply type::
 
@@ -102,8 +128,18 @@ To see the values of these predefined variables checkout the :ref:`configuration
 
 **To add several slide_seq projects at once, follow** :ref:`the tutorial here <add-several-samples>`
 
+.. _running spacemake Slide-seq:
+
+Step 2: running spacemake
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. include:: run_spacemake.rst 
+
 Seq-scope quick start
 ---------------------
+
+Step 1: add a Seq-scope sample
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Adding a `Seq-scope <https://www.sciencedirect.com/science/article/pii/S0092867421006279>`_ sample 
 is similar to Slide-seq::
@@ -149,8 +185,18 @@ the ``seq_scope`` ``run_mode``. This means that downstream rather than with work
 the 1 micron beads, spaceame will create a mesh of adjascent, equal hexagons with 10 micron
 sides.
 
+.. _running spacemake Seq-scope:
+
+Step 2: running spacemake
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. include:: run_spacemake.rst 
+
 scRNA-seq quick start
 ---------------------
+
+Step 1: add a single-cell RNA-seq sample
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 spacemake was written as a spatial-transcriptomics pipeline, however it will also work for
 single-cell experiments, where there is no spatial information available. 
@@ -182,20 +228,10 @@ To see the values of these predefined variables checkout the :ref:`configuration
 
 **To add several single-cell projects at once, follow** :ref:`the tutorial here <add-several-samples>`
 
-Running spacemake
------------------
+.. _running spacemake scRNA-seq:
 
-After a sample is added, like in one of the examples above, spacemake can be run with::
+Step 2: running spacemake
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   spacemake run --cores <n_cores> --keep-going
-
-The ``--keep-going`` flag is optional, however it will ensure that spacemake runs all
-the jobs it can, even if one job fails (this logic is directly taken from snakemake).
-
-Listing projects
-----------------
-
-To list projects which were added so far, and their information, type::
-
-   spacemake projects list
+.. include:: run_spacemake.rst 
 

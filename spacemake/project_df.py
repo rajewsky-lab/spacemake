@@ -1140,6 +1140,11 @@ class ProjectDF:
                 if not self.config.variable_exists(cv_plural, kwargs[cv_singular]):
                     raise ConfigVariableNotFoundError(cv_singular, kwargs[cv_singular])
 
+
+        # if spatial we set the id to spatial_data if not provided
+        if is_spatial:
+            puck_id = kwargs.get('puck_id', 'spatial_data')
+
         # if everything correct, add or update
         # first populate kwargs
         kwargs["R1"] = R1
@@ -1150,6 +1155,7 @@ class ProjectDF:
         kwargs["sample_sheet"] = sample_sheet
         kwargs["basecalls_dir"] = basecalls_dir
         kwargs["is_merged"] = is_merged
+        kwargs["puck_id"] = puck_id
 
         if sample_exists:
             new_project = self.df.loc[ix].copy()
@@ -1160,7 +1166,7 @@ class ProjectDF:
             # if sample is spatial, and puck not provided, assign 'default'
             if is_spatial and "puck" not in kwargs:
                 kwargs["puck"] = "default"
-
+                
             new_project = pd.Series(self.project_df_default_values)
             new_project.name = ix
             new_project.update(kwargs)
