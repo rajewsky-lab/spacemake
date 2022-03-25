@@ -250,7 +250,7 @@ include: 'scripts/snakemake_helper_functions.py'
 #########################
 include: 'downsample.smk'
 include: 'dropseq.smk'
-include: 'pacbio.smk' 
+include: 'longread.smk' 
 
 
 # global wildcard constraints
