@@ -59,19 +59,48 @@ def setup_namespace(args, need_sample_name=True):
     db = get_signature_db(args.config)
 
     d["signature_db"] = db
+    d["CB"] = db.CB[args.signature]
+    d["UMI"] = db.UMI[args.signature]
+    d["read1_primer"] = db.read1_primer[args.signature]
+    d["read2_primer"] = db.read2_primer[args.signature]
+    d["cDNA_after"] = db.cDNA_after[args.signature]
     intact_bead = db.intact[args.signature]
     d["intact_bead"] = intact_bead
-    d["ignore_matches"] = db.ignore[args.signature]
+    d["relevant"] = (
+        intact_bead.split(",")
+        + db.other[args.signature].split(",")
+        + db.prefixes[args.signature].split(",")
+        + db.suffixes[args.signature].split(",")
+    )
     d["sig_intact"] = intact_bead.split(",")
     d["sig_core"], d["sig_core_order"] = util.process_intact_signature(intact_bead)
-
-    d["bead_related"] = db.related[args.signature]
+    d["bead_related"] = d["sig_intact"][0]
     d["logger"] = logging.getLogger(f"spacemake.longread.cmd.{args.subcmd}")
     d["blocks"] = util.load_oligos(args.blocks)
 
     from types import SimpleNamespace
 
     return SimpleNamespace(**d)
+
+
+def initialize(args):
+    args = setup_namespace(args)
+
+    annotation = ann.AnnotatedSequences(
+        args.fname,
+        os.path.join(args.annotation_out, f"{args.sample_name}.annotation.tsv"),
+        args.sample_name,
+        args.blocks,
+        min_score=args.min_score,
+        relevant=args.relevant,
+        orient_by=args.bead_related,
+    )
+    n_total = len(annotation.raw_sequences)
+
+    args.logger.info(
+        f"total number of reads in {args.fname} ({args.sample_name}) is {n_total}"
+    )
+    return args, annotation
 
 
 ## Subcommand 'align'
@@ -83,6 +112,7 @@ def cmd_align(args):
             args.fname,
             args.sample_name,
             args.blocks,
+            relevant=args.relevant,
             path=util.ensure_path(args.cache),
             n_proc=args.parallel,
         )
@@ -92,7 +122,7 @@ def cmd_align(args):
         args.sample_name,
         args.blocks,
         path=util.ensure_path(args.cache),
-        ignore_matches=args.ignore_matches,
+        relevant=args.relevant,
     )
     df.to_csv(
         os.path.join(
@@ -123,23 +153,8 @@ def prepare_align_parser(subparsers):
 
 ## subcommand 'annotate'
 def cmd_annotate(args):
-    args = setup_namespace(args)
-    args.logger.info(
-        f"analyzing {args.sample_name} for intact signature {args.sig_intact}"
-    )
-    annotation = ann.AnnotatedSequences(
-        args.fname,
-        os.path.join(args.annotation_out, f"{args.sample_name}.annotation.tsv"),
-        args.sample_name,
-        args.blocks,
-        min_score=args.min_score,
-        ignore_matches=args.ignore_matches,
-        orient_by=args.bead_related,
-    )
+    args, annotation = initialize(args)
     n_total = len(annotation.raw_sequences)
-    logging.info(
-        f"total number of reads in {args.fname} ({args.sample_name}) is {n_total}"
-    )
 
     sig_counts, n_concat, n_reprimed = annotation.count_signatures()
     util.count_dict_out(sig_counts, "common signatures", total=n_total)
@@ -390,19 +405,7 @@ def prepare_report_parser(subparsers):
 
 ## subcommand 'edits'
 def cmd_edits(args):
-    args = setup_namespace(args)
-
-    annotation = ann.AnnotatedSequences(
-        args.fname,
-        os.path.join(args.annotation_out, f"{args.sample_name}.annotation.tsv"),
-        args.sample_name,
-        args.blocks,
-        min_score=args.min_score,
-    )
-    n_total = len(annotation.raw_sequences)
-    logging.info(
-        f"total number of reads in {args.fname} ({args.sample_name}) is {n_total}"
-    )
+    args, annotation = initialize(args)
 
     data = []
     for part in args.sig_intact:
@@ -459,53 +462,23 @@ def prepare_edits_parser(subparsers):
 
 ## subcommand 'extract'
 def cmd_extract(args):
-    args = setup_namespace(args)
-    # TODO: clean up and actually implement
-    sample_name = detect_sample(args)
-    blocks = args.blocks
+    args, annotation = initialize(args)
 
-    annotation = ann.AnnotatedSequences(
-        args.fname,
-        os.path.join(args.annotation_out, f"{sample_name}.annotation.tsv"),
-        sample_name,
-        blocks,
-        min_score=args.min_score,
+    # anchor_scores = defaultdict(float)
+    CB_detect = set()
+    # umis = defaultdict(lambda: "NA")
+
+    args.logger.info(
+        "expecting read1 primed by {args.read1_primer} and CB={args.CB} UMI={args.UMI}"
     )
-    n_total = len(annotation.raw_sequences)
-    logging.info(f"total number of reads in {args.fname} ({sample_name}) is {n_total}")
-
-    anchor_scores = defaultdict(float)
-    barcodes = defaultdict(lambda: "NA")
-    umis = defaultdict(lambda: "NA")
-
-    cb_start, cb_end = args.CB.split(",")
-    cb_start, cb_end = int(cb_start), int(cb_end)
-
-    umi_start, umi_end = args.UMI.split(",")
-    umi_start, umi_end = int(umi_start), int(umi_end)
-
-    if args.barcode_after:
-        hits = annotation.query_oligo_occurrences(args.barcode_after)
-        for qname, start, end, score, L in zip(*hits):
-            a_score = anchor_scores[qname]
-            if score > a_score:
-                anchor_scores[qname] = score
-                seq = annotation.raw_sequences[qname]
-                barcodes[qname] = seq[end + cb_start : end + cb_end]
-                umis[qname] = seq[end + umi_start : end + umi_end]
+    args.logger.info(
+        f"expecting cDNA after {args.cDNA_after} and primed by {args.read2_primer}"
+    )
 
     if args.top_barcodes:
         known = set([bc.strip()[::-1] for bc in open(args.top_barcodes).readlines()])
         rev = set([bc[::-1] for bc in known])
-        detect = set(barcodes.values())
-        nd = len(detect)
-        ov = len(detect & known)
-        ctrl = len(detect & rev)
-        logging.info(
-            f"loaded {len(known)} barcodes from '{args.top_barcodes}'. "
-            f"{ov} / {nd} detected barcodes overlap ({ov/nd * 100:.3f}%). "
-            f"Reverse BC control {ctrl/nd * 100:.3f}%"
-        )
+        logger.info(f"loaded {len(known)} barcodes from '{args.top_barcodes}'. ")
     else:
         known = set()
 
@@ -518,30 +491,50 @@ def cmd_extract(args):
         if args.sig_exclude and (args.sig_exclude in sig_str):
             continue
 
+        r1 = ""
+        if args.read1_primer in sig:
+            ((r1_start, r1_end), (start_oli, end_oli), r1,) = annotation.extract_cDNA(
+                qname, after_oligo=args.read1_primer, distal=args.distal
+            )
+
+        r2 = ""
         if args.cDNA_after in sig:
             (
                 (cDNA_start, cDNA_end),
                 (start_oli, end_oli),
-                cDNA,
+                r2,
             ) = annotation.extract_cDNA(
                 qname, after_oligo=args.cDNA_after, distal=args.distal
             )
-            if not cDNA.strip() or (cDNA_end - cDNA_start <= 0):
-                continue
+            if not r2.strip() or (cDNA_end - cDNA_start <= 0):
+                r2 = ""
 
-            bc = barcodes[qname]
-            if bc not in known:
-                bc = bc.lower()
-            n += 1
-            seq = annotation.raw_sequences[qname]
-            header = (
-                f">{n}__CB:{bc}__UMI:{umis[qname]}__"
-                + f"sig:{','.join(sig)}__cDNA:{cDNA_start}-{cDNA_end}__oli:{start_oli}-{end_oli}__"
-                + f"L_read={len(seq)}__L_cDNA={cDNA_end - cDNA_start}"
-            )
+        CB = eval(args.CB, dict(r1=r1)) if r1 else "NA"
+        UMI = eval(args.UMI, dict(r1=r1, r2=r2)) if r1 and r2 else "NA"
 
-            # print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
-            print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
+        CB_detect.add(CB)
+        if CB not in known:
+            CB = CB.lower()
+
+        n += 1
+        seq = annotation.raw_sequences[qname]
+        header = (
+            f">{n}__CB:{CB}__UMI:{UMI}__"
+            + f"sig:{sig_str}__cDNA:{cDNA_start}-{cDNA_end}__oli:{start_oli}-{end_oli}__"
+            + f"L_read={len(seq)}__L_cDNA={cDNA_end - cDNA_start}"
+        )
+        # print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
+        if r2:
+            print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{r2}")
+
+    if len(known):
+        nd = len(CB_detect)
+        ov = len(CB_detect & known)
+        ctrl = len(CB_detect & rev)
+        args.logger.info(
+            f"{ov} / {nd} detected barcodes overlap ({ov/nd * 100:.3f}%). "
+            f"Reverse BC control {ctrl/nd * 100:.3f}%"
+        )
 
 
 def prepare_extract_parser(subparsers):
@@ -558,18 +551,6 @@ def prepare_extract_parser(subparsers):
         type=str,
         default="bead_start",
         help="name of anchor match after which the barcodes follow (default='bead_start')",
-    )
-    parser.add_argument(
-        "--CB",
-        type=str,
-        default="8,20",
-        help="bases downstream of anchor match at which the cell barcode starts and ends. Default='8,20'",
-    )
-    parser.add_argument(
-        "--UMI",
-        type=str,
-        default="0,8",
-        help="bases downstream of anchor match at which the UMI starts and ends. Default='0,8'",
     )
     parser.add_argument(
         "--cDNA-after",

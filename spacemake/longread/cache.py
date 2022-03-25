@@ -232,7 +232,7 @@ class CachedAlignments:
 
 class MultiAlignments:
     def __init__(
-        self, sample_name, oligo_dict, min_length=15, path="./cache/", ignore_matches=[]
+        self, sample_name, oligo_dict, min_length=15, path="./cache/", relevant=[]
     ):
         """
         Combine alignments of multiple oligos against a set of reads and
@@ -244,21 +244,24 @@ class MultiAlignments:
         self.sample_name = sample_name
         self.oligo_dict = oligo_dict
         # sort oligos by length and accept longer oligo match only if score is at least 2 matches better (+4)
-        self.ignore_matches = set(ignore_matches)
-        for m in ignore_matches:
-            # ignore reverse-complement hits of an oligo set to ignore
-            # as well!
-            self.ignore_matches.add(f"{m}_RC".replace("_RC_RC", ""))
+        self.relevant = set(relevant)
+        for m in relevant:
+            #  also include reverse-complement hits of an oligo
+            self.relevant.add(f"{m}_RC".replace("_RC_RC", ""))
+
         self.min_length = min_length
 
         self.logger.info(
-            f"ignoring matches for {sorted(self.ignore_matches)} or under {min_length} bases"
+            f"restricting to relevant matches {sorted(self.relevant)} "
+            f"and discarding matches under {min_length} bases"
         )
 
         self.oligo_names = sorted(
             oligo_dict.keys(), key=lambda k: len(self.oligo_dict[k])
         )
-        self.oligo_names = [o for o in self.oligo_names if not o in self.ignore_matches]
+        self.oligo_names = [
+            o for o in self.oligo_names if o in self.relevant or len(self.relevant) == 0
+        ]
         self.aln_caches = {}
         for o in self.oligo_names:
             aln = CachedAlignments(sample_name, o, self.oligo_dict[o], path=path)
@@ -382,20 +385,31 @@ class MultiAlignments:
 #     return sample_name, oligo_name, n
 
 
-def fill_caches(fastq_path, sample_name, oligo_dict, path="./cache/", n_proc=None):
+def rev_comp_name(name):
+    return (name + "_RC").replace("_RC_RC", "")
+
+
+def fill_caches(
+    fastq_path, sample_name, oligo_dict, path="./cache/", n_proc=None, relevant=[]
+):
     """
     Utility function to run alignments in parallel
     """
     # import multiprocessing as mp
     for oligo_name, oligo_seq in sorted(oligo_dict.items()):
+        if relevant:
+            if oligo_name not in relevant and rev_comp_name(oligo_name) not in relevant:
+                logging.info(
+                    f"skipping irrelevant oligo {oligo_name} for this signature"
+                )
+                continue
+
         aln = CachedAlignments(sample_name, oligo_name, oligo_seq, path=path)
         aln.align_fastq(fastq_path, n_proc=n_proc)
 
 
-def annotate(fastq_path, sample_name, oligo_dict, path="./cache/", ignore_matches=[]):
-    multi = MultiAlignments(
-        sample_name, oligo_dict, path=path, ignore_matches=ignore_matches
-    )
+def annotate(fastq_path, sample_name, oligo_dict, path="./cache/", relevant=[]):
+    multi = MultiAlignments(sample_name, oligo_dict, path=path, relevant=relevant)
     return multi.annotate_fastq(fastq_path)
     data = []
     # for name, seq, qual in read_fq(fastq_path):

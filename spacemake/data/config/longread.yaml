@@ -1,97 +1,113 @@
 signatures:
     visium:
-        label: "visium"
+        label: visium
         prio: 0
-        read1_primer: chr_bead_start
-        read2_primer: vTSO
-        CB: "r1[0:16]"
-        UMI: "r1[16:28]"
-        color: "pink"
-        intact_bead: "chr_bead_start,polyT,chr_TSO_RC"
-        bead_related: "chr_bead_start"
-        ignore_matches: ["bead_start", "TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER", "OP1", "OP2", "OP2_2s", "OP3"]
-
-    withUMI:
-        label: "withUMI"
-        prio: 1
-        read1_primer: bead_start
-        read2_primer: N70X
-        CB: "r1[0:12]"
-        UMI: "r2[0:8]"
-        color: "blue"
-        intact_bead: "P5,bead_start,OP1,polyT,N70X"
-        bead_related: "bead_start"
-        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER", "OP1", "OP2", "OP2_2s", "OP3"]
-
-    noUMI:
-        label: "noUMI"
-        prio: 2
-        read1_primer: bead_start
-        read2_primer: N70X
-        CB: "r1[0:12]"
-        UMI: "r2[0:8]"
-        color: "darkgray"
-        intact_bead: "P5,bead_start,OP1,polyT,N70X"
-        bead_related: "bead_start"
-        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER", "OP1", "OP2", "OP2_2s", "OP3"]
-
-    dropseq:
-        prio: -1
-        label: "dropseq"
-        read1_primer: bead_start
-        read2_primer: N70X
-        CB: "r1[8:20]"
-        UMI: "r1[0:8]"
-        color: "gray"
-        intact_bead: "P5,bead_start,polyT,N70X"
-        bead_related: "bead_start"
-        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER", "OP1", "OP2", "OP2_2s", "OP3"]
+        color: pink
+        intact: 10X_start,polyT,10X_TSO_RC
+        other: 10X_C3_RT_PRIMER,10X_C2_RT_PRIMER
+        prefixes: P5
+        suffixes: N70X
+        CB: r1[0:16]
+        UMI: r1[16:28]
+        cDNA_after: polyT
+        read1_primer: 10X_start
+        read2_primer: 10X_TSO
 
     chromium:
-        prio: -1
-        label: "chromium"
-        read1_primer: chr_bead_start
-        read2_primer: chr_TSO
-        CB: "r1[0:16]"
-        UMI: "r1[16:26]"
-        color: "gray"
-        intact_bead: "chr_bead_start,polyT,chr_TSO_RC"
-        bead_related: "chr_bead_start"
-        ignore_matches: ["bead_start","TSO"]
+        label: chromium
+        prio: 1
+        color: gray
+        CB: r1[0:16]
+        UMI: r1[16:26]
+        intact: 10X_start,polyT,10X_TSO_RC
+        other: 10X_C3_RT_PRIMER,10X_C2_RT_PRIMER
+        cDNA_after: polyT
+        prefixes: P5
+        suffixes: N70X
+        read1_primer: 10X_start
+        read2_primer: 10X_TSO
+
+    dropseq:
+        label: dropseq
+        prio: 2
+        color: gray
+        CB: r1[8:20]
+        UMI: r1[0:8]
+        intact: SMART_bead,polyT
+        cDNA_after: polyT
+        other: SMART_primer,dN-SMRT,TSO,sc_primer
+        prefixes: P5
+        suffixes: N70X
+        read1_primer: SMART_bead
+        read2_primer: N70X
+
+    # in-house experimental
+    withUMI:
+        label: withUMI
+        prio: 3
+        color: blue
+        CB: r1[0:12]
+        UMI: r1[12:20]
+        intact: SMART_bead,OP1,polyT
+        other: SMART_primer,dN-SMRT,TSO,sc_primer
+        prefixes: P5
+        suffixes: N70X
+        cDNA_after: polyT
+        read1_primer: SMART_bead
+        read2_primer: N70X
+
+    noUMI:
+        label: noUMI
+        prio: 10
+        color: lightblue
+        CB: r1[0:12]
+        UMI: r2[0:8]
+        intact: SMART_bead,OP1,polyT
+        other: SMART_primer,dN-SMRT,TSO,sc_primer
+        prefixes: P5
+        suffixes: N70X
+        cDNA_after: polyT
+        read1_primer: SMART_bead
+        read2_primer: N70X
 
     combv1:
-        prio: 10
-        label: "comb_2seg_pilot"
-        read1_primer: bead_start
+        label: comb_2seg_pilot
+        prio: 20
+        color: blue
+        CB: r1[0:12]
+        UMI: r2[0:8]
+        intact_bead: SMART_bead,OP1,OP2_2s,polyT
+        other: SMART_primer,dN-SMRT,TSO,sc_primer,OP3
+        cDNA_after: polyT
+        read1_primer: SMART_bead
         read2_primer: N70X
-        CB: "r1[0:12]"
-        UMI: "r2[0:8]"
-        color: "blue"
-        intact_bead: "P5,bead_start,OP1,OP2_2s,polyT,N70X"
-        bead_related: "bead_start"
-        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER"]
 
     hybridv1:
-        prio: 20
-        label: "comb_hybrid"
-        read1_primer: bead_start
+        label: comb_hybrid
+        prio: 30
+        color: lightblue
+        CB: r1[0:8]+r1[31:39]
+        UMI: r2[0:8]
+        intact: SMART_bead,OP2,OP3,polyT
+        other: SMART_primer,dN-SMRT,TSO,sc_primer,OP3
+        prefixes: P5
+        suffixes: N70X
+        cDNA_after: polyT
+        read1_primer: SMART_bead
         read2_primer: N70X
-        CB: "r1[0:8]+r1[31:39]"
-        color: "lightblue"
-        intact_bead: "P5,bead_start,OP2,OP3,polyT,N70X"
-        bead_related: "bead_start"
-        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER"]
 
     scsmrna:
-        prio: -1
-        label: "smallRNA"
-        read1_primer: bead_start
+        label: smallRNA
+        prio: 40
+        color: red
+        CB: r1[0:12]
+        UMI: r1[12:20]
+        intact: SMART_bead,polyT,sc_primer_RC
+        other: SMART_primer,dN-SMRT,TSO,sc_primer,OP1
+        prefixes: P5
+        suffixes: N70X
+        cDNA_after: polyT
+        read1_primer: SMART_bead
         read2_primer: TSO
-        CB: "r1[0:12]"
-        UMI: "r2[0:8]"
-        color: "red"
-        intact_bead: "P5,bead_start,polyT,sc_primer_RC,N70X"
-        bead_related: "bead_start"
-        ignore_matches: ["chr_bead_start", "chr_TSO","chrV2_RT_PRIMER","chrV3_RT_PRIMER", "OP1", "OP2", "OP2_2s", "OP3"]
 
-default: "withUMI"
+default: withUMI
