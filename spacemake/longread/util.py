@@ -1,26 +1,5 @@
-import os
-import logging
-from more_itertools import grouper
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 import numpy as np
-from spacemake.util import rev_comp, fasta_chunks, ensure_path, read_fq
-
-
-logger = logging.getLogger("spacemake.longread.util")
-
-
-def load_oligos(fname=""):
-    if not fname:
-        base = os.path.dirname(__file__)
-        fname = os.path.join(base, "../data/oligo_blocks.fa")
-
-    blocks = OrderedDict()
-    for fa_id, seq in fasta_chunks(open(fname)):
-        blocks[fa_id] = seq
-        blocks[fa_id + "_RC"] = rev_comp(seq)
-
-    logger.info(f"load_oligos(): loaded {len(blocks)} sequences from '{fname}'")
-    return blocks
 
 
 def count_dict_collapse_misc(
@@ -127,91 +106,6 @@ def count_dict_from_df(df, kind):
     keys = df["name"]
     values = df["count"]
     return dict(zip(keys, values))
-
-
-def process_intact_signature(complete_signature, prefixes=["P5"], suffixes=["N70X"]):
-    complete = complete_signature.split(",")
-    while complete[0] in prefixes:
-        complete.pop(0)
-
-    while complete[-1] in suffixes:
-        complete.pop()
-
-    complete_order = dict(x[::-1] for x in enumerate(complete))
-    # print(f"complete={complete}")
-
-    return tuple(complete), complete_order
-
-
-def digest_signatures(
-    sig_counts,
-    bead_related="bead_start",
-    complete_signature="P5,bead_start,OP1,polyT,N70X",
-    prefixes=[
-        "P5",
-    ],
-    suffixes=[
-        "N70X",
-    ],
-):
-    bead_counts = defaultdict(int)
-    ov_counts = defaultdict(int)
-    n_bead_related = 0
-
-    complete, complete_order = process_intact_signature(
-        complete_signature, prefixes, suffixes
-    )
-    complete_set = set(complete)
-    found_part_counts = defaultdict(int)
-
-    def describe(found_set):
-        missing = complete_set - found_set
-        if not missing:
-            descr = "complete"
-        elif len(missing) < len(found_set):
-            descr = f"missing_{','.join(sorted(missing))}"
-        else:
-            descr = f"only_{','.join(sorted(found_set))}"
-
-        return descr
-
-    def bead_relation(parts):
-        search = list(complete)
-        at = 0
-
-        try:
-            i = parts.index(search[0])  # look for first part, e.g. bead_start
-        except ValueError:
-            i = 0
-
-        found = []
-        for part in parts[i:]:
-            # find co-linear matches,
-            # ignore extra inserted segments
-            # (for now)
-            if part in search[at:]:
-                found.append(part)
-                at = search.index(part)
-
-        found_set = set(found)
-        found_tup = tuple(sorted(found_set, key=lambda x: complete_order[x]))
-
-        return describe(found_set), found_tup
-
-    for sig, count in sig_counts.items():
-        parts = sig.split(",")
-        if bead_related in parts:
-            br, found_tup = bead_relation(parts)
-            bead_counts[br] += count
-            n_bead_related += count
-
-            for i in range(1, len(found_tup) + 1):
-                found_part_counts[found_tup[:i]] += count
-        else:
-            ov_counts[sig] = count
-
-    ov_counts["bead-related"] = n_bead_related
-    return ov_counts, bead_counts, found_part_counts, complete
 
 
 def gather_data_from_overview(df, samples, attr, na=np.nan):

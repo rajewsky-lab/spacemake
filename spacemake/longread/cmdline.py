@@ -6,11 +6,16 @@ import argparse
 import logging
 import pandas as pd
 import numpy as np
+from spacemake.util import ensure_path
 import spacemake.longread.util as util
 import spacemake.longread.report as report
 import spacemake.longread.cache as cache
 import spacemake.longread.annotation as ann
-from spacemake.longread.signature import get_signature_db
+from spacemake.longread.signature import (
+    get_signature_db,
+    process_intact_signature,
+    digest_signatures,
+)
 from collections import defaultdict
 
 
@@ -27,7 +32,7 @@ def detect_sample(args):
 
 
 def store_results(df, path, fname, logger, **kw):
-    fpath = os.path.join(util.ensure_path(path), fname)
+    fpath = os.path.join(ensure_path(path), fname)
     df.to_csv(fpath, sep="\t", **kw)
     logger.info(f"storing {len(df)} rows to '{fpath}'")
     return fpath
@@ -73,10 +78,10 @@ def setup_namespace(args, need_sample_name=True):
         + db.suffixes[args.signature].split(",")
     )
     d["sig_intact"] = intact_bead.split(",")
-    d["sig_core"], d["sig_core_order"] = util.process_intact_signature(intact_bead)
+    d["sig_core"], d["sig_core_order"] = process_intact_signature(intact_bead)
     d["bead_related"] = d["sig_intact"][0]
     d["logger"] = logging.getLogger(f"spacemake.longread.cmd.{args.subcmd}")
-    d["blocks"] = util.load_oligos(args.blocks)
+    d["blocks"] = db.blocks
 
     from types import SimpleNamespace
 
@@ -107,26 +112,25 @@ def initialize(args):
 def cmd_align(args):
     args = setup_namespace(args)
 
-    if args.fill_caches:
-        cache.fill_caches(
-            args.fname,
-            args.sample_name,
-            args.blocks,
-            relevant=args.relevant,
-            path=util.ensure_path(args.cache),
-            n_proc=args.parallel,
-        )
+    cache.fill_caches(
+        args.fname,
+        args.sample_name,
+        args.blocks,
+        relevant=args.relevant,
+        path=ensure_path(args.cache),
+        n_proc=args.parallel,
+    )
 
     df = cache.annotate(
         args.fname,
         args.sample_name,
         args.blocks,
-        path=util.ensure_path(args.cache),
+        path=ensure_path(args.cache),
         relevant=args.relevant,
     )
     df.to_csv(
         os.path.join(
-            util.ensure_path(args.annotation_out), f"{args.sample_name}.annotation.tsv"
+            ensure_path(args.annotation_out), f"{args.sample_name}.annotation.tsv"
         ),
         sep="\t",
         index=False,
@@ -140,13 +144,6 @@ def prepare_align_parser(subparsers):
         default=None,
         help="file with pacbio reads (FASTQ or BAM format)",
     )
-    parser.add_argument(
-        "--fill-caches",
-        default=False,
-        action="store_true",
-        help="parallelize initial Smith & Waterman alignments (default=False)",
-    )
-
     parser.set_defaults(func=cmd_align)
     return parser
 
@@ -253,9 +250,7 @@ def cmd_annotate(args):
     )
 
     # output representative examples
-    eo_fname = os.path.join(
-        util.ensure_path(args.examples_out), f"{args.sample_name}.txt"
-    )
+    eo_fname = os.path.join(ensure_path(args.examples_out), f"{args.sample_name}.txt")
 
     with open(eo_fname, "wt") as eo:
         for signame, sigcount in sorted(sig_counts.items(), key=lambda x: -x[1]):
@@ -324,7 +319,7 @@ def cmd_report(args):
     args.logger.info(f"n_total={n_total}")
 
     # disentangle bead-related from other signatures
-    ov_counts, bead_counts, found_part_counts, core_signature = util.digest_signatures(
+    ov_counts, bead_counts, found_part_counts, core_signature = digest_signatures(
         sig_counts,
         args.bead_related,
         args.intact_bead,
@@ -379,7 +374,7 @@ def cmd_report(args):
         syn_rates,
         all_parts=core_signature,
         fname=os.path.join(
-            util.ensure_path(args.report_out), f"{args.sample_name}.donuts.pdf"
+            ensure_path(args.report_out), f"{args.sample_name}.donuts.pdf"
         ),
         suptitle=args.sample_name,
     )
@@ -390,7 +385,7 @@ def cmd_report(args):
             args.stats_out, f"{args.sample_name}.intact_parts.tsv", args.logger
         ),
         fname=os.path.join(
-            util.ensure_path(args.report_out), f"{args.sample_name}.hists.pdf"
+            ensure_path(args.report_out), f"{args.sample_name}.hists.pdf"
         ),
         n_total=n_total,
         parts=args.intact_bead.split(","),

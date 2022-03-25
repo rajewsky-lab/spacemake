@@ -45,7 +45,7 @@ class AnnotatedSequences:
         sample_name,
         blocks,
         min_score=0,
-        ignore_matches=[],
+        relevant=[],
         orient_by="bead_start",
     ):
         self.sample_name = sample_name
@@ -55,17 +55,17 @@ class AnnotatedSequences:
         self.raw_sequences = self.load_raw_sequences(fastq_path)
         self.oligo_blocks = blocks
         self.min_oligo_scores = {}
-        self.ignore_matches = set(ignore_matches)
-        for m in ignore_matches:
-            # ignore reverse-complement hits of an oligo set to ignore
-            # as well!
-            self.ignore_matches.add(f"{m}_RC".replace("_RC_RC", ""))
+        self.relevant = set(relevant)
+        for m in relevant:
+            # reverse-complement hits of a relevant oligo too!
+            self.relevant.add(f"{m}_RC".replace("_RC_RC", ""))
 
         for name, seq in blocks.items():
             self.min_oligo_scores[name] = (2 * len(seq)) * min_score
 
         self.logger.info(
-            f"ignoring matches for {sorted(self.ignore_matches)} or under {min_score} align score"
+            f"restricting to relevant matches {sorted(self.relevant)} "
+            f"and discarding matches under {min_score} alignment score."
         )
         self.ann_db = self.load_annotation(ann_path)
         # self.ann_db = self.cleanup_overlaps(self.ann_db)
@@ -90,7 +90,9 @@ class AnnotatedSequences:
         df["min_score"] = df["oligo"].apply(lambda x: self.min_oligo_scores.get(x, 22))
         # df = df.query(f"score > min_score")
         mask = df["score"] > df["min_score"]
-        mask &= ~df["oligo"].isin(self.ignore_matches)
+        if len(self.relevant):
+            mask &= df["oligo"].isin(self.relevant)
+
         df = df.loc[mask]
 
         qdata = {}
