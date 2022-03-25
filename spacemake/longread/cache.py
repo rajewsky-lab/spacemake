@@ -164,7 +164,7 @@ class CachedAlignments:
             new = [
                 self.df_from_hits(qname, hits)
                 for qname, hits in pool.starmap(
-                    align_one_oligo_one_read, job_list, chunksize=10
+                    align_one_oligo_one_read, job_list, chunksize=100
                 )
             ]
 

@@ -7,7 +7,6 @@ import logging
 import pandas as pd
 import numpy as np
 from spacemake.util import ensure_path
-import spacemake.longread.util as util
 import spacemake.longread.report as report
 import spacemake.longread.cache as cache
 import spacemake.longread.annotation as ann
