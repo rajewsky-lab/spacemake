@@ -154,45 +154,45 @@ def cmd_annotate(args):
     n_total = len(annotation.raw_sequences)
 
     sig_counts, n_concat, n_reprimed = annotation.count_signatures()
-    util.count_dict_out(sig_counts, "common signatures", total=n_total)
+    report.count_dict_out(sig_counts, "common signatures", total=n_total)
     print(
         f"n_concat={n_concat} ({100.0 * n_concat/n_total:.2f}%) "
         f"n_reprimed={n_reprimed} ({100.0 * n_reprimed/n_total:.2f}%)"
     )
-    df_sig = util.count_dict_to_df(sig_counts, "signatures", n_total=n_total)
+    df_sig = report.count_dict_to_df(sig_counts, "signatures", n_total=n_total)
 
     concat_counts, n_occurrences = annotation.count_concatenations()
-    util.count_dict_out(concat_counts, "concatenations", total=n_occurrences)
-    df_concat = util.count_dict_to_df(
+    report.count_dict_out(concat_counts, "concatenations", total=n_occurrences)
+    df_concat = report.count_dict_to_df(
         concat_counts, "concatenations", n_total=n_occurrences
     )
 
     reprimed_counts = annotation.count_repriming()
-    util.count_dict_out(reprimed_counts, "repriming", total=n_total)
-    df_reprimed = util.count_dict_to_df(reprimed_counts, "repriming", n_total=n_total)
+    report.count_dict_out(reprimed_counts, "repriming", total=n_total)
+    df_reprimed = report.count_dict_to_df(reprimed_counts, "repriming", n_total=n_total)
 
     partial_counts, prefixes, suffixes, pT_counts = annotation.completeness(
         args.sig_core, polyT=args.polyT
     )
 
-    partial_counts_simple, _ = util.count_dict_collapse_misc(
+    partial_counts_simple, _ = report.count_dict_collapse_misc(
         partial_counts, sig_intact=args.sig_intact, total=n_total, misc_thresh=0.00001
     )
-    util.count_dict_out(partial_counts_simple, "completeness", total=n_total)
+    report.count_dict_out(partial_counts_simple, "completeness", total=n_total)
 
-    df_comp = util.count_dict_to_df(
+    df_comp = report.count_dict_to_df(
         partial_counts_simple, kind="bead_complete", n_total=n_total
     ).sort_values("name")
 
-    df_pT = util.count_dict_to_df(pT_counts, kind="polyT_after", n_total=n_total)
+    df_pT = report.count_dict_to_df(pT_counts, kind="polyT_after", n_total=n_total)
 
     df = pd.concat([df_sig, df_concat, df_reprimed, df_comp, df_pT])
     store_results(df, args.stats_out, f"{args.sample_name}.stats.tsv", args.logger)
 
     # TODO: prefix/suffix counts add up to > 100%. Needs fix
-    util.count_dict_out(pT_counts, "polyT after", total=n_total)
-    util.count_dict_out(prefixes, "prefixes", total=n_total)
-    util.count_dict_out(suffixes, "suffixes", total=n_total)
+    report.count_dict_out(pT_counts, "polyT after", total=n_total)
+    report.count_dict_out(prefixes, "prefixes", total=n_total)
+    report.count_dict_out(suffixes, "suffixes", total=n_total)
 
     # Gather statistics about the parts that make up intact oligos
     qintact, qL, qstarts, qends, qscores = annotation.query_dimensions(
@@ -311,8 +311,8 @@ def cmd_report(args):
     args.logger.debug(f"'bead-related' if we detect: '{args.bead_related}'")
 
     df = load_results(args.stats_out, f"{args.sample_name}.stats.tsv", args.logger)
-    sig_counts = util.count_dict_from_df(df, "signatures")
-    util.count_dict_out(
+    sig_counts = report.count_dict_from_df(df, "signatures")
+    report.count_dict_out(
         sig_counts, "signatures", misc_thresh=0.05, total=sig_counts["n_total"]
     )
     n_total = sig_counts["n_total"]
@@ -327,16 +327,16 @@ def cmd_report(args):
         # suffixes=args.suffixes,
     )
     # group low abundance signatures into 'misc' for overview donut plot
-    ov_simple, _ = util.count_dict_out(
+    ov_simple, _ = report.count_dict_out(
         ov_counts, "overview counts", misc_thresh=0.01, total=sig_counts["n_total"]
     )
     # group low abundance signatures into 'misc' for bead completeness donut plot
-    bead_simple, _ = util.count_dict_out(
+    bead_simple, _ = report.count_dict_out(
         bead_counts, "bead counts", misc_thresh=0.0, total=ov_counts["bead-related"]
     )
     # store the donut plot values in ...report.tsv for cross-sample overviews and such
-    df_ov = util.count_dict_to_df(ov_simple, kind="overview")
-    df_bead = util.count_dict_to_df(bead_simple, kind="bead_related")
+    df_ov = report.count_dict_to_df(ov_simple, kind="overview")
+    df_bead = report.count_dict_to_df(bead_simple, kind="bead_related")
     df_rep = pd.concat([df_ov, df_bead])
     df_rep["sample"] = args.sample_name
     df_rep["signature"] = args.signature
