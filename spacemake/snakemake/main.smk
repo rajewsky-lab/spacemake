@@ -613,7 +613,7 @@ rule run_novosparc_denovo:
         novosparc_denovo_h5ad
     threads: 4
     shell:
-        "python {spacemake_dir}/spatial/novosparc_reconstruction.py"
+        "python {spacemake_dir}/spatial/novosparc_integration.py"
         " --single_cell_dataset {input}"
         " --output {output}"
 
@@ -624,7 +624,7 @@ rule run_novosparc_with_reference:
     output:
         novosparc_with_reference_h5ad
     shell:
-        "python {spacemake_dir}/spatial/novosparc_reconstruction.py"
+        "python {spacemake_dir}/spatial/novosparc_integration.py"
         " --single_cell_dataset {input.sc_adata}"
         " --spatial_dataset {input.st_adata}"
         " --output {output}"

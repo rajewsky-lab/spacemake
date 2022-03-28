@@ -1,14 +1,15 @@
 import logging
 import novosparc
+import anndata
 
-from anndata import AnnData
 from spacemake.util import message_aggregation
 from numpy import ndarray
 
-logger_name = 'spacemake.spatial.novosparc_reconstruction'
+logger_name = 'spacemake.spatial.novosparc_integration'
 logger = logging.getLogger(logger_name)
 
 def get_parser():
+    """get_parser."""
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -38,13 +39,14 @@ def quantify_clusters_spatially(tissue: novosparc.cm.Tissue, cluster_key: str='c
     """Maps the annotated clusters obtained from the scRNA-seq analysis onto
     the tissue space.
 
-    :param tissue:    the novosparc tissue object containing the gene expression data,
+    :param: tissue:    the novosparc tissue object containing the gene expression data,
                       the clusters annotation and the spatial reconstruction. Assumes
                       that the cluster annotation exists in the underlying anndata object.
-    :type tissue: novosparc.cm.Tissue
-    :param cluster_key: the key of the clustering to be used for deduction
-    :type cluster_key: str
-    rtype: numpy.ndarray
+    :type: tissue: novosparc.cm.Tissue
+    :param: cluster_key: the key of the clustering to be used for deduction
+    :type: cluster_key: str
+    :returns: A numpy list of cluster names, one per each spot
+    :rtype: numpy.ndarray
     """
     import numpy as np
 
@@ -61,21 +63,35 @@ def quantify_clusters_spatially(tissue: novosparc.cm.Tissue, cluster_key: str='c
     return [cluster_names[ix] for ix in ixs]
     
 def novosparc_denovo(
-        adata: AnnData,
+        adata: anndata.AnnData,
         num_spatial_locations: int=5000,
         num_input_cells: int=30000,
         locations=None,
     ) -> novosparc.cm.Tissue:
-    """reconstruct spatial information de-novo with novosparc.
+    """
+    Given an AnnData object containing single-cell data, this function
+    will try to reconstruct a 2D tissue de-novo. By default it will use 
+    the 500 most variable genes as markers to do this reconstruction.
 
     :param adata: A spacemake processed sample.
-    :type adata: AnnData
-    :param num_spatial_locations:
+    :type adata: anndata.AnnData
+    :param num_spatial_locations: The number of spatial locations to be used
+        for de-novo recontruction onto a circular tissue. Ignored if locations
+        are provided. If set to None this will be equal to the number of cells
+        in the dataset. Default: 5000.
     :type num_spatial_locations: int
-    :param num_input_cells:
+    :param num_input_cells: Number of cells from the single-cell data to be
+        used for de-novo reconstruction. If set to less than the available
+        number of cells, the data will be downsampled. If set to None all cells
+        are used. Default: 30000
     :type num_input_cells: int
-    :param locations: Numpy array of (x,y) locations (optional)
+    :param locations: Numpy array of (x,y) coordinates (optional).
+        Novosparc will try to reconstruct the tissue using these 
+        locations. If none provided, a circular tissue will be 
+        automatically created with num_spatial_locations number of
+        locations.
     :type locations: numpy.ndarray
+    :returns: A novosparc.cm.Tissue object with 2D expression information.
     :rtype: novosparc.cm.Tissue
     """
     import numpy as np
@@ -92,6 +108,12 @@ def novosparc_denovo(
     gene_names = adata.var.index.tolist()
 
     num_cells, num_genes = adata.shape
+
+    if num_input_cells is None:
+        num_input_cells = num_cells
+
+    if num_spatial_locations is None:
+        num_spatial_locations = num_cells
 
     if num_cells > num_input_cells:
         sc.pp.subsample(adata, n_obs = num_input_cells)
@@ -131,13 +153,19 @@ def novosparc_denovo(
 
     return tissue
 
-def novosparc_mapping(sc_adata: AnnData, st_adata: AnnData) -> novosparc.cm.Tissue:
-    """novosparc_mapping.
+def novosparc_mapping(sc_adata: anndata.AnnData, st_adata: anndata.AnnData) -> novosparc.cm.Tissue:
+    """
+    Given two AnnData objects, one single-cell and one spatial, this function
+    will map the expression of the single-cell data onto the spatial data using
+    shared highly variable genes as markers.
 
-    :param sc_adata:
-    :type sc_adata: AnnData
-    :param st_adata:
-    :type st_adata: AnnData
+    :param sc_adata: A spacemake processed single-cell sample.
+    :type sc_adata: anndata.AnnData
+    :param st_adata: A spacemake processed spatial sample.
+    :type st_adata: anndata.AnnData
+    :returns: A novosparc.cm.Tissue object with 2D expression information.
+        The locations of the Tissue will be identical to the locations of 
+        the spatial sample.
     :rtype: novosparc.cm.Tissue
     """
     import scanpy as sc
@@ -198,7 +226,18 @@ def novosparc_mapping(sc_adata: AnnData, st_adata: AnnData) -> novosparc.cm.Tiss
 
     return tissue
 
-def save_novosparc_res(tissue, adata_original) -> AnnData:
+def save_novosparc_res(
+        tissue : novosparc.cm.Tissue,
+        adata_original : anndata.AnnData
+    ) -> anndata.AnnData:
+    """save_novosparc_res.
+
+    :param tissue:
+    :type tissue: novosparc.cm.Tissue
+    :param adata_original:
+    :type adata_original: anndata.AnnData
+    :rtype: anndata.AnnData
+    """
     import anndata
     import pandas as pd
     import numpy as np
@@ -224,6 +263,7 @@ def save_novosparc_res(tissue, adata_original) -> AnnData:
 
 @message_aggregation(logger_name)
 def cmdline():
+    """cmdline."""
     import scanpy as sc
 
     parser = get_parser()
