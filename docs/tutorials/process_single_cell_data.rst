@@ -16,7 +16,7 @@ As an example we will be using 1 million reads from `this Visium dataset <https:
     spacemake provides pre-defined variables. If you are using
     one of these methods follow our :ref:`Quick start guide <quick start guide>` instead.
 
-Step 1: inistall and initialize spacemake
+Step 1: install and initialize spacemake
 -----------------------------------------
 
 To install spacemake follow the :ref:`installation guide here <installation>`.
@@ -26,12 +26,18 @@ To initialize spacemake follow the :ref:`initialization guide here <initializati
 Step 2: download test data
 --------------------------
 
-Next we download the test data: 1 million Read1 and 1 million Read2 reads: 
+For the sake of this tutorial we will work with a test dataset: 1 million Read1 and 1 million Read2 reads from a `Visium`_ adult mouse brain.
+
+To download the test data:
 
 .. code-block::
 
     wget -nv http://bimsbstatic.mdc-berlin.de/rajewsky/spacemake-test-data/visium/test_fastq/visium_public_lane_joined_1m_R1.fastq.gz
     wget -nv http://bimsbstatic.mdc-berlin.de/rajewsky/spacemake-test-data/visium/test_fastq/visium_public_lane_joined_1m_R2.fastq.gz
+
+.. note:: 
+
+    If there is already data available, to be processed and analyzed, this step can be omitted.
 
 Step 3: add a new species
 -------------------------
@@ -77,8 +83,8 @@ Consequently, we create a new ``barcode\_flavor`` like this:
 
     If you want to use one of these, there is no need to add your own flavor.
 
-Step 5: adding a new run\_mode
-------------------------------
+Step 5: add a new run\_mode
+---------------------------
 
 A ``run\_mode`` in spacemake defines how a sample should processed downstream. 
 In this tutorial, we will trim the PolyA stretches from the 3' end of Read2,
@@ -101,10 +107,10 @@ using 50, 100 and 300 UMI cutoffs. To set these parameters, we define a
     As with ``barcode\_flavors``, spacemake provides several ``run\_modes`` out
     of the box. For more info :ref:`check out a more detailed guide here <configure run\\_modes>`.
 
-Step 6: adding the test sample
-------------------------------
+Step 6: add the sample
+----------------------
 
-After configuring all the steps above, we are ready to add our test sample:
+After configuring all the steps above, we are ready to add our (test) sample:
 
 .. code-block:: console
 
@@ -116,9 +122,13 @@ After configuring all the steps above, we are ready to add our test sample:
     --barcode_flavor test_barcode_flavor \
     --run_mode test_run_mode
 
+.. note::
 
-Step 7: running spacemake
--------------------------
+    If there is already data available, here the Read1 and Read2 ``.fastq.gz`` files should be added,
+    instead of the test files.
+
+Step 7: runn spacemake
+----------------------
 
 Now we can process our samples with spacemake. Since we added only one sample, only one sample will be processed
 and analyzed. To start spacemake, simply write:
