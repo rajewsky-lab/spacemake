@@ -6,16 +6,21 @@ import argparse
 import logging
 import pandas as pd
 import numpy as np
-import spacemake.longread.util as util
+from spacemake.util import ensure_path
 import spacemake.longread.report as report
 import spacemake.longread.cache as cache
 import spacemake.longread.annotation as ann
+from spacemake.longread.signature import (
+    get_signature_db,
+    process_intact_signature,
+    digest_signatures,
+)
 from collections import defaultdict
 
 
 def detect_sample(args):
     if args.sample is None:
-        if not hasattr(args.fname):
+        if not hasattr(args, "fname"):
             raise ValueError("please provide a sample-identifier via --sample")
 
         sample_name, _ = os.path.splitext(os.path.basename(args.fname))
@@ -26,7 +31,7 @@ def detect_sample(args):
 
 
 def store_results(df, path, fname, logger, **kw):
-    fpath = os.path.join(util.ensure_path(path), fname)
+    fpath = os.path.join(ensure_path(path), fname)
     df.to_csv(fpath, sep="\t", **kw)
     logger.info(f"storing {len(df)} rows to '{fpath}'")
     return fpath
@@ -39,169 +44,154 @@ def load_results(path, fname, logger, **kw):
     return df
 
 
-class SignatureDB:
-    def __init__(self, intact={}, related={}, color={}, label={}, prio={}):
-        self.intact = intact
-        self.related = related
-        self.color = color
-        self.label = label
-        self.prio = prio
+def setup_namespace(args, need_sample_name=True):
+    """
+    perform initialization code common to more than one sub-command.
+    Augments the args object returned from argparse module with additional
+    variables that are used by multiple sub-commands.
 
-    @classmethod
-    def from_YAML(cls, fname="samples.yaml"):
-        import yaml
-
-        logger = logging.getLogger("spacemake.longread.SampleDB.from_YAML")
-        logger.info(f"reading longread signature definitions from '{fname}'")
-
-        groups = yaml.load(open(fname), Loader=yaml.SafeLoader)
-        grp = groups["signatures"]
-        default = grp[groups["default"]]
-        # print("default THING", default)
-
-        intact_lkup = defaultdict(lambda: default["intact_bead"])
-        brelated_lkup = defaultdict(lambda: default["bead_related"])
-        color_lkup = defaultdict(lambda: default["color"])
-        label_lkup = defaultdict(lambda: default["label"])
-        prio_lkup = defaultdict(lambda: default["prio"])
-        for name, d in groups["signatures"].items():
-            # print(f"name={name} d={d}")
-            intact_lkup[name] = d["intact_bead"]
-            brelated_lkup[name] = d["bead_related"]
-            color_lkup[name] = d["color"]
-            label_lkup[name] = d["label"]
-            prio_lkup[name] = d["prio"]
-
-        # print(color_lkup)
-        # print("DEFAULT COLOR", color_lkup["TEST"])
-        logger.info(
-            f"found {len(intact_lkup)} signature definitions: {sorted(intact_lkup.keys())}."
-        )
-        return cls(intact_lkup, brelated_lkup, color_lkup, label_lkup, prio_lkup)
-
-    def sort_samples(self, samples, signatures):
-        return sorted(
-            zip(samples, signatures), key=lambda x: (self.prio.get(x[1], np.inf), x[0])
-        )
-
-
-def get_signature_db(args):
-    if os.access(args.config, os.R_OK):
-        cfg = args.config
-    else:
-        cfg = os.path.join(os.path.dirname(__file__), "../data/config/longread.yaml")
-
-    return SignatureDB.from_YAML(cfg)
-
-
-def setup_namespace(args):
-    "perform initialization code common to more than one sub-command"
+    :param args: cmdline parser args
+    :type args: Namespace
+    :return: augmented namespace
+    :rtype: SimpleNamespace
+    """
     d = vars(args)
-    sample = detect_sample(args)
-    d["sample_name"] = sample
+    if need_sample_name:
+        sample = detect_sample(args)
+        d["sample_name"] = sample
 
-    db = get_signature_db(args)
+    db = get_signature_db(args.config)
+
     d["signature_db"] = db
-
+    d["CB"] = db.CB[args.signature]
+    d["UMI"] = db.UMI[args.signature]
+    d["read1_primer"] = db.read1_primer[args.signature]
+    d["read2_primer"] = db.read2_primer[args.signature]
+    d["cDNA_after"] = db.cDNA_after[args.signature]
     intact_bead = db.intact[args.signature]
     d["intact_bead"] = intact_bead
+    d["relevant"] = (
+        intact_bead.split(",")
+        + db.other[args.signature].split(",")
+        + db.prefixes[args.signature].split(",")
+        + db.suffixes[args.signature].split(",")
+    )
     d["sig_intact"] = intact_bead.split(",")
-    d["sig_core"], d["sig_core_order"] = util.process_intact_signature(intact_bead)
-
-    d["bead_related"] = db.related[args.signature]
-    # bead_related = args.bead_related
-    # if bead_related is None:
-    #     sig_intact = tuple(args.intact_bead.split(","))
-    #     bead_related = sig_intact[0]
-
+    d["sig_core"], d["sig_core_order"] = process_intact_signature(intact_bead)
+    d["bead_related"] = d["sig_intact"][0]
     d["logger"] = logging.getLogger(f"spacemake.longread.cmd.{args.subcmd}")
-    d["blocks"] = util.load_oligos(args.blocks)
+    d["blocks"] = db.blocks
 
     from types import SimpleNamespace
 
     return SimpleNamespace(**d)
 
 
-def aln_main(args):
+def initialize(args):
     args = setup_namespace(args)
 
-    cache.fill_caches(
-        args.fname,
-        args.sample_name,
-        args.blocks,
-        path=util.ensure_path(args.cache),
-        n_proc=args.parallel,
-    )
-    df = cache.annotate(
-        args.fname, args.sample_name, args.blocks, path=util.ensure_path(args.cache)
-    )
-    df.to_csv(
-        os.path.join(
-            util.ensure_path(args.annotation_out), f"{args.sample_name}.annotation.tsv"
-        ),
-        sep="\t",
-        index=False,
-    )
-
-
-def ann_main(args):
-    args = setup_namespace(args)
-    args.logger.info(
-        f"analyzing {args.sample_name} for intact signature {args.sig_intact}"
-    )
     annotation = ann.AnnotatedSequences(
         args.fname,
         os.path.join(args.annotation_out, f"{args.sample_name}.annotation.tsv"),
         args.sample_name,
         args.blocks,
         min_score=args.min_score,
+        relevant=args.relevant,
         orient_by=args.bead_related,
     )
     n_total = len(annotation.raw_sequences)
-    logging.info(
+
+    args.logger.info(
         f"total number of reads in {args.fname} ({args.sample_name}) is {n_total}"
     )
+    return args, annotation
+
+
+## Subcommand 'align'
+def cmd_align(args):
+    args = setup_namespace(args)
+
+    cache.fill_caches(
+        args.fname,
+        args.sample_name,
+        args.blocks,
+        relevant=args.relevant,
+        path=ensure_path(args.cache),
+        n_proc=args.parallel,
+    )
+
+    df = cache.annotate(
+        args.fname,
+        args.sample_name,
+        args.blocks,
+        path=ensure_path(args.cache),
+        relevant=args.relevant,
+    )
+    df.to_csv(
+        os.path.join(
+            ensure_path(args.annotation_out), f"{args.sample_name}.annotation.tsv"
+        ),
+        sep="\t",
+        index=False,
+    )
+
+
+def prepare_align_parser(subparsers):
+    parser = subparsers.add_parser("align", help="align PacBio reads against oligos")
+    parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
+    )
+    parser.set_defaults(func=cmd_align)
+    return parser
+
+
+## subcommand 'annotate'
+def cmd_annotate(args):
+    args, annotation = initialize(args)
+    n_total = len(annotation.raw_sequences)
 
     sig_counts, n_concat, n_reprimed = annotation.count_signatures()
-    util.count_dict_out(sig_counts, "common signatures", total=n_total)
+    report.count_dict_out(sig_counts, "common signatures", total=n_total)
     print(
         f"n_concat={n_concat} ({100.0 * n_concat/n_total:.2f}%) "
         f"n_reprimed={n_reprimed} ({100.0 * n_reprimed/n_total:.2f}%)"
     )
-    df_sig = util.count_dict_to_df(sig_counts, "signatures", n_total=n_total)
+    df_sig = report.count_dict_to_df(sig_counts, "signatures", n_total=n_total)
 
     concat_counts, n_occurrences = annotation.count_concatenations()
-    util.count_dict_out(concat_counts, "concatenations", total=n_occurrences)
-    df_concat = util.count_dict_to_df(
+    report.count_dict_out(concat_counts, "concatenations", total=n_occurrences)
+    df_concat = report.count_dict_to_df(
         concat_counts, "concatenations", n_total=n_occurrences
     )
 
     reprimed_counts = annotation.count_repriming()
-    util.count_dict_out(reprimed_counts, "repriming", total=n_total)
-    df_reprimed = util.count_dict_to_df(reprimed_counts, "repriming", n_total=n_total)
+    report.count_dict_out(reprimed_counts, "repriming", total=n_total)
+    df_reprimed = report.count_dict_to_df(reprimed_counts, "repriming", n_total=n_total)
 
     partial_counts, prefixes, suffixes, pT_counts = annotation.completeness(
         args.sig_core, polyT=args.polyT
     )
 
-    partial_counts_simple, _ = util.count_dict_collapse_misc(
+    partial_counts_simple, _ = report.count_dict_collapse_misc(
         partial_counts, sig_intact=args.sig_intact, total=n_total, misc_thresh=0.00001
     )
-    util.count_dict_out(partial_counts_simple, "completeness", total=n_total)
+    report.count_dict_out(partial_counts_simple, "completeness", total=n_total)
 
-    df_comp = util.count_dict_to_df(
+    df_comp = report.count_dict_to_df(
         partial_counts_simple, kind="bead_complete", n_total=n_total
     ).sort_values("name")
 
-    df_pT = util.count_dict_to_df(pT_counts, kind="polyT_after", n_total=n_total)
+    df_pT = report.count_dict_to_df(pT_counts, kind="polyT_after", n_total=n_total)
 
     df = pd.concat([df_sig, df_concat, df_reprimed, df_comp, df_pT])
     store_results(df, args.stats_out, f"{args.sample_name}.stats.tsv", args.logger)
 
     # TODO: prefix/suffix counts add up to > 100%. Needs fix
-    util.count_dict_out(pT_counts, "polyT after", total=n_total)
-    util.count_dict_out(prefixes, "prefixes", total=n_total)
-    util.count_dict_out(suffixes, "suffixes", total=n_total)
+    report.count_dict_out(pT_counts, "polyT after", total=n_total)
+    report.count_dict_out(prefixes, "prefixes", total=n_total)
+    report.count_dict_out(suffixes, "suffixes", total=n_total)
 
     # Gather statistics about the parts that make up intact oligos
     qintact, qL, qstarts, qends, qscores = annotation.query_dimensions(
@@ -259,23 +249,45 @@ def ann_main(args):
     )
 
     # output representative examples
-    eo_fname = os.path.join(
-        util.ensure_path(args.examples_out), f"{args.sample_name}.txt"
-    )
+    eo_fname = os.path.join(ensure_path(args.examples_out), f"{args.sample_name}.txt")
 
     with open(eo_fname, "wt") as eo:
         for signame, sigcount in sorted(sig_counts.items(), key=lambda x: -x[1]):
-            try:
-                qname, _, _ = next(
-                    annotation.filter_signatures(tuple(signame.split(",")))
+            i = None
+            for i, (qname, _, _) in enumerate(
+                annotation.filter_signatures(tuple(signame.split(",")))
+            ):
+                eo.write(
+                    f"# example={i} {signame} n={sigcount}\n{annotation.fmt(qname)}\n"
                 )
-                eo.write(f"# {signame} n={sigcount}\n{annotation.fmt(qname)}\n")
-            except StopIteration:
+                if i >= 10:
+                    break
+
+            if i is None:
                 args.logger.warning(
                     f"unable to find any reads with signature {signame}"
                 )
 
 
+def prepare_annotate_parser(subparsers):
+    parser = subparsers.add_parser(
+        "annotate", help="create annotation from detected oligo matches"
+    )
+    parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
+    )
+    parser.add_argument(
+        "--polyT",
+        help="name of oligo-block that matches polyT (default='polyT')",
+        default="polyT",
+    )
+    parser.set_defaults(func=cmd_annotate)
+    return parser
+
+
+## subcommand 'report'
 def get_synth_rates(found_part_counts, all_parts, n_total):
     rates = []
 
@@ -292,21 +304,21 @@ def get_synth_rates(found_part_counts, all_parts, n_total):
     return np.array(rates)
 
 
-def rep_main(args):
+def cmd_report(args):
     args = setup_namespace(args)
     args.logger.info(f"generating report plots for '{args.sample_name}'")
     args.logger.debug(f"'bead-related' if we detect: '{args.bead_related}'")
 
     df = load_results(args.stats_out, f"{args.sample_name}.stats.tsv", args.logger)
-    sig_counts = util.count_dict_from_df(df, "signatures")
-    util.count_dict_out(
+    sig_counts = report.count_dict_from_df(df, "signatures")
+    report.count_dict_out(
         sig_counts, "signatures", misc_thresh=0.05, total=sig_counts["n_total"]
     )
     n_total = sig_counts["n_total"]
     args.logger.info(f"n_total={n_total}")
 
     # disentangle bead-related from other signatures
-    ov_counts, bead_counts, found_part_counts, core_signature = util.digest_signatures(
+    ov_counts, bead_counts, found_part_counts, core_signature = digest_signatures(
         sig_counts,
         args.bead_related,
         args.intact_bead,
@@ -314,16 +326,16 @@ def rep_main(args):
         # suffixes=args.suffixes,
     )
     # group low abundance signatures into 'misc' for overview donut plot
-    ov_simple, _ = util.count_dict_out(
+    ov_simple, _ = report.count_dict_out(
         ov_counts, "overview counts", misc_thresh=0.01, total=sig_counts["n_total"]
     )
     # group low abundance signatures into 'misc' for bead completeness donut plot
-    bead_simple, _ = util.count_dict_out(
+    bead_simple, _ = report.count_dict_out(
         bead_counts, "bead counts", misc_thresh=0.0, total=ov_counts["bead-related"]
     )
     # store the donut plot values in ...report.tsv for cross-sample overviews and such
-    df_ov = util.count_dict_to_df(ov_simple, kind="overview")
-    df_bead = util.count_dict_to_df(bead_simple, kind="bead_related")
+    df_ov = report.count_dict_to_df(ov_simple, kind="overview")
+    df_bead = report.count_dict_to_df(bead_simple, kind="bead_related")
     df_rep = pd.concat([df_ov, df_bead])
     df_rep["sample"] = args.sample_name
     df_rep["signature"] = args.signature
@@ -361,7 +373,7 @@ def rep_main(args):
         syn_rates,
         all_parts=core_signature,
         fname=os.path.join(
-            util.ensure_path(args.report_out), f"{args.sample_name}.donuts.pdf"
+            ensure_path(args.report_out), f"{args.sample_name}.donuts.pdf"
         ),
         suptitle=args.sample_name,
     )
@@ -372,27 +384,22 @@ def rep_main(args):
             args.stats_out, f"{args.sample_name}.intact_parts.tsv", args.logger
         ),
         fname=os.path.join(
-            util.ensure_path(args.report_out), f"{args.sample_name}.hists.pdf"
+            ensure_path(args.report_out), f"{args.sample_name}.hists.pdf"
         ),
         n_total=n_total,
         parts=args.intact_bead.split(","),
     )
 
 
-def main_edits(args):
-    args = setup_namespace(args)
+def prepare_report_parser(subparsers):
+    parser = subparsers.add_parser("report", help="create PDF/PNG reports")
+    parser.set_defaults(func=cmd_report)
+    return parser
 
-    annotation = ann.AnnotatedSequences(
-        args.fname,
-        os.path.join(args.annotation_out, f"{args.sample_name}.annotation.tsv"),
-        args.sample_name,
-        args.blocks,
-        min_score=args.min_score,
-    )
-    n_total = len(annotation.raw_sequences)
-    logging.info(
-        f"total number of reads in {args.fname} ({args.sample_name}) is {n_total}"
-    )
+
+## subcommand 'edits'
+def cmd_edits(args):
+    args, annotation = initialize(args)
 
     data = []
     for part in args.sig_intact:
@@ -401,7 +408,9 @@ def main_edits(args):
             qmatches = ann.subsample(qmatches, n=args.n_samples)
 
         nmatch = len(qmatches[0])
-        m, ed = ann.align_stats(annotation, args.blocks[part], qmatches)
+        m, ed = ann.align_stats(
+            annotation, args.blocks[part], qmatches, min_score=args.min_score
+        )
         for x in np.arange(len(m)):
             # print(part, x, m)
             data.append((part, args.blocks[part], nmatch, x, m[x], ed[x]))
@@ -420,52 +429,50 @@ def main_edits(args):
     )
 
 
-def main_extract(args):
-    sample_name = detect_sample(args)
-    blocks = util.load_oligos(args.blocks)
-
-    annotation = ann.AnnotatedSequences(
-        args.fname,
-        os.path.join(args.annotation_out, f"{sample_name}.annotation.tsv"),
-        sample_name,
-        blocks,
-        min_score=args.min_score,
+def prepare_edits_parser(subparsers):
+    parser = subparsers.add_parser(
+        "edits", help="gather mismatch and indel stats for oligo matches"
     )
-    n_total = len(annotation.raw_sequences)
-    logging.info(f"total number of reads in {args.fname} ({sample_name}) is {n_total}")
+    parser.add_argument(
+        "--n-samples",
+        type=int,
+        default=1000,
+        help="number of sample alignments to gather edit statistics from (default=1000)",
+    )
+    parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
+    )
+    parser.add_argument(
+        "--min-score",
+        default=0.6,
+        type=float,
+        help="minimal match alignment score to consider a match for edit extraction, relative to its size (default=0.6)",
+    )
+    parser.set_defaults(func=cmd_edits)
+    return parser
 
-    anchor_scores = defaultdict(float)
-    barcodes = defaultdict(lambda: "NA")
-    umis = defaultdict(lambda: "NA")
 
-    cb_start, cb_end = args.CB.split(",")
-    cb_start, cb_end = int(cb_start), int(cb_end)
+## subcommand 'extract'
+def cmd_extract(args):
+    args, annotation = initialize(args)
 
-    umi_start, umi_end = args.UMI.split(",")
-    umi_start, umi_end = int(umi_start), int(umi_end)
+    # anchor_scores = defaultdict(float)
+    CB_detect = set()
+    # umis = defaultdict(lambda: "NA")
 
-    if args.barcode_after:
-        hits = annotation.query_oligo_occurrences(args.barcode_after)
-        for qname, start, end, score, L in zip(*hits):
-            a_score = anchor_scores[qname]
-            if score > a_score:
-                anchor_scores[qname] = score
-                seq = annotation.raw_sequences[qname]
-                barcodes[qname] = seq[end + cb_start : end + cb_end]
-                umis[qname] = seq[end + umi_start : end + umi_end]
+    args.logger.info(
+        "expecting read1 primed by {args.read1_primer} and CB={args.CB} UMI={args.UMI}"
+    )
+    args.logger.info(
+        f"expecting cDNA after {args.cDNA_after} and primed by {args.read2_primer}"
+    )
 
     if args.top_barcodes:
         known = set([bc.strip()[::-1] for bc in open(args.top_barcodes).readlines()])
         rev = set([bc[::-1] for bc in known])
-        detect = set(barcodes.values())
-        nd = len(detect)
-        ov = len(detect & known)
-        ctrl = len(detect & rev)
-        logging.info(
-            f"loaded {len(known)} barcodes from '{args.top_barcodes}'. "
-            f"{ov} / {nd} detected barcodes overlap ({ov/nd * 100:.3f}%). "
-            f"Reverse BC control {ctrl/nd * 100:.3f}%"
-        )
+        logger.info(f"loaded {len(known)} barcodes from '{args.top_barcodes}'. ")
     else:
         known = set()
 
@@ -478,30 +485,105 @@ def main_extract(args):
         if args.sig_exclude and (args.sig_exclude in sig_str):
             continue
 
+        r1 = ""
+        if args.read1_primer in sig:
+            ((r1_start, r1_end), (start_oli, end_oli), r1,) = annotation.extract_cDNA(
+                qname, after_oligo=args.read1_primer, distal=args.distal
+            )
+
+        r2 = ""
         if args.cDNA_after in sig:
             (
                 (cDNA_start, cDNA_end),
                 (start_oli, end_oli),
-                cDNA,
+                r2,
             ) = annotation.extract_cDNA(
                 qname, after_oligo=args.cDNA_after, distal=args.distal
             )
-            bc = barcodes[qname]
-            if bc not in known:
-                bc = bc.lower()
-            n += 1
-            seq = annotation.raw_sequences[qname]
-            header = (
-                f">{n}__CB:{bc}__UMI:{umis[qname]}__"
-                + f"sig:{','.join(sig)}__cDNA:{cDNA_start}-{cDNA_end}__oli:{start_oli}-{end_oli}__"
-                + f"L_read={len(seq)}__L_cDNA={cDNA_end - cDNA_start}"
-            )
+            if not r2.strip() or (cDNA_end - cDNA_start <= 0):
+                r2 = ""
 
-            # print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
-            print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
+        CB = eval(args.CB, dict(r1=r1)) if r1 else "NA"
+        UMI = eval(args.UMI, dict(r1=r1, r2=r2)) if r1 and r2 else "NA"
+
+        CB_detect.add(CB)
+        if CB not in known:
+            CB = CB.lower()
+
+        n += 1
+        seq = annotation.raw_sequences[qname]
+        header = (
+            f">{n}__CB:{CB}__UMI:{UMI}__"
+            + f"sig:{sig_str}__cDNA:{cDNA_start}-{cDNA_end}__oli:{start_oli}-{end_oli}__"
+            + f"L_read={len(seq)}__L_cDNA={cDNA_end - cDNA_start}"
+        )
+        # print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
+        if r2:
+            print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{r2}")
+
+    if len(known):
+        nd = len(CB_detect)
+        ov = len(CB_detect & known)
+        ctrl = len(CB_detect & rev)
+        args.logger.info(
+            f"{ov} / {nd} detected barcodes overlap ({ov/nd * 100:.3f}%). "
+            f"Reverse BC control {ctrl/nd * 100:.3f}%"
+        )
 
 
-def main_overview(args):
+def prepare_extract_parser(subparsers):
+    parser = subparsers.add_parser(
+        "extract", help="extract sequences from the long read"
+    )
+    parser.add_argument(
+        "fname",
+        default=None,
+        help="file with pacbio reads (FASTQ or BAM format)",
+    )
+    parser.add_argument(
+        "--barcode-after",
+        type=str,
+        default="bead_start",
+        help="name of anchor match after which the barcodes follow (default='bead_start')",
+    )
+    parser.add_argument(
+        "--cDNA-after",
+        type=str,
+        default="bead_start",
+        help="excise sequence between this oligo and the last oligo match (if it exists)",
+    )
+    parser.add_argument(
+        "--sig-include",
+        type=str,
+        default="",
+        help="extract cDNA only from long reads INCLUDING this substring in the signature",
+    )
+    parser.add_argument(
+        "--sig-exclude",
+        type=str,
+        default="",
+        help="extract cDNA only from long reads EXCLUDING this substring in the signature",
+    )
+    parser.add_argument(
+        "--distal",
+        default=150,
+        type=int,
+        help="number of nt from end of sequence that are considered for oligo matches when extracting cDNA",
+    )
+    parser.add_argument(
+        "--top-barcodes",
+        type=str,
+        default="",
+        help="path to text file with known barcodes (e.g. from Illumina)",
+    )
+    parser.set_defaults(func=cmd_extract)
+    return parser
+
+
+## subcommand 'overview'
+def cmd_overview(args):
+    args = setup_namespace(args, need_sample_name=False)
+
     dfs = []
     for fname in list(args.reports):
         print(f"loading {fname}")
@@ -550,208 +632,46 @@ def main_overview(args):
     df["fidelity"] = 100 * df["complete"] / df["bead-related"]
     df = df.fillna(0)
     # print(df)
-    if args.csv_out:
-        df.to_csv(args.csv_out, float_format="%.2f", sep="\t")
 
-    def clean(txt):
-        txt = os.path.basename(txt)
-        t = (
-            txt.replace("source/", "")
-            .replace("sts_", "")
-            .replace("pb_", "")
-            .replace("ds_", "")
-            .replace(".fq", "")
-            .replace(".bam", "")
-            .replace("lima.", "")
-        )
-
-        if t.count("_") > 1:
-            t = "_".join(t.split("_")[:2])
-
-        return t
-
-    df = df.reset_index()
-    # df = df.sort_values('bead_related')
-    df = df.sort_values("sample")
-
-    def guess_rRNA_file(path):
-        # print("guessrRNA raw path", path)
-        name = os.path.basename(path).replace(".summary", ".rRNA")
-
-        if args.rRNA_same_place:
-            place = os.path.dirname(path)
-        else:
-            place = args.rRNA
-
-        return [
-            os.path.join(place, name.replace(".fq", ".txt")),
-            os.path.join(place, name.replace(".fq", ".txt")).replace(
-                ".rRNA.tsv", ".txt"
-            ),
-            os.path.join(place, name.replace(".fq", ".txt")).replace(
-                ".rRNA.tsv", ".rRNA.txt"
-            ),
-            os.path.join(place, name.replace(".bam", ".txt").replace("lima.", "")),
-            os.path.join(
-                place, name.replace(".bam", ".txt").replace("lima.", "")
-            ).replace(".rRNA.tsv", ".txt"),
-            os.path.join(
-                place, name.replace(".bam", ".txt").replace("lima.", "")
-            ).replace(".rRNA.tsv", ".rRNA.txt"),
-        ]
-
-    # rRNA_fracs = []
-    # for row in df[["stats_file", "N_reads"]].itertuples():
-    #     rcount = np.nan
-    #     for fname in guess_rRNA_file(row.stats_file):
-    #         print(fname)
-    #         try:
-    #             rcount = int(open(fname).read())
-    #         except (FileNotFoundError, ValueError):
-    #             pass
-    #         else:
-    #             break
-    #     if rcount == np.nan:
-    #         raise ValueError
-
-    #     rRNA_fracs.append(100.0 * rcount / row.N_reads)
-
-    # df["rRNA"] = rRNA_fracs
-    # print(df[['qfa', 'rRNA']])
-
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    plt.rcParams.update({"font.size": 8})
-
-    def make_bars(
-        ax, df, kinds, labels, cmap=plt.get_cmap("tab10"), w=0.9, colors=None
-    ):
-        n = len(kinds)
-        if colors is None:
-            colors = cmap(np.linspace(0, 1, n))
-
-        x = np.arange(len(df)) - w / 2.0
-        y0 = np.zeros(len(x), dtype=float)
-        for kind, label, color in zip(kinds, labels, colors):
-            y = np.nan_to_num(df[kind], nan=0.0)
-            # print(kind)
-            # print(y)
-            ax.bar(x, y, bottom=y0, label=label, width=w, color=color)
-            y0 += y
-
-        ax.set_ylabel("fraction of library")
-        ax.set_xticks(x)
-        labels = df["sample"]  # [clean(fq) for fq in df['qfa']]
-        ax.set_xticklabels(labels, rotation=90)
-        ax.set_ylim(0, 100)
-
-    marie = [
-        "non_bead",
-        "incomplete",
-        "dropseq",
-        "complete",
-    ]
-    marie_colors = ["gray", "royalblue", "green", "gold"]
-
-    w = max(8 / 25.0 * len(df), 5)
-    if args.multi_page:
-        pdf = PdfPages(args.breakdown)
-        fig, ax1 = plt.subplots(1, figsize=(w, 8))
-    else:
-        fig, (ax1, ax2) = plt.subplots(2, figsize=(w, 8), sharex=True)
-
-    make_bars(
-        ax1,
+    df = df.reset_index().sort_values("sample")
+    store_results(
         df,
-        marie,
-        labels=marie,
-        colors=marie_colors,
+        args.output,
+        "overview.csv",
+        float_format="%.2f",
+        logger=args.logger,
     )
-    ax1.legend(title="Marie-stats", ncol=len(marie))
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        plt.close()
-        fig, ax2 = plt.subplots(1, figsize=(w, 4))
-
-    make_bars(ax2, df, ["fidelity"], labels=["bead fidelity"])
-    ax2.set_ylabel("bead fidelity")
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        pdf.close()
-    else:
-        fig.tight_layout()
-        plt.savefig(args.breakdown)
-
-    plt.close()
-
-    if args.multi_page:
-        pdf = PdfPages(args.output)
-        fig, ax1 = plt.subplots(1, figsize=(w, 4))
-    else:
-        fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, figsize=(w, 12), sharex=True)
-
-    # print("bead related", bead)
-    make_bars(ax1, df, bead, labels=bead)
-    ax1.legend(title="bead-related", ncol=len(bead))
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        plt.close()
-        fig, ax2 = plt.subplots(1, figsize=(w, 4))
-
-    # print("repriming events", repriming)
-    make_bars(
-        ax2,
+    report.overview_plots(
         df,
-        repriming,
-        labels=[r.split(",")[0] for r in repriming],
-        cmap=plt.get_cmap("tab20c"),
+        path=args.output,
+        bead=bead,
+        concatenation=concatenation,
+        repriming=repriming,
     )
-    ax2.legend(title="repriming", ncol=len(repriming))
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        plt.close()
-        fig, ax3 = plt.subplots(1, figsize=(w, 4))
 
-    # print("concat events", concatenation)
-    make_bars(ax3, df, concatenation, labels=concatenation, cmap=plt.get_cmap("tab20b"))
-    ax3.legend(title="concatamers", ncol=len(concatenation))
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        plt.close()
-        fig, ax4 = plt.subplots(1, figsize=(w, 4))
-
-    # make_bars(
-    #     ax4,
-    #     df,
-    #     [
-    #         "rRNA",
-    #     ],
-    #     labels=["rRNA"],
-    #     cmap=plt.get_cmap("tab20c"),
-    # )
-    ax4.legend(title="human rRNA", ncol=1)
-    if args.multi_page:
-        fig.tight_layout()
-        pdf.savefig()
-        pdf.close()
-    else:
-        fig.tight_layout()
-        plt.savefig(args.output)
-
-    plt.close()
     return df
 
 
-def prepare_parser():
+def prepare_overview_parser(subparsers):
+    parser = subparsers.add_parser(
+        "overview", help="make overview plots across samples"
+    )
+    parser.add_argument("reports", nargs="+", help="sample reports to aggregate")
+    parser.add_argument(
+        "--output",
+        default=".",
+        help="path for detailed report PDFs and CSV overview table",
+    )
+    parser.set_defaults(func=cmd_overview)
+    return parser
+
+
+## main commandline interface
+def prepare_toplevel_parser():
     parser = argparse.ArgumentParser(prog="longread")
+    parser.add_argument(
+        "--debug", default=False, action="store_true", help="activate debug output"
+    )
     parser.add_argument(
         "--sample",
         help="sample name (default=autodetect from fname)",
@@ -764,7 +684,7 @@ def prepare_parser():
     )
     parser.add_argument(
         "--signature",
-        help="expected long read signature (e.g. dropseq, noUMI, withUMI,...)",
+        help="expected long read signature (e.g. dropseq, chromium, noUMI, withUMI,...)",
         default=None,
     )
     parser.add_argument(
@@ -807,152 +727,40 @@ def prepare_parser():
         type=float,
         help="minimal match alignment score to consider a match for annotation, relative to its size (default=0.6)",
     )
-    parser.add_argument(
-        "--debug", default=False, action="store_true", help="activate debug output"
-    )
 
     ## sub-parser setup ##
-    subparsers = parser.add_subparsers(help="sub-command help", dest="subcmd")
-    aln_parser = subparsers.add_parser(
-        "align", help="align PacBio reads against oligos"
-    )
-    aln_parser.add_argument(
-        "fname",
-        default=None,
-        help="file with pacbio reads (FASTQ or BAM format)",
-    )
-    ann_parser = subparsers.add_parser(
-        "annotate", help="create annotation from detected oligo matches"
-    )
-    ann_parser.add_argument(
-        "fname",
-        default=None,
-        help="file with pacbio reads (FASTQ or BAM format)",
-    )
-    ann_parser.add_argument(
-        "--polyT",
-        help="name of oligo-block that matches polyT (default='polyT')",
-        default="polyT",
-    )
-
-    rep_parser = subparsers.add_parser("report", help="create PDF/PNG reports")
-
-    ed_parser = subparsers.add_parser(
-        "edits", help="gather mismatch and indel stats for oligo matches"
-    )
-    ed_parser.add_argument(
-        "--n-samples",
-        type=int,
-        default=1000,
-        help="number of sample alignments to gather edit statistics from (default=1000)",
-    )
-    ed_parser.add_argument(
-        "fname",
-        default=None,
-        help="file with pacbio reads (FASTQ or BAM format)",
-    )
-
-    xt_parser = subparsers.add_parser(
-        "extract", help="extract sequences from the long read"
-    )
-    xt_parser.add_argument(
-        "--barcode-after",
-        type=str,
-        default="bead_start",
-        help="name of anchor match after which the barcodes follow (default='bead_start')",
-    )
-    xt_parser.add_argument(
-        "--CB",
-        type=str,
-        default="8,20",
-        help="bases downstream of anchor match at which the cell barcode starts and ends. Default='8,20'",
-    )
-    xt_parser.add_argument(
-        "--UMI",
-        type=str,
-        default="0,8",
-        help="bases downstream of anchor match at which the UMI starts and ends. Default='0,8'",
-    )
-    xt_parser.add_argument(
-        "--cDNA-after",
-        type=str,
-        default="bead_start",
-        help="excise sequence between this oligo and the last oligo match (if it exists)",
-    )
-    xt_parser.add_argument(
-        "--sig-include",
-        type=str,
-        default="",
-        help="extract cDNA only from long reads INCLUDING this substring in the signature",
-    )
-    xt_parser.add_argument(
-        "--sig-exclude",
-        type=str,
-        default="",
-        help="extract cDNA only from long reads EXCLUDING this substring in the signature",
-    )
-    xt_parser.add_argument(
-        "--distal",
-        default=150,
-        type=int,
-        help="number of nt from end of sequence that are considered for oligo matches when extracting cDNA",
-    )
-    xt_parser.add_argument(
-        "--top-barcodes",
-        type=str,
-        default="",
-        help="path to text file with known barcodes (e.g. from Illumina)",
-    )
-
-    ov_parser = subparsers.add_parser(
-        "overview", help="make overview plots across samples"
-    )
-    ov_parser.add_argument("reports", nargs="+", help="sample reports to aggregate")
-    ov_parser.add_argument(
-        "--output", default="pb_overview.pdf", help="path/name of detailed report PDF"
-    )
-    ov_parser.add_argument(
-        "--csv-out", default="all_pb_stats.csv", help="path/name of detailed report PDF"
-    )
-    ov_parser.add_argument(
-        "--breakdown",
-        default="bead_overview.pdf",
-        help="path/name of bead report (Marie style) PDF",
-    )
-    # ov_parser.add_argument(
-    #     "--rRNA",
-    #     default="rRNA/",
-    #     help="path to search for rRNA counts corresponding to samples",
-    # )
-    # ov_parser.add_argument(
-    #     "--rRNA-same-place",
-    #     default=False,
-    #     action="store_true",
-    #     help="If set, look for rRNA txt file with same sample name in same directory",
-    # )
-    ov_parser.add_argument(
-        "--multi-page",
-        default=False,
-        action="store_true",
-        help="If set, generate multiple PDF pages instead of subplots",
-    )
+    sp = parser.add_subparsers(help="sub-command help", dest="subcmd")
+    prepare_align_parser(sp)
+    prepare_annotate_parser(sp)
+    prepare_edits_parser(sp)
+    prepare_extract_parser(sp)
+    prepare_report_parser(sp)
+    prepare_overview_parser(sp)
 
     parser.set_defaults(func=lambda args: parser.print_help())
-    aln_parser.set_defaults(func=aln_main)
-    ann_parser.set_defaults(func=ann_main)
-    rep_parser.set_defaults(func=rep_main)
-    ed_parser.set_defaults(func=main_edits)
-    xt_parser.set_defaults(func=main_extract)
-    ov_parser.set_defaults(func=main_overview)
 
     return parser
 
 
 def cmdline():
+    """
+    Commandline interface to handle long-read (PacBio, nanopore, ...)
+    annotation and analysis.
+
+    :return: depends on sub-command used
+    :rtype: depends on sub-command used
+    """
     import logging
 
-    logging.basicConfig(level=logging.INFO)
-
-    parser = prepare_parser()
+    parser = prepare_toplevel_parser()
     args = parser.parse_args()
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+
     return args.func(args)
+
+
+if __name__ == "__main__":
+    result = cmdline()

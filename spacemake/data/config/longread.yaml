@@ -1,35 +1,136 @@
-signatures:
-    withUMI:
-        label: "withUMI"
-        prio: 1
-        read1_primer: bead_start
-        read2_primer: N70X
-        CB: "r1[0:12]"
-        UMI: "r2[0:8]"
-        color: "blue"
-        intact_bead: "P5,bead_start,OP1,polyT,N70X"
-        bead_related: "bead_start"
+blocks:
+    P5: AATGATACGGCGACCACCGAGATCTACACGCCTGTCCGCGG
+    N70X: CTGTCTCTTATACACATCTCCGAGCCCACGAGACNNNNNNNNATCTCGTATGCCGTCTTCTGCTTG
+    SMART_primer: AAGCAGTGGTATCAACGCAGAGT
+    SMART_bead: AAGCAGTGGTATCAACGCAGAGTAC
+    dN-SMRT: AAGCAGTGGTATCAACGCAGAGTGA
+    TSO: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+    sc_primer: CTCGGAGATGTGTATAAGAGACAGTATGGG
+    # random_primer: GTCTCGTGGGCTCGGAGATGTGTATAAGAGACAG
+    OP1: GAATCACGATACGTACACCA
+    OP2_2s: GCGTTGCGTTCCTAGCCGCTAC
+    # OP3: CGCAGTCTCCGTCGATAAGGTC
+    OP2: GCGTGTGGTCGGACGCACCCAC
+    OP3: GCAAAGCTGCTGCCTCCGCTAGC
+    polyT: TTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+    #dN-NEXT_Tn5: GTCTCGTGGGCTCGGAGATGTGTATAAGAGACAG
+    #NEXT_Tn5_Rev_Primer: GTCTCGTGGGCTCGGAGAT
+    #Nextera_TN5: CCGAGCCCACGAGACTAAGGCGAATCTCGTATGCCGTCTTCTGCTTG
+    10X_start: CTACACGACGCTCTTCCGATCT
+    10X_TSO: AAGCAGTGGTATCAACGCAGAGTACATGGG
+    10X_C3_RT_PRIMER: AAGCAGTGGTATCAACGCAGAG
+    10X_C2_RT_PRIMER: AAGCAGTGGTATCAACGCAGAGTACAT
 
-    noUMI:
-        label: "noUMI"
-        prio: 2
-        read1_primer: bead_start
-        read2_primer: N70X
-        CB: "r1[0:12]"
-        UMI: "r2[0:8]"
-        color: "darkgray"
-        intact_bead: "P5,bead_start,OP1,polyT,N70X"
-        bead_related: "bead_start"
+signatures:
+    visium:
+        label: visium
+        prio: 0
+        color: pink
+        intact: 10X_start,polyT,10X_TSO_RC
+        other: 10X_C3_RT_PRIMER,10X_C2_RT_PRIMER
+        prefixes: P5
+        suffixes: N70X
+        CB: r1[0:16]
+        UMI: r1[16:28]
+        cDNA_after: polyT
+        read1_primer: 10X_start
+        read2_primer: 10X_TSO
+
+    chromium:
+        label: chromium
+        prio: 1
+        color: gray
+        CB: r1[0:16]
+        UMI: r1[16:26]
+        intact: 10X_start,polyT,10X_TSO_RC
+        other: 10X_C3_RT_PRIMER,10X_C2_RT_PRIMER
+        cDNA_after: polyT
+        prefixes: P5
+        suffixes: N70X
+        read1_primer: 10X_start
+        read2_primer: 10X_TSO
 
     dropseq:
-        prio: -1
-        label: "dropseq"
-        read1_primer: bead_start
+        label: dropseq
+        prio: 2
+        color: gray
+        CB: r1[8:20]
+        UMI: r1[0:8]
+        intact: SMART_bead,polyT
+        cDNA_after: polyT
+        other: SMART_primer,dN-SMRT,TSO,sc_primer
+        prefixes: P5
+        suffixes: N70X
+        read1_primer: SMART_bead
         read2_primer: N70X
-        CB: "r1[8:20]"
-        UMI: "r1[0:8]"
-        color: "gray"
-        intact_bead: "P5,bead_start,polyT,N70X"
-        bead_related: "bead_start"
 
-default: "withUMI"
+    # in-house experimental
+    withUMI:
+        label: withUMI
+        prio: 3
+        color: blue
+        CB: r1[0:12]
+        UMI: r1[12:20]
+        intact: SMART_bead,OP1,polyT
+        other: SMART_primer,dN-SMRT,TSO,sc_primer
+        prefixes: P5
+        suffixes: N70X
+        cDNA_after: polyT
+        read1_primer: SMART_bead
+        read2_primer: N70X
+
+    noUMI:
+        label: noUMI
+        prio: 10
+        color: lightblue
+        CB: r1[0:12]
+        UMI: r2[0:8]
+        intact: SMART_bead,OP1,polyT
+        other: SMART_primer,dN-SMRT,TSO,sc_primer
+        prefixes: P5
+        suffixes: N70X
+        cDNA_after: polyT
+        read1_primer: SMART_bead
+        read2_primer: N70X
+
+    combv1:
+        label: comb_2seg_pilot
+        prio: 20
+        color: blue
+        CB: r1[0:12]
+        UMI: r2[0:8]
+        intact_bead: SMART_bead,OP1,OP2_2s,polyT
+        other: SMART_primer,dN-SMRT,TSO,sc_primer,OP3
+        cDNA_after: polyT
+        read1_primer: SMART_bead
+        read2_primer: N70X
+
+    hybridv1:
+        label: comb_hybrid
+        prio: 30
+        color: lightblue
+        CB: r1[0:8]+r1[31:39]
+        UMI: r2[0:8]
+        intact: SMART_bead,OP2,OP3,polyT
+        other: SMART_primer,dN-SMRT,TSO,sc_primer,OP3
+        prefixes: P5
+        suffixes: N70X
+        cDNA_after: polyT
+        read1_primer: SMART_bead
+        read2_primer: N70X
+
+    scsmrna:
+        label: smallRNA
+        prio: 40
+        color: red
+        CB: r1[0:12]
+        UMI: r1[12:20]
+        intact: SMART_bead,polyT,sc_primer_RC
+        other: SMART_primer,dN-SMRT,TSO,sc_primer,OP1
+        prefixes: P5
+        suffixes: N70X
+        cDNA_after: polyT
+        read1_primer: SMART_bead
+        read2_primer: TSO
+
+default: withUMI

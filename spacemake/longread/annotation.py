@@ -45,6 +45,7 @@ class AnnotatedSequences:
         sample_name,
         blocks,
         min_score=0,
+        relevant=[],
         orient_by="bead_start",
     ):
         self.sample_name = sample_name
@@ -54,9 +55,18 @@ class AnnotatedSequences:
         self.raw_sequences = self.load_raw_sequences(fastq_path)
         self.oligo_blocks = blocks
         self.min_oligo_scores = {}
+        self.relevant = set(relevant)
+        for m in relevant:
+            # reverse-complement hits of a relevant oligo too!
+            self.relevant.add(f"{m}_RC".replace("_RC_RC", ""))
+
         for name, seq in blocks.items():
             self.min_oligo_scores[name] = (2 * len(seq)) * min_score
 
+        self.logger.info(
+            f"restricting to relevant matches {sorted(self.relevant)} "
+            f"and discarding matches under {min_score} alignment score."
+        )
         self.ann_db = self.load_annotation(ann_path)
         # self.ann_db = self.cleanup_overlaps(self.ann_db)
 
@@ -78,7 +88,13 @@ class AnnotatedSequences:
         )
         df = pd.read_csv(ann_path, sep="\t")
         df["min_score"] = df["oligo"].apply(lambda x: self.min_oligo_scores.get(x, 22))
-        df = df.query(f"score > min_score")
+        # df = df.query(f"score > min_score")
+        mask = df["score"] > df["min_score"]
+        if len(self.relevant):
+            mask &= df["oligo"].isin(self.relevant)
+
+        df = df.loc[mask]
+
         qdata = {}
         for qname, grp in df.groupby("qname"):
             qdata[qname] = (
@@ -99,9 +115,13 @@ class AnnotatedSequences:
             lnames = list(names)
             fw_start = lnames.count(self.orient_by)
             rc_start = lnames.count(self.orient_by_RC)
+            fw_nrc = lnames.count("_RC")
+            rc_nrc = len(lnames) - fw_nrc
 
-            if (fw_start < rc_start) or (
-                (fw_start == rc_start) and names[0].endswith("_RC")
+            if (
+                (fw_start < rc_start)
+                or ((fw_start == rc_start) and names[0].endswith("_RC"))
+                or ((fw_start == rc_start) and (fw_nrc > rc_nrc))
             ):
                 # reverse complement the whole thing
                 names = tuple([(n + "_RC").replace("_RC_RC", "") for n in names[::-1]])
@@ -328,7 +348,7 @@ class AnnotatedSequences:
         # print(ends)
         # print(scores)
         for oligo, start, end in zip(names, starts, ends):
-            buf[start : end + 1] = render_label(oligo, start, end + 1)
+            buf[start:end] = render_label(oligo, start, end)
         #
         return f"# qname={qname} oligo_matches={names} match_scores={scores}\n{seq}\n{''.join(buf)}"
 
@@ -383,7 +403,7 @@ class AnnotatedSequences:
         return partial_counts, prefixes, suffixes, pT_counts
 
 
-def align_stats(ann, oseq, qmatches, pad=1):
+def align_stats(ann, oseq, qmatches, pad=1, min_score=0):
     import spacemake.longread.cache as cache
     from Bio import pairwise2
 
@@ -395,14 +415,16 @@ def align_stats(ann, oseq, qmatches, pad=1):
         e = min(l, e + pad)
         n += 1
         rseq = ann.raw_sequences[qn][s:e]
-        res = cache.align(rseq, oseq, min_score=0)
+        res = cache.align(rseq, oseq, min_score=min_score)
         if not res:
             continue
         aln = res[0]
         aln_str = pairwise2.format_alignment(*aln, full_sequences=True).split("\n")
         i = 0
         j = 0
-        # print("\n".join(aln_str))
+        # if oseq.startswith("TTTTTTTTTTTTTTTT"):
+        #     print("\n".join(aln_str))
+
         for r, m, q in zip(aln_str[0], aln_str[1], aln_str[2]):
             # print(r, m, q, i, len(oseq))
             if q == " ":
