@@ -12,7 +12,7 @@ As an example we will be using 1 million reads from `this Visium dataset <https:
     Firstly, the example data used here is a 10X `Visium`_ dataset, hence it is spatial.
     However, for the sake of this tutorial, we will be treating it as a single-cell sample.
     
-    Secondly, for many methods (such as `Visium`_, 10X single-cell, `Slide-seq`_ or `Seq-scope`_)
+    Secondly, for many methods (such as `Visium`_, `10X Chromium`_ `Slide-seq`_ or `Seq-scope`_)
     spacemake provides pre-defined variables. If you are using
     one of these methods follow our :ref:`Quick start guide <quick start guide>` instead.
 
@@ -38,7 +38,7 @@ Step 3: add a new species
 
 .. note::
 
-    If you initialized spacemake with the `--download-species` flag, you can
+    If you initialized spacemake with the ``--download-species`` flag, you can
     omit this step, as spacemake will automatically download and configure
     mm10 mouse genome.fa and annotation.gtf files for you.
 
@@ -68,9 +68,9 @@ Consequently, we create a new ``barcode\_flavor`` like this:
 
 .. note:: 
 
-    There are several `barcode\_flavors` provided by spacemake out of the box,
-    such as `visium` for 10X `Visium`_ or `sc_10x_v2` for v2 single-cell 10X
-    kits. The `default` flavor is identical to a Drop-seq library, with 12
+    There are several ``barcode\_flavors`` provided by spacemake out of the box,
+    such as ``visium`` for 10X `Visium`_ or ``sc_10x_v2`` for `10X Chromium`_ v2 
+    kits. The ``default`` flavor is identical to a `Drop-seq`_ library, with 12
     nucleotide cell-barcode and 8 nucleotide UMI. 
 
     :ref:`More info about provided flavors here <provided barcode\\_flavors>`.
@@ -98,7 +98,7 @@ using 50, 100 and 300 UMI cutoffs. To set these parameters, we define a
 
 .. note:: 
 
-    As with `barcode\_flavors`, spacemake provides several `run\_modes` out
+    As with ``barcode\_flavors``, spacemake provides several ``run\_modes`` out
     of the box. For more info :ref:`check out a more detailed guide here <configure run\\_modes>`.
 
 Step 6: adding the test sample
@@ -153,6 +153,6 @@ Under this directory, there are several files and directories which are importan
 
 .. note::
 
-    If the `test_project` had more samples, than those would be automatically placed under `projects/test_project`. Similarily, under one spacemake
-    directory there can be several projects in parallel, and each will have their own directory structure under the `projects/` folder.
+    If the ``test_project`` had more samples, than those would be automatically placed under ``projects/test_project``. Similarily, under one spacemake
+    directory there can be several projects in parallel, and each will have their own directory structure under the ``projects/`` folder.
 
