@@ -16,7 +16,7 @@ As an example we will be using 1 million reads from `this Visium dataset <https:
     spacemake provides pre-defined variables. If you are using
     one of these methods follow our :ref:`Quick start guide <quick start guide>` instead.
 
-Step 1: inistall and initialize spacemake
+Step 1: install and initialize spacemake
 -----------------------------------------
 
 To install spacemake follow the :ref:`installation guide here <installation>`.
@@ -26,12 +26,18 @@ To initialize spacemake follow the :ref:`initialization guide here <initializati
 Step 2: download test data
 --------------------------
 
-Next we download the test data: 1 million Read1 and 1 million Read2 reads: 
+For the sake of this tutorial we will work with a test dataset: 1 million Read1 and 1 million Read2 reads from a `Visium`_ adult mouse brain.
+
+To download the test data:
 
 .. code-block::
 
     wget -nv http://bimsbstatic.mdc-berlin.de/rajewsky/spacemake-test-data/visium/test_fastq/visium_public_lane_joined_1m_R1.fastq.gz
     wget -nv http://bimsbstatic.mdc-berlin.de/rajewsky/spacemake-test-data/visium/test_fastq/visium_public_lane_joined_1m_R2.fastq.gz
+
+.. note:: 
+
+    If there is already data available, to be processed and analyzed, this step can be omitted.
 
 Step 3: add a new species
 -------------------------
@@ -54,11 +60,11 @@ The sample we are working with here is a mouse brain sample, so we have to add a
 Step 4: add a new barcode\_flavor
 ---------------------------------
 
-The ``barcode\_flavor`` will decide which nucletodies of Read1/Read2 extract the UMIs and cell-barcodes from.
+The ``barcode_flavor`` will decide which nucletodies of Read1/Read2 extract the UMIs and cell-barcodes from.
 
 In this perticular test sample, the first 16 nucleotides of Read1 are the cell-barcode, and the following 12 nucleotides are the UMIs.
 
-Consequently, we create a new ``barcode\_flavor`` like this:
+Consequently, we create a new ``barcode_flavor`` like this:
 
 .. code-block:: console
 
@@ -68,7 +74,7 @@ Consequently, we create a new ``barcode\_flavor`` like this:
 
 .. note:: 
 
-    There are several ``barcode\_flavors`` provided by spacemake out of the box,
+    There are several ``barcode_flavors`` provided by spacemake out of the box,
     such as ``visium`` for 10X `Visium`_ or ``sc_10x_v2`` for `10X Chromium`_ v2 
     kits. The ``default`` flavor is identical to a `Drop-seq`_ library, with 12
     nucleotide cell-barcode and 8 nucleotide UMI. 
@@ -77,10 +83,10 @@ Consequently, we create a new ``barcode\_flavor`` like this:
 
     If you want to use one of these, there is no need to add your own flavor.
 
-Step 5: adding a new run\_mode
-------------------------------
+Step 5: add a new run\_mode
+---------------------------
 
-A ``run\_mode`` in spacemake defines how a sample should processed downstream. 
+A ``run_mode`` in spacemake defines how a sample should processed downstream. 
 In this tutorial, we will trim the PolyA stretches from the 3' end of Read2,
 count both exonic and intronic reads, expect 5000 cells, and analyze the data,
 turn off multi-mapper counting (so only unique reads are counted),
@@ -98,13 +104,13 @@ using 50, 100 and 300 UMI cutoffs. To set these parameters, we define a
 
 .. note:: 
 
-    As with ``barcode\_flavors``, spacemake provides several ``run\_modes`` out
+    As with ``barcode_flavors``, spacemake provides several ``run_modes`` out
     of the box. For more info :ref:`check out a more detailed guide here <configure run\\_modes>`.
 
-Step 6: adding the test sample
-------------------------------
+Step 6: add the sample
+----------------------
 
-After configuring all the steps above, we are ready to add our test sample:
+After configuring all the steps above, we are ready to add our (test) sample:
 
 .. code-block:: console
 
@@ -116,9 +122,13 @@ After configuring all the steps above, we are ready to add our test sample:
     --barcode_flavor test_barcode_flavor \
     --run_mode test_run_mode
 
+.. note::
 
-Step 7: running spacemake
--------------------------
+    If there is already data available, here the Read1 and Read2 ``.fastq.gz`` files should be added,
+    instead of the test files.
+
+Step 7: runn spacemake
+----------------------
 
 Now we can process our samples with spacemake. Since we added only one sample, only one sample will be processed
 and analyzed. To start spacemake, simply write:
@@ -141,14 +151,23 @@ The results of the analysis for this sample will be under ``projects/test_projec
 Under this directory, there are several files and directories which are important:
 
 * ``final.polyA_adapter_trimmed.bam``: final, mapped, tagged ``.bam`` file. ``CB`` tag contains the cell barcode, and the ``MI`` contains the UMI-s. 
+
 * ``qc_sheet_test_sample_no_spatial_data.html``: the QC-sheet for this sample, as a self-contained ``.html`` file.
+
 * ``dge/``: a directory containing the Digital Expression Matrices (DGEs)
+
     * ``dge.all.polyA_adapter_trimmed.5000_beads.txt.gz``: a compressed, text based DGE
+
     * ``dge.all.polyA_adapter_trimmed.5000_beads.h5ad``: the same DGE but stored in ``.h5ad`` format (`used by the anndata python package <https://github.com/theislab/anndata/issues/180>`_). This matrix is stored as a Compressed Sparse Column matrix (using `scipy.sparse.csc_matrix <https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csc_matrix.html>`_).
+
     * ``dge.all.polyA_adapter_trimmed.5000_beads.summary.txt``: the summary of the DGE, one line per cell.
+
     * ``dge.all.polyA_adapter_trimmed.5000_beads.obs.csv``: the observation table of the matrix. Similar to the previous file, more detailed.
+
 * ``automated_analysis/test_run_mode/umi_cutoff_50/``: In this directory the results of the automated analysis can be found. As it can be seen under the ``automated_analysis`` directory there are two further levels, one for ``run_mode`` and one for ``umi_cutoff``. This is because one sample can have several ``run_modes`` and in the same way one ``run_mode`` can have several UMI cutoffs.
+
     * ``results.h5ad``: the result of the automated analysis, stored in an anndata object. Same as the DGE before, but containing processed data.
+
     * ``test_sample_no_spatial_data_illumina_automated_report.html``: automated analysis self-contained ``.html`` report.
 
 .. note::
