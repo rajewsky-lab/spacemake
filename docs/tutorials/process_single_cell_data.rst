@@ -60,11 +60,11 @@ The sample we are working with here is a mouse brain sample, so we have to add a
 Step 4: add a new barcode\_flavor
 ---------------------------------
 
-The ``barcode\_flavor`` will decide which nucletodies of Read1/Read2 extract the UMIs and cell-barcodes from.
+The ``barcode_flavor`` will decide which nucletodies of Read1/Read2 extract the UMIs and cell-barcodes from.
 
 In this perticular test sample, the first 16 nucleotides of Read1 are the cell-barcode, and the following 12 nucleotides are the UMIs.
 
-Consequently, we create a new ``barcode\_flavor`` like this:
+Consequently, we create a new ``barcode_flavor`` like this:
 
 .. code-block:: console
 
@@ -74,7 +74,7 @@ Consequently, we create a new ``barcode\_flavor`` like this:
 
 .. note:: 
 
-    There are several ``barcode\_flavors`` provided by spacemake out of the box,
+    There are several ``barcode_flavors`` provided by spacemake out of the box,
     such as ``visium`` for 10X `Visium`_ or ``sc_10x_v2`` for `10X Chromium`_ v2 
     kits. The ``default`` flavor is identical to a `Drop-seq`_ library, with 12
     nucleotide cell-barcode and 8 nucleotide UMI. 
@@ -86,7 +86,7 @@ Consequently, we create a new ``barcode\_flavor`` like this:
 Step 5: add a new run\_mode
 ---------------------------
 
-A ``run\_mode`` in spacemake defines how a sample should processed downstream. 
+A ``run_mode`` in spacemake defines how a sample should processed downstream. 
 In this tutorial, we will trim the PolyA stretches from the 3' end of Read2,
 count both exonic and intronic reads, expect 5000 cells, and analyze the data,
 turn off multi-mapper counting (so only unique reads are counted),
@@ -104,7 +104,7 @@ using 50, 100 and 300 UMI cutoffs. To set these parameters, we define a
 
 .. note:: 
 
-    As with ``barcode\_flavors``, spacemake provides several ``run\_modes`` out
+    As with ``barcode_flavors``, spacemake provides several ``run_modes`` out
     of the box. For more info :ref:`check out a more detailed guide here <configure run\\_modes>`.
 
 Step 6: add the sample
