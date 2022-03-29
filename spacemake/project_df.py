@@ -573,7 +573,7 @@ class ProjectDF:
 
     # default values of the project dataframe columns
     project_df_default_values = {
-        "puck_id": "no_optical_puck",
+        "puck_id": "no_spatial_data",
         "sample_sheet": None,
         "species": None,
         "demux_barcode_mismatch": 1,
@@ -1144,6 +1144,8 @@ class ProjectDF:
         # if spatial we set the id to spatial_data if not provided
         if is_spatial:
             puck_id = kwargs.get('puck_id', 'spatial_data')
+        else:
+            puck_id = self.project_df_default_values['puck_id']
 
         # if everything correct, add or update
         # first populate kwargs
