@@ -151,14 +151,23 @@ The results of the analysis for this sample will be under ``projects/test_projec
 Under this directory, there are several files and directories which are important:
 
 * ``final.polyA_adapter_trimmed.bam``: final, mapped, tagged ``.bam`` file. ``CB`` tag contains the cell barcode, and the ``MI`` contains the UMI-s. 
+
 * ``qc_sheet_test_sample_no_spatial_data.html``: the QC-sheet for this sample, as a self-contained ``.html`` file.
+
 * ``dge/``: a directory containing the Digital Expression Matrices (DGEs)
+
     * ``dge.all.polyA_adapter_trimmed.5000_beads.txt.gz``: a compressed, text based DGE
+
     * ``dge.all.polyA_adapter_trimmed.5000_beads.h5ad``: the same DGE but stored in ``.h5ad`` format (`used by the anndata python package <https://github.com/theislab/anndata/issues/180>`_). This matrix is stored as a Compressed Sparse Column matrix (using `scipy.sparse.csc_matrix <https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csc_matrix.html>`_).
+
     * ``dge.all.polyA_adapter_trimmed.5000_beads.summary.txt``: the summary of the DGE, one line per cell.
+
     * ``dge.all.polyA_adapter_trimmed.5000_beads.obs.csv``: the observation table of the matrix. Similar to the previous file, more detailed.
+
 * ``automated_analysis/test_run_mode/umi_cutoff_50/``: In this directory the results of the automated analysis can be found. As it can be seen under the ``automated_analysis`` directory there are two further levels, one for ``run_mode`` and one for ``umi_cutoff``. This is because one sample can have several ``run_modes`` and in the same way one ``run_mode`` can have several UMI cutoffs.
+
     * ``results.h5ad``: the result of the automated analysis, stored in an anndata object. Same as the DGE before, but containing processed data.
+
     * ``test_sample_no_spatial_data_illumina_automated_report.html``: automated analysis self-contained ``.html`` report.
 
 .. note::
