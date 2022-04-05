@@ -628,31 +628,40 @@ class ProjectDF:
                         raise e
                         failed=True
 
-            # replacing NaN with None
-            df = df.where(pd.notnull(df), None)
 
-            # convert R1/R2 to list, if they are stored as string
-            df.R1 = df.R1.apply(str_to_list)
-            df.R2 = df.R2.apply(str_to_list)
+            if df.empty:
+                index = pd.MultiIndex(
+                    names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
+                )
+                self.df = pd.DataFrame(
+                    columns=self.project_df_default_values.keys(), index=index
+                )
+            else:
+                # replacing NaN with None
+                df = df.where(pd.notnull(df), None)
 
-            project_list = []
-            # required if upgrading from pre-longread tree
-            if not "longreads" in df.columns:
-                df["longreads"] = None
+                # convert R1/R2 to list, if they are stored as string
+                df.R1 = df.R1.apply(str_to_list)
+                df.R2 = df.R2.apply(str_to_list)
 
-            if not "longread_signature" in df.columns:
-                df["longread_signature"] = None
+                project_list = []
+                # required if upgrading from pre-longread tree
+                if not "longreads" in df.columns:
+                    df["longreads"] = None
 
-            # update with new columns, if they exist.
-            for ix, row in df.iterrows():
-                s = pd.Series(self.project_df_default_values)
-                s.update(row)
-                s.name = row.name
-                project_list.append(s)
+                if not "longread_signature" in df.columns:
+                    df["longread_signature"] = None
 
-            self.df = pd.concat(project_list, axis=1).T
-            self.df.is_merged = self.df.is_merged.astype(bool)
-            self.df.index.names = ["project_id", "sample_id"]
+                # update with new columns, if they exist.
+                for ix, row in df.iterrows():
+                    s = pd.Series(self.project_df_default_values)
+                    s.update(row)
+                    s.name = row.name
+                    project_list.append(s)
+
+                self.df = pd.concat(project_list, axis=1).T
+                self.df.is_merged = self.df.is_merged.astype(bool)
+                self.df.index.names = ["project_id", "sample_id"]
         else:
             index = pd.MultiIndex(
                 names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
