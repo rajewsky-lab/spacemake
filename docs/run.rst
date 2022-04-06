@@ -1,3 +1,5 @@
+.. _Running spacemake general:
+
 Running spacemake
 =================
 

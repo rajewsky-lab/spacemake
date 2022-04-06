@@ -14,7 +14,7 @@ logger = logging.getLogger(logger_name)
 def create_spot_expression_img(
         adata: anndata.AnnData,
         binary : bool=True,
-    ) -> numpy.ndarray:
+    ) -> (numpy.ndarray, numpy.ndarray):
     """
     Creates a binary/grayscale image based on spatial expression data.
 
@@ -78,8 +78,14 @@ def create_spot_expression_img(
     
     spot_img_bw[spot_img_bw<255] = 0
     
-    return spot_img, spot_img_bw
+    spot_img_cnt = np.where(spot_img_bw < 255)
+    spot_img = spot_img[spot_img_cnt[0].min():spot_img_cnt[0].max(),
+                        spot_img_cnt[1].min():spot_img_cnt[1].max()]
 
+    spot_img_bw = spot_img_bw[spot_img_cnt[0].min():spot_img_cnt[0].max(),
+                              spot_img_cnt[1].min():spot_img_cnt[1].max()]
+    
+    return spot_img, spot_img_bw
 
 def create_aggregated_expression_img(
         adata : anndata.AnnData,
@@ -220,8 +226,8 @@ def load_he_img(he_path, bw_threshold=None):
         
     return he, he_gray, he_bw
 
-def match_he_img(he_path, expression_img, bw_threshold=None, use_bw=True):
-    """match_he_img.
+def align_he_img(he_path, expression_img, bw_threshold=None, use_bw=True):
+    """align_he_img.
 
     :param he_path:
     :param expression_img:
@@ -277,7 +283,7 @@ def match_he_img(he_path, expression_img, bw_threshold=None, use_bw=True):
     
     highest_cor = 0.0
     scale_dim = None
-    match_res = None
+    align_res = None
     rotate = 0
     flip = False
     
@@ -306,12 +312,12 @@ def match_he_img(he_path, expression_img, bw_threshold=None, use_bw=True):
                     if m_res.max() > highest_cor:
                         highest_cor = m_res.max()
                         scale_dim = dim
-                        match_res = m_res
+                        align_res = m_res
                         rotate = rotate_n
                         flip = make_flip
     
-    # find the boundaries of the match
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(match_res)
+    # find the boundaries of the align
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(align_res)
     top_left = max_loc
     bottom_right = (top_left[0] + expression_img.shape[1],
                     top_left[1] + expression_img.shape[0])
@@ -337,31 +343,31 @@ def match_he_img(he_path, expression_img, bw_threshold=None, use_bw=True):
 
     return highest_cor, he, he_orig, top_left, bottom_right
 
-def match_he_spot_img(
+def align_he_spot_img(
         adata : anndata.AnnData,
         he_path : str
     ) -> (numpy.ndarray, numpy.ndarray):
     """
-    Match a H&E image with a spacemake processed data, based on spot expression.
+    Align a H&E image with a spacemake processed data, based on spot expression.
 
-    Takes an H&E image and a spacemake processed dataset, and matches the two, 
+    Takes an H&E image and a spacemake processed dataset, and alignes the two, 
     trying to find the most probably position of the spatial dataset within the 
     H&E image. This function should be used for datasets with a spot_diameter_um 
     higher than or equal to 10 microns, such as Visium or Slide-seq.
 
     :param adata: A spacemake processed AnnData object.
     :type adata: anndata.AnnData
-    :param he_path: Path to the H&E image to be matched.
+    :param he_path: Path to the H&E image to be aligned.
     :type he_path: str
-    :returns: A tuple of (original_he, matched_he). original_he will contain the 
-        original H&E data together with the matched spots and a blue rectangle 
-        showing the matched region. matched_he will contain the part of the 
-        H&E image matched.
+    :returns: A tuple of (original_he, aligned_he). original_he will contain the 
+        original H&E data together with the aligned spots and a blue rectangle 
+        showing the aligned region. aligned_he will contain the part of the 
+        H&E image aligned.
     :rtype: (numpy.ndarray, numpy.ndarray)
     """
     spot_img, spot_img_bw = create_spot_expression_img(adata)
 
-    # we match the binary image
+    # we align the binary image
     spot_img = spot_img_bw
 
     # find the contour of the spot image
@@ -369,7 +375,7 @@ def match_he_spot_img(
     spot_img = spot_img[spot_img_cnt[0].min():spot_img_cnt[0].max(),
                         spot_img_cnt[1].min():spot_img_cnt[1].max()]
 
-    highest_cor, he_res, he_orig, tl, br = match_he_img(
+    highest_cor, he_res, he_orig, tl, br = align_he_img(
         he_path,
         expression_img = spot_img,
         use_bw = True)
@@ -390,49 +396,49 @@ def match_he_spot_img(
                                   (box_br[0] - box_tl[0], box_br[1] - box_tl[1]),
                                    cv2.INTER_NEAREST)
 
-    match_bw = cv2.cvtColor(spot_img_resized, cv2.COLOR_GRAY2BGR)
+    align_bw = cv2.cvtColor(spot_img_resized, cv2.COLOR_GRAY2BGR)
 
-    he_match = he_orig[box_tl[1]:box_br[1], box_tl[0]:box_br[0]].copy()
-    he_orig[box_tl[1]:box_br[1], box_tl[0]:box_br[0]] &= match_bw
+    he_align = he_orig[box_tl[1]:box_br[1], box_tl[0]:box_br[0]].copy()
+    he_orig[box_tl[1]:box_br[1], box_tl[0]:box_br[0]] &= align_bw
 
     cv2.rectangle(he_orig, box_tl, box_br,  (180, 233, 86), 3)
     
-    return he_orig, he_match
+    return he_orig, he_align
 
-def match_he_aggregated_img(
+def align_he_aggregated_img(
         adata : anndata.AnnData,
         he_path : str,
         bw_threshold : int=200,
         binary_top_qth_percentile : int=30,
         box_size : float=0.5
     ) -> (numpy.ndarray, numpy.ndarray):
-    """match_he_aggregated_img.
-    Match a H&E image with a spacemake processed data, based on aggregated 
+    """align_he_aggregated_img.
+    Align a H&E image with a spacemake processed data, based on aggregated 
     expression.
 
-    Takes an H&E image and a spacemake processed dataset, and matches the two, 
+    Takes an H&E image and a spacemake processed dataset, and alignes the two, 
     trying to find the most probably position of the spatial dataset within the 
     H&E image. First the spatial data will be aggregated in a 500 x 500 pixel 
-    image, then the best match between the spatial expression image and the H&E 
+    image, then the best align between the spatial expression image and the H&E 
     will be found. This function should be used for datasets with a
     spot_diameter_um smaller than 10 microns, such as Visium or Slide-seq.
 
     :param adata: A spacemake processed AnnData object.
     :type adata: anndata.AnnData
-    :param he_path: Path to the H&E image to be matched.
+    :param he_path: Path to the H&E image to be aligned.
     :type he_path: str
     :param bw_threshold: 
     :type bw_threshold: int
     :param binary_top_qth_percentile:
     :type binary_top_qth_percentile: int
-    :param box_size: By default not the whole aggregated image will be matched,
+    :param box_size: By default not the whole aggregated image will be aligned,
         only the middle part (a box with 50% x 50% pixels, wrt the original size).
-        This parameter controls the size of the matching box.
+        This parameter controls the size of the aligning box.
     :type box_size: float
-    :returns: A tuple of (original_he, matched_he). original_he will contain the 
+    :returns: A tuple of (original_he, aligned_he). original_he will contain the 
         original H&E data together with the aggregated image overlayed, together 
-        with the matched area and the matched_box shown as blue rectangles.
-        matched_he will contain the part of the H&E image matched.
+        with the aligned area and the aligned_box shown as blue rectangles.
+        aligned_he will contain the part of the H&E image aligned.
     :rtype: (numpy.ndarray, numpy.ndarray)
     """
     img, img_bw = create_aggregated_expression_img(adata, binary_top_qth_percentile)
@@ -449,19 +455,19 @@ def match_he_aggregated_img(
         top_left[0]:bottom_right[0]    
     ]
 
-    highest_cor, he_res, he_orig, tl, br = match_he_img(
+    highest_cor, he_res, he_orig, tl, br = align_he_img(
         he_path,
         expression_img=img,
         bw_threshold=bw_threshold,
         use_bw = True
     )
 
-    match_w = br[0]-tl[0]
-    match_h = br[1]-tl[1]
+    align_w = br[0]-tl[0]
+    align_h = br[1]-tl[1]
     multiplier = (1-box_size) / (box_size * 2)
-    box_tl = (int(tl[0]-match_w * multiplier), int(tl[1]-match_h * multiplier))
+    box_tl = (int(tl[0]-align_w * multiplier), int(tl[1]-align_h * multiplier))
     #box_tl = h,w
-    box_br = (int(br[0]+match_w * multiplier), int(br[1]+match_h * multiplier))
+    box_br = (int(br[0]+align_w * multiplier), int(br[1]+align_h * multiplier))
 
     he_res_ratio = he_res.shape[1] / he_res.shape[0]
 
@@ -484,42 +490,42 @@ def match_he_aggregated_img(
                                   (box_br[0] - box_tl[0], box_br[1] - box_tl[1]),
                                    cv2.INTER_NEAREST)
 
-    match_bw = cv2.cvtColor(img_resized, cv2.COLOR_GRAY2BGR)
+    align_bw = cv2.cvtColor(img_resized, cv2.COLOR_GRAY2BGR)
 
-    he_match = he_orig[box_tl[1]:box_br[1], box_tl[0]:box_br[0]].copy()
+    he_align = he_orig[box_tl[1]:box_br[1], box_tl[0]:box_br[0]].copy()
 
     cv2.rectangle(he_orig, tl, br,  (180, 233, 86, 255), 5)
     cv2.rectangle(he_orig, box_tl, box_br,  (180, 233, 86, 255), 5)
     
     overlay = he_orig.copy()
-    overlay[box_tl[1]:box_br[1], box_tl[0]:box_br[0]] &= match_bw
+    overlay[box_tl[1]:box_br[1], box_tl[0]:box_br[0]] &= align_bw
     
     cv2.addWeighted(overlay, 0.4, he_orig, 0.6, 0, he_orig)
     
-    return he_orig, he_match
+    return he_orig, he_align
 
 def attach_he_adata(
     adata : anndata.AnnData,
-    matched_he : numpy.ndarray,
+    aligned_he : numpy.ndarray,
     push_by_spot_diameter : bool=True,
-    raw_matched : bool=False
+    raw_aligned : bool=False
 ) -> anndata.AnnData:
     """
-    Attach the matched H&E data to a spacemake processed AnnData object.
+    Attach the aligned H&E data to a spacemake processed AnnData object.
 
     :param adata: A spacemake processed AnnData object.
     :type adata: anndata.AnnData
-    :param matched_he: A spacemake matched H&E image matched either with the
-        match_he_aggregated_img or the match_he_spot_img functions.
-    :type matched_he: numpy.ndarray
-    :param push_by_spot_diameter: If true the matched image will be pushed by 
-        one spot diameter. To be used only if a spot image was matched. 
+    :param aligned_he: A spacemake aligned H&E image aligned either with the
+        align_he_aggregated_img or the align_he_spot_img functions.
+    :type aligned_he: numpy.ndarray
+    :param push_by_spot_diameter: If true the aligned image will be pushed by 
+        one spot diameter. To be used only if a spot image was aligned. 
         Defaults to True.
     :type push_by_spot_diameter: bool
-    :param raw_matched: If true it is assumed that the H&E image was matched 
-        using the raw spacemake processed AnnData. If a spot image was matched 
+    :param raw_aligned: If true it is assumed that the H&E image was aligned 
+        using the raw spacemake processed AnnData. If a spot image was aligned 
         this should be set to False. Defaults to False.
-    :type raw_matched: bool
+    :type raw_aligned: bool
     :returns: An AnnData object with the attached H&E image. When used with 
         scanpy's scanpy.pl.spatial, under the spatial data the H&E image will
         be shown.
@@ -546,7 +552,7 @@ def attach_he_adata(
         (adata.obsm['spatial'].max(axis=0)[0])
 
     # rotate he to align with coordinate system of scanpy
-    rotated_he = cv2.flip(cv2.rotate(matched_he, cv2.ROTATE_90_CLOCKWISE), 1)
+    rotated_he = cv2.flip(cv2.rotate(aligned_he, cv2.ROTATE_90_CLOCKWISE), 1)
     
     h_px, w_px = rotated_he.shape[:2]
 
@@ -555,12 +561,12 @@ def attach_he_adata(
     # convert so that origin at 0, 0
     locations = adata.obsm['spatial']
     
-    if not raw_matched:
+    if not raw_aligned:
         locations = locations - locations.min(axis=0)
 
     spot_diameter_px = spot_diameter_um * px_per_um
 
-    if raw_matched:
+    if raw_aligned:
         
         locations = locations * [(w_px ) / width_coord_max,
                              (h_px ) / height_coord_max]

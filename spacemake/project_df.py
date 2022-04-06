@@ -578,6 +578,7 @@ class ProjectDF:
     # default values of the project dataframe columns
     project_df_default_values = {
         "puck_barcode_file_id": "no_spatial_data",
+        "puck_id": "no_spatial_data",
         "sample_sheet": None,
         "species": None,
         "demux_barcode_mismatch": 1,
@@ -632,40 +633,39 @@ class ProjectDF:
                         raise e
                         failed=True
 
-            # replacing NaN with None
-            df = df.where(pd.notnull(df), None)
+            if df.empty:
+                index = pd.MultiIndex(
+                    names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
+                )
+                self.df = pd.DataFrame(
+                    columns=self.project_df_default_values.keys(), index=index
+                )
+            else:
+                # replacing NaN with None
+                df = df.where(pd.notnull(df), None)
 
-            # rename puck_id to puck_barcode_file_id
-            df.rename(
-                columns={"puck_id":"puck_barcode_file_id"},
-                inplace=True,
-            )
+                # convert R1/R2 to list, if they are stored as string
+                df.R1 = df.R1.apply(str_to_list)
+                df.R2 = df.R2.apply(str_to_list)
 
-            # convert R1/R2 to list, if they are stored as string
-            df.R1 = df.R1.apply(str_to_list)
-            df.R2 = df.R2.apply(str_to_list)
+                project_list = []
+                # required if upgrading from pre-longread tree
+                if not "longreads" in df.columns:
+                    df["longreads"] = None
 
-            df.puck_barcode_file_id = df.puck_barcode_file_id.apply(str_to_list)
-            df.puck_barcode_file = df.puck_barcode_file.apply(str_to_list)
+                if not "longread_signature" in df.columns:
+                    df["longread_signature"] = None
 
-            project_list = []
-            # required if upgrading from pre-longread tree
-            if not "longreads" in df.columns:
-                df["longreads"] = None
+                # update with new columns, if they exist.
+                for ix, row in df.iterrows():
+                    s = pd.Series(self.project_df_default_values)
+                    s.update(row)
+                    s.name = row.name
+                    project_list.append(s)
 
-            if not "longread_signature" in df.columns:
-                df["longread_signature"] = None
-
-            # update with new columns, if they exist.
-            for ix, row in df.iterrows():
-                s = pd.Series(self.project_df_default_values)
-                s.update(row)
-                s.name = row.name
-                project_list.append(s)
-
-            self.df = pd.concat(project_list, axis=1).T
-            self.df.is_merged = self.df.is_merged.astype(bool)
-            self.df.index.names = ["project_id", "sample_id"]
+                self.df = pd.concat(project_list, axis=1).T
+                self.df.is_merged = self.df.is_merged.astype(bool)
+                self.df.index.names = ["project_id", "sample_id"]
         else:
             index = pd.MultiIndex(
                 names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
@@ -790,6 +790,9 @@ class ProjectDF:
             ],
         ]
 
+        self.logger.debug(
+            f"project_id={project_id} sample_id={sample_id} R1,2={bool(data.R1 and data.R2)} basecall={(data.basecalls_dir and data.sample_sheet)} longreads={bool(data.longreads)} dge={bool(data.dge)} is_merged={bool(data.is_merged)}"
+        )
         if (
             (data.R1 and data.R2)
             or (data.basecalls_dir and data.sample_sheet)
@@ -801,8 +804,10 @@ class ProjectDF:
         elif data.dge:
             return True
         else:
-            raise SpacemakeError(f'Sample with id (project_id, sample_id)=' +
-                f'({project_id}, {sample_id}) is invalid.')
+            raise SpacemakeError(
+                f"Sample with id (project_id, sample_id)="
+                + f"({project_id}, {sample_id}) is invalid."
+            )
 
     def has_dge(self, project_id: str, sample_id: str) -> bool:
         """Returns True if a has dge. for Pacbio only samples returns False.
@@ -838,9 +843,10 @@ class ProjectDF:
         elif data.longreads:
             return False
         else:
-            raise SpacemakeError(f'Sample with id (project_id, sample_id)=' +
-                f'({project_id}, {sample_id}) is invalid.')
-            
+            raise SpacemakeError(
+                f"Sample with id (project_id, sample_id)="
+                + f"({project_id}, {sample_id}) is invalid."
+            )
 
     def is_spatial(
         self,
@@ -1195,7 +1201,7 @@ class ProjectDF:
             else:
                 if not longread_signature:
                     raise SpacemakeError(
-                        "adding longreads requires to set --longread-signature as well (e.g. dropseq, noUMI, default, visium, slideseq_bc14,...)"
+                        "adding longreads requires to set --longread-signature as well (e.g. dropseq, chromium, noUMI, default, visium, slideseq_bc14,...)"
                     )
 
         # assert files first
@@ -1246,6 +1252,13 @@ class ProjectDF:
                 if not self.config.variable_exists(cv_plural, kwargs[cv_singular]):
                     raise ConfigVariableNotFoundError(cv_singular, kwargs[cv_singular])
 
+
+        # if spatial we set the id to spatial_data if not provided
+        if is_spatial:
+            puck_id = kwargs.get('puck_id', 'spatial_data')
+        else:
+            puck_id = self.project_df_default_values['puck_id']
+
         # if everything correct, add or update
         # first populate kwargs
         kwargs["R1"] = R1
@@ -1256,6 +1269,7 @@ class ProjectDF:
         kwargs["sample_sheet"] = sample_sheet
         kwargs["basecalls_dir"] = basecalls_dir
         kwargs["is_merged"] = is_merged
+        kwargs["puck_id"] = puck_id
 
         # populate puck_barcode_file
         if puck_barcode_file is not None:
@@ -1321,6 +1335,10 @@ class ProjectDF:
             new_project.update(pd.Series(kwargs))
             self.df.loc[ix] = new_project
         else:
+            # if sample is spatial, and puck not provided, assign 'default'
+            if is_spatial and "puck" not in kwargs:
+                kwargs["puck"] = "default"
+                
             new_project = pd.Series(self.project_df_default_values)
             new_project.name = ix
             new_project.update(kwargs)
@@ -1581,7 +1599,7 @@ class ProjectDF:
                 )
 
         # after all checks, log that we are merging
-        self.logger.info(f'Merging samples {ix_list} together\n')
+        self.logger.info(f"Merging samples {ix_list} together\n")
         variables_to_deduce = ["investigator", "experiment", "sequencing_date"]
 
         for variable in variables_to_deduce:

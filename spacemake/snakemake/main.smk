@@ -16,7 +16,7 @@ import math
 import scanpy as sc
 
 from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
-    parse_barcode_file, load_external_dge
+    parse_barcode_file, load_external_dge, attach_puck_variables
 from spacemake.spatial import create_meshed_adata
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
@@ -63,6 +63,9 @@ smart_adapter = config['adapters']['smart']
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
 project_df = ProjectDF(config['project_df'], ConfigFile.from_yaml('config.yaml'))
 
+species_genome = 'species_data/{species}/genome.fa'
+species_annotation = 'species_data/{species}/annotation.gtf'
+
 ####################
 # HELPER FUNCTIONS #
 ####################
@@ -73,7 +76,7 @@ include: 'scripts/snakemake_helper_functions.py'
 #########################
 include: 'downsample.smk'
 include: 'dropseq.smk'
-include: 'pacbio.smk' 
+include: 'longread.smk' 
 
 
 # global wildcard constraints
@@ -391,10 +394,17 @@ rule create_h5ad_dge:
             adata = dge_to_sparse_adata(
                 input['dge'],
                 input['dge_summary'])
-
         # attach barcodes
         if 'barcode_file' in input.keys() and wildcards.n_beads == 'spatial':
             adata = attach_barcode_file(adata, input['barcode_file'])
+            adata = attach_puck_variables(
+                adata,
+                project_df.get_puck_variables(
+                    project_id = wildcards.project_id,
+                    sample_id = wildcards.sample_id,
+                    return_empty=True
+                )
+            )
         adata.write(output[0])
         adata.obs.to_csv(output[1])
 
@@ -480,7 +490,7 @@ rule run_novosparc_denovo:
         novosparc_denovo_h5ad
     threads: 4
     shell:
-        "python {spacemake_dir}/spatial/novosparc_reconstruction.py"
+        "python {spacemake_dir}/spatial/novosparc_integration.py"
         " --single_cell_dataset {input}"
         " --output {output}"
 
@@ -491,7 +501,7 @@ rule run_novosparc_with_reference:
     output:
         novosparc_with_reference_h5ad
     shell:
-        "python {spacemake_dir}/spatial/novosparc_reconstruction.py"
+        "python {spacemake_dir}/spatial/novosparc_integration.py"
         " --single_cell_dataset {input.sc_adata}"
         " --spatial_dataset {input.st_adata}"
         " --output {output}"
@@ -557,6 +567,28 @@ rule split_reads_sam_to_bam:
     threads: 2
     shell:
         "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
+
+rule create_species_genome:
+	input:
+		unpack(get_species_genome)
+	output:
+		species_genome	
+	run:
+		if input[0].endswith('.fa.gz'):
+			shell('unpigz -c {input} > {output}')
+		else:
+			shell('ln -sr {input} {output}')
+
+rule create_species_annotation:
+	input:
+		unpack(get_species_annotation)
+	output:
+		species_annotation
+	run:
+		if input[0].endswith('.gtf.gz'):
+			shell('unpigz -c {input} > {output}')
+		else:
+			shell('ln -sr {input} {output}')
 
 rule create_rRNA_index:
     input:

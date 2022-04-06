@@ -14,6 +14,7 @@ from spacemake.project_df import ProjectDF, get_project_sample_parser
 from spacemake.config import ConfigFile
 from spacemake.util import message_aggregation
 from spacemake.errors import SpacemakeError
+from spacemake.preprocess import attach_puck_variables
 
 config_path = "config.yaml"
 project_df = "project_df.csv"
@@ -61,8 +62,10 @@ class Spacemake:
                 f'illumina/complete_data/automated_analysis/{run_mode_name}/' +
                 f'umi_cutoff_{umi_cutoff}/results.h5ad')
         
-        adata.uns['run_mode_variables'] = run_mode.variables
-        adata.uns['puck_variables'] = adata_raw.uns['puck_variables']
+        if 'run_mode_variables' not in adata.uns.keys():
+            adata.uns['run_mode_variables'] = run_mode.variables
+        if 'puck_variables' not in adata.uns.keys():
+            adata.uns['puck_variables'] = adata_raw.uns['puck_variables']
         
         return adata
     
@@ -104,18 +107,16 @@ class Spacemake:
                 f'illumina/complete_data/dge/dge{dge_type}{dge_cleaned}'+
                 f'{polyA_adapter_trimmed}{mm_included}.spatial_beads.h5ad')
         
-        adata.uns['run_mode_variables'] = run_mode.variables
-        adata.uns['puck_variables'] = self.project_df.get_puck_variables(
-            project_id = project_id,
-            sample_id = sample_id)
+        if 'puck_variables' not in adata.uns.keys():
+            adata = attach_puck_variables(adata,
+                puck_variables = self.project_df.get_puck_variables(
+                    project_id = project_id,
+                    sample_id = sample_id
+                )
+            )
 
-        x_pos_max, y_pos_max = tuple(adata.obsm['spatial'].max(axis=0))
-        width_um = adata.uns['puck_variables']['width_um']
-        coord_by_um = x_pos_max / width_um
-        height_um = int(y_pos_max / coord_by_um)
-        
-        adata.uns['puck_variables']['height_um'] = height_um
-        adata.uns['puck_variables']['coord_by_um'] = coord_by_um
+        if 'run_mode_variables' not in adata.uns.keys():
+            adata.uns['run_mode_variables'] = run_mode.variables
 
         return adata
 
@@ -511,6 +512,7 @@ parser_run = None
 parser_projects = None
 parser_config = None
 parser_init = None
+parser_spatial = None
 
 ##################
 # SPACEMAKE INIT #

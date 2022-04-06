@@ -27,8 +27,8 @@ def get_expression_img_parser(with_umi_cutoff = False):
     parser.add_argument('--umi_cutoff', type=int,
         required=False)
 
-    parser.add_argument('--filter_percentage',
-        type=int, required=False, default=70)
+    parser.add_argument('--binary_top_qth_percentile',
+        type=int, required=False, default=30)
 
     parser.add_argument('--binary', type=str,
         required=False, default='False')
@@ -57,7 +57,7 @@ def setup_spatial_parser(spmk, attach_to):
             'aggregated'))
 
     spot_img_parser = subparsers.add_parser(
-        'create_spot_expression_Img',
+        'create_spot_expression_img',
         parents=[get_expression_img_parser()])
 
     spot_img_parser.set_defaults(
@@ -89,13 +89,14 @@ def create_expression_img_cmdline(spmk, args, img_type):
 
     logger.info(f'Generating {img_type} expression image...')
     if img_type == 'spot':
-        img = create_spot_expression_img(adata,
+        img, img_bw = create_spot_expression_img(adata,
             binary=str2bool(args['binary']))
     elif img_type == 'aggregated':
         img, img_bw = create_aggregated_expression_img(
-            adata, filter_percentage=int(args['filter_percentage']))
+            adata,
+            binary_top_qth_percentile=int(args['binary_top_qth_percentile']))
 
-        if str2bool(args['binary']):
-            img = img_bw
+    if str2bool(args['binary']):
+        img = img_bw
 
     cv2.imwrite(args['out_img'], img)

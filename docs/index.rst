@@ -9,17 +9,20 @@ welcome to the documentation of spacemake
 
 .. note::
 
-   This project is under active development.
+    This project is under active development.
 
 Contents
 --------
 
 .. toctree::
+    :maxdepth: 3
 
-   install
-   quick-start
-   config
-   projects
-   run
-   tutorials/index
-   api/index
+    install
+    quick-start/index.rst
+    initialize
+    config
+    projects/index
+    run
+    tutorials/index
+    api/index
+
