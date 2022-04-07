@@ -77,16 +77,20 @@ meshed_run_mode_names <- run_mode_settings %>%
     filter(val == 1) %$%
     run_mode
 
-sample_info <- bind_rows(snakemake@params$sample_info) %>%
+sample_info <- bind_rows(snakemake@params$sample_info[
+        c('species', 'demux_dir', 'basecalls_dir',
+          'investigator', 'experiment', 'barcode_flavor',
+          'sequencing_date', 'puck')
+    ]) %>%
     select(species, sequencing_date, investigator, experiment) %>%
     unique %>%
     gather('info_name', 'value') %>%
     add_row(info_name = 'project_id',
-            value = snakemake@wildcards$project, .before=1)%>%
+            value = snakemake@wildcards$project_id, .before=1)%>%
     add_row(info_name = 'sample_id',
-            value = snakemake@wildcards$sample, .after=1)%>%
-    add_row(info_name = 'puck_id',
-            value = snakemake@wildcards$puck, .after=2)
+            value = snakemake@wildcards$sample_id, .after=1)%>%
+    add_row(info_name = 'puck_barcode_file_id',
+            value = snakemake@wildcards$puck_barcode_file_id, .after=2)
 
 cPalette = list('grey'= "#999999", 'light_orange'="#E69F00",
          'light_blue'="#56B4E9", 'green' = "#009E73",
