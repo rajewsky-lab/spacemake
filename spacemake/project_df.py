@@ -578,7 +578,6 @@ class ProjectDF:
     # default values of the project dataframe columns
     project_df_default_values = {
         "puck_barcode_file_id": "no_spatial_data",
-        "puck_id": "no_spatial_data",
         "sample_sheet": None,
         "species": None,
         "demux_barcode_mismatch": 1,
@@ -619,7 +618,6 @@ class ProjectDF:
                     df = pd.read_csv(
                         file_path,
                         index_col=["project_id", "sample_id"],
-                        converters={"run_mode": eval, "merged_from": eval},
                         na_values=["None", "none"],
                     )
                     failed=True
@@ -644,9 +642,17 @@ class ProjectDF:
                 # replacing NaN with None
                 df = df.where(pd.notnull(df), None)
 
+
+                # convert list values stored as string
+                df.run_mode = df.run_mode.apply(str_to_list)
+                df.merged_from = df.merged_from.apply(str_to_list)
+                
                 # convert R1/R2 to list, if they are stored as string
                 df.R1 = df.R1.apply(str_to_list)
                 df.R2 = df.R2.apply(str_to_list)
+
+                df.puck_barcode_file_id = df.puck_barcode_file_id.apply(str_to_list)
+                df.puck_barcode_file = df.puck_barcode_file.apply(str_to_list)
 
                 project_list = []
                 # required if upgrading from pre-longread tree
@@ -1253,12 +1259,6 @@ class ProjectDF:
                     raise ConfigVariableNotFoundError(cv_singular, kwargs[cv_singular])
 
 
-        # if spatial we set the id to spatial_data if not provided
-        if is_spatial:
-            puck_id = kwargs.get('puck_id', 'spatial_data')
-        else:
-            puck_id = self.project_df_default_values['puck_id']
-
         # if everything correct, add or update
         # first populate kwargs
         kwargs["R1"] = R1
@@ -1269,7 +1269,6 @@ class ProjectDF:
         kwargs["sample_sheet"] = sample_sheet
         kwargs["basecalls_dir"] = basecalls_dir
         kwargs["is_merged"] = is_merged
-        kwargs["puck_id"] = puck_id
 
         # populate puck_barcode_file
         if puck_barcode_file is not None:
@@ -1321,6 +1320,10 @@ class ProjectDF:
             kwargs['puck_barcode_file'] = puck_barcode_file
 
         else:
+            # put the default value in a list
+            kwargs['puck_barcode_file_id'] = [
+                self.project_df_default_values['puck_barcode_file_id']
+            ]
             puck_name = kwargs.get('puck', None)
 
             if puck_name is not None:
@@ -1335,15 +1338,11 @@ class ProjectDF:
             new_project.update(pd.Series(kwargs))
             self.df.loc[ix] = new_project
         else:
-            # if sample is spatial, and puck not provided, assign 'default'
-            if is_spatial and "puck" not in kwargs:
-                kwargs["puck"] = "default"
-                
             new_project = pd.Series(self.project_df_default_values)
             new_project.name = ix
             new_project.update(kwargs)
-
-            self.df = self.df.append(new_project)
+            
+            self.df = pd.concat([self.df, pd.DataFrame(new_project).T], axis=0)
 
         if return_series:
             return (ix, new_project)

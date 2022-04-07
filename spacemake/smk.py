@@ -424,7 +424,7 @@ def spacemake_run(pdf, args):
 
     samples = []
     projects = []
-    #targets = ['all']
+    targets = ['run_analysis']
     with_fastqc = args.get("with_fastqc", False)
 
     downsample = args.get("downsample", False)
@@ -478,7 +478,7 @@ def spacemake_run(pdf, args):
         configfiles=[config_path],
         cores=args["cores"],
         dryrun=args["dryrun"],
-        targets=['run_analysis'],
+        targets=targets,
         touch=args["touch"],
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],

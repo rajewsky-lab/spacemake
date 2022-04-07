@@ -51,6 +51,7 @@ def get_output_files(
         # get puck files
         puck_barcode_file_ids = row['puck_barcode_file_id']
 
+        
         non_spatial_pbf_id = project_df.project_df_default_values[
             'puck_barcode_file_id']
 

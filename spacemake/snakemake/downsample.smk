@@ -52,6 +52,7 @@ def get_saturation_analysis_input(wildcards):
                 sample_id = wildcards.sample_id,
                 run_mode = run_mode,
                 data_root_type = 'downsampled_data',
+                puck_barcode_file_id = 'no_spatial_data',
                 downsampling_percentage = '/' + str(ratio))['dge_summary']
 
             files[f'downsampled_dge_summary.{run_mode}.{ratio}'] = dge_summary
@@ -61,6 +62,7 @@ def get_saturation_analysis_input(wildcards):
             sample_id = wildcards.sample_id,
             run_mode = run_mode,
             data_root_type = 'complete_data',
+            puck_barcode_file_id = 'no_spatial_data',
             downsampling_percentage = '')['dge_summary']
 
     return files

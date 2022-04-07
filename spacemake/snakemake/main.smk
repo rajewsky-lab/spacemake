@@ -130,11 +130,11 @@ rule get_whitelist_barcodes:
 ##############
 # DOWNSAMPLE #
 ##############
-#rule downsample:
-#    input:
-#        get_output_files(downsample_saturation_analysis,
-#            samples = config['samples'],
-#            projects = config['projects'])
+rule downsample:
+    input:
+        get_output_files(downsample_saturation_analysis,
+            samples = config['samples'],
+            projects = config['projects'])
 
 #############
 # NOVOSPARC #
