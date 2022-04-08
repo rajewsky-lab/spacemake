@@ -100,13 +100,13 @@ wildcard_constraints:
 rule run_analysis:
     input:
         # create fastq
-        #unpack(
-        #    lambda wildcards: get_output_files(
-        #            fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
-        #            data_root_type = 'complete_data', downsampling_percentage = '',
-        #            filter_merged=True) 
-        #        if config['with_fastqc'] else []
-        #),
+        unpack(
+            lambda wildcards: get_output_files(
+                    fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
+                    data_root_type = 'complete_data', downsampling_percentage = '',
+                    filter_merged=True) 
+                if config['with_fastqc'] else []
+        ),
         unpack(get_all_dges),
         # this will also create the clean dge
         get_output_files(automated_report, data_root_type = 'complete_data',

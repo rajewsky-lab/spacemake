@@ -14,5 +14,5 @@ ConfigFile
 
 This class is responsible for updating spacemake's configuration.
 
-.. module:: spacemake.config
+.. automodule:: spacemake.config
    :members:

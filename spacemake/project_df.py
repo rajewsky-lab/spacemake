@@ -25,7 +25,6 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         parameter
     :param prepend: a string that will be prepended before the arguments
     :param help_extra: extra help message
-    ...
     :return: a parser object
     :rtype: argparse.ArgumentParser
     """
@@ -61,9 +60,8 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         default=default,
         help=f"{sample_argument} {help_extra}",
     )
-
+    
     return parser
-
 
 def get_add_sample_sheet_parser():
     """
