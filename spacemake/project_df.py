@@ -640,6 +640,12 @@ class ProjectDF:
                 # replacing NaN with None
                 df = df.where(pd.notnull(df), None)
 
+                # rename puck_id to puck_barcode_file_id, for backward
+                # compatibility
+                df.rename(
+                    columns={"puck_id":"puck_barcode_file_id"},
+                    inplace=True,
+                )
 
                 # convert list values stored as string
                 df.run_mode = df.run_mode.apply(str_to_list)
