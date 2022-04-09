@@ -7,7 +7,7 @@ import yaml
 import logging
 import scanpy as sc
 import pandas as pd
-
+import anndata
 
 from shutil import copyfile
 from spacemake.project_df import ProjectDF, get_project_sample_parser
@@ -23,10 +23,17 @@ logger_name = "spacemake.main"
 logger = logging.getLogger(logger_name)
 
 class Spacemake:
-    def __init__(self, root):
-        """__init__.
+    """Spacemake.
 
-        :param root:
+    Class to access spacemake processed data from python.
+
+    """
+
+    def __init__(self, root):
+        """__init__ constructor function of the Spacemake class
+        
+        :param root: Path to the spacemake root directory.
+        :type root: str
         """
         self.root = root
         self.config = ConfigFile.from_yaml(f'{root}/config.yaml')
@@ -37,13 +44,24 @@ class Spacemake:
         sample_id,
         run_mode_name,
         umi_cutoff 
-    ):
-        """load_processed_adata.
+    ) -> anndata.AnnData:
+        """Load spacemake processed data.
 
-        :param project_id:
-        :param sample_id:
-        :param run_mode_name:
-        :param umi_cutoff:
+        :param project_id: project_id of the data to be loaded.
+        :type project_id: str
+        :param sample_id: sample_id of the data to be loaded.
+        :type sample_id: str
+        :param run_mode_name: name of the run mode of the data to be loaded.
+            Each sample can have several run_modes during sample addition,
+            here only one option needs to be provided.
+        :type run_mode_name: str
+        :param umi_cutoff: the umi_cutoff of the data to be loaded. Each 
+            run_mode can have several umi_cutoffs provided during configuration
+            here only one option needs to be provided.
+        :type umi_cutoff: int
+        :returns: A spacemake processed and analyzed AnnData object, containing
+            the results of the analysis.
+        :rtype: anndata.AnnData
         """
         self.project_df.assert_run_mode(project_id, sample_id, run_mode_name)
         run_mode = self.config.get_run_mode(run_mode_name)
@@ -74,12 +92,22 @@ class Spacemake:
         project_id,
         sample_id,
         run_mode_name
-    ):
-        """load_raw_spatial_adata.
+    ) -> anndata.AnnData:
+        """Load raw, spacemake processed data.
 
-        :param project_id:
-        :param sample_id:
-        :param run_mode_name:
+        This function will load the raw countr matrix, created by spacemake. 
+
+        :param project_id: project_id of the raw data to be loaded.
+        :type project_id: str
+        :param sample_id: sample_id of the raw data to be loaded.
+        :type sample_id: str
+        :param run_mode_name: name of the run mode of the raw data to be loaded.
+            Each sample can have several run_modes during sample addition,
+            here only one option needs to be provided.
+        :type run_mode_name: str
+        :returns: A spacemake processed AnnData object, containing unfiltered
+            raw expression data, and all cells or spatial units in the dataset.
+        :rtype: anndata.AnnData
         """
         self.project_df.assert_run_mode(project_id, sample_id, run_mode_name)
         run_mode = self.config.get_run_mode(run_mode_name)
@@ -121,6 +149,7 @@ class Spacemake:
         return adata
 
 def get_run_parser():
+    """get_run_parser."""
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
 
     parser.add_argument(
@@ -165,6 +194,10 @@ def get_run_parser():
     return parser
 
 def setup_init_parser(parent_parser):
+    """setup_init_parser.
+
+    :param parent_parser:
+    """
     parser_init = parent_parser.add_parser(
         "init",
         help="initialise spacemake: create config files, download genomes and annotations",
@@ -195,6 +228,11 @@ def setup_init_parser(parent_parser):
     return parser_init
 
 def setup_run_parser(pdf, parent_parser):
+    """setup_run_parser.
+
+    :param pdf:
+    :param parent_parser:
+    """
     parser_run = parent_parser.add_parser(
         "run", help="run spacemake", parents=[get_run_parser()]
     )
@@ -264,6 +302,10 @@ def setup_run_parser(pdf, parent_parser):
 
 @message_aggregation(logger_name)
 def spacemake_init(args):
+    """spacemake_init.
+
+    :param args:
+    """
     if os.path.isfile(config_path):
         msg = "spacemake has already been initiated in this directory.\n"
         msg += "use other commands to run and analyse samples."
@@ -355,10 +397,21 @@ def spacemake_init(args):
     cf.dump()
 
 def get_novosparc_variables(pdf, args):
+    """get_novosparc_variables.
+
+    :param pdf:
+    :param args:
+    """
     # assert that sample exists
     pdf.assert_sample(args['project_id'], args['sample_id'])
 
     def populate_variables_from_args(pdf, args, arg_prefix=''):
+        """populate_variables_from_args.
+
+        :param pdf:
+        :param args:
+        :param arg_prefix:
+        """
         # get sample info
         sample_info = pdf.get_sample_info(
             project_id=args[f'{arg_prefix}project_id'],
@@ -416,6 +469,11 @@ def get_novosparc_variables(pdf, args):
 
 @message_aggregation(logger_name)
 def spacemake_run(pdf, args):
+    """spacemake_run.
+
+    :param pdf:
+    :param args:
+    """
     if not os.path.isfile(config_path):
         msg = "spacemake has not been initalised yet.\n"
         msg += "please run `spacemake init` to start a new project"
@@ -554,6 +612,7 @@ if os.path.isfile(config_path):
     parser_spatial = setup_spatial_parser(spmk, subparsers)
 
 def cmdline():
+    """cmdline."""
     args = main_parser.parse_args()
 
     parser_dict = {

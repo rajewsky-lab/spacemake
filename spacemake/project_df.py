@@ -801,7 +801,11 @@ class ProjectDF:
         ]
 
         self.logger.debug(
-            f"project_id={project_id} sample_id={sample_id} R1,2={bool(data.R1 and data.R2)} basecall={(data.basecalls_dir and data.sample_sheet)} longreads={bool(data.longreads)} dge={bool(data.dge)} is_merged={bool(data.is_merged)}"
+            f"project_id={project_id} sample_id={sample_id} " +
+            f"R1,2={bool(data.R1 and data.R2)} " +
+            f"basecall={(data.basecalls_dir and data.sample_sheet)} " +
+            f"longreads={bool(data.longreads)} dge={bool(data.dge)} " +
+            f"is_merged={bool(data.is_merged)}"
         )
         if (
             (data.R1 and data.R2)

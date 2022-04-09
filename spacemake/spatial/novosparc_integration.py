@@ -230,12 +230,18 @@ def save_novosparc_res(
         tissue : novosparc.cm.Tissue,
         adata_original : anndata.AnnData
     ) -> anndata.AnnData:
-    """save_novosparc_res.
+    """Save the result of novosparc spatial mapping.
 
-    :param tissue:
+    :param tissue: A Tissue object, result of the novosparc mapping.
     :type tissue: novosparc.cm.Tissue
-    :param adata_original:
+    :param adata_original: The original AnnData which was mapped with novosparc,
+        to reconstruct the Tissue. For the de-novo reconstruction, use the 
+        original AnnData object, when a single-cell dataset was mapped onto a 
+        spatial dataset, use the AnnData of the single-cell dataset.
     :type adata_original: anndata.AnnData
+    :returns: An AnnData object containing the spatial information in
+        .obsm['spatial'], and the imputed (after mapping) expression values
+        in .X.
     :rtype: anndata.AnnData
     """
     import anndata
