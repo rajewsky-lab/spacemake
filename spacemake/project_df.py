@@ -333,13 +333,13 @@ def get_action_sample_parser(parent_parser, action, func):
     sample_parser.set_defaults(func=func, action=action)
 
 
-def setup_project_parser(pdf, attach_to):
+def setup_project_parser(pdf, parent_parser_subparsers):
     """setup_project_parser.
 
     :param pdf:
     :param attach_to:
     """
-    parser = attach_to.add_parser(
+    parser = parent_parser_subparsers.add_parser(
         "projects",
         help="manage projects and samples",
         description="Using one of the subcommands specified below, it is possible to"

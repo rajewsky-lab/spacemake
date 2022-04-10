@@ -15,6 +15,8 @@ from spacemake.config import ConfigFile
 from spacemake.util import message_aggregation
 from spacemake.errors import SpacemakeError
 from spacemake.preprocess import attach_puck_variables
+from spacemake.spatial.novosparc_integration import get_spacemake_parser as \
+    novosparc_spacemake_parser
 
 config_path = "config.yaml"
 project_df = "project_df.csv"
@@ -193,12 +195,12 @@ def get_run_parser():
 
     return parser
 
-def setup_init_parser(parent_parser):
+def setup_init_parser(parent_parser_subparsers):
     """setup_init_parser.
 
-    :param parent_parser:
+    :param parent_parser_subparsers:
     """
-    parser_init = parent_parser.add_parser(
+    parser_init = parent_parser_subparsers.add_parser(
         "init",
         help="initialise spacemake: create config files, download genomes and annotations",
     )
@@ -227,13 +229,13 @@ def setup_init_parser(parent_parser):
 
     return parser_init
 
-def setup_run_parser(pdf, parent_parser):
+def setup_run_parser(pdf, parent_parser_subparsers):
     """setup_run_parser.
 
     :param pdf:
-    :param parent_parser:
+    :param parent_parser_subparsers:
     """
-    parser_run = parent_parser.add_parser(
+    parser_run = parent_parser_subparsers.add_parser(
         "run", help="run spacemake", parents=[get_run_parser()]
     )
     parser_run.set_defaults(func=lambda args: spacemake_run(pdf, args))
@@ -249,54 +251,9 @@ def setup_run_parser(pdf, parent_parser):
     downsampling_parser.set_defaults(downsample=True,
         func=lambda args: spacemake_run(pdf, args))
 
-    parser_novosparc = parser_run_subparsers.add_parser(
-        'novosparc',
-        help='reconstruct the 2-d tissue with novosparc',
-        parents=[
-            get_run_parser(),
-            get_project_sample_parser(
-                    allow_multiple = False,
-                    help_extra = ' of sample to reconstruct',
-                 ),
-        ],
-    )
-        
-    parser_novosparc.add_argument(
-        '--run_mode', type=str, help='the run_mode to be used for this sample ' +
-        'for reconstruction. If left empty, the first run_mode for this ' +
-        'sample will be used', required=False,
-    )
-
-    parser_novosparc.add_argument(
-        '--umi_cutoff', type=int, help='umi_cutoff to be used for this sample ' +
-        'for reconstruction. If left empty, the smallest umi_cutoff of a given ' +
-        'run_mode will be used', required=False,
-    )
-
-    parser_novosparc.add_argument(
-        '--reference_project_id', type=str, help='project_id of the reference atlas.' +
-        'Has to be spatial, otherwise error will be raised', required=False,
-    )
-
-    parser_novosparc.add_argument(
-        '--reference_sample_id', type=str, help='sample_id of the reference atlas.' +
-        'Has to be spatial, otherwise error will be raised', required=False,
-    )
-
-    parser_novosparc.add_argument(
-        '--reference_run_mode', type=str, help='the run_mode to be used for the ' +
-        'reference sample. If empty, the first run_mode for the reference will be used',
-        required=False,
-    )
-
-    parser_novosparc.add_argument(
-        '--reference_umi_cutoff', type=str, help='the umi_cutoff to be used for this ' +
-        'reference sample. If empty, the smallest umi_cutoff of the given run_mode ' +
-        'will be used.', required=False,
-    )
-
-    parser_novosparc.set_defaults(novosparc_reconstruct=True,
-        func=lambda args: spacemake_run(pdf, args))
+    #parser_novosparc = novosparc_spacemake_parser(parser_run_subparsers)
+    #parser_novosparc.set_defaults(novosparc_reconstruct=True,
+    #    func=lambda args: spacemake_run(pdf, args))
     
     return parser_run
 
@@ -513,7 +470,6 @@ def spacemake_run(pdf, args):
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
     # run snakemake
-    # TODO: downsampling and novosparc
     preprocess_finished = snakemake.snakemake(
         snakefile,
         configfiles=[config_path],
@@ -559,12 +515,14 @@ def spacemake_run(pdf, args):
 # -h (help) functionality if no parameters are provided,
 # rather than printing an error.
 
-main_parser = argparse.ArgumentParser(
+parser_main = argparse.ArgumentParser(
     allow_abbrev=False,
     description="spacemake: bioinformatic pipeline for processing and analysis of spatial-transcriptomics data",
 )
 
-subparsers = main_parser.add_subparsers(help="sub-command help", dest="subcommand")
+parser_main_subparsers = parser_main.add_subparsers(
+        help="sub-command help",
+        dest="subcommand")
 
 parser_run = None
 parser_projects = None
@@ -575,7 +533,7 @@ parser_spatial = None
 ##################
 # SPACEMAKE INIT #
 ##################
-parser_init = setup_init_parser(subparsers)
+parser_init = setup_init_parser(parser_main_subparsers)
 
 ####################
 # SPACEMAKE CONFIG #
@@ -586,7 +544,7 @@ from spacemake.config import setup_config_parser
 if os.path.isfile(config_path):
     cf = ConfigFile.from_yaml(config_path)
     # save config file
-    parser_config = setup_config_parser(cf, subparsers)
+    parser_config = setup_config_parser(cf, parser_main_subparsers)
 
 ############################
 # SPACEMAKE PROJECT/SAMPLE #
@@ -595,12 +553,12 @@ from spacemake.project_df import setup_project_parser
 
 if os.path.isfile(config_path):
     pdf = ProjectDF(project_df, cf)
-    parser_projects = setup_project_parser(pdf, subparsers)
+    parser_projects = setup_project_parser(pdf, parser_main_subparsers)
 
     #################
     # SPACEMAKE RUN #
     #################
-    parser_run = setup_run_parser(pdf, subparsers)
+    parser_run = setup_run_parser(pdf, parser_main_subparsers)
 
 #####################
 # SPACEMAKE SPATIAL #
@@ -609,18 +567,18 @@ from .spatial.cmdline import setup_spatial_parser
 
 if os.path.isfile(config_path):
     spmk = Spacemake('.')
-    parser_spatial = setup_spatial_parser(spmk, subparsers)
+    parser_spatial = setup_spatial_parser(spmk, parser_main_subparsers)
 
 def cmdline():
     """cmdline."""
-    args = main_parser.parse_args()
+    args = parser_main.parse_args()
 
     parser_dict = {
         "init": parser_init,
         "config": parser_config,
         "projects": parser_projects,
         "run": parser_run,
-        "main": main_parser,
+        "main": parser_main,
         "spatial": parser_spatial
     }
 
