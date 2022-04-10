@@ -8,6 +8,7 @@ import logging
 import scanpy as sc
 import pandas as pd
 import anndata
+import importlib.metadata
 
 from shutil import copyfile
 from spacemake.project_df import ProjectDF, get_project_sample_parser
@@ -520,6 +521,10 @@ parser_main = argparse.ArgumentParser(
     description="spacemake: bioinformatic pipeline for processing and analysis of spatial-transcriptomics data",
 )
 
+parser_main.add_argument(
+    '--version',
+    action = 'store_true')
+
 parser_main_subparsers = parser_main.add_subparsers(
         help="sub-command help",
         dest="subcommand")
@@ -572,6 +577,10 @@ if os.path.isfile(config_path):
 def cmdline():
     """cmdline."""
     args = parser_main.parse_args()
+
+    if args.version:
+        print(importlib.metadata.version('spacemake'))
+        return 0
 
     parser_dict = {
         "init": parser_init,
