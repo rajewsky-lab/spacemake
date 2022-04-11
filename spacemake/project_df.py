@@ -613,7 +613,7 @@ class ProjectDF:
 
             while not failed:
                 try:
-                    df = pd.read_csv(
+                    self.df = pd.read_csv(
                         file_path,
                         index_col=["project_id", "sample_id"],
                         na_values=["None", "none"],
@@ -629,7 +629,7 @@ class ProjectDF:
                         raise e
                         failed=True
 
-            if df.empty:
+            if self.df.empty:
                 index = pd.MultiIndex(
                     names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
                 )
@@ -637,45 +637,8 @@ class ProjectDF:
                     columns=self.project_df_default_values.keys(), index=index
                 )
             else:
-                # replacing NaN with None
-                df = df.where(pd.notnull(df), None)
-
-                # rename puck_id to puck_barcode_file_id, for backward
-                # compatibility
-                df.rename(
-                    columns={"puck_id":"puck_barcode_file_id"},
-                    inplace=True,
-                )
-
-                # convert list values stored as string
-                df.run_mode = df.run_mode.apply(str_to_list)
-                df.merged_from = df.merged_from.apply(str_to_list)
-                
-                # convert R1/R2 to list, if they are stored as string
-                df.R1 = df.R1.apply(str_to_list)
-                df.R2 = df.R2.apply(str_to_list)
-
-                df.puck_barcode_file_id = df.puck_barcode_file_id.apply(str_to_list)
-                df.puck_barcode_file = df.puck_barcode_file.apply(str_to_list)
-
-                project_list = []
-                # required if upgrading from pre-longread tree
-                if not "longreads" in df.columns:
-                    df["longreads"] = None
-
-                if not "longread_signature" in df.columns:
-                    df["longread_signature"] = None
-
-                # update with new columns, if they exist.
-                for ix, row in df.iterrows():
-                    s = pd.Series(self.project_df_default_values)
-                    s.update(row)
-                    s.name = row.name
-                    project_list.append(s)
-
-                self.df = pd.concat(project_list, axis=1).T
-                self.df.is_merged = self.df.is_merged.astype(bool)
-                self.df.index.names = ["project_id", "sample_id"]
+                # 'fix' the dataframe if there are inconsistencies
+                self.fix()
         else:
             index = pd.MultiIndex(
                 names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
@@ -888,6 +851,68 @@ class ProjectDF:
         else:
             return False
 
+    def fix(self):
+        # replacing NaN with None
+        self.df = self.df.where(pd.notnull(self.df), None)
+
+        # rename puck_id to puck_barcode_file_id, for backward
+        # compatibility
+        self.df.rename(
+            columns={"puck_id":"puck_barcode_file_id"},
+            inplace=True,
+        )
+
+        # convert list values stored as string
+        self.df.run_mode = self.df.run_mode.apply(str_to_list)
+        self.df.merged_from = self.df.merged_from.apply(str_to_list)
+        
+        # convert R1/R2 to list, if they are stored as string
+        self.df.R1 = self.df.R1.apply(str_to_list)
+        self.df.R2 = self.df.R2.apply(str_to_list)
+
+        self.df.puck_barcode_file_id = self.df.puck_barcode_file_id.apply(
+                str_to_list)
+        self.df.puck_barcode_file = self.df.puck_barcode_file.apply(
+                str_to_list)
+
+        project_list = []
+        # required if upgrading from pre-longread tree
+        if not "longreads" in self.df.columns:
+            self.df["longreads"] = None
+
+        if not "longread_signature" in self.df.columns:
+            self.df["longread_signature"] = None
+
+        # per row updates
+        # first create a series of a 
+        for ix, row in self.df.iterrows():
+            s = pd.Series(self.project_df_default_values)
+
+            # update puck barcode file info
+            # for samples which have shared barcodes, and this barcode info is
+            # stored in a puck, in the config file, before the id was set to
+            # the name of the puck, and the puck_barcode_file was set to None.
+            # Here we populate the puck_barcode_file into the path to the actual
+            # file so that no errors are caused downstream.
+            if row['puck_barcode_file'] is None:
+                if len(row['puck_barcode_file_id']) > 1:
+                    raise SpacemakeError('When no barcode file provided, there ' +
+                        'only should be one id available')
+
+                pbf_id = row['puck_barcode_file_id'][0]
+                if pbf_id != self.project_df_default_values['puck_barcode_file_id']:
+                    puck = self.config.get_puck(pbf_id)
+
+                    row['puck_barcode_file'] = [puck.variables['barcodes']]
+
+            s.update(row)
+            s.name = row.name
+            project_list.append(s)
+
+        self.df = pd.concat(project_list, axis=1).T
+        self.df.is_merged = self.df.is_merged.astype(bool)
+        self.df.index.names = ["project_id", "sample_id"]
+
     def get_puck_barcode_file(
         self, project_id: str,
         sample_id: str,
@@ -907,18 +932,7 @@ class ProjectDF:
 
             # if no puck_barcode_file is provided, it means that barcode
             # file has to be fetched from the puck itself
-            if puck_barcode_files is None:
-                puck_name = self.get_metadata(
-                    "puck",
-                    project_id=project_id,
-                    sample_id=sample_id
-                )
-                
-                puck = self.config.get_puck(puck_name)
-
-                return puck.variables['barcodes']
-            # else we fetch the barcodes from the list
-            else:
+            if puck_barcode_files is not None:
                 for pid, pbf in zip(ids, puck_barcode_files):
                     if pid == puck_barcode_file_id:
                         return pbf
@@ -1284,6 +1298,7 @@ class ProjectDF:
                 puck_barcode_file = [puck_barcode_file]
 
             # if there are duplicates, raise error
+            print(puck_barcode_file)
             if len(puck_barcode_file) != len(set(puck_barcode_file)):
                 raise SpacemakeError('Duplicate files provided for '
                     + '--puck_barcode_file. \n'
@@ -1339,6 +1354,7 @@ class ProjectDF:
 
                 if puck.has_barcodes:
                     kwargs['puck_barcode_file_id'] = [puck_name]
+                    kwargs['puck_barcode_file'] = puck.variables['barcodes']
 
         if sample_exists:
             new_project = self.df.loc[ix].copy()
@@ -1583,27 +1599,21 @@ class ProjectDF:
                 # attach the deduced, consisten variable
                 kwargs[variable] = variable_val[0]
 
-        # get puck_barcode_file
-        if "puck_barcode_file" not in kwargs:
-            pbf_default = self.project_df_default_values["puck_barcode_file"]
-            pbf_list = self.df.loc[ix, "puck_barcode_file"].to_list()
-            # filter out default values
-            pbf_list = [x for x in pbf_list if x != pbf_default]
+        # get puck_barcode_files
+        if ("puck_barcode_file" not in kwargs or
+            "puck_barcode_file_id" not in kwargs):
+            kwargs['puck_barcode_file_id'] = []
+            kwargs['puck_barcode_file'] = []
 
-            # remove duplicates
-            pbf_list = list(set(pbf_list))
-
-            if pbf_list == []:
-                # if all values are default
-                kwargs["puck_barcode_file"] = pbf_default
-            elif len(pbf_list) == 1:
-                kwargs["puck_barcode_file"] = pbf_list[0]
-            else:
-                raise InconsistentVariablesDuringMerge(
-                    variable_name="puck_barcode_file",
-                    variable_value=pbf_list,
-                    ix=ix.to_list(),
-                )
+            for _, row in self.df.loc[ix].iterrows():
+                if row['puck_barcode_file'] is None:
+                    continue
+                else:
+                    for pbf_id, pbf in zip(row['puck_barcode_file_id'], row['puck_barcode_file']):
+                        if (pbf_id not in kwargs['puck_barcode_file_id'] and
+                            pbf not in kwargs['puck_barcode_file']):
+                            kwargs['puck_barcode_file_id'].append(pbf_id)
+                            kwargs['puck_barcode_file'].append(pbf)
 
         # after all checks, log that we are merging
         self.logger.info(f"Merging samples {ix_list} together\n")
