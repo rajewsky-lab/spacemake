@@ -167,6 +167,9 @@ if (is_spatial){
     x_limits <- puck_file$x_pos %>% {c(min(.), max(.))}
     y_limits <- puck_file$y_pos %>% {c(min(.), max(.))}
 
+    px_by_um <- snakemake@params$pbf_metrics$px_by_um
+    puck_width_um <- (x_limits[2] - x_limits[1]) / px_by_um
+
     ratio <- (x_limits[2] - x_limits[1] ) / (y_limits[2] - y_limits[1])
 
     scale_factor <- ifelse(puck_width_um < 3000, 2, 3)
@@ -178,10 +181,8 @@ if (is_spatial){
     y_mm_breaks <- seq(0, puck_width_um / ratio, mm_dist)
     y_mm_breaks <- paste0(y_mm_breaks * mm_diff / mm_dist, 'mm')
 
-    px_to_um <- (x_limits[2] - x_limits[1]) / snakemake@params$puck_variables$width_um
-
-    x_breaks <- seq(x_limits[1], x_limits[2], px_to_um * mm_dist)
-    y_breaks <- seq(y_limits[1], y_limits[2], px_to_um * mm_dist)
+    x_breaks <- seq(x_limits[1], x_limits[2], px_by_um * mm_dist)
+    y_breaks <- seq(y_limits[1], y_limits[2], px_by_um * mm_dist)
 
     puck_bead_size <- min(def_plot_bead_size, ifelse(snakemake@params$run_mode_variables$mesh_data,
         snakemake@params$run_mode_variables$mesh_spot_diameter_um / 40,
@@ -310,8 +311,7 @@ cat('\n\n### Neighborhood enrichment\n\n')
 ```{r plot_nhood_enrichment, echo =F, eval=is_spatial}
 nhood_dat <- read_csv(snakemake@input$nhood_enrichment)
 
-for (i in obs_df %$% res %>% unique){
-    res <- as.double(strsplit(i, '_')[[1]][2])
+for (i in nhood_dat %$% resolution %>% unique){
     dat <- nhood_dat %>%
         filter(resolution == res) %>%
         mutate(a = as.character(1000 + cluster_a),

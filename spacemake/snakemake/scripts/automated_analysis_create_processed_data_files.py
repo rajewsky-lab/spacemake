@@ -33,6 +33,9 @@ else:
     for res_key in res_keys:
         rank_key = 'rank_genes_groups_' + res_key
         
+        if not 'names' in adata.uns[rank_key]:
+            continue
+
         df = pd.DataFrame(adata.uns[rank_key]['names'])\
                 .melt(var_name = 'cluster', value_name = 'gene')
         

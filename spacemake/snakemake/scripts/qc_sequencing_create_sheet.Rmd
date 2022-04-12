@@ -77,16 +77,20 @@ meshed_run_mode_names <- run_mode_settings %>%
     filter(val == 1) %$%
     run_mode
 
-sample_info <- bind_rows(snakemake@params$sample_info) %>%
+sample_info <- bind_rows(snakemake@params$sample_info[
+        c('species', 'demux_dir', 'basecalls_dir',
+          'investigator', 'experiment', 'barcode_flavor',
+          'sequencing_date', 'puck')
+    ]) %>%
     select(species, sequencing_date, investigator, experiment) %>%
     unique %>%
     gather('info_name', 'value') %>%
     add_row(info_name = 'project_id',
-            value = snakemake@wildcards$project, .before=1)%>%
+            value = snakemake@wildcards$project_id, .before=1)%>%
     add_row(info_name = 'sample_id',
-            value = snakemake@wildcards$sample, .after=1)%>%
-    add_row(info_name = 'puck_id',
-            value = snakemake@wildcards$puck, .after=2)
+            value = snakemake@wildcards$sample_id, .after=1)%>%
+    add_row(info_name = 'puck_barcode_file_id',
+            value = snakemake@wildcards$puck_barcode_file_id, .after=2)
 
 cPalette = list('grey'= "#999999", 'light_orange'="#E69F00",
          'light_blue'="#56B4E9", 'green' = "#009E73",
@@ -303,6 +307,7 @@ umi_cutoff_plot <- function(metric, y_log_transform = F, legend_pos='none'){
     y_label <- strsplit(metric, '_')
     y_label <- paste0(y_label[[1]][1], ' ', metric_names[[y_label[[1]][2]]])
 
+    enough_data <- nrow(umi_cutoff_data) > 10
     pl <- umi_cutoff_data %>%
         gather('obs', 'value', -umi_cutoffs, -run_mode) %>%
         filter(obs == metric) %>%
@@ -319,7 +324,7 @@ umi_cutoff_plot <- function(metric, y_log_transform = F, legend_pos='none'){
             guides(linetype = guide_legend(override.aes = list(size = 1), ncol=2),
                    color = guide_legend(override.aes = list(size = 2)))
 
-    if (y_log_transform){
+    if (y_log_transform & enough_data){
         pl <- pl + scale_y_log10() +
             annotation_logticks(sides='bl')
     } else {
@@ -538,10 +543,11 @@ plot_bead_size <- run_mode_settings %>%
 x_limits <- dge_summary$x_pos %>% {c(min(.), max(.))}
 y_limits <- dge_summary$y_pos %>% {c(min(.), max(.))}
 
+px_by_um <- snakemake@params$pbf_metrics$px_by_um
+puck_width_um <- (x_limits[2] - x_limits[1]) / px_by_um
 
 ratio <- (x_limits[2] - x_limits[1] ) / (y_limits[2] - y_limits[1])
 
-puck_width_um <- snakemake@params$puck_variables$width_um
 scale_factor <- ifelse(puck_width_um < 3000, 2, 3)
 mm_dist <- max(10^scale_factor, round(puck_width_um/3, digits =-scale_factor))
 mm_diff <- mm_dist / 1000
@@ -551,10 +557,8 @@ x_mm_breaks <- paste0(x_mm_breaks * mm_diff / mm_dist, 'mm')
 y_mm_breaks <- seq(0, puck_width_um / ratio, mm_dist)
 y_mm_breaks <- paste0(y_mm_breaks * mm_diff / mm_dist, 'mm')
 
-px_to_um <- (x_limits[2] - x_limits[1]) / snakemake@params$puck_variables$width_um
-
-x_breaks <- seq(x_limits[1], x_limits[2], px_to_um * mm_dist)
-y_breaks <- seq(y_limits[1], y_limits[2], px_to_um * mm_dist)
+x_breaks <- seq(x_limits[1], x_limits[2], px_by_um * mm_dist)
+y_breaks <- seq(y_limits[1], y_limits[2], px_by_um * mm_dist)
 
 plot_spatial_qc <- function(variable, dat_in, plot_bead_size=0.1, ttl='', cut_dist=T, min_value=0, is_hexagonal=F){
     spatial_qc_dat <- dat_in %>%

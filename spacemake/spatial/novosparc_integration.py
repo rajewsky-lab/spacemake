@@ -34,6 +34,55 @@ def get_parser():
 
     return parser
 
+def get_spacemake_parser(parent_parser_subparsers):
+    parser_novosparc = parent_parser_subparsers.add_parser(
+        'novosparc',
+        help='reconstruct the 2-d tissue with novosparc',
+        parents=[
+            get_run_parser(),
+            get_project_sample_parser(
+                    allow_multiple = False,
+                    help_extra = ' of sample to reconstruct',
+                 ),
+        ],
+    )
+        
+    parser_novosparc.add_argument(
+        '--run_mode', type=str, help='the run_mode to be used for this sample ' +
+        'for reconstruction. If left empty, the first run_mode for this ' +
+        'sample will be used', required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--umi_cutoff', type=int, help='umi_cutoff to be used for this sample ' +
+        'for reconstruction. If left empty, the smallest umi_cutoff of a given ' +
+        'run_mode will be used', required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_project_id', type=str, help='project_id of the reference atlas.' +
+        'Has to be spatial, otherwise error will be raised', required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_sample_id', type=str, help='sample_id of the reference atlas.' +
+        'Has to be spatial, otherwise error will be raised', required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_run_mode', type=str, help='the run_mode to be used for the ' +
+        'reference sample. If empty, the first run_mode for the reference will be used',
+        required=False,
+    )
+
+    parser_novosparc.add_argument(
+        '--reference_umi_cutoff', type=str, help='the umi_cutoff to be used for this ' +
+        'reference sample. If empty, the smallest umi_cutoff of the given run_mode ' +
+        'will be used.', required=False,
+    )
+
+    return parser_novosparc
+
 # copy of a yet-to-be-pushed novosparc function
 def quantify_clusters_spatially(tissue: novosparc.cm.Tissue, cluster_key: str='clusters') -> ndarray:
     """Maps the annotated clusters obtained from the scRNA-seq analysis onto
@@ -230,12 +279,18 @@ def save_novosparc_res(
         tissue : novosparc.cm.Tissue,
         adata_original : anndata.AnnData
     ) -> anndata.AnnData:
-    """save_novosparc_res.
+    """Save the result of novosparc spatial mapping.
 
-    :param tissue:
+    :param tissue: A Tissue object, result of the novosparc mapping.
     :type tissue: novosparc.cm.Tissue
-    :param adata_original:
+    :param adata_original: The original AnnData which was mapped with novosparc,
+        to reconstruct the Tissue. For the de-novo reconstruction, use the 
+        original AnnData object, when a single-cell dataset was mapped onto a 
+        spatial dataset, use the AnnData of the single-cell dataset.
     :type adata_original: anndata.AnnData
+    :returns: An AnnData object containing the spatial information in
+        .obsm['spatial'], and the imputed (after mapping) expression values
+        in .X.
     :rtype: anndata.AnnData
     """
     import anndata
