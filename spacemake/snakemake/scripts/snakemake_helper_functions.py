@@ -47,31 +47,24 @@ def get_output_files(
             # and sample is external, skip
             continue
             
-
-        # get puck files
-        puck_barcode_file_ids = row['puck_barcode_file_id']
-
-        
-        non_spatial_pbf_id = project_df.project_df_default_values[
-            'puck_barcode_file_id']
-
-        if non_spatial_pbf_id not in puck_barcode_file_ids:
-            puck_barcode_file_ids.append(non_spatial_pbf_id)
-
         if puck_barcode_file_matching_type == 'none':
             # reset to empty string
             puck_barcode_file_ids = []
-        elif puck_barcode_file_matching_type == 'all':
-            # add non-spatial as well to every sample
-            pass
         elif puck_barcode_file_matching_type == 'spatial':
             # get only spatial
-            puck_barcode_file_ids = project_df.get_puck_barcode_file_ids_and_files(
+            puck_barcode_file_ids = project_df.get_puck_barcode_ids_and_files(
                 project_id, sample_id)[0]
         elif puck_barcode_file_matching_type == 'spatial_matching':
             puck_barcode_file_ids = project_df.get_matching_puck_barcode_file_ids(
                 project_id = project_id,
                 sample_id = sample_id)
+
+        # add the non spatial barcode by default
+        non_spatial_pbf_id = project_df.project_df_default_values[
+            'puck_barcode_file_id'][0]
+
+        if non_spatial_pbf_id not in puck_barcode_file_ids:
+            puck_barcode_file_ids.append(non_spatial_pbf_id)
 
         for run_mode in row["run_mode"]:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables

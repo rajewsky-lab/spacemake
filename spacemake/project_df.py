@@ -575,7 +575,7 @@ class ProjectDF:
 
     # default values of the project dataframe columns
     project_df_default_values = {
-        "puck_barcode_file_id": "no_spatial_data",
+        "puck_barcode_file_id": ["no_spatial_data"],
         "sample_sheet": None,
         "species": None,
         "demux_barcode_mismatch": 1,
@@ -595,6 +595,29 @@ class ProjectDF:
         "merged_from": [],
         "puck": "default",
         "dge": None,
+    }
+
+    project_df_dtypes = {
+        "puck_barcode_file_id": "object",
+        "sample_sheet": "str",
+        "species": "str",
+        "demux_barcode_mismatch": "int64",
+        "demux_dir": "str",
+        "basecalls_dir": "str",
+        "R1": "object",
+        "R2": "object",
+        "longreads": "str",
+        "longread_signature": "str",
+        "investigator": "str",
+        "sequencing_date": "str",
+        "experiment": "str",
+        "puck_barcode_file": "object",
+        "run_mode": "object",
+        "barcode_flavor": "str",
+        "is_merged": "bool",
+        "merged_from": "object",
+        "puck": "str",
+        "dge": "str",
     }
 
     def __init__(self, file_path, config: ConfigFile = None):
@@ -617,6 +640,7 @@ class ProjectDF:
                         file_path,
                         index_col=["project_id", "sample_id"],
                         na_values=["None", "none"],
+                        dtype = self.project_df_dtypes
                     )
                     failed=True
                 except pd.errors.EmptyDataError as e:
@@ -630,24 +654,24 @@ class ProjectDF:
                         failed=True
 
             if self.df.empty:
-                index = pd.MultiIndex(
-                    names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
-                )
-                self.df = pd.DataFrame(
-                    columns=self.project_df_default_values.keys(), index=index
-                )
+                self.create_empty_df()
             else:
                 # 'fix' the dataframe if there are inconsistencies
                 self.fix()
         else:
-            index = pd.MultiIndex(
-                names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
-            )
-            self.df = pd.DataFrame(
-                columns=self.project_df_default_values.keys(), index=index
-            )
+            self.create_empty_df()
 
         self.logger = logging.getLogger(logger_name)
+
+    def create_empty_df(self):
+        index = pd.MultiIndex(
+            names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
+        )
+        self.df = pd.DataFrame(
+            self.project_df_default_values, index=index
+        )
+
+        self.df = self.df.astype(self.project_df_dtypes)
 
     def compute_max_barcode_mismatch(self, indices: List[str]) -> int:
         """compute_max_barcode_mismatch.
@@ -852,8 +876,11 @@ class ProjectDF:
             return False
 
     def fix(self):
-        # replacing NaN with None
+        import numpy as np
+        # convert types
         self.df = self.df.where(pd.notnull(self.df), None)
+        self.df = self.df.replace({np.nan: None})
+        # replacing NaN with None
 
         # rename puck_id to puck_barcode_file_id, for backward
         # compatibility
@@ -894,13 +921,14 @@ class ProjectDF:
             # the name of the puck, and the puck_barcode_file was set to None.
             # Here we populate the puck_barcode_file into the path to the actual
             # file so that no errors are caused downstream.
-            if row['puck_barcode_file'] is None:
+            if (row['puck_barcode_file'] is None and
+                row['puck_barcode_file_id'] is not None):
                 if len(row['puck_barcode_file_id']) > 1:
                     raise SpacemakeError('When no barcode file provided, there ' +
                         'only should be one id available')
 
                 pbf_id = row['puck_barcode_file_id'][0]
-                if pbf_id != self.project_df_default_values['puck_barcode_file_id']:
+                if pbf_id not in self.project_df_default_values['puck_barcode_file_id']:
                     puck = self.config.get_puck(pbf_id)
 
                     row['puck_barcode_file'] = [puck.variables['barcodes']]
@@ -918,7 +946,7 @@ class ProjectDF:
         sample_id: str,
         puck_barcode_file_id: str
     ) -> str:
-        if (puck_barcode_file_id == self.project_df_default_values['puck_barcode_file_id']):
+        if (puck_barcode_file_id in self.project_df_default_values['puck_barcode_file_id']):
             # if sample is not spatial, or we request the non-spatial puck
             return None
         else:
@@ -947,18 +975,14 @@ class ProjectDF:
             project_id = project_id,
             sample_id = sample_id)
 
-        puck_barcode_files = [self.get_puck_barcode_file(
-            project_id = project_id,
-            sample_id = sample_id,
-            puck_barcode_file_id = pbf_id)
-            for pbf_id in puck_barcode_file_ids]
+        puck_barcode_files =  self.get_metadata('puck_barcode_file')
 
         out_puck_barcode_files = []
         out_puck_barcode_file_ids = []
 
         # return only id-file pairs, for which file is not none
-        for pbf_id, pbf in zip(puck_barcode_file_ids, puck_barcode_files):
-            if pbf is not None:
+        if puck_barcode_files is not None:
+            for pbf_id, pbf in zip(puck_barcode_file_ids, puck_barcode_files):
                 out_puck_barcode_files.append(pbf)
                 out_puck_barcode_file_ids.append(pbf_id)
 
@@ -973,7 +997,7 @@ class ProjectDF:
             sample_id = sample_id)
 
         if not os.path.isfile(summary_file):
-            return [self.project_df_default_values['puck_barcode_file_id']]
+            return self.project_df_default_values['puck_barcode_file_id']
 
         df = pd.read_csv(summary_file)
 
@@ -981,7 +1005,7 @@ class ProjectDF:
 
         pdf_ids = df.puck_barcode_file_id.to_list()
         
-        pdf_ids.append(self.project_df_default_values['puck_barcode_file_id'])
+        pdf_ids.append(self.project_df_default_values['puck_barcode_file_id'][0])
 
         return pdf_ids
 
@@ -1298,7 +1322,6 @@ class ProjectDF:
                 puck_barcode_file = [puck_barcode_file]
 
             # if there are duplicates, raise error
-            print(puck_barcode_file)
             if len(puck_barcode_file) != len(set(puck_barcode_file)):
                 raise SpacemakeError('Duplicate files provided for '
                     + '--puck_barcode_file. \n'
@@ -1344,9 +1367,6 @@ class ProjectDF:
 
         else:
             # put the default value in a list
-            kwargs['puck_barcode_file_id'] = [
-                self.project_df_default_values['puck_barcode_file_id']
-            ]
             puck_name = kwargs.get('puck', None)
 
             if puck_name is not None:
@@ -1365,7 +1385,9 @@ class ProjectDF:
             new_project = pd.Series(self.project_df_default_values)
             new_project.name = ix
             new_project.update(kwargs)
+            #before addition
             
+            #after addition
             self.df = pd.concat([self.df, pd.DataFrame(new_project).T], axis=0)
 
         if return_series:
