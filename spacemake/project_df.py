@@ -1366,7 +1366,7 @@ class ProjectDF:
             kwargs['puck_barcode_file'] = puck_barcode_file
 
         else:
-            # put the default value in a list
+            # if no puck barcode files are provided, we check if the puck has barcodes
             puck_name = kwargs.get('puck', None)
 
             if puck_name is not None:

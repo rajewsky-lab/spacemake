@@ -34,6 +34,11 @@ spacemake projects add_sample --project_id test \
     --puck visium \
     --puck_barcode_file spacemake/data/test/test_bc1.csv spacemake/data/test/test_bc2.csv
 
+# update sample
+spacemake projects update_sample --project_id test \
+    --sample_id two_bc_files \
+    --investigator Test
+
 spacemake projects merge_samples --merged_project_id test \
     --merged_sample_id test_merged \
     --project_id_list test \
