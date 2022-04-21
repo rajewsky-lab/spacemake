@@ -19,3 +19,4 @@ nbsphinx>=0.4
 spacemake
 novosparc
 ipython
+importlib
