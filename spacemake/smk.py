@@ -8,7 +8,6 @@ import logging
 import scanpy as sc
 import pandas as pd
 import anndata
-import importlib.metadata
 
 from shutil import copyfile
 from spacemake.project_df import ProjectDF, get_project_sample_parser
@@ -575,6 +574,7 @@ if os.path.isfile(config_path):
     parser_spatial = setup_spatial_parser(spmk, parser_main_subparsers)
 
 def cmdline():
+    import importlib.metadata
     """cmdline."""
     args = parser_main.parse_args()
 
