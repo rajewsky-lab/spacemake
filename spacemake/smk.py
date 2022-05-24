@@ -578,9 +578,11 @@ def cmdline():
     """cmdline."""
     args = parser_main.parse_args()
 
-    if args.version:
+    if args.version and args.subcommand is None:
         print(importlib.metadata.version('spacemake'))
         return 0
+    else:
+        del args.version
 
     parser_dict = {
         "init": parser_init,
@@ -590,7 +592,6 @@ def cmdline():
         "main": parser_main,
         "spatial": parser_spatial
     }
-
     # get the function to be run
     if "func" in args:
         func = args.func

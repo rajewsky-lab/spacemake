@@ -10,7 +10,6 @@ from spacemake.util import check_star_index_compatibility
 
 logger_name = "spacemake.config"
 
-
 def get_puck_parser(required=True):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     parser.add_argument("--name", help="name of the puck", type=str, required=True)
