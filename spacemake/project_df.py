@@ -94,7 +94,7 @@ def get_add_sample_sheet_parser():
 
 def get_sample_main_variables_parser(
         species_required=False,
-        main_variables=['barcode_flavor', 'species', 'puck', 'run_mode']
+        main_variables=['barcode_flavor', 'species', 'puck', 'run_mode', 'map_strategy']
     ):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
 
@@ -110,6 +110,16 @@ def get_sample_main_variables_parser(
             help="add the name of the species for this sample",
             required=species_required,
         )
+
+    if 'map_strategy' in main_variables:
+        parser.add_argument(
+            "--map_strategy",
+            type=str,
+            help="string constant definining mapping strategy. Can be multi-stage and use bowtie2 or STAR (see documentation)",
+            required=False,
+            default=ProjectDF.project_df_default_values["map_strategy"],
+        )
+
 
     if 'puck' in main_variables:
         parser.add_argument(
@@ -378,6 +388,7 @@ def setup_project_parser(pdf, attach_to):
         "experiment",
         "run_mode",
         "barcode_flavor",
+        "map_strategy"
     ]
     remaining_options = [
         x for x in pdf.project_df_default_values.keys() if x not in always_show
@@ -593,6 +604,7 @@ class ProjectDF:
         "merged_from": [],
         "puck": "default",
         "dge": None,
+        "map_strategy": "STAR:genome:final" # default mapping strategy
     }
 
     def __init__(self, file_path, config: ConfigFile = None):
@@ -639,6 +651,10 @@ class ProjectDF:
             # required if upgrading from pre-longread tree
             if not "longreads" in df.columns:
                 df["longreads"] = None
+
+            # required if upgrading from pre-bowtie2/map-strategy tree
+            if not "map_strategy" in df.columns:
+                df["map_strategy"] = self.project_df_default_values["map_strategy"]
 
             if not "longread_signature" in df.columns:
                 df["longread_signature"] = None
@@ -1018,6 +1034,7 @@ class ProjectDF:
         basecalls_dir=None,
         is_merged=False,
         return_series=False,
+        map_strategy="STAR:genome:final",
         **kwargs,
     ):
         """add_update_sample.
@@ -1034,6 +1051,7 @@ class ProjectDF:
         :param basecalls_dir:
         :param is_merged:
         :param return_series:
+        :param map_strategy:
         :param kwargs:
         """
         ix = (project_id, sample_id)
@@ -1158,6 +1176,7 @@ class ProjectDF:
         kwargs["basecalls_dir"] = basecalls_dir
         kwargs["is_merged"] = is_merged
         kwargs["puck_id"] = puck_id
+        kwargs["map_strategy"] = map_strategy
 
         if sample_exists:
             new_project = self.df.loc[ix].copy()
