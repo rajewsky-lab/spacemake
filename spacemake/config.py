@@ -142,27 +142,25 @@ def get_run_mode_parser(required=True):
 
 
 def get_species_parser(required=True):
+    "a parser that allows to add a reference sequence and annotation, belonging to some species"
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     parser.add_argument(
-        "--name", help="name of the species to be added", type=str, required=True
+        "--name", help="name of the reference (default=genome)", type=str, default="genome"
     )
     parser.add_argument(
-        "--genome",
+        "--species", help="name of the species", type=str, required=True
+    )
+    parser.add_argument(
+        "--sequence",
         help="path to the genome (.fa) file for the species to be added",
         type=str,
         required=required,
     )
     parser.add_argument(
         "--annotation",
-        help="path to the annotation (.gtf) file for the species to be added",
+        help="path to the genome annotation (.gtf) file for the species to be added",
         type=str,
         required=required,
-    )
-    parser.add_argument(
-        "--rRNA_genome",
-        help="path to the ribosomal-RNA genome (.fa) file for the species to be added",
-        default=None,
-        type=str,
     )
     parser.add_argument(
         "--STAR_index_dir",
@@ -170,7 +168,12 @@ def get_species_parser(required=True):
         type=str,
         required=False,
     )
-
+    parser.add_argument(
+        "--BT2_index",
+        help="path to BOWTIE2 index",
+        type=str,
+        required=False,
+    )
     return parser
 
 
@@ -491,31 +494,33 @@ class ConfigFile:
             # if species is empty, create a species dictionary
             self.variables["species"] = {}
 
-            if "knowledge" in self.variables:
-                # extract all annotation info, if exists
-                for species in self.variables["knowledge"].get("annotations", {}):
-                    if species not in self.variables["species"]:
-                        self.variables["species"][species] = {}
+            # if "knowledge" in self.variables:
+            #     # TODO: check if this still applies and make compatible with new
+            #     # two-layer species->reference model
+            #     # extract all annotation info, if exists
+            #     for species in self.variables["knowledge"].get("annotations", {}):
+            #         if species not in self.variables["species"]:
+            #             self.variables["species"][species] = {}
 
-                    self.variables["species"][species]["annotation"] = self.variables[
-                        "knowledge"
-                    ]["annotations"][species]
+            #         self.variables["species"][species]["annotation"] = self.variables[
+            #             "knowledge"
+            #         ]["annotations"][species]
 
-                for species in self.variables["knowledge"].get("genomes", {}):
-                    if species not in self.variables["species"]:
-                        self.variables["species"][species] = {}
+            #     for species in self.variables["knowledge"].get("genomes", {}):
+            #         if species not in self.variables["species"]:
+            #             self.variables["species"][species] = {}
 
-                    self.variables["species"][species]["genome"] = self.variables[
-                        "knowledge"
-                    ]["genomes"][species]
+            #         self.variables["species"][species]["genome"] = self.variables[
+            #             "knowledge"
+            #         ]["genomes"][species]
 
-                for species in self.variables["knowledge"].get("rRNA_genomes", {}):
-                    if species not in self.variables["species"]:
-                        self.variables["species"][species] = {}
+            #     for species in self.variables["knowledge"].get("rRNA_genomes", {}):
+            #         if species not in self.variables["species"]:
+            #             self.variables["species"][species] = {}
 
-                    self.variables["species"][species]["rRNA_genome"] = self.variables[
-                        "knowledge"
-                    ]["rRNA_genomes"][species]
+            #         self.variables["species"][species]["rRNA_genome"] = self.variables[
+            #             "knowledge"
+            #         ]["rRNA_genomes"][species]
 
         if "knowledge" in self.variables:
             del self.variables["knowledge"]
@@ -599,31 +604,28 @@ class ConfigFile:
 
     def process_species_args(
         self,
-        genome=None,
+        species=None,
+        sequence=None,
         annotation=None,
-        rRNA_genome=None,
+        reference=None,
         STAR_index_dir=None,
+        BT2_index=None,
     ):
-        assert_file(genome, default_value=None, extension=[".fa", ".fa.gz"])
+        assert_file(sequence, default_value=None, extension=[".fa", ".fa.gz"])
         assert_file(annotation, default_value=None, extension=[".gtf", ".gtf.gz"])
-        assert_file(rRNA_genome, default_value=None, extension=[".fa"])
-
-        species = {}
-
-        if genome is not None:
-            species["genome"] = genome
-
-        if annotation is not None:
-            species["annotation"] = annotation
-
-        if rRNA_genome is not None:
-            species["rRNA_genome"] = rRNA_genome
-
-        if STAR_index_dir is not None:
+        # assert_file(STAR_genome, default_value=None, extension=[".fa"])
+        if STAR_index_dir:
             check_star_index_compatibility(STAR_index_dir)
-            species["STAR_index_dir"] = STAR_index_dir
 
-        return species
+        species_refs = self.variables["species"].get(species, {})
+        species_refs[reference] = dict(
+            sequence=sequence,
+            annotation=annotation,
+            STAR_index_dir=STAR_index_dir,
+            BT2_index=BT2_index,
+        )
+        self.variables["species"] = species_refs
+        return species_refs
 
     def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None):
         assert_file(barcodes, default_value=None, extension="all")
