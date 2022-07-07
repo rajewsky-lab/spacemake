@@ -222,7 +222,8 @@ def get_dge_input_bam(wildcards):
 
     return out
 
-def get_species_genome(wildcards):
+# TODO: rename to get_species_ref_sequence()
+def get_species_genome(wildcards, ref="genome"):
     # This function will return the genome of a sample
     #    - annotation (.gtf file)
     #    - genome (.fa file)
@@ -235,9 +236,9 @@ def get_species_genome(wildcards):
 
     files = project_df.config.get_variable("species", name=species)
 
-    return [files['genome']]
+    return [files[ref]['sequence']]
 
-def get_species_annotation(wildcards):
+def get_species_annotation(wildcards, ref="genome"):
     # This function will return the genome of a sample
     #    - annotation (.gtf file)
     #    - genome (.fa file)
@@ -250,7 +251,7 @@ def get_species_annotation(wildcards):
 
     files = project_df.config.get_variable("species", name=species)
 
-    return [files['annotation']]
+    return [files[ref]['annotation']]
 
 def get_species_genome_annotation(wildcards):
     # This function will return 2 things required by STAR:
@@ -267,25 +268,27 @@ def get_species_genome_annotation(wildcards):
             'annotation': species_annotation.format(species=species)}
 
 
-def get_star_index(wildcards):
+def get_star_index(wildcards, ref="genome"):
     # This function will return 1 things required by STAR:
     #    - index directory
     species = project_df.get_metadata(
         "species", project_id=wildcards.project_id, sample_id=wildcards.sample_id
     )
-    species_data = project_df.config.get_variable("species", name=species)
+    species_data = project_df.config.get_variable("species", name=species)[ref]
 
     if 'STAR_index_dir' in species_data:
         return {'index': species_data['STAR_index_dir']}
     else:
         return {"index": expand(star_index, species=species)[0]}
 
+
+# TODO: refactor into map_strategy and/or delete
 def get_rRNA_genome(wildcards):
     files = project_df.config.get_variable("species", name=wildcards.species)
 
     return [files["rRNA_genome"]]
 
-
+# TODO: refactor into map_strategy and/or delete
 def get_bt2_rRNA_index(wildcards):
     species = project_df.get_metadata(
         "species", project_id=wildcards.project_id, sample_id=wildcards.sample_id
