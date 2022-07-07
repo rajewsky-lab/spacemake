@@ -249,9 +249,9 @@ include: 'scripts/snakemake_helper_functions.py'
 # INCLUDE OTHER MODULES #
 #########################
 include: 'downsample.smk'
+include: 'mapping.smk'
 include: 'dropseq.smk'
 include: 'longread.smk' 
-
 
 # global wildcard constraints
 wildcard_constraints:
@@ -274,20 +274,21 @@ wildcard_constraints:
 rule all:
     input:
         # create fastq
-        unpack(
-            lambda wildcards: get_output_files(
-                    fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
-                    data_root_type = 'complete_data', downsampling_percentage = '',
-                    filter_merged=True) 
-                if config['with_fastqc'] else []
-        ),
-        unpack(get_all_dges),
-        # this will also create the clean dge
-        get_output_files(automated_report, data_root_type = 'complete_data',
-            downsampling_percentage=''),
-        get_output_files(qc_sheet, data_root_type = 'complete_data',
-            downsampling_percentage='', run_on_external=False),
-        get_longread_output()
+        get_mapped_BAM_output(),
+        # unpack(
+        #     lambda wildcards: get_output_files(
+        #             fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
+        #             data_root_type = 'complete_data', downsampling_percentage = '',
+        #             filter_merged=True) 
+        #         if config['with_fastqc'] else []
+        # ),
+        # unpack(get_all_dges),
+        # # this will also create the clean dge
+        # get_output_files(automated_report, data_root_type = 'complete_data',
+        #     downsampling_percentage=''),
+        # get_output_files(qc_sheet, data_root_type = 'complete_data',
+        #     downsampling_percentage='', run_on_external=False),
+        # get_longread_output()
 
 ##############
 # DOWNSAMPLE #
