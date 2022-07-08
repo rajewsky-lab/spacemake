@@ -190,12 +190,13 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
 
 
 def get_annotation_command(output):
-    tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={output.bam} ANNOTATIONS_FILE={ann_gtf}"
+    print(output)
+    tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={output} ANNOTATIONS_FILE={ann_gtf}"
     ann = BAM_ANN_LKUP.get(output, None)
     if ann and ann.lower().endswith(".gtf"):
         return tagging_cmd.format(dropseq_tools=dropseq_tools, output=output, ann_gtf=ann)
     else:
-        return f"| samtools view --threads=2 -bh /dev/stdin > {output.bam}"
+        return f"| samtools view --threads=4 -bh /dev/stdin > {output}"
 
     # TODO: add other means of annotation
 
@@ -228,7 +229,7 @@ rule map_reads_bowtie2:
         bam=bt2_mapped_bam
     log: bt2_mapped_bam + ".log"
     params:
-        annotation_cmd=lambda wildcards, output: get_annotation_command(output),
+        annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
         flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP[output.bam],
     threads: 32
     shell:
@@ -261,7 +262,7 @@ rule map_reads_STAR:
         bam=star_mapped_bam
     threads: 32
     params:
-        annotation_cmd=lambda wildcards, output: get_annotation_command(output),
+        annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
         annotation=lambda wilcards, output: BAM_ANN_LKUP[output.bam],
         flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP[output.bam],
         tmp_dir = star_tmp_dir,
@@ -270,7 +271,7 @@ rule map_reads_STAR:
         "STAR {params.flags}"
         " --genomeDir {input.index}"
         " --readFilesIn {input.bam}"
-        " --readFilesCommand 'samtools view -f 4'"
+        " --readFilesCommand samtools view -f 4"
         " --readFilesType SAM SE"
         " --sjdbGTFfile {params.annotation}"
         " --outFileNamePrefix {params.star_prefix}"
@@ -281,4 +282,4 @@ rule map_reads_STAR:
         " "
         "{params.annotation_cmd}"
         " "
-        "rm -rf {params.tmp_dir}"
+        "; rm -rf {params.tmp_dir}"
