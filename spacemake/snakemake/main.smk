@@ -217,7 +217,7 @@ tagged_polyA_adapter_trimmed_bam = complete_data_root + '/unaligned_bc_tagged.po
 tagged_bam_pattern = complete_data_root + '/unaligned_bc_tagged{polyA_adapter_trimmed}.bam'
 
 # mapped reads
-star_prefix  = complete_data_root + '/star{polyA_adapter_trimmed}.'
+star_prefix  = complete_data_root + '/star.'
 star_log_file = star_prefix + 'Log.final.out'
 star_tmp_dir = star_prefix + 'tmp'
 
