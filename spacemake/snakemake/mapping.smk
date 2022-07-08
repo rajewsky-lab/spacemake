@@ -21,13 +21,11 @@ default_BT2_MAP_FLAGS = (
     " --local"
     " -L 10 -D 30 -R 30"
     " --ignore-quals"
-    " --score-min=L,0,1.5"
+    " --score-min=L,0,1.5" # require 75% of perfect match (2=base match)
 )
 
 default_STAR_MAP_FLAGS = (
     " --genomeLoad NoSharedMemory"
-    " --readFilesCommand samtools view"
-    " --readFilesType SAM SE"
     " --outSAMprimaryFlag AllBestScore"
     " --outSAMattributes All"
     " --outSAMunmapped Within"
@@ -228,18 +226,28 @@ rule map_reads_bowtie2:
         index=lambda wc: BAM_IDX_LKUP[wc_fill(bt2_mapped_bam, wc)],
     output:
         bam=bt2_mapped_bam
+    log: bt2_mapped_bam + ".log"
     params:
         annotation_cmd=lambda wildcards, output: get_annotation_command(output),
         flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP[output.bam],
     threads: 32
     shell:
-        "bowtie2"
-        "  -x {input.index}"
-        "  -b {input.bam}"
-        "  -p {threads} --reorder --mm"
-        "  {params.flags}"
+        # 1) decompress unmapped reads from existing BAM
+        "samtools view -f 4 {input.bam}"
+        # 2) re-convert SAM into uncompressed BAM.
+        #     Somehow needed for bowtie2 2.4.5. If we don't do this
+        #     bowtie2 just says "0 reads"
         " "
-        "| samtools view --threads=2 -Sbuh /dev/stdin"
+        "| samtools view --no-PG --threads=2 -Sbu" 
+        " "
+        # 3) align reads with bowtie2, *preserving the original BAM tags*
+        "| bowtie2 -p {threads} --reorder --mm"
+        "  -x {input.index} -b /dev/stdin --preserve-tags"
+        "  {params.flags} 2> {log}"
+        " "
+        # fix the BAM header to accurately reflect the entire history of processing via PG records.
+        "| python {repo_dir}/scripts/splice_bam_header.py"
+        "  --in-ubam {input.bam}"
         " "
         "{params.annotation_cmd}"
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
@@ -259,19 +267,17 @@ rule map_reads_STAR:
         tmp_dir = star_tmp_dir,
         star_prefix = star_prefix
     shell:
-        "samtools fastq -f 4 {input.bam}"
-        " "
-        "| STAR {params.flags}"
+        "STAR {params.flags}"
         " --genomeDir {input.index}"
-        " --readFilesIn {input}"
+        " --readFilesIn {input.bam}"
+        " --readFilesCommand 'samtools view -f 4'"
+        " --readFilesType SAM SE"
         " --sjdbGTFfile {params.annotation}"
         " --outFileNamePrefix {params.star_prefix}"
         " --runThreadN {threads}"
         " "
-        "| python {repo_dir}/scripts/fix_bam_header.py"
-        " --in-bam-star /dev/stdin"
-        " --in-bam-tagged {input.bam}"
-        " --out-bam /dev/stdout"
+        "| python {repo_dir}/scripts/splice_bam_header.py"
+        " --in-ubam {input.bam}"
         " "
         "{params.annotation_cmd}"
         " "
