@@ -219,6 +219,7 @@ tagged_bam_pattern = complete_data_root + '/unaligned_bc_tagged{polyA_adapter_tr
 # mapped reads
 star_prefix  = complete_data_root + '/star.'
 star_log_file = star_prefix + 'Log.final.out'
+star_target_log_file = star_prefix + 'Log.{target}.STAR.out'
 star_tmp_dir = star_prefix + 'tmp'
 
 # final bam file
@@ -271,24 +272,25 @@ wildcard_constraints:
 #############
 # Main rule #
 #############
+
 rule all:
     input:
         # create fastq
         get_mapped_BAM_output(),
-        # unpack(
-        #     lambda wildcards: get_output_files(
-        #             fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
-        #             data_root_type = 'complete_data', downsampling_percentage = '',
-        #             filter_merged=True) 
-        #         if config['with_fastqc'] else []
-        # ),
-        # unpack(get_all_dges),
-        # # this will also create the clean dge
-        # get_output_files(automated_report, data_root_type = 'complete_data',
-        #     downsampling_percentage=''),
-        # get_output_files(qc_sheet, data_root_type = 'complete_data',
-        #     downsampling_percentage='', run_on_external=False),
-        # get_longread_output()
+        unpack(
+            lambda wildcards: get_output_files(
+                    fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
+                    data_root_type = 'complete_data', downsampling_percentage = '',
+                    filter_merged=True) 
+                if config['with_fastqc'] else []
+        ),
+        unpack(get_all_dges),
+        # this will also create the clean dge
+        get_output_files(automated_report, data_root_type = 'complete_data',
+            downsampling_percentage=''),
+        get_output_files(qc_sheet, data_root_type = 'complete_data',
+            downsampling_percentage='', run_on_external=False),
+        get_longread_output()
 
 ##############
 # DOWNSAMPLE #
@@ -643,7 +645,7 @@ rule create_automated_analysis_processed_data_files:
         
 rule create_automated_report:
     input:
-        #star_log=star_log_file,
+        # star_log=star_log_file,
         unpack(get_parsed_puck_file),
         **automated_analysis_processed_data_files,
     # spawn at most 4 automated analyses
