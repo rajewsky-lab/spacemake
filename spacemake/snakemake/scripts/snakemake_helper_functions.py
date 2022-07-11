@@ -14,7 +14,6 @@ def get_output_files(
 
     if projects != [] or samples != []:
         project_df.assert_index_value(projects, "project_id")
-
         project_df.assert_index_value(samples, "sample_id")
 
         ix = project_df.get_ix_from_project_sample_list(
@@ -202,10 +201,11 @@ def get_final_bam(wildcards):
     )
 
     if is_merged:
-        return [final_merged_bam]
+        res = [final_merged_bam]
     else:
-        return [final_bam]
+        res = [final_bam]
 
+    return res
 
 def get_dge_input_bam(wildcards):
     if wildcards.data_root_type == "complete_data":
