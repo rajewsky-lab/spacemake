@@ -1,5 +1,9 @@
-ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed" # this must be local and not have .bam appended!
+# this must be local and not have .bam appended!
 # basically, if ubam_input were used as {target} in mapped.bam it should eval to tagged_polyA_adapter_trimmed_bam
+ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
+final_target = "final.polyA_adapter_trimmed"
+
+# pattern for BAM file names 
 mapped_bam = complete_data_root + "/{target}.bam"
 star_mapped_bam = complete_data_root + "/{target}.STAR.bam"
 bt2_mapped_bam = complete_data_root + "/{target}.bowtie2.bam"
@@ -10,12 +14,16 @@ def wc_fill(x, wc):
 # These lookup dictionaries use the absolute paths of BAM files as keys
 BAM_DEP_LKUP = {} # input on which a mapped BAM will depend (usually a uBAM or BAM of previous stage)
 BAM_MAP_LKUP = {} # which mapper to use (STAR or bowtie2)
-BAM_IDX_LKUP = {} # mapping index which is needed to create a BAM
-BAM_REF_LKUP = {} # reference sequence
-BAM_ANN_LKUP = {} # annotation file used for tagging 
-BAM_SYMLINKS = {} # contains the source file to symlink to
+BAM_IDX_LKUP = {} # mapping index which is needed to create the BAM
+BAM_REF_LKUP = {} # path to reference sequence
+BAM_ANN_LKUP = {} # path to annotation file to be used for tagging 
+BAM_SYMLINKS = {} # contains the source file to symlink to for named targets ("genome", "rRNA", "final")
 
 BAM_MAP_FLAGS_LKUP = {}
+
+# needed for later stages of SPACEMAKE which require one, "star.Log.final.out" file
+# we create a symlink from the target designated with the 'final' target identifier
+STAR_FINAL_LOG_SYMLINKS = {}
 
 default_BT2_MAP_FLAGS = (
     " --local"
@@ -34,7 +42,7 @@ default_STAR_MAP_FLAGS = (
     " --limitOutSJcollapsed 5000000"
 )
 
-def mapstr_to_targets(mapstr, inbam="uBAM", outbam="final"):
+def mapstr_to_targets(mapstr, inbam="uBAM", final="final"):
     """
     Converts a mapping strategy provided as a string into a series of BAM file names
     and their dependencies. Rule matching is otherwise ensured by the convention of the 
@@ -96,19 +104,27 @@ def mapstr_to_targets(mapstr, inbam="uBAM", outbam="final"):
         parts = token.split(":")
         if len(parts) == 1:
             target = parts[0]
-            if target != inbam:
-                dep_lkup[target] = inbam
-            else:
+            if target == "final":
+                target = final
+
+            if target == inbam:
                 symlinks[target] = inbam
+            # elif target == final:
+            #     symlinks[target] = inbam  # create a symlink to the designated final result
+            else:
+                dep_lkup[target] = inbam
 
             return target
         else:
             if len(parts) == 2:
                 mapper, ref = parts
-                outname = f"{inbam}.{ref}.{mapper}"
+                # outname = f"{inbam}.{ref}.{mapper}"
+                outname = f"{ref}.{mapper}"
             else:
                 mapper, ref, linkname = parts
-                outname = f"{inbam}.{ref}.{mapper}"
+                linkname = linkname.replace("final", final)
+                # outname = f"{inbam}.{ref}.{mapper}"
+                outname = f"{ref}.{mapper}"
                 symlinks[linkname] = outname
 
             ann_lkup[outname] = ref
@@ -119,7 +135,7 @@ def mapstr_to_targets(mapstr, inbam="uBAM", outbam="final"):
             return outname
 
     left = inbam
-    chain = [inbam] + mapstr.split("->") + ["final"]
+    chain = [inbam] + mapstr.split("->") # + ["final"]
     # print("  chain", chain)
     while chain:
         right = chain.pop(0)
@@ -148,7 +164,8 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             mapstr = row.map_strategy
 
         # print(index, mapstr)
-        targets, dep_lkup, ref_lkup, mapper_lkup, ann_lkup, symlinks = mapstr_to_targets(mapstr, inbam=ubam_input)
+        # print(index, mapstr)
+        targets, dep_lkup, ref_lkup, mapper_lkup, ann_lkup, symlinks = mapstr_to_targets(mapstr, inbam=ubam_input, final=final_target)
         for target in targets:
             _target = mapped_bam.format(project_id=index[0], sample_id=index[1], target=target)
             # print(f"TARGET: target={target} -> _target={_target}")
@@ -174,7 +191,24 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             _src = mapped_bam.format(project_id=index[0], sample_id=index[1], target=src)
             BAM_SYMLINKS[_target] = _src
 
+            if target == final_target:
+                final_log_name = star_log_file.format(project_id=index[0], sample_id=index[1])
+                final_log = star_target_log_file.format(target=src.replace('.STAR', ''), project_id=index[0], sample_id=index[1])
+                print("STAR_FINAL_LOG_SYMLINKS preparation", target, src, final_log_name, "->", final_log)
+                STAR_FINAL_LOG_SYMLINKS[final_log_name] = final_log
+
+            # print(f"   target: {target}")
+
             out_files.append(_target)
+
+        # # debug qc sheet dependency
+        # print(f"qc sheet debug: {index[1]}")
+        # for k, v in get_qc_sheet_input_files(dotdict(project_id=index[0], sample_id=index[1])).items():
+        #     print(f"     {k}:{v}")
+        #     if k == "star_log":
+        #         assert v[0] in STAR_FINAL_LOG_LKUP
+        #         print("YAY! log file points to ", STAR_FINAL_LOG_LKUP[v[0]])
+
 
     print("ALL TOP-LEVEL TARGETS")
     for o in out_files:
@@ -190,36 +224,38 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
 
 
 def get_annotation_command(output):
-    print(output)
     tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={output} ANNOTATIONS_FILE={ann_gtf}"
     ann = BAM_ANN_LKUP.get(output, None)
     if ann and ann.lower().endswith(".gtf"):
         return tagging_cmd.format(dropseq_tools=dropseq_tools, output=output, ann_gtf=ann)
     else:
+        # this is a stub for "no annotation tagging"
         return f"| samtools view --threads=4 -bh /dev/stdin > {output}"
-
-    # TODO: add other means of annotation
-
-# def get_symlink_source(wc):
-#     output = complete_data_root + f"/{wc.name}.bam"
-#     if not output in BAM_SYMLINKS:
-#         for k,v in sorted(BAM_SYMLINKS.items()):
-#             print(f"{k} <- {v}")
-#             if not v in BAM_DEP_LKUP:
-#                 print("!!! NOT IN BAM_DEP_LKUP")
-#                 for k in sorted(BAM_DEP_LKUP.keys()):
-#                     print(k)
-
-#     return BAM_SYMLINKS.get(output, f'NA {output} NA')
-
-# ruleorder: 
-#     map_reads_bowtie2 > map_reads_STAR > symlinks
+    
+    # TODO: add other means of annotation (lookup-based for pseudo-genomes such as miRNA reference...)
 
 rule symlinks:
     input: lambda wc: BAM_SYMLINKS[wc_fill(mapped_bam, wc)]
     output: mapped_bam
+    params:
+        rel_input=lambda wildcards, input: os.path.basename(input[0])
     shell:
-        "ln -s {input} {output}"
+        "ln -s {params.rel_input} {output}"
+
+    # run:
+    #     rel = os.path.basename(input)
+    #     shell(f"ln -s {rel} {output}")
+
+ruleorder:
+    symlink_final_log > map_reads_STAR
+
+rule symlink_final_log:
+    input: lambda wc: STAR_FINAL_LOG_SYMLINKS[star_log_file.format(sample_id=wc.sample_id, project_id=wc.project_id)]
+    output: star_log_file
+    params:
+        rel_input=lambda wildcards, input: os.path.basename(input[0])
+    shell:
+        "ln -s {params.rel_input} {output}"
 
 rule map_reads_bowtie2:
     input:
@@ -231,7 +267,7 @@ rule map_reads_bowtie2:
     params:
         annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
         flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP[output.bam],
-    threads: 32
+    threads: 32 
     shell:
         # 1) decompress unmapped reads from existing BAM
         "samtools view -f 4 {input.bam}"
@@ -256,15 +292,18 @@ rule map_reads_bowtie2:
 
 rule map_reads_STAR:
     input: 
+        # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
+        # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
         bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
-        bam=star_mapped_bam
-    threads: 32
+        bam=star_mapped_bam,
+        log=star_target_log_file,
+    threads: 16 # bottleneck is annotation! We could push to 32 on murphy
     params:
         annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
-        annotation=lambda wilcards, output: BAM_ANN_LKUP[output.bam],
-        flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP[output.bam],
+        annotation=lambda wilcards, output: BAM_ANN_LKUP.get(output.bam, "can't_find_annotation"),
+        flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP.get(output.bam, "can't_find_flags"),
         tmp_dir = star_tmp_dir,
         star_prefix = star_prefix
     shell:
