@@ -3,13 +3,16 @@
 ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
 final_target = "final.polyA_adapter_trimmed"
 
+# ubam_input = "unaligned_bc_tagged{polyA_adapter_trimmed}"
+# final_target = "final{polyA_adapter_trimmed}"
+
 # pattern for BAM file names 
 mapped_bam = complete_data_root + "/{target}.bam"
 star_mapped_bam = complete_data_root + "/{target}.STAR.bam"
 bt2_mapped_bam = complete_data_root + "/{target}.bowtie2.bam"
 
 def wc_fill(x, wc):
-    return x.format(sample_id=wc.sample_id, project_id=wc.project_id, target=wc.target)
+    return x.format(sample_id=wc.sample_id, project_id=wc.project_id, target=wc.target)  # polyA_adapter_trimmed=wc.polyA_adapter_trimmed
 
 # These lookup dictionaries use the absolute paths of BAM files as keys
 BAM_DEP_LKUP = {} # input on which a mapped BAM will depend (usually a uBAM or BAM of previous stage)
@@ -18,11 +21,10 @@ BAM_IDX_LKUP = {} # mapping index which is needed to create the BAM
 BAM_REF_LKUP = {} # path to reference sequence
 BAM_ANN_LKUP = {} # path to annotation file to be used for tagging 
 BAM_SYMLINKS = {} # contains the source file to symlink to for named targets ("genome", "rRNA", "final")
+BAM_MAP_FLAGS_LKUP = {} # additional cmdline flags/switches to be passed to the mapper (bowtie2 or STAR)
 
-BAM_MAP_FLAGS_LKUP = {}
-
-# needed for later stages of SPACEMAKE which require one, "star.Log.final.out" file
-# we create a symlink from the target designated with the 'final' target identifier
+# needed for later stages of SPACEMAKE which require one "star.Log.final.out" file.
+# We create a symlink from the *target* designated with the 'final' identifier
 STAR_FINAL_LOG_SYMLINKS = {}
 
 default_BT2_MAP_FLAGS = (
@@ -109,8 +111,6 @@ def mapstr_to_targets(mapstr, inbam="uBAM", final="final"):
 
             if target == inbam:
                 symlinks[target] = inbam
-            # elif target == final:
-            #     symlinks[target] = inbam  # create a symlink to the designated final result
             else:
                 dep_lkup[target] = inbam
 
@@ -135,8 +135,7 @@ def mapstr_to_targets(mapstr, inbam="uBAM", final="final"):
             return outname
 
     left = inbam
-    chain = [inbam] + mapstr.split("->") # + ["final"]
-    # print("  chain", chain)
+    chain = [inbam] + mapstr.split("->")
     while chain:
         right = chain.pop(0)
         if left == right:
@@ -151,10 +150,21 @@ def mapstr_to_targets(mapstr, inbam="uBAM", final="final"):
     return sorted(targets), dep_lkup, ref_lkup, mapper_lkup, ann_lkup, symlinks
 
 
+def _print_debug_targets(out_files):
+    print("ALL TOP-LEVEL TARGETS")
+    for o in out_files:
+        print(
+            f"   {o}\n"
+            f"      input={BAM_DEP_LKUP.get(o, None)}\n"
+            f"      mapper={BAM_MAP_LKUP.get(o, None)}\n"
+            f"      ref={BAM_REF_LKUP.get(o, None)}\n"
+            f"      ann={BAM_ANN_LKUP.get(o, None)}\n"
+        )
+
 def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
     """
     This function is called from main.smk at least once 
-    to determine which output files need to be generated.
+    to determine which output BAM files need to be generated.
     """
     out_files = []
 
@@ -163,12 +173,9 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
         if hasattr(row, "map_strategy") and row.map_strategy:
             mapstr = row.map_strategy
 
-        # print(index, mapstr)
-        # print(index, mapstr)
         targets, dep_lkup, ref_lkup, mapper_lkup, ann_lkup, symlinks = mapstr_to_targets(mapstr, inbam=ubam_input, final=final_target)
         for target in targets:
             _target = mapped_bam.format(project_id=index[0], sample_id=index[1], target=target)
-            # print(f"TARGET: target={target} -> _target={_target}")
             BAM_DEP_LKUP[_target] = mapped_bam.format(project_id=index[0], sample_id=index[1], target=dep_lkup.get(target, None))
             mapper = mapper_lkup.get(target, None)
             BAM_MAP_LKUP[_target] = mapper
@@ -197,29 +204,9 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
                 print("STAR_FINAL_LOG_SYMLINKS preparation", target, src, final_log_name, "->", final_log)
                 STAR_FINAL_LOG_SYMLINKS[final_log_name] = final_log
 
-            # print(f"   target: {target}")
-
             out_files.append(_target)
 
-        # # debug qc sheet dependency
-        # print(f"qc sheet debug: {index[1]}")
-        # for k, v in get_qc_sheet_input_files(dotdict(project_id=index[0], sample_id=index[1])).items():
-        #     print(f"     {k}:{v}")
-        #     if k == "star_log":
-        #         assert v[0] in STAR_FINAL_LOG_LKUP
-        #         print("YAY! log file points to ", STAR_FINAL_LOG_LKUP[v[0]])
-
-
-    print("ALL TOP-LEVEL TARGETS")
-    for o in out_files:
-        print(
-            f"   {o}\n"
-            f"      input={BAM_DEP_LKUP.get(o, None)}\n"
-            f"      mapper={BAM_MAP_LKUP.get(o, None)}\n"
-            f"      ref={BAM_REF_LKUP.get(o, None)}\n"
-            f"      ann={BAM_ANN_LKUP.get(o, None)}\n"
-        )
-
+    # _print_debug_targets(out_files)
     return out_files
 
 
@@ -234,6 +221,9 @@ def get_annotation_command(output):
     
     # TODO: add other means of annotation (lookup-based for pseudo-genomes such as miRNA reference...)
 
+ruleorder:
+    symlink_final_log > map_reads_STAR
+
 rule symlinks:
     input: lambda wc: BAM_SYMLINKS[wc_fill(mapped_bam, wc)]
     output: mapped_bam
@@ -241,13 +231,6 @@ rule symlinks:
         rel_input=lambda wildcards, input: os.path.basename(input[0])
     shell:
         "ln -s {params.rel_input} {output}"
-
-    # run:
-    #     rel = os.path.basename(input)
-    #     shell(f"ln -s {rel} {output}")
-
-ruleorder:
-    symlink_final_log > map_reads_STAR
 
 rule symlink_final_log:
     input: lambda wc: STAR_FINAL_LOG_SYMLINKS[star_log_file.format(sample_id=wc.sample_id, project_id=wc.project_id)]
