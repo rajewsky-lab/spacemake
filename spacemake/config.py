@@ -10,7 +10,6 @@ from spacemake.util import check_star_index_compatibility
 
 logger_name = "spacemake.config"
 
-
 def get_puck_parser(required=True):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     parser.add_argument("--name", help="name of the puck", type=str, required=True)
@@ -269,8 +268,11 @@ def get_variable_action_subparsers(config, parent_parser, variable):
     update_parser.set_defaults(func=func, action="update", variable=variable)
 
 
-def setup_config_parser(config, subparsers):
-    parser_config = subparsers.add_parser("config", help="configure spacemake")
+def setup_config_parser(config, parent_parser_subparsers):
+    parser_config = parent_parser_subparsers.add_parser(
+        "config",
+        help="configure spacemake"
+    )
     parser_config_subparsers = parser_config.add_subparsers(
         help="config sub-command help"
     )
@@ -633,7 +635,7 @@ class ConfigFile:
         puck = {}
 
         if width_um is not None:
-            puck["width_um"] = (float(width_um),)
+            puck['width_um'] = float(width_um)
 
         if spot_diameter_um is not None:
             puck["spot_diameter_um"] = float(spot_diameter_um)

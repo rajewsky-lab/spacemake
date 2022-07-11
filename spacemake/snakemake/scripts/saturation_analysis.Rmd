@@ -55,16 +55,17 @@ run_mode_settings <- bind_rows(snakemake@params$run_mode) %>%
 
 run_mode_names <- run_mode_settings[-1] %>% names
 
-sample_info <- bind_rows(snakemake@params$sample_info) %>%
-    select(species, sequencing_date, investigator, experiment) %>%
+sample_info <- bind_rows(snakemake@params$sample_info[
+        c('species', 'demux_dir', 'basecalls_dir',
+          'investigator', 'experiment', 'barcode_flavor',
+          'sequencing_date', 'puck')
+    ]) %>%
     unique %>%
     gather('info_name', 'value') %>%
     add_row(info_name = 'project_id',
-            value = snakemake@wildcards$project, .before=1)%>%
+            value = snakemake@wildcards$project_id, .before=1)%>%
     add_row(info_name = 'sample_id',
-            value = snakemake@wildcards$sample, .after=1)%>%
-    add_row(info_name = 'puck_id',
-            value = snakemake@wildcards$puck, .after=2)
+            value = snakemake@wildcards$sample_id, .after=1)
 ```
 
 

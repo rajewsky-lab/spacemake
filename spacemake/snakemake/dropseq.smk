@@ -90,7 +90,6 @@ rule create_star_index:
 #             --outSAMunmapped Within \
 #             --outStd BAM_Unsorted \
 #             --outSAMtype BAM Unsorted \
-#             --limitOutSJcollapsed 5000000 \
 #             --runThreadN {threads} | \
 #             python {repo_dir}/scripts/fix_bam_header.py \
 #                 --in-bam-star /dev/stdin \
@@ -101,8 +100,8 @@ rule create_star_index:
 #                 O={output.final_bam} \
 #                 ANNOTATIONS_FILE={input.annotation}
 
-#         rm -rf {params.tmp_dir}
-#         """
+# #         rm -rf {params.tmp_dir}
+# #         """
 
 rule filter_mm_reads:
     input:

@@ -7,7 +7,6 @@ snakemake>=5.32.0,<6.5.0
 pysam
 pandas
 scanpy
-leidenalg
 numpy
 more-itertools
 biopython
@@ -19,3 +18,4 @@ nbsphinx>=0.4
 spacemake
 novosparc
 ipython
+importlib-metadata

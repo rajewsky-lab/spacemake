@@ -42,8 +42,8 @@ def get_expression_img_parser(with_umi_cutoff = False):
 
     return parser
 
-def setup_spatial_parser(spmk, attach_to):
-    parser = attach_to.add_parser('spatial',
+def setup_spatial_parser(spmk, parent_parser_subparsers):
+    parser = parent_parser_subparsers.add_parser('spatial',
         help = 'spacemake spatial commands')
 
     subparsers = parser.add_subparsers()
