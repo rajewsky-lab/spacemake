@@ -167,6 +167,15 @@ class dotdict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
+    def __str__(self):
+        buf = ["dotdict"]
+        for k, v in self.__dict__.items():
+            if not k.startswith("__"):
+                buf.append(f"  {k} = {v}")
+
+        return "\n".join(buf)
+
+
 
 def parse_barcode_flavors(
     config,
