@@ -923,7 +923,7 @@ class ProjectDF:
             self.df["longread_signature"] = None
 
         # required if upgrading from pre-bowtie2/map-strategy tree
-        if not "map_strategy" in df.columns:
+        if not "map_strategy" in self.df.columns:
             self.df["map_strategy"] = self.project_df_default_values["map_strategy"]
 
         # per row updates
