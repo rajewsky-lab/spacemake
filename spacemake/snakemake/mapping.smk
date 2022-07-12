@@ -14,6 +14,8 @@ bt2_mapped_bam = complete_data_root + "/{target}.bowtie2.bam"
 def wc_fill(x, wc):
     return x.format(sample_id=wc.sample_id, project_id=wc.project_id, target=wc.target)  # polyA_adapter_trimmed=wc.polyA_adapter_trimmed
 
+MAP_RULES_LKUP = {}
+
 # These lookup dictionaries use the absolute paths of BAM files as keys
 BAM_DEP_LKUP = {} # input on which a mapped BAM will depend (usually a uBAM or BAM of previous stage)
 BAM_MAP_LKUP = {} # which mapper to use (STAR or bowtie2)
@@ -181,22 +183,38 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             BAM_MAP_LKUP[_target] = mapper
             species_d = project_df.config.get_variable("species", name=row.species)
             ref = ref_lkup.get(target, None)
+            # map_rules = dotdict(
+            #     target=target,
+            #     mapper=mapper,
+            #     output=mapped_bam.format(project_id=index[0], sample_id=index[1], target=target),
+            #     input=mapped_bam.format(project_id=index[0], sample_id=index[1], target=dep_lkup.get(target, None)),
+            #     refname=ref,
+            # )
             if ref:
                 BAM_REF_LKUP[_target] = species_d[ref]["sequence"]
                 BAM_ANN_LKUP[_target] = species_d[ref].get("annotation", None)
+                # map_rules.sequence = species_d[ref]["sequence"]
+                # map_rules.annotation = species_d[ref].get("annotation", None)
+
                 if mapper == "bowtie2":
                     BAM_MAP_FLAGS_LKUP[_target] = species_d[ref].get("bt2_flags", default_BT2_MAP_FLAGS)
                     BAM_IDX_LKUP[_target] = species_d[ref].get("bt2_index", BAM_REF_LKUP[_target])
+                    # map_rules.flags = species_d[ref].get("bt2_flags", default_BT2_MAP_FLAGS)
+                    # map_rules.index = species_d[ref].get("bt2_index", BAM_REF_LKUP[_target])
                 else:
                     BAM_MAP_FLAGS_LKUP[_target] = species_d[ref].get("STAR_flags", default_STAR_MAP_FLAGS)
                     BAM_IDX_LKUP[_target] = species_d[ref].get("index_dir", "NO_STAR_index_IN_config.yaml")
-                
-            out_files.append(_target)
+                    # map_rules.flags = species_d[ref].get("STAR_flags", default_STAR_MAP_FLAGS)
+                    # map_rules.index = species_d[ref].get("bt2_index", BAM_REF_LKUP[_target])
+            
+            MAP_RULES_LKUP[_target] = map_rules
+            # out_files.append(_target)
 
         for target, src in symlinks.items():
             _target = mapped_bam.format(project_id=index[0], sample_id=index[1], target=target)
             _src = mapped_bam.format(project_id=index[0], sample_id=index[1], target=src)
             BAM_SYMLINKS[_target] = _src
+            print("BAM_SYMLINKS preparation", target, src, _target, "->", _src)
 
             if target == final_target:
                 final_log_name = star_log_file.format(project_id=index[0], sample_id=index[1])
@@ -207,8 +225,28 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             out_files.append(_target)
 
     # _print_debug_targets(out_files)
+    for k,v in sorted(MAP_RULES_LKUP.items()):
+        print(f"map_rules for '{k}'")
+        print(v)
+
     return out_files
 
+
+def get_map_rules(wc):
+    output = mapped_bam.format(
+        project_id=wc.project_id,
+        sample_id=wc.sample_id,
+        target=wc.target
+    )
+    print(f"get_map_rules output={output}")
+    return MAP_RULES_LKUP[output]
+
+def get_map_inputs(wc):
+    map_rules = get_map_rules(wc)
+    return {
+        'bam' : map_rules.input,
+        'index' : map_rules.index
+    }
 
 def get_annotation_command(output):
     tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={output} ANNOTATIONS_FILE={ann_gtf}"
@@ -221,7 +259,10 @@ def get_annotation_command(output):
     
     # TODO: add other means of annotation (lookup-based for pseudo-genomes such as miRNA reference...)
 
-ruleorder:
+# ruleorder:
+#     symlinks > map_reads_bowtie2 > map_reads_STAR
+
+ruleorder:    
     symlink_final_log > map_reads_STAR
 
 rule symlinks:
@@ -244,12 +285,13 @@ rule map_reads_bowtie2:
     input:
         bam=lambda wc: BAM_DEP_LKUP[wc_fill(bt2_mapped_bam, wc)],
         index=lambda wc: BAM_IDX_LKUP[wc_fill(bt2_mapped_bam, wc)],
+        # unpack(get_map_inputs),
     output:
         bam=bt2_mapped_bam
     log: bt2_mapped_bam + ".log"
     params:
         annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
-        flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP[output.bam],
+        flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP.get(output.bam, f"no_flags_for_BAM:{output.bam}"),
     threads: 32 
     shell:
         # 1) decompress unmapped reads from existing BAM
@@ -272,6 +314,9 @@ rule map_reads_bowtie2:
         "{params.annotation_cmd}"
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
+# print(">>>>>>>>>>>>>>>>>>>>")
+# print(star_mapped_bam)
+# print(star_target_log_file)
 
 rule map_reads_STAR:
     input: 
