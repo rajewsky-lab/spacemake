@@ -207,7 +207,7 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
                     # map_rules.flags = species_d[ref].get("STAR_flags", default_STAR_MAP_FLAGS)
                     # map_rules.index = species_d[ref].get("bt2_index", BAM_REF_LKUP[_target])
             
-            MAP_RULES_LKUP[_target] = map_rules
+            # MAP_RULES_LKUP[_target] = map_rules
             # out_files.append(_target)
 
         for target, src in symlinks.items():
