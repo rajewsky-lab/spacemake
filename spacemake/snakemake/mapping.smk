@@ -11,6 +11,13 @@ mapped_bam = complete_data_root + "/{target}.bam"
 star_mapped_bam = complete_data_root + "/{target}.STAR.bam"
 bt2_mapped_bam = complete_data_root + "/{target}.bowtie2.bam"
 
+# special log file used for rRNA "ribo depletion" stats
+bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
+
+# index settings
+star_index = 'species_data/{species}/{target}/star_index'
+bt2_index = 'species_data/{species}/{target}/bt2_index'
+
 def wc_fill(x, wc):
     return x.format(sample_id=wc.sample_id, project_id=wc.project_id, target=wc.target)  # polyA_adapter_trimmed=wc.polyA_adapter_trimmed
 
@@ -35,6 +42,8 @@ default_BT2_MAP_FLAGS = (
     " --ignore-quals"
     " --score-min=L,0,1.5" # require 75% of perfect match (2=base match)
 )
+# original rRNA mapping code used --very-fast-local and that was that.
+
 
 default_STAR_MAP_FLAGS = (
     " --genomeLoad NoSharedMemory"
@@ -314,6 +323,20 @@ rule map_reads_bowtie2:
         "{params.annotation_cmd}"
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
+def get_ribo_log(wc):
+    ribo_bam = bt2_mapped_bam.format(project_id=wc.project_id, sample_id=wc.sample_id, target='rRNA')
+    if ribo_bam in BAM_IDX_LKUP:
+        return bt2_rRNA_log.format(project_id=wc.project_id, sample_id=wc.sample_id)
+    else:
+        return "no_rRNA_index"
+
+rule parse_ribo_log:
+    output: parsed_ribo_depletion_log
+    params:
+        ribo_log = get_ribo_log
+    script: 'scripts/parse_ribo_log.py'
+
+
 # print(">>>>>>>>>>>>>>>>>>>>")
 # print(star_mapped_bam)
 # print(star_target_log_file)
@@ -350,3 +373,22 @@ rule map_reads_STAR:
         "{params.annotation_cmd}"
         " "
         "; rm -rf {params.tmp_dir}"
+
+
+rule create_star_index:
+    input:
+        unpack(get_species_genome_annotation)
+    output:
+        directory(star_index)
+    threads: max(workflow.cores * 0.25, 8)
+    shell:
+        """
+        mkdir -p {output} 
+
+        STAR --runMode genomeGenerate \
+             --runThreadN {threads} \
+             --genomeDir {output} \
+             --genomeFastaFiles {input.genome} \
+             --sjdbGTFfile {input.annotation}
+        """
+

@@ -47,7 +47,12 @@ def parse_ribo_log(ribo_log_file):
         return (aligned_reads, input_reads)
 
 
-aligned_reads, input_reads = parse_ribo_log(snakemake.input[0])
+if snakemake.params.ribo_log == "no_rRNA_index":
+    input_reads = -1
+    aligned_reads = -1
+
+else:
+    aligned_reads, input_reads = parse_ribo_log(snakemake.params.ribo_log)
 
 with open(snakemake.output[0], 'w') as fo:
     fo.write(f'aligned_reads\t{aligned_reads}\n')
