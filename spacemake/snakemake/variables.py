@@ -138,7 +138,11 @@ novosparc_denovo_h5ad = novosparc_root + '/denovo.h5ad'
 novosparc_with_reference_h5ad = novosparc_root + novosparc_wildcards + '.h5ad'
 
 # in silico repo depletion
+## This is the stderr output of bowtie2 after aligning to rRNA
 ribo_depletion_log = complete_data_root + '/ribo_depletion_log.txt'
+## This is the output of scripts/parse_ribo_log.py. Two lines:
+# aligned_reads\t{n}
+# input_reads\t{n}
 parsed_ribo_depletion_log = complete_data_root + '/parsed_ribo_depletion_log.txt'
 
 # #########################
@@ -172,8 +176,6 @@ downsampled_bam = downsampled_data_root + '/final_downsampled{polyA_adapter_trim
 downsampled_bam_mm_included_pipe = downsampled_data_root + '/final_downsampled' + bam_mm_included_pipe_suffix
 downsample_saturation_analysis = downsampled_data_prefix + '/{project_id}_{sample_id}_saturation_analysis.html'
 
-# index settings
-star_index = 'species_data/{species}/star_index'
-bt2_rRNA_index_dir = 'species_data/{species}/bt2_rRNA_index'
-bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'
+
+# bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'
 

@@ -45,23 +45,6 @@ rule remove_polyA:
             NUM_BASES=6
         """
 
-rule create_star_index:
-    input:
-        unpack(get_species_genome_annotation)
-    output:
-        directory(star_index)
-    threads: max(workflow.cores * 0.25, 8)
-    shell:
-        """
-        mkdir -p {output} 
-
-        STAR --runMode genomeGenerate \
-             --runThreadN {threads} \
-             --genomeDir {output} \
-             --genomeFastaFiles {input.genome} \
-             --sjdbGTFfile {input.annotation}
-        """
-
 # rule map_reads_final_bam:
 #     input:
 #         unpack(get_species_genome_annotation),
