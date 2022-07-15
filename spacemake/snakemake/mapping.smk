@@ -7,34 +7,41 @@ final_target = "final.polyA_adapter_trimmed"
 # final_target = "final{polyA_adapter_trimmed}"
 
 # pattern for BAM file names 
-mapped_bam = complete_data_root + "/{target}.bam"
-star_mapped_bam = complete_data_root + "/{target}.STAR.bam"
-bt2_mapped_bam = complete_data_root + "/{target}.bowtie2.bam"
+linked_bam = complete_data_root + "/{link_name}.bam"
+mapped_bam = complete_data_root + "/{ref_name}.{mapper}.bam"
+star_mapped_bam = complete_data_root + "/{ref_name}.STAR.bam"
+bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.bam"
 
 # special log file used for rRNA "ribo depletion" stats
 bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
 
-# index settings
-star_index = 'species_data/{species}/{target}/star_index'
-bt2_index = 'species_data/{species}/{target}/bt2_index'
+# default places for mapping indices, unless specified differently in the config.yaml
+star_index = 'species_data/{species}/{ref_name}/star_index'
+star_index_param = star_index
+star_index_file = star_index + '/SAindex'
 
-def wc_fill(x, wc):
-    return x.format(sample_id=wc.sample_id, project_id=wc.project_id, target=wc.target)  # polyA_adapter_trimmed=wc.polyA_adapter_trimmed
+bt2_index = 'species_data/{species}/{ref_name}/bt2_index'
+bt2_index_param = bt2_index + '/{ref_name}'
+bt2_index_file = bt2_index_param + '.1.bt2'
 
+# used to fetch all info needed to create a BAM file
 MAP_RULES_LKUP = {}
+#   key: path of output BAM file
+#   value: dotdict with plenty of attributes
 
-# These lookup dictionaries use the absolute paths of BAM files as keys
-BAM_DEP_LKUP = {} # input on which a mapped BAM will depend (usually a uBAM or BAM of previous stage)
-BAM_MAP_LKUP = {} # which mapper to use (STAR or bowtie2)
-BAM_IDX_LKUP = {} # mapping index which is needed to create the BAM
-BAM_REF_LKUP = {} # path to reference sequence
-BAM_ANN_LKUP = {} # path to annotation file to be used for tagging 
-BAM_SYMLINKS = {} # contains the source file to symlink to for named targets ("genome", "rRNA", "final")
-BAM_MAP_FLAGS_LKUP = {} # additional cmdline flags/switches to be passed to the mapper (bowtie2 or STAR)
+# used for symlink name to source mapping
+BAM_SYMLINKS = {}
+
+# used for automated mapping index generation
+INDEX_FASTA_LKUP = {}
+#   key: bt2_index_file or star_index_file
+#   value: dotdict with 
+#       .ref_path: path to genome FASTA
+#       .ann_path: path to annotation file (GTF) [optional]
 
 # needed for later stages of SPACEMAKE which require one "star.Log.final.out" file.
-# We create a symlink from the *target* designated with the 'final' identifier
 STAR_FINAL_LOG_SYMLINKS = {}
+# We create a symlink from the mapping that was accompanied by the 'final' identifier
 
 default_BT2_MAP_FLAGS = (
     " --local"
@@ -55,43 +62,58 @@ default_STAR_MAP_FLAGS = (
     " --limitOutSJcollapsed 5000000"
 )
 
-def mapstr_to_targets(mapstr, inbam="uBAM", final="final"):
+def wc_fill(x, wc):
     """
-    Converts a mapping strategy provided as a string into a series of BAM file names
-    and their dependencies. Rule matching is otherwise ensured by the convention of the 
-    target BAM filename ending in "STAR.bam" or "bowtie2.bam".
+    Versatile helper function that can render any string template used in the mapping module,
+    either filling in from a Wildcards object, or from a dotdict.
+    """
+    return x.format(
+        sample_id=getattr(wc, "sample_id", "NO_sample_id"),
+        project_id=getattr(wc, "project_id", "NO_project_id"),
+        species=getattr(wc, "species", "NO_species"),
+        ref_name=getattr(wc, "ref_name", "NO_ref_name"),
+        mapper=getattr(wc, "mapper", "NO_mapper"),
+        link_name=getattr(wc, "link_name", "NO_link_name"),
+        polyA_adapter_trimmed=getattr(wc, "polyA_adapter_trimmed", "")
+    )
+
+def mapstr_to_targets(mapstr, left="uBAM", final="final"):
+    """
+    Converts a mapping strategy provided as a string into a series of BAM names
+    and their dependencies. Downstream, rule matching is guided by the convention of the 
+    strategy-defined BAM filenames ending in "STAR.bam" or "bowtie2.bam".
 
     Examples:
 
         [uBAM->]bowtie2:rRNA->STAR:genome:final
 
-    uBAM stands for the CB and UMI tagged, pre-processed, but unmapped reads.
-    The '->' operator always extracts the unmapped fraction of reads from the bam file
+    Here, uBAM stands for the CB and UMI tagged, pre-processed, but unmapped reads.
+    The '->' operator extracts the unmapped fraction of reads from the bam file
     on the left.
     On the right of the operator are the main parameters for the mapping rule <mapper>:<reference>.
-    The target BAM will have the name <input>.<reference>.<mapper>.bam.
+    The target BAM will have the name <reference>.<mapper>.bam.
     Optionally, a triplet can be used <mapper>:<reference>:<symlink> where the presence of <symlink> 
-    indicates that the BAM file with the assigned reads should be accessible under a useful 
-    shorthand name as well ("final.bam" for instance).
+    indicates that the BAM file should additionally be made accessible under the name <symlink>, a useful 
+    shorthand or common hook expected by other stages of SPACEMAKE ("final.bam" for instance).
 
     The example above is going to create
         
-        (1) uBAM.rRNA.bowtie2.bam
+        (1) rRNA.bowtie2.bam
         
             using bowtie2 and the index associated with the "rRNA" reference
 
 
-        (2) uBAM.rRNA.bowtie2.genome.STAR.bam 
+        (2) genome.STAR.bam 
         
             using STAR on the *unmapped* reads from BAM (1)
 
 
         (3) final.bam
         
-            a symlink pointing to BAM (2).
+            a symlink pointing to the actual BAM created in (2).
 
-    If not otherwise specified, the last bam is by convention named or symlinked as 'final.bam'
-    This file will be the input to downstream processing rules (for DGE creation).
+    Note that one BAM must be designated 'final.bam'. It file will be the input to 
+    downstream processing rules (for DGE creation).
 
     NOTE: Parallel mappings can be implemented by using commata:
 
@@ -101,189 +123,198 @@ def mapstr_to_targets(mapstr, inbam="uBAM", final="final"):
         in parallel to the rRNA reference and to the genome. In this way the same reads can match to both
         indices.
 
-    NOTE: Gene tagging will be applied if annotation rules are provided for the associated mapping index
+    NOTE: Gene tagging will be applied automatically if annotation rules are provided for the associated mapping index
     """
-    from collections import defaultdict
+    def process(token, left):
+        """
+        based on the left-hand side name (left) and the rule encoded in token,
+        create one mapping rule and up to one symlink rule.
+        """
 
-    targets = set()
-    dep_lkup = {}
-    ref_lkup = {}
-    ann_lkup = {}
-    mapper_lkup = {}
-    chain_lengths = {}
-    symlinks = {}
-
-    def process(token, inbam):
         parts = token.split(":")
-        if len(parts) == 1:
-            target = parts[0]
-            if target == "final":
-                target = final
+        mr = dotdict()
+        lr = None
 
-            if target == inbam:
-                symlinks[target] = inbam
-            else:
-                dep_lkup[target] = inbam
-
-            return target
+        if len(parts) == 2:
+            mapper, ref = parts
+            link_name = None
         else:
-            if len(parts) == 2:
-                mapper, ref = parts
-                # outname = f"{inbam}.{ref}.{mapper}"
-                outname = f"{ref}.{mapper}"
-            else:
-                mapper, ref, linkname = parts
-                linkname = linkname.replace("final", final)
-                # outname = f"{inbam}.{ref}.{mapper}"
-                outname = f"{ref}.{mapper}"
-                symlinks[linkname] = outname
+            mapper, ref, link_name = parts
+            link_name = link_name.replace("final", final)
 
-            ann_lkup[outname] = ref
-            ref_lkup[outname] = ref
-            mapper_lkup[outname] = mapper
-            dep_lkup[outname] = inbam
+        mr.input_name = left
+        mr.mapper = mapper
+        mr.ref_name = ref
+        mr.out_name = f"{ref}.{mapper}"
 
-            return outname
+        if link_name:
+            lr = dotdict(link_src=mr.out_name, link_name=link_name, ref_name=ref)
 
-    left = inbam
-    chain = [inbam] + mapstr.split("->")
+        return mr, lr
+
+
+    map_rules = []
+    link_rules = []
+
+    chain = mapstr.split("->")
     while chain:
+        print("chain:", chain)
         right = chain.pop(0)
+        print(f"left='{left}' right='{right}'")
         if left == right:
             continue
 
         for r in right.split(","):
-            target = process(r, inbam=left)
-            targets.add(target)
+            mr, lr = process(r, left=left)
+            map_rules.append(mr)
+            
+            if lr:
+                link_rules.append(lr)
 
-        left = target
+        left = mr.out_name
 
-    return sorted(targets), dep_lkup, ref_lkup, mapper_lkup, ann_lkup, symlinks
+    return map_rules, link_rules
 
 
-def _print_debug_targets(out_files):
+def _print_debug_targets(map_files):
     print("ALL TOP-LEVEL TARGETS")
     for o in out_files:
+        mr = MAP_RULES_LKUP[o]
         print(
             f"   {o}\n"
-            f"      input={BAM_DEP_LKUP.get(o, None)}\n"
-            f"      mapper={BAM_MAP_LKUP.get(o, None)}\n"
-            f"      ref={BAM_REF_LKUP.get(o, None)}\n"
-            f"      ann={BAM_ANN_LKUP.get(o, None)}\n"
+            f"      input={mr.input_name}->{mr.input_path}\n"
+            f"      mapper={mr.mapper}\n"
+            f"      ref={mr.ref_name}->{mr.ref_path}\n"
+            f"      ann={mr.ref_name}->{mr.ann_path}\n"
         )
 
 def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
     """
     This function is called from main.smk at least once 
-    to determine which output BAM files need to be generated.
+    to determine which output BAM files need to be generated and 
+    to parse the map_strategy into rules and dependencies.
     """
     out_files = []
 
     for index, row in project_df.df.iterrows():
-        mapstr = default_strategy
-        if hasattr(row, "map_strategy") and row.map_strategy:
-            mapstr = row.map_strategy
+        # rules so far are "local" to each sample. Here we create full paths, merging with
+        # project_id/sample_id from the project_df
 
-        targets, dep_lkup, ref_lkup, mapper_lkup, ann_lkup, symlinks = mapstr_to_targets(mapstr, inbam=ubam_input, final=final_target)
-        for target in targets:
-            _target = mapped_bam.format(project_id=index[0], sample_id=index[1], target=target)
-            BAM_DEP_LKUP[_target] = mapped_bam.format(project_id=index[0], sample_id=index[1], target=dep_lkup.get(target, None))
-            mapper = mapper_lkup.get(target, None)
-            BAM_MAP_LKUP[_target] = mapper
-            species_d = project_df.config.get_variable("species", name=row.species)
-            ref = ref_lkup.get(target, None)
-            # map_rules = dotdict(
-            #     target=target,
-            #     mapper=mapper,
-            #     output=mapped_bam.format(project_id=index[0], sample_id=index[1], target=target),
-            #     input=mapped_bam.format(project_id=index[0], sample_id=index[1], target=dep_lkup.get(target, None)),
-            #     refname=ref,
-            # )
-            if ref:
-                BAM_REF_LKUP[_target] = species_d[ref]["sequence"]
-                BAM_ANN_LKUP[_target] = species_d[ref].get("annotation", None)
-                # map_rules.sequence = species_d[ref]["sequence"]
-                # map_rules.annotation = species_d[ref].get("annotation", None)
+        map_strategy = getattr(row, "map_strategy", default_strategy)
+        map_rules, link_rules = mapstr_to_targets(map_strategy, left=ubam_input, final=final_target)
 
-                if mapper == "bowtie2":
-                    BAM_MAP_FLAGS_LKUP[_target] = species_d[ref].get("bt2_flags", default_BT2_MAP_FLAGS)
-                    BAM_IDX_LKUP[_target] = species_d[ref].get("bt2_index", BAM_REF_LKUP[_target])
-                    # map_rules.flags = species_d[ref].get("bt2_flags", default_BT2_MAP_FLAGS)
-                    # map_rules.index = species_d[ref].get("bt2_index", BAM_REF_LKUP[_target])
-                else:
-                    BAM_MAP_FLAGS_LKUP[_target] = species_d[ref].get("STAR_flags", default_STAR_MAP_FLAGS)
-                    BAM_IDX_LKUP[_target] = species_d[ref].get("index_dir", "NO_STAR_index_IN_config.yaml")
-                    # map_rules.flags = species_d[ref].get("STAR_flags", default_STAR_MAP_FLAGS)
-                    # map_rules.index = species_d[ref].get("bt2_index", BAM_REF_LKUP[_target])
+        species_d = project_df.config.get_variable("species", name=row.species)
+        for mr in map_rules:
+            mr.project_id = index[0]
+            mr.sample_id = index[1]
+            mr.species = row.species
             
-            # MAP_RULES_LKUP[_target] = map_rules
-            # out_files.append(_target)
+            mr.out_path = wc_fill(mapped_bam, mr)
+            
+            mr.link_name = mr.input_name
+            mr.input_path = wc_fill(linked_bam, mr)
 
-        for target, src in symlinks.items():
-            _target = mapped_bam.format(project_id=index[0], sample_id=index[1], target=target)
-            _src = mapped_bam.format(project_id=index[0], sample_id=index[1], target=src)
-            BAM_SYMLINKS[_target] = _src
-            print("BAM_SYMLINKS preparation", target, src, _target, "->", _src)
+            mr.ref_path = species_d[mr.ref_name]["sequence"]
+            mr.ann_path = species_d[mr.ref_name].get("annotation", None)
 
-            if target == final_target:
+            default_STAR_INDEX = wc_fill(star_index, mr)
+            default_BT2_INDEX = wc_fill(bt2_index_param, mr)
+            if mr.mapper == "bowtie2":
+                mr.map_flags = species_d[mr.ref_name].get("bt2_flags", default_BT2_MAP_FLAGS)
+                mr.map_index_param = species_d[mr.ref_name].get("bt2_index", default_BT2_INDEX) # the parameter passed on to the mapper
+                mr.map_index = os.path.dirname(mr.map_index_param) # the index_dir
+                mr.map_index_file = mr.map_index_param + ".1.bt2" # file present if the index is actually there
+
+            elif mr.mapper == "STAR":
+                mr.map_flags = species_d[mr.ref_name].get("STAR_flags", default_STAR_MAP_FLAGS)
+                mr.map_index = species_d[mr.ref_name].get("index_dir", default_STAR_INDEX)
+                mr.map_index_param = mr.map_index
+                mr.map_index_file = mr.map_index + "/SAindex"
+
+            MAP_RULES_LKUP[mr.out_path] = mr
+            INDEX_FASTA_LKUP[mr.map_index_file] = mr
+            out_files.append(mr.out_path)
+
+        # process all symlink rules
+        for lr in link_rules:
+            lr.link_path = linked_bam.format(project_id=index[0], sample_id=index[1], link_name=lr.link_name)
+            lr.src_path = linked_bam.format(project_id=index[0], sample_id=index[1], link_name=lr.link_src)
+            BAM_SYMLINKS[lr.link_path] = lr.src_path
+
+            if lr.link_name == final_target:
                 final_log_name = star_log_file.format(project_id=index[0], sample_id=index[1])
-                final_log = star_target_log_file.format(target=src.replace('.STAR', ''), project_id=index[0], sample_id=index[1])
-                print("STAR_FINAL_LOG_SYMLINKS preparation", target, src, final_log_name, "->", final_log)
+                final_log = star_target_log_file.format(ref_name=lr.ref_name, project_id=index[0], sample_id=index[1])
+                # print("STAR_FINAL_LOG_SYMLINKS preparation", target, src, final_log_name, "->", final_log)
                 STAR_FINAL_LOG_SYMLINKS[final_log_name] = final_log
 
-            out_files.append(_target)
+            out_files.append(lr.link_path)
 
-    # _print_debug_targets(out_files)
     for k,v in sorted(MAP_RULES_LKUP.items()):
         print(f"map_rules for '{k}'")
         print(v)
 
+    print("BAM_SYMLINKS")
+    for k, v in BAM_SYMLINKS.items():
+        print(f"    output={k} <- source={v}")
+
+    print("out_files", out_files)
     return out_files
 
 
-def get_map_rules(wc):
-    output = mapped_bam.format(
-        project_id=wc.project_id,
-        sample_id=wc.sample_id,
-        target=wc.target
-    )
+def get_species_reference_info(species, ref):
+    refs_d = project_df.config.get_variable("species", name=species)
+    return refs_d[ref]
+
+def get_map_rule(wc):
+    output = wc_fill(mapped_bam, wc)
     print(f"get_map_rules output={output}")
     return MAP_RULES_LKUP[output]
 
-def get_map_inputs(wc):
-    map_rules = get_map_rules(wc)
+def get_map_inputs(wc, mapper="STAR"):
+    wc = dotdict(wc.items())
+    wc.mapper = mapper
+    mr = get_map_rule(wc)
+    print(f"get_map_inputs({wc}) -> bam={mr.input_path}")
     return {
-        'bam' : map_rules.input,
-        'index' : map_rules.index
+        'bam' : mr.input_path,
+        'index_file' : mr.map_index_file
     }
 
-def get_annotation_command(output):
-    tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={output} ANNOTATIONS_FILE={ann_gtf}"
-    ann = BAM_ANN_LKUP.get(output, None)
-    if ann and ann.lower().endswith(".gtf"):
-        return tagging_cmd.format(dropseq_tools=dropseq_tools, output=output, ann_gtf=ann)
-    else:
-        # this is a stub for "no annotation tagging"
-        return f"| samtools view --threads=4 -bh /dev/stdin > {output}"
-    
-    # TODO: add other means of annotation (lookup-based for pseudo-genomes such as miRNA reference...)
+def get_map_params(wc, output, mapper="STAR"):
+    wc = dotdict(wc.items())
+    wc.mapper = mapper
+    mr = get_map_rule(wc)
+    annotation_cmd = f"| samtools view --threads=4 -bh /dev/stdin > {output}"
+    # this is a stub for "no annotation tagging"
+    if hasattr(mr, "ann_path"):
+        ann = mr.ann_path
+        if ann and ann.lower().endswith(".gtf"):
+            tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={mr.out_path} ANNOTATIONS_FILE={mr.ann_path}"
+            annotation_cmd = tagging_cmd.format(dropseq_tools=dropseq_tools, mr=mr)
 
-# ruleorder:
-#     symlinks > map_reads_bowtie2 > map_reads_STAR
+    return {
+        'annotation_cmd' : annotation_cmd,
+        'annotation' : mr.ann_path,
+        'index' : mr.map_index_param,
+        'flags' : mr.map_flags,
+    }
+
+ruleorder:
+    map_reads_bowtie2 > map_reads_STAR > symlinks
 
 ruleorder:    
     symlink_final_log > map_reads_STAR
 
 rule symlinks:
-    input: lambda wc: BAM_SYMLINKS[wc_fill(mapped_bam, wc)]
-    output: mapped_bam
+    input: lambda wc: BAM_SYMLINKS.get(wc_fill(linked_bam, wc),f"NO_BAM_SYMLINKS_for_{wc_fill(linked_bam, wc)}")
+    output: linked_bam
     params:
         rel_input=lambda wildcards, input: os.path.basename(input[0])
     shell:
         "ln -s {params.rel_input} {output}"
 
 rule symlink_final_log:
-    input: lambda wc: STAR_FINAL_LOG_SYMLINKS[star_log_file.format(sample_id=wc.sample_id, project_id=wc.project_id)]
+    input: lambda wc: STAR_FINAL_LOG_SYMLINKS[wc_fill(star_log_file, wc)]
     output: star_log_file
     params:
         rel_input=lambda wildcards, input: os.path.basename(input[0])
@@ -292,15 +323,14 @@ rule symlink_final_log:
 
 rule map_reads_bowtie2:
     input:
-        bam=lambda wc: BAM_DEP_LKUP[wc_fill(bt2_mapped_bam, wc)],
-        index=lambda wc: BAM_IDX_LKUP[wc_fill(bt2_mapped_bam, wc)],
-        # unpack(get_map_inputs),
+        # bam=lambda wc: BAM_DEP_LKUP[wc_fill(bt2_mapped_bam, wc)],
+        # index=lambda wc: BAM_IDX_LKUP[wc_fill(bt2_mapped_bam, wc)],
+        unpack(lambda wc: get_map_inputs(wc, mapper='bowtie2')),
     output:
         bam=bt2_mapped_bam
     log: bt2_mapped_bam + ".log"
     params:
-        annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
-        flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP.get(output.bam, f"no_flags_for_BAM:{output.bam}"),
+        auto = lambda wc, output: get_map_params(wc, output, mapper='bowtie2'),
     threads: 32 
     shell:
         # 1) decompress unmapped reads from existing BAM
@@ -313,14 +343,14 @@ rule map_reads_bowtie2:
         " "
         # 3) align reads with bowtie2, *preserving the original BAM tags*
         "| bowtie2 -p {threads} --reorder --mm"
-        "  -x {input.index} -b /dev/stdin --preserve-tags"
-        "  {params.flags} 2> {log}"
+        "  -x {params.auto[index]} -b /dev/stdin --preserve-tags"
+        "  {params.auto[flags]} 2> {log}"
         " "
         # fix the BAM header to accurately reflect the entire history of processing via PG records.
         "| python {repo_dir}/scripts/splice_bam_header.py"
         "  --in-ubam {input.bam}"
         " "
-        "{params.annotation_cmd}"
+        "{params.auto[annotation_cmd]}"
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
 def get_ribo_log(wc):
@@ -337,58 +367,77 @@ rule parse_ribo_log:
     script: 'scripts/parse_ribo_log.py'
 
 
-# print(">>>>>>>>>>>>>>>>>>>>")
-# print(star_mapped_bam)
-# print(star_target_log_file)
-
 rule map_reads_STAR:
     input: 
         # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
-        bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
-        index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
+        unpack(get_map_inputs)
+        # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
+        # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
         bam=star_mapped_bam,
         log=star_target_log_file,
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
     params:
-        annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
-        annotation=lambda wilcards, output: BAM_ANN_LKUP.get(output.bam, "can't_find_annotation"),
-        flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP.get(output.bam, "can't_find_flags"),
+        auto=get_map_params,
+        # annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
+        # annotation=lambda wilcards, output: BAM_ANN_LKUP.get(output.bam, "can't_find_annotation"),
+        # flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP.get(output.bam, "can't_find_flags"),
         tmp_dir = star_tmp_dir,
         star_prefix = star_prefix
     shell:
-        "STAR {params.flags}"
-        " --genomeDir {input.index}"
+        "STAR {params.auto[flags]}"
+        " --genomeDir {params.auto[index]}"
         " --readFilesIn {input.bam}"
         " --readFilesCommand samtools view -f 4"
         " --readFilesType SAM SE"
-        " --sjdbGTFfile {params.annotation}"
+        " --sjdbGTFfile {params.auto[annotation]}"
         " --outFileNamePrefix {params.star_prefix}"
         " --runThreadN {threads}"
         " "
         "| python {repo_dir}/scripts/splice_bam_header.py"
         " --in-ubam {input.bam}"
         " "
-        "{params.annotation_cmd}"
+        "{params.auto[annotation_cmd]}"
         " "
         "; rm -rf {params.tmp_dir}"
 
 
-rule create_star_index:
+## Automatic index generation requires
+# a) that the reference sequence has already been provided (by user or another rule)
+# b) that the index is to be placed in the default location
+
+# print(f"bt2_index_file {bt2_index_file}")
+
+rule create_bowtie2_index:
     input:
-        unpack(get_species_genome_annotation)
+        lambda wc: INDEX_FASTA_LKUP[wc_fill(bt2_index_file, wc)].ref_path
     output:
-        directory(star_index)
-    threads: max(workflow.cores * 0.25, 8)
+        bt2_index_file
+    params:
+        auto = lambda wc: INDEX_FASTA_LKUP[wc_fill(bt2_index_file, wc)]
     shell:
         """
-        mkdir -p {output} 
-
-        STAR --runMode genomeGenerate \
-             --runThreadN {threads} \
-             --genomeDir {output} \
-             --genomeFastaFiles {input.genome} \
-             --sjdbGTFfile {input.annotation}
+        mkdir -p {params.auto[map_index]}
+        bowtie2-build --ftabchars 12 \
+                      --offrate 1 \
+                      {params.auto[ref_path]} \
+                      {params.auto[map_index_param]}
         """
 
+# rule create_star_index:
+#     input:
+#         unpack(get_species_genome_annotation)
+#     output:
+#         index_dir=directory(star_index),
+#         index_file=star_index_file
+#     threads: max(workflow.cores * 0.25, 8)
+#     shell:
+#         """
+#         mkdir -p {output.index_dir} 
+#         STAR --runMode genomeGenerate \
+#              --runThreadN {threads} \
+#              --genomeDir {output.index_dir} \
+#              --genomeFastaFiles {input.sequence} \
+#              --sjdbGTFfile {input.annotation}
+#         """
