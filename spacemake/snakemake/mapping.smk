@@ -1,12 +1,30 @@
-# this must be local and not have .bam appended!
-# basically, if ubam_input were used as {target} in mapped.bam it should eval to tagged_polyA_adapter_trimmed_bam
-ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
-final_target = "final.polyA_adapter_trimmed"
+"""
+This module implements the mapping-strategy feature. This gives the freedom to define 
+- for each sample - how reads should be mapped in detail: which mapper to use (currently
+STAR or bowtie2) against which reference should be mapped (each species can now have arbitrary
+references, each with its own sequence/FASTA file and optional annotation) and annotation-tagged.
 
+The module takes over after pre-processing is done and hands over a "final.bam" or equivalent
+to all downstream steps (DGE generation, qc_sheets, ...).
+"""
+
+#####################################
+#### snakemake string templates #####
+#####################################
+# (may eventually move to variables.py)
+
+# The entry point: pre-processed, unmapped reads in a uBAM
+ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
+# this must be local and not have .bam appended!
+# basically, if ubam_input were used as {target} in linked_bam it should eval to 
+# "unaligned_bc_tagged.polyA_adapter_trimmed.bam"
+
+# The end-point. Usually annotation-tagged genome alignments
+final_target = "final.polyA_adapter_trimmed"
 # ubam_input = "unaligned_bc_tagged{polyA_adapter_trimmed}"
 # final_target = "final{polyA_adapter_trimmed}"
 
-# pattern for BAM file names 
+# patterns for auto-generated BAM file names and symlinks
 linked_bam = complete_data_root + "/{link_name}.bam"
 mapped_bam = complete_data_root + "/{ref_name}.{mapper}.bam"
 star_mapped_bam = complete_data_root + "/{ref_name}.STAR.bam"
@@ -51,7 +69,6 @@ default_BT2_MAP_FLAGS = (
 )
 # original rRNA mapping code used --very-fast-local and that was that.
 
-
 default_STAR_MAP_FLAGS = (
     " --genomeLoad NoSharedMemory"
     " --outSAMprimaryFlag AllBestScore"
@@ -61,6 +78,11 @@ default_STAR_MAP_FLAGS = (
     " --outSAMtype BAM Unsorted"
     " --limitOutSJcollapsed 5000000"
 )
+
+
+######################################################
+##### Utility functions specific for this module #####
+######################################################
 
 def wc_fill(x, wc):
     """
@@ -176,18 +198,6 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
     return map_rules, link_rules
 
 
-def _print_debug_targets(map_files):
-    print("ALL TOP-LEVEL TARGETS")
-    for o in out_files:
-        mr = MAP_RULES_LKUP[o]
-        print(
-            f"   {o}\n"
-            f"      input={mr.input_name}->{mr.input_path}\n"
-            f"      mapper={mr.mapper}\n"
-            f"      ref={mr.ref_name}->{mr.ref_path}\n"
-            f"      ann={mr.ref_name}->{mr.ann_path}\n"
-        )
-
 def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
     """
     This function is called from main.smk at least once 
@@ -249,17 +259,21 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
 
             out_files.append(lr.link_path)
 
-    for k,v in sorted(MAP_RULES_LKUP.items()):
-        print(f"map_rules for '{k}'")
-        print(v)
+    # for k,v in sorted(MAP_RULES_LKUP.items()):
+    #     print(f"map_rules for '{k}'")
+    #     print(v)
 
-    print("BAM_SYMLINKS")
-    for k, v in BAM_SYMLINKS.items():
-        print(f"    output={k} <- source={v}")
+    # print("BAM_SYMLINKS")
+    # for k, v in BAM_SYMLINKS.items():
+    #     print(f"    output={k} <- source={v}")
 
-    print("out_files", out_files)
+    # print("out_files", out_files)
     return out_files
 
+
+#############################################
+#### utility functions used by the rules ####
+#############################################
 
 def get_species_reference_info(species, ref):
     refs_d = project_df.config.get_variable("species", name=species)
@@ -267,14 +281,15 @@ def get_species_reference_info(species, ref):
 
 def get_map_rule(wc):
     output = wc_fill(mapped_bam, wc)
-    print(f"get_map_rules output={output}")
+    # print(f"get_map_rules output={output}")
     return MAP_RULES_LKUP[output]
 
 def get_map_inputs(wc, mapper="STAR"):
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
-    print(f"get_map_inputs({wc}) -> bam={mr.input_path}")
+
+    # print(f"get_map_inputs({wc}) -> bam={mr.input_path}")
     return {
         'bam' : mr.input_path,
         'index_file' : mr.map_index_file
@@ -298,6 +313,20 @@ def get_map_params(wc, output, mapper="STAR"):
         'index' : mr.map_index_param,
         'flags' : mr.map_flags,
     }
+
+
+def get_ribo_log(wc):
+    "used in params: which allows to make this purely optional w/o creating fake output"
+    ribo_bam = bt2_mapped_bam.format(project_id=wc.project_id, sample_id=wc.sample_id, target='rRNA')
+    if ribo_bam in BAM_IDX_LKUP:
+        return bt2_rRNA_log.format(project_id=wc.project_id, sample_id=wc.sample_id)
+    else:
+        return "no_rRNA_index"
+
+
+##############################################################################
+#### Snakemake rules for mapping, symlinks, and mapping-index generation #####
+##############################################################################
 
 ruleorder:
     map_reads_bowtie2 > map_reads_STAR > symlinks
@@ -352,13 +381,6 @@ rule map_reads_bowtie2:
         " "
         "{params.auto[annotation_cmd]}"
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
-
-def get_ribo_log(wc):
-    ribo_bam = bt2_mapped_bam.format(project_id=wc.project_id, sample_id=wc.sample_id, target='rRNA')
-    if ribo_bam in BAM_IDX_LKUP:
-        return bt2_rRNA_log.format(project_id=wc.project_id, sample_id=wc.sample_id)
-    else:
-        return "no_rRNA_index"
 
 rule parse_ribo_log:
     output: parsed_ribo_depletion_log
