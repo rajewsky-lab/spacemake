@@ -75,9 +75,9 @@ include: 'scripts/snakemake_helper_functions.py'
 # INCLUDE OTHER MODULES #
 #########################
 include: 'downsample.smk'
+include: 'mapping.smk'
 include: 'dropseq.smk'
 include: 'longread.smk' 
-
 
 # global wildcard constraints
 wildcard_constraints:
@@ -100,6 +100,7 @@ wildcard_constraints:
 rule run_analysis:
     input:
         # create fastq
+        get_mapped_BAM_output(),
         unpack(
             lambda wildcards: get_output_files(
                     fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
@@ -440,11 +441,6 @@ rule create_mesh_spatial_dge:
         adata.write(output[0])
         adata.obs.to_csv(output[1])
 
-rule parse_ribo_log:
-    input: unpack(get_ribo_depletion_log)
-    output: parsed_ribo_depletion_log
-    script: 'scripts/parse_ribo_log.py'
-
 rule create_qc_sheet:
     input:
         unpack(get_qc_sheet_input_files),
@@ -590,38 +586,38 @@ rule create_species_annotation:
 		else:
 			shell('ln -sr {input} {output}')
 
-rule create_rRNA_index:
-    input:
-        unpack(get_rRNA_genome)
-    output:
-        directory(bt2_rRNA_index_dir)
-    params:
-        basename=bt2_rRNA_index_basename
-    shell:
-        """
-        mkdir -p {output}
+# rule create_rRNA_index:
+#     input:
+#         unpack(get_rRNA_genome)
+#     output:
+#         directory(bt2_rRNA_index_dir)
+#     params:
+#         basename=bt2_rRNA_index_basename
+#     shell:
+#         """
+#         mkdir -p {output}
 
-        bowtie2-build --ftabchars 12 \
-                      --offrate 1 \
-                      {input} \
-                      {params.basename}
-        """
+#         bowtie2-build --ftabchars 12 \
+#                       --offrate 1 \
+#                       {input} \
+#                       {params.basename}
+#         """
 
-rule map_to_rRNA:
-    input:
-        unpack(get_bt2_rRNA_index),
-        reads=raw_reads_mate_2
-    output:
-        ribo_depletion_log
-    params:
-        species=lambda wildcards: project_df.get_metadata(
-            'species', project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)
-    run:
-        if 'index' in input.keys():
-            shell("bowtie2 -x {input.index}/{params.species}_rRNA -U {input.reads} -p 20 --very-fast-local > /dev/null 2> {output}")
-        else:
-            shell("echo 'no_rRNA_index' > {output}")
+# rule map_to_rRNA:
+#     input:
+#         unpack(get_bt2_rRNA_index),
+#         reads=raw_reads_mate_2
+#     output:
+#         ribo_depletion_log
+#     params:
+#         species=lambda wildcards: project_df.get_metadata(
+#             'species', project_id = wildcards.project_id,
+#             sample_id = wildcards.sample_id)
+#     run:
+#         if 'index' in input.keys():
+#             shell("bowtie2 -x {input.index}/{params.species}_rRNA -U {input.reads} -p 20 --very-fast-local > /dev/null 2> {output}")
+#         else:
+#             shell("echo 'no_rRNA_index' > {output}")
 
 rule create_barcode_files_matching_summary:
     input:

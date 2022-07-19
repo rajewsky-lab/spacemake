@@ -530,7 +530,7 @@ def cmdline():
         title="most frequent 3' soft-clipped sequences",
     )
 
-    from spacemake.longread.util import count_dict_to_df
+    from spacemake.longread.report import count_dict_to_df
 
     df = pd.concat(
         [

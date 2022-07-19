@@ -822,7 +822,7 @@ class Output:
                 "HD": {"VN": "1.6"},
                 "PG": [
                     {
-                        "ID": 0,
+                        "ID": "fastq_to_uBAM",
                         "PN": prog,
                         "CL": " ".join(sys.argv[1:]),
                         "VN": __version__,

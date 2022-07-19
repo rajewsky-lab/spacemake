@@ -93,7 +93,7 @@ def get_add_sample_sheet_parser():
 
 def get_sample_main_variables_parser(
         species_required=False,
-        main_variables=['barcode_flavor', 'species', 'puck', 'run_mode']
+        main_variables=['barcode_flavor', 'species', 'puck', 'run_mode', 'map_strategy']
     ):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
 
@@ -109,6 +109,16 @@ def get_sample_main_variables_parser(
             help="add the name of the species for this sample",
             required=species_required,
         )
+
+    if 'map_strategy' in main_variables:
+        parser.add_argument(
+            "--map_strategy",
+            type=str,
+            help="string constant definining mapping strategy. Can be multi-stage and use bowtie2 or STAR (see documentation)",
+            required=False,
+            default=ProjectDF.project_df_default_values["map_strategy"],
+        )
+
 
     if 'puck' in main_variables:
         parser.add_argument(
@@ -380,6 +390,7 @@ def setup_project_parser(pdf, parent_parser_subparsers):
         "experiment",
         "run_mode",
         "barcode_flavor",
+        "map_strategy"
     ]
     remaining_options = [
         x for x in pdf.project_df_default_values.keys() if x not in always_show
@@ -595,6 +606,7 @@ class ProjectDF:
         "merged_from": [],
         "puck": "default",
         "dge": None,
+        "map_strategy": "STAR:genome:final" # default mapping strategy
     }
 
     project_df_dtypes = {
@@ -910,6 +922,10 @@ class ProjectDF:
         if not "longread_signature" in self.df.columns:
             self.df["longread_signature"] = None
 
+        # required if upgrading from pre-bowtie2/map-strategy tree
+        if not "map_strategy" in self.df.columns:
+            self.df["map_strategy"] = self.project_df_default_values["map_strategy"]
+
         # per row updates
         # first create a series of a 
         for ix, row in self.df.iterrows():
@@ -1187,6 +1203,7 @@ class ProjectDF:
         basecalls_dir=None,
         is_merged=False,
         return_series=False,
+        map_strategy="STAR:genome:final",
         puck_barcode_file=None,
         puck_barcode_file_id=None,
         **kwargs,
@@ -1205,6 +1222,7 @@ class ProjectDF:
         :param basecalls_dir:
         :param is_merged:
         :param return_series:
+        :param map_strategy:
         :param kwargs:
         """
         ix = (project_id, sample_id)
@@ -1315,6 +1333,7 @@ class ProjectDF:
         kwargs["sample_sheet"] = sample_sheet
         kwargs["basecalls_dir"] = basecalls_dir
         kwargs["is_merged"] = is_merged
+        kwargs["map_strategy"] = map_strategy
 
         # populate puck_barcode_file
         if puck_barcode_file is not None:
