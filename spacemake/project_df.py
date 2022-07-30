@@ -975,7 +975,9 @@ class ProjectDF:
             project_id = project_id,
             sample_id = sample_id)
 
-        puck_barcode_files =  self.get_metadata('puck_barcode_file')
+        puck_barcode_files =  self.get_metadata('puck_barcode_file',
+            project_id = project_id,
+            sample_id = sample_id)
 
         out_puck_barcode_files = []
         out_puck_barcode_file_ids = []

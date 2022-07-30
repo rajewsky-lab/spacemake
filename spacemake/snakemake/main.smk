@@ -93,6 +93,7 @@ wildcard_constraints:
     spot_distance_um = '[0-9]+|hexagon',
     data_root_type = 'complete_data|downsampled_data',
     downsampling_percentage = '\/[0-9]+|',
+    puck_barcode_file_id = '[^.]+'
 
 #############
 # Main rule #
