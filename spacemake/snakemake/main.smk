@@ -71,13 +71,38 @@ species_annotation = 'species_data/{species}/annotation.gtf'
 ####################
 include: 'scripts/snakemake_helper_functions.py'
 
+_module_output_hooks = []
+def register_module_output_hook(hook, module="built-in"):
+    _module_output_hooks.append( (hook, module) )
+
+def get_module_outputs():
+    outputs = []
+    for hook, module in _module_output_hooks:
+        for out in hook():
+            print(f"output provided by '{module}' module (via '{hook.__name__}'): '{out}'")
+            outputs.append(out)
+    
+    return outputs
+
 ######################### 
 # INCLUDE OTHER MODULES #
 #########################
 include: 'downsample.smk'
 include: 'mapping.smk'
 include: 'dropseq.smk'
-include: 'longread.smk' 
+include: 'longread.smk'
+
+#####################
+# CUSTOM USER RULES #
+#####################
+# top-level targets to be injected as input-dependencies of the 
+# master rule should be registered by calling register_module_output_hook()
+# with a function that returns a list of output files.
+
+if "custom_rules" in config:
+    custom = os.path.join(config["pwd"], config["custom_rules"])
+    include: custom
+
 
 # global wildcard constraints
 wildcard_constraints:
@@ -100,7 +125,6 @@ wildcard_constraints:
 rule run_analysis:
     input:
         # create fastq
-        get_mapped_BAM_output(),
         unpack(
             lambda wildcards: get_output_files(
                     fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
@@ -115,7 +139,9 @@ rule run_analysis:
         get_output_files(qc_sheet, data_root_type = 'complete_data',
             downsampling_percentage='', run_on_external=False,
             puck_barcode_file_matching_type='spatial_matching'),
-        get_longread_output()
+        # finally, everything registered via register_module_output_hook()
+        get_module_outputs(),
+
 
 rule get_whitelist_barcodes:
     input:
