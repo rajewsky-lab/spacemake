@@ -180,9 +180,9 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
 
     chain = mapstr.split("->")
     while chain:
-        print("chain:", chain)
+        # print("chain:", chain)
         right = chain.pop(0)
-        print(f"left='{left}' right='{right}'")
+        # print(f"left='{left}' right='{right}'")
         if left == right:
             continue
 
@@ -270,6 +270,7 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
     # print("out_files", out_files)
     return out_files
 
+register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
 
 #############################################
 #### utility functions used by the rules ####
@@ -447,19 +448,19 @@ rule create_bowtie2_index:
                       {params.auto[map_index_param]}
         """
 
-# rule create_star_index:
-#     input:
-#         unpack(get_species_genome_annotation)
-#     output:
-#         index_dir=directory(star_index),
-#         index_file=star_index_file
-#     threads: max(workflow.cores * 0.25, 8)
-#     shell:
-#         """
-#         mkdir -p {output.index_dir} 
-#         STAR --runMode genomeGenerate \
-#              --runThreadN {threads} \
-#              --genomeDir {output.index_dir} \
-#              --genomeFastaFiles {input.sequence} \
-#              --sjdbGTFfile {input.annotation}
-#         """
+rule create_star_index:
+    input:
+        unpack(get_species_genome_annotation)
+    output:
+        index_dir=directory(star_index),
+        index_file=star_index_file
+    threads: max(workflow.cores * 0.25, 8)
+    shell:
+        """
+        mkdir -p {output.index_dir} 
+        STAR --runMode genomeGenerate \
+             --runThreadN {threads} \
+             --genomeDir {output.index_dir} \
+             --genomeFastaFiles {input.sequence} \
+             --sjdbGTFfile {input.annotation}
+        """
