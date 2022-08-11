@@ -590,61 +590,6 @@ rule split_reads_sam_to_bam:
     shell:
         "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
 
-rule create_species_genome:
-	input:
-		unpack(get_species_genome)
-	output:
-		species_genome	
-	run:
-		if input[0].endswith('.fa.gz'):
-			shell('unpigz -c {input} > {output}')
-		else:
-			shell('ln -sr {input} {output}')
-
-rule create_species_annotation:
-	input:
-		unpack(get_species_annotation)
-	output:
-		species_annotation
-	run:
-		if input[0].endswith('.gtf.gz'):
-			shell('unpigz -c {input} > {output}')
-		else:
-			shell('ln -sr {input} {output}')
-
-# rule create_rRNA_index:
-#     input:
-#         unpack(get_rRNA_genome)
-#     output:
-#         directory(bt2_rRNA_index_dir)
-#     params:
-#         basename=bt2_rRNA_index_basename
-#     shell:
-#         """
-#         mkdir -p {output}
-
-#         bowtie2-build --ftabchars 12 \
-#                       --offrate 1 \
-#                       {input} \
-#                       {params.basename}
-#         """
-
-# rule map_to_rRNA:
-#     input:
-#         unpack(get_bt2_rRNA_index),
-#         reads=raw_reads_mate_2
-#     output:
-#         ribo_depletion_log
-#     params:
-#         species=lambda wildcards: project_df.get_metadata(
-#             'species', project_id = wildcards.project_id,
-#             sample_id = wildcards.sample_id)
-#     run:
-#         if 'index' in input.keys():
-#             shell("bowtie2 -x {input.index}/{params.species}_rRNA -U {input.reads} -p 20 --very-fast-local > /dev/null 2> {output}")
-#         else:
-#             shell("echo 'no_rRNA_index' > {output}")
-
 rule create_barcode_files_matching_summary:
     input:
         unpack(get_barcode_files_matching_summary_input)
