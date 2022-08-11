@@ -42,6 +42,9 @@ bt2_index = 'species_data/{species}/{ref_name}/bt2_index'
 bt2_index_param = bt2_index + '/{ref_name}'
 bt2_index_file = bt2_index_param + '.1.bt2'
 
+species_reference_sequence = 'species_data/{species}/{ref_name}/sequence.fa'
+species_reference_annotation = 'species_data/{species}/{ref_name}/annotation.gtf'
+
 # used to fetch all info needed to create a BAM file
 MAP_RULES_LKUP = {}
 #   key: path of output BAM file
@@ -280,6 +283,10 @@ def get_species_reference_info(species, ref):
     refs_d = project_df.config.get_variable("species", name=species)
     return refs_d[ref]
 
+def get_reference_attr_from_wc(wc, attr):
+    d = get_species_reference_info(wc.species, wc.ref_name)
+    return d[attr]
+
 def get_map_rule(wc):
     output = wc_fill(mapped_bam, wc)
     # print(f"get_map_rules output={output}")
@@ -318,8 +325,8 @@ def get_map_params(wc, output, mapper="STAR"):
 
 def get_ribo_log(wc):
     "used in params: which allows to make this purely optional w/o creating fake output"
-    ribo_bam = bt2_mapped_bam.format(project_id=wc.project_id, sample_id=wc.sample_id, target='rRNA')
-    if ribo_bam in BAM_IDX_LKUP:
+    ribo_bam = bt2_mapped_bam.format(project_id=wc.project_id, sample_id=wc.sample_id, ref_name='rRNA')
+    if ribo_bam in MAP_RULES_LKUP or ribo_bam in BAM_SYMLINKS:
         return bt2_rRNA_log.format(project_id=wc.project_id, sample_id=wc.sample_id)
     else:
         return "no_rRNA_index"
@@ -383,7 +390,14 @@ rule map_reads_bowtie2:
         "{params.auto[annotation_cmd]}"
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
+def get_ribo_log_input(wc):
+    # print("get_ribo_log_input:", wc.items())
+    bam = star_mapped_bam.format(sample_id=wc.sample_id, project_id=wc.project_id, ref_name="genome")
+    # print("->", bam)
+    return bam
+
 rule parse_ribo_log:
+    input: get_ribo_log_input
     output: parsed_ribo_depletion_log
     params:
         ribo_log = get_ribo_log
@@ -430,11 +444,34 @@ rule map_reads_STAR:
 # a) that the reference sequence has already been provided (by user or another rule)
 # b) that the index is to be placed in the default location
 
-# print(f"bt2_index_file {bt2_index_file}")
+
+rule prepare_species_reference_sequence:
+	input:
+		lambda wc: get_reference_attr_from_wc(wc, 'sequence')
+	output:
+		species_reference_sequence
+	run:
+		if input[0].endswith('.fa.gz'):
+			shell('unpigz -c {input} > {output}')
+		else:
+			shell('ln -sr {input} {output}')
+
+
+rule prepare_species_reference_annotation:
+	input:
+		lambda wc: get_reference_attr_from_wc(wc, 'annotation')
+	output:
+		species_reference_annotation
+	run:
+		if input[0].endswith('.gtf.gz'):
+			shell('unpigz -c {input} > {output}')
+		else:
+			shell('ln -sr {input} {output}')
+
 
 rule create_bowtie2_index:
     input:
-        lambda wc: INDEX_FASTA_LKUP[wc_fill(bt2_index_file, wc)].ref_path
+        species_reference_sequence
     output:
         bt2_index_file
     params:
@@ -450,7 +487,8 @@ rule create_bowtie2_index:
 
 rule create_star_index:
     input:
-        unpack(get_species_genome_annotation)
+        sequence=species_reference_sequence,
+        annotation=species_reference_annotation
     output:
         index_dir=directory(star_index),
         index_file=star_index_file
