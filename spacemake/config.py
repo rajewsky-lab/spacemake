@@ -10,6 +10,7 @@ from spacemake.util import check_star_index_compatibility
 
 logger_name = "spacemake.config"
 
+
 def get_puck_parser(required=True):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     parser.add_argument("--name", help="name of the puck", type=str, required=True)
@@ -144,11 +145,12 @@ def get_species_parser(required=True):
     "a parser that allows to add a reference sequence and annotation, belonging to some species"
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     parser.add_argument(
-        "--name", help="name of the reference (default=genome)", type=str, default="genome"
+        "--reference",
+        help="name of the reference (default=genome)",
+        type=str,
+        default="genome",
     )
-    parser.add_argument(
-        "--species", help="name of the species", type=str, required=True
-    )
+    parser.add_argument("--name", help="name of the species", type=str, required=True)
     parser.add_argument(
         "--sequence",
         help="path to the genome (.fa) file for the species to be added",
@@ -159,7 +161,8 @@ def get_species_parser(required=True):
         "--annotation",
         help="path to the genome annotation (.gtf) file for the species to be added",
         type=str,
-        required=required,
+        default="",
+        required=False,
     )
     parser.add_argument(
         "--STAR_index_dir",
@@ -270,8 +273,7 @@ def get_variable_action_subparsers(config, parent_parser, variable):
 
 def setup_config_parser(config, parent_parser_subparsers):
     parser_config = parent_parser_subparsers.add_parser(
-        "config",
-        help="configure spacemake"
+        "config", help="configure spacemake"
     )
     parser_config_subparsers = parser_config.add_subparsers(
         help="config sub-command help"
@@ -305,7 +307,6 @@ def add_update_delete_variable_cmdline(config, args):
         func = config.delete_variable
 
     var_variables = func(variable, name, **args)
-
     # print and dump config file
     config.logger.info(yaml.dump(var_variables, sort_keys=False))
     config.dump()
@@ -606,7 +607,7 @@ class ConfigFile:
 
     def process_species_args(
         self,
-        species=None,
+        name=None,
         sequence=None,
         annotation=None,
         reference=None,
@@ -614,19 +615,21 @@ class ConfigFile:
         BT2_index=None,
     ):
         assert_file(sequence, default_value=None, extension=[".fa", ".fa.gz"])
-        assert_file(annotation, default_value=None, extension=[".gtf", ".gtf.gz"])
+        if annotation:
+            assert_file(annotation, default_value=None, extension=[".gtf", ".gtf.gz"])
+
         # assert_file(STAR_genome, default_value=None, extension=[".fa"])
         if STAR_index_dir:
             check_star_index_compatibility(STAR_index_dir)
 
-        species_refs = self.variables["species"].get(species, {})
+        species_refs = self.variables["species"].get(name, {})
         species_refs[reference] = dict(
             sequence=sequence,
             annotation=annotation,
             STAR_index_dir=STAR_index_dir,
             BT2_index=BT2_index,
         )
-        self.variables["species"] = species_refs
+        self.variables["species"][name] = species_refs
         return species_refs
 
     def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None):
@@ -635,7 +638,7 @@ class ConfigFile:
         puck = {}
 
         if width_um is not None:
-            puck['width_um'] = float(width_um)
+            puck["width_um"] = float(width_um)
 
         if spot_diameter_um is not None:
             puck["spot_diameter_um"] = float(spot_diameter_um)
@@ -658,15 +661,32 @@ class ConfigFile:
             ValueError(f"Invalid variable: {variable}")
 
     def add_variable(self, variable, name, **kwargs):
-        if not self.variable_exists(variable, name):
-            values = self.process_variable_args(variable, **kwargs)
-            self.variables[variable][name] = values
-        else:
-            if variable in ["run_modes", "pucks", "barcode_flavors"]:
-                # drop the last s
-                variable = variable[:-1]
+        kwargs["name"] = name
+        # It's not very clear that a cmdline arg
+        # --name is absolutely REQUIRED and its value has to map somehow onto
+        # an internal function name
+        # @TAMAS: can you help?
+        print(f"add_variable() called with variable={variable} name={name} kw={kwargs}")
 
-            raise DuplicateConfigVariableError(variable, name)
+        if variable == "species":
+            # for the species command, collision check is on the reference name, not the species name
+            ref = kwargs["reference"]
+            if ref in self.variables[variable][name]:
+                raise DuplicateConfigVariableError(variable, f"{name}.{ref}")
+            else:
+                values = self.process_variable_args(variable, **kwargs)
+                self.variables[variable][name] = values
+
+        else:
+            if not self.variable_exists(variable, name):
+                values = self.process_variable_args(variable, **kwargs)
+                self.variables[variable][name] = values
+            else:
+                if variable in ["run_modes", "pucks", "barcode_flavors"]:
+                    # drop the last s
+                    variable = variable[:-1]
+
+                raise DuplicateConfigVariableError(variable, name)
 
         return kwargs
 
