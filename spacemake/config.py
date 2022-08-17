@@ -671,7 +671,7 @@ class ConfigFile:
         if variable == "species":
             # for the species command, collision check is on the reference name, not the species name
             ref = kwargs["reference"]
-            if ref in self.variables[variable][name]:
+            if ref in self.variables[variable].get(name, {}):
                 raise DuplicateConfigVariableError(variable, f"{name}.{ref}")
             else:
                 values = self.process_variable_args(variable, **kwargs)
