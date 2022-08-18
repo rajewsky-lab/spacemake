@@ -13,20 +13,20 @@ test_species_data = [
     (
         "test_hsa",
         "genome",
-        f"{base_dir}/test_data/hg38_chr22.fa",
-        f"{base_dir}/test_data/gencode.v38.chr22.gtf",
+        f"{base_dir}/test_data/test_genome.fa.gz",
+        f"{base_dir}/test_data/test_genome.gtf.gz",
     ),
     (
         "test_hsa",
         "rRNA",
-        f"{base_dir}/test_data/rRNA_hsa.fa",
+        f"{base_dir}/test_data/rRNA_hsa.fa.gz",
         f"",
     ),
     (
         "test_hsa",
         "miRNA",
-        f"{base_dir}/test_data/mirgenedb.hsa.mature.fa",
-        f"{base_dir}/test_data/mirgenedb.hsa.mature.gtf",
+        f"{base_dir}/test_data/mirgenedb.hsa.mature.fa.gz",
+        f"{base_dir}/test_data/mirgenedb.hsa.mature.gtf.gz",
     ),
 ]
 test_project_data = [
@@ -36,7 +36,16 @@ test_project_data = [
         "test_01",
         f"{base_dir}/test_data/test_reads.R1.fastq.gz",
         f"{base_dir}/test_data/test_reads.R2.fastq.gz",
-    )
+        "--map_strategy='STAR:genome:final'",
+    ),
+    (
+        "test_hsa",
+        "test",
+        "test_02",
+        f"{base_dir}/test_data/test_reads.R1.fastq.gz",
+        f"{base_dir}/test_data/test_reads.R2.fastq.gz",
+        "--map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final'",
+    ),
 ]
 
 
@@ -48,8 +57,8 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        os.chdir("..")
-        os.system("rm -rf _tests")
+        # os.chdir("..")
+        # os.system("rm -rf _tests")
         pass
 
     def run_spacemake(self, *args, expect_fail=False, **kwargs):
@@ -133,6 +142,12 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             df2 = self.add_sample(species, pid, sid, r1, r2, expect_fail=True)
             # expect unchanged project_df
             self.assertTrue(df.equals(df2))
+
+    def test_3_run(self):
+        self.run_spacemake("spacemake run --cores=8")
+
+        # test correct BAM content
+        # test correct DGE content
 
 
 if __name__ == "__main__":
