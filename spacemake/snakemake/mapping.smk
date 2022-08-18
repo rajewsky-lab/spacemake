@@ -229,6 +229,8 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
 
             mr.ref_path = species_d[mr.ref_name]["sequence"]
             mr.ann_path = species_d[mr.ref_name].get("annotation", None)
+            if mr.ann_path:
+                mr.ann_final = wc_fill(species_reference_annotation, mr)
 
             default_STAR_INDEX = wc_fill(star_index, mr)
             default_BT2_INDEX = wc_fill(bt2_index_param, mr)
@@ -244,6 +246,7 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
                 mr.map_index_param = mr.map_index
                 mr.map_index_file = mr.map_index + "/SAindex"
 
+            print("final mr", str(mr))
             MAP_RULES_LKUP[mr.out_path] = mr
             INDEX_FASTA_LKUP[mr.map_index_file] = mr
             out_files.append(mr.out_path)
@@ -262,15 +265,15 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
 
             out_files.append(lr.link_path)
 
-    # for k,v in sorted(MAP_RULES_LKUP.items()):
-    #     print(f"map_rules for '{k}'")
-    #     print(v)
+    for k,v in sorted(MAP_RULES_LKUP.items()):
+        print(f"map_rules for '{k}'")
+        print(v)
 
-    # print("BAM_SYMLINKS")
-    # for k, v in BAM_SYMLINKS.items():
-    #     print(f"    output={k} <- source={v}")
+    print("BAM_SYMLINKS")
+    for k, v in BAM_SYMLINKS.items():
+        print(f"    output={k} <- source={v}")
 
-    # print("out_files", out_files)
+    print("out_files", out_files)
     return out_files
 
 register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
@@ -296,12 +299,15 @@ def get_map_inputs(wc, mapper="STAR"):
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
-
     # print(f"get_map_inputs({wc}) -> bam={mr.input_path}")
-    return {
+    d = {
         'bam' : mr.input_path,
         'index_file' : mr.map_index_file
     }
+    if hasattr(mr, "ann_final"):
+        d['annotation'] = mr.ann_final
+
+    return d
 
 def get_map_params(wc, output, mapper="STAR"):
     wc = dotdict(wc.items())
@@ -309,15 +315,15 @@ def get_map_params(wc, output, mapper="STAR"):
     mr = get_map_rule(wc)
     annotation_cmd = f"| samtools view --threads=4 -bh /dev/stdin > {output}"
     # this is a stub for "no annotation tagging"
-    if hasattr(mr, "ann_path"):
-        ann = mr.ann_path
+    if hasattr(mr, "ann_final"):
+        ann = mr.ann_final
         if ann and ann.lower().endswith(".gtf"):
-            tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={mr.out_path} ANNOTATIONS_FILE={mr.ann_path}"
+            tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={mr.out_path} ANNOTATIONS_FILE={mr.ann_final}"
             annotation_cmd = tagging_cmd.format(dropseq_tools=dropseq_tools, mr=mr)
 
     return {
         'annotation_cmd' : annotation_cmd,
-        'annotation' : mr.ann_path,
+        'annotation' : mr.ann_final,
         'index' : mr.map_index_param,
         'flags' : mr.map_flags,
     }

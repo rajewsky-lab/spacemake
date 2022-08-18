@@ -38,14 +38,14 @@ test_project_data = [
         f"{base_dir}/test_data/test_reads.R2.fastq.gz",
         "--map_strategy='STAR:genome:final'",
     ),
-    (
-        "test_hsa",
-        "test",
-        "test_02",
-        f"{base_dir}/test_data/test_reads.R1.fastq.gz",
-        f"{base_dir}/test_data/test_reads.R2.fastq.gz",
-        "--map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final'",
-    ),
+    # (
+    #     "test_hsa",
+    #     "test",
+    #     "test_02",
+    #     f"{base_dir}/test_data/test_reads.R1.fastq.gz",
+    #     f"{base_dir}/test_data/test_reads.R2.fastq.gz",
+    #     "--map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final'",
+    # ),
 ]
 
 
@@ -94,14 +94,14 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
         )
         return self.load_config()
 
-    def add_sample(self, species, pid, sid, r1, r2, **kw):
+    def add_sample(self, species, pid, sid, r1, r2, options, **kw):
         p = self.run_spacemake(
             f"spacemake projects add_sample"
             f" --species={species}"
             f" --project_id={pid}"
             f" --sample_id={sid}"
             f" --R1={r1}"
-            f" --R2={r2}",
+            f" --R2={r2} {options}",
             **kw,
         )
         return self.load_project_df()
@@ -129,8 +129,8 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             self.assertEqual(y1_str, y2_str)
 
     def test_2_add_project(self):
-        for species, pid, sid, r1, r2 in test_project_data:
-            df = self.add_sample(species, pid, sid, r1, r2)
+        for species, pid, sid, r1, r2, options in test_project_data:
+            df = self.add_sample(species, pid, sid, r1, r2, options)
             self.assertTrue(os.access("project_df.csv", os.R_OK))
             x = df.set_index("sample_id").loc[sid]
             self.assertEqual(x.species, species)
@@ -139,7 +139,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             self.assertEqual(x.R2, str([r2]))
 
             # expect failure if trying to add the same sample again
-            df2 = self.add_sample(species, pid, sid, r1, r2, expect_fail=True)
+            df2 = self.add_sample(species, pid, sid, r1, r2, options, expect_fail=True)
             # expect unchanged project_df
             self.assertTrue(df.equals(df2))
 
