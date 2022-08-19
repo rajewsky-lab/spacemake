@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import unittest
 import os
 import os.path
@@ -8,6 +9,9 @@ import pandas as pd
 
 dropseq_tools = "/data/rajewsky/shared_bins/Drop-seq_tools-2.4.0"
 base_dir = os.path.join(os.path.dirname(__file__), "..")
+
+# set to true to track code coverage of the tests here using 'coverage'
+code_coverage = False
 
 test_species_data = [
     (
@@ -47,6 +51,18 @@ test_project_data = [
         "--map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final'",
     ),
 ]
+
+
+def which_spacemake():
+    p = subprocess.run("which spacemake", shell=True, capture_output=True)
+    return p.stdout.decode("ascii").rstrip()
+
+
+spacemake_cmd = which_spacemake()
+
+if code_coverage:
+    # gathering coverage information
+    spacemake_cmd = f"coverage run -p {spacemake_cmd}"
 
 
 def shell_bam_to_md5(path):
@@ -143,7 +159,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
 
     def add_species(self, name, ref, seq, ann, **kw):
         p = self.run_spacemake(
-            f"spacemake config add_species"
+            f"{spacemake_cmd} config add_species"
             f" --name={name}"
             f" --reference={ref}"
             f" --sequence={seq}"
@@ -154,7 +170,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
 
     def add_sample(self, species, pid, sid, r1, r2, options, **kw):
         p = self.run_spacemake(
-            f"spacemake projects add_sample"
+            f"{spacemake_cmd} projects add_sample"
             f" --species={species}"
             f" --project_id={pid}"
             f" --sample_id={sid}"
@@ -165,7 +181,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
         return self.load_project_df()
 
     def test_0_init(self):
-        self.run_spacemake(f"spacemake init --dropseq_tools={dropseq_tools}")
+        self.run_spacemake(f"{spacemake_cmd} init --dropseq_tools={dropseq_tools}")
         self.assertTrue(os.access("config.yaml", os.R_OK))
 
     def test_1_add_species(self):
@@ -203,7 +219,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
 
     def test_3_run(self):
         self.run_spacemake(
-            "spacemake run --cores=8", check_returncode=False, check_stderr=False
+            f"{spacemake_cmd} run --cores=8", check_returncode=False, check_stderr=False
         )
 
     def test_4_bamcheck(self):
@@ -213,9 +229,11 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             print(f"checking '{bpath}'")
             self.assertEqual(md5, expect[bpath])
 
-        # test correct DGE content
+        # TODO: test correct DGE content
 
 
 if __name__ == "__main__":
+    ## run this line once, together with output redirect to create
+    ## reference md5 hashes from a run you deem correct
     # print_bam_hashes(gather_bam_hashes("."))
     unittest.main(verbosity=2)
