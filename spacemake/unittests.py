@@ -38,15 +38,50 @@ test_project_data = [
         f"{base_dir}/test_data/test_reads.R2.fastq.gz",
         "--map_strategy='STAR:genome:final'",
     ),
-    # (
-    #     "test_hsa",
-    #     "test",
-    #     "test_02",
-    #     f"{base_dir}/test_data/test_reads.R1.fastq.gz",
-    #     f"{base_dir}/test_data/test_reads.R2.fastq.gz",
-    #     "--map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final'",
-    # ),
+    (
+        "test_hsa",
+        "test",
+        "test_02",
+        f"{base_dir}/test_data/test_reads.R1.fastq.gz",
+        f"{base_dir}/test_data/test_reads.R2.fastq.gz",
+        "--map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final'",
+    ),
 ]
+
+
+def shell_bam_to_md5(path):
+    "prints BAM content as SAM, sorts lexicographically and computes md5 hash"
+    p = subprocess.run(
+        f"samtools view {path} | sort | md5sum", shell=True, capture_output=True
+    )
+    md5 = p.stdout.split()[0]
+    return (path, md5.decode("ascii"))
+
+
+def gather_bam_hashes(path):
+    results = {}
+    for root, dirs, files in os.walk(path):
+        for fname in files:
+            if fname.endswith("bam"):
+                bpath, md5 = shell_bam_to_md5(os.path.join(root, fname))
+                results[bpath] = md5
+
+    return results
+
+
+def print_bam_hashes(results):
+    for bpath, md5 in sorted(results.items()):
+        print(f"{bpath}\t{md5}")
+
+
+def load_bam_hashes(path):
+    results = {}
+    with open(path) as hfile:
+        for line in hfile:
+            bpath, md5 = line.rstrip().split("\t")
+            results[bpath] = md5
+
+    return results
 
 
 class SpaceMakeCmdlineTests(unittest.TestCase):
@@ -61,16 +96,39 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
         # os.system("rm -rf _tests")
         pass
 
-    def run_spacemake(self, *args, expect_fail=False, **kwargs):
-        print(f"running spacemake: cwd='{os.getcwd()}' args={args} kw={kwargs}")
+    def run_spacemake(
+        self,
+        *args,
+        expect_fail=False,
+        check_returncode=True,
+        check_success=True,
+        check_stderr=True,
+        **kwargs,
+    ):
+        print(
+            f"running spacemake: cwd='{os.getcwd()}' args={args} kw={kwargs}", end=" "
+        )
         p = subprocess.run(*args, shell=True, capture_output=True, **kwargs)
-        print(f"\nrun_spacemake() results:\nstdout={p.stdout}\nstderr={p.stderr}")
-        if expect_fail:
-            self.assertFalse(p.stdout.endswith(b"SUCCESS!\n"))
-        else:
-            self.assertEqual(p.returncode, 0)
-            self.assertTrue(p.stdout.endswith(b"SUCCESS!\n"))
-            self.assertEqual(len(p.stderr), 0)
+        print(f"returncode={p.returncode}")
+        # print(f"\nrun_spacemake() results:\nstdout={p.stdout}\nstderr={p.stderr}")
+        with open("run_spacemake.out.log", "ab") as out:
+            if expect_fail:
+                self.assertFalse(p.stdout.endswith(b"SUCCESS!\n"))
+            else:
+                out.write(bytes(f"RUN {args} \n", "ascii"))
+                out.write(b"\nSTDOUT\n")
+                out.write(p.stdout)
+                out.write(b"\nSTDERR\n")
+                out.write(p.stderr)
+                out.write(bytes(f"RETURNCODE {p.returncode}\n", "ascii"))
+                if check_returncode:
+                    self.assertEqual(p.returncode, 0)
+
+                if check_success:
+                    self.assertTrue(p.stdout.endswith(b"SUCCESS!\n"))
+
+                if check_stderr:
+                    self.assertEqual(len(p.stderr), 0)
 
         return p
 
@@ -107,7 +165,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
         return self.load_project_df()
 
     def test_0_init(self):
-        p = self.run_spacemake(f"spacemake init --dropseq_tools={dropseq_tools}")
+        self.run_spacemake(f"spacemake init --dropseq_tools={dropseq_tools}")
         self.assertTrue(os.access("config.yaml", os.R_OK))
 
     def test_1_add_species(self):
@@ -125,7 +183,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
 
             # expect unchanged config.yaml
             y1_str = yaml.dump(y)
-            y2_str = yaml.dump(y)
+            y2_str = yaml.dump(y2)
             self.assertEqual(y1_str, y2_str)
 
     def test_2_add_project(self):
@@ -144,11 +202,20 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             self.assertTrue(df.equals(df2))
 
     def test_3_run(self):
-        self.run_spacemake("spacemake run --cores=8")
+        self.run_spacemake(
+            "spacemake run --cores=8", check_returncode=False, check_stderr=False
+        )
 
+    def test_4_bamcheck(self):
         # test correct BAM content
+        expect = load_bam_hashes("../test_data/test_bam_md5.txt")
+        for bpath, md5 in sorted(gather_bam_hashes(".").items()):
+            print(f"checking '{bpath}'")
+            self.assertEqual(md5, expect[bpath])
+
         # test correct DGE content
 
 
 if __name__ == "__main__":
+    # print_bam_hashes(gather_bam_hashes("."))
     unittest.main(verbosity=2)
