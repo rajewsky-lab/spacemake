@@ -45,47 +45,6 @@ rule remove_polyA:
             NUM_BASES=6
         """
 
-# rule map_reads_final_bam:
-#     input:
-#         unpack(get_species_genome_annotation),
-#         unpack(get_star_input_bam),
-#         unpack(get_star_index),
-#         tagged_bam=tagged_bam
-#     output:
-#         star_log_file,
-#         final_bam=final_bam
-#     threads: 8
-#     params:
-#         tmp_dir = star_tmp_dir,
-#         star_prefix = star_prefix
-#     shell:
-#         """
-#         STAR \
-#             --genomeLoad NoSharedMemory \
-#             --genomeDir  {input.index} \
-#             --sjdbGTFfile {input.annotation} \
-#             --readFilesCommand samtools view \
-#             --readFilesIn {input.reads} \
-#             --readFilesType SAM SE \
-#             --outFileNamePrefix {params.star_prefix} \
-#             --outSAMprimaryFlag AllBestScore \
-#             --outSAMattributes All \
-#             --outSAMunmapped Within \
-#             --outStd BAM_Unsorted \
-#             --outSAMtype BAM Unsorted \
-#             --runThreadN {threads} | \
-#             python {repo_dir}/scripts/fix_bam_header.py \
-#                 --in-bam-star /dev/stdin \
-#                 --in-bam-tagged {input.tagged_bam} \
-#                 --out-bam /dev/stdout | \
-#             {dropseq_tools}/TagReadWithGeneFunction \
-#                 I=/dev/stdin \
-#                 O={output.final_bam} \
-#                 ANNOTATIONS_FILE={input.annotation}
-
-# #         rm -rf {params.tmp_dir}
-# #         """
-
 rule filter_mm_reads:
     input:
         unpack(get_final_bam)
