@@ -237,8 +237,8 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             default_STAR_INDEX = wc_fill(star_index, mr)
             default_BT2_INDEX = wc_fill(bt2_index_param, mr)
             if mr.mapper == "bowtie2":
-                mr.map_flags = species_d[mr.ref_name].get("bt2_flags", default_BT2_MAP_FLAGS)
-                mr.map_index_param = species_d[mr.ref_name].get("bt2_index", default_BT2_INDEX) # the parameter passed on to the mapper
+                mr.map_flags = species_d[mr.ref_name].get("BT2_flags", default_BT2_MAP_FLAGS)
+                mr.map_index_param = species_d[mr.ref_name].get("BT2_index", default_BT2_INDEX) # the parameter passed on to the mapper
                 mr.map_index = os.path.dirname(mr.map_index_param) # the index_dir
                 mr.map_index_file = mr.map_index_param + ".1.bt2" # file present if the index is actually there
 
@@ -329,15 +329,6 @@ def get_map_params(wc, output, mapper="STAR"):
     }
 
 
-def get_ribo_log(wc):
-    "used in params: which allows to make this purely optional w/o creating fake output"
-    ribo_bam = bt2_mapped_bam.format(project_id=wc.project_id, sample_id=wc.sample_id, ref_name='rRNA')
-    if ribo_bam in MAP_RULES_LKUP or ribo_bam in BAM_SYMLINKS:
-        return bt2_rRNA_log.format(project_id=wc.project_id, sample_id=wc.sample_id)
-    else:
-        return "no_rRNA_index"
-
-
 ##############################################################################
 #### Snakemake rules for mapping, symlinks, and mapping-index generation #####
 ##############################################################################
@@ -396,11 +387,27 @@ rule map_reads_bowtie2:
         "{params.auto[annotation_cmd]}"
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
+
+# TODO: unify these two functions and get rid of the params in parse_ribo_log rule below.
+def get_ribo_log(wc):
+    "used in params: which allows to make this purely optional w/o creating fake output"
+    ribo_bam = bt2_mapped_bam.format(project_id=wc.project_id, sample_id=wc.sample_id, ref_name='rRNA')
+    if ribo_bam in MAP_RULES_LKUP or ribo_bam in BAM_SYMLINKS:
+        return bt2_rRNA_log.format(project_id=wc.project_id, sample_id=wc.sample_id)
+    else:
+        return "no_rRNA_index"
+
 def get_ribo_log_input(wc):
-    # print("get_ribo_log_input:", wc.items())
-    bam = star_mapped_bam.format(sample_id=wc.sample_id, project_id=wc.project_id, ref_name="genome")
-    # print("->", bam)
-    return bam
+    rrna_bam = bt2_mapped_bam.format(sample_id=wc.sample_id, project_id=wc.project_id, ref_name="rRNA")
+    if rrna_bam in MAP_RULES_LKUP:
+        # we plan to map against rRNA. This is the correct dependency:
+        log = rrna_bam + '.log'
+    
+    else:
+        # no rRNA reference available. Default to the stub
+        log = []
+
+    return log
 
 rule parse_ribo_log:
     input: get_ribo_log_input
@@ -474,7 +481,8 @@ rule prepare_species_reference_annotation:
 		else:
 			shell('ln -sr {input} {output}')
 
-
+# TODO: transition to species_reference_file and map_index_param
+# and get rid of INDEX_FASTA_LKUP
 rule create_bowtie2_index:
     input:
         species_reference_sequence
