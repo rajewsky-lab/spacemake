@@ -176,6 +176,21 @@ def get_species_parser(required=True):
         type=str,
         required=False,
     )
+    parser.add_argument(
+        "--BT2_flags",
+        help="bt2 mapping arguments for this reference (default=mapping.smk:default_BT2_MAP_FLAGS) ",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--STAR_flags",
+        help="STAR mapping arguments for this reference (default=mapping.smk:default_STAR_MAP_FLAGS)",
+        type=str,
+        default="",
+        required=False,
+    )
+
     return parser
 
 
@@ -525,6 +540,29 @@ class ConfigFile:
             #             "knowledge"
             #         ]["rRNA_genomes"][species]
 
+        for name, species_data in self.variables["species"].items():
+            if "annotation" in species_data:
+                # we have a pre-bowtie2-support config.yaml with following structur
+                # species:
+                #   human:
+                #     genome: ....
+                #     annotation: ....
+                self.logger.warning(
+                    f"converting old-style config.yaml species section for '{name}' {species_data}..."
+                )
+                new_data = {}
+                new_data["genome"] = {
+                    "sequence": species_data["genome"],
+                    "annotation": species_data["annotation"],
+                }
+                if "rRNA_genome" in species_data:
+                    new_data["rRNA"] = {
+                        "sequence": species_data["rRNA_genome"],
+                        "annotation": "",
+                    }
+
+                self.variables["species"][name] = new_data
+
         if "knowledge" in self.variables:
             del self.variables["knowledge"]
 
@@ -613,22 +651,33 @@ class ConfigFile:
         reference=None,
         STAR_index_dir=None,
         BT2_index=None,
+        BT2_flags=None,
+        STAR_flags=None,
     ):
         assert_file(sequence, default_value=None, extension=[".fa", ".fa.gz"])
         if annotation:
             assert_file(annotation, default_value=None, extension=[".gtf", ".gtf.gz"])
 
+        d = dict(
+            sequence=sequence,
+            annotation=annotation,
+        )
         # assert_file(STAR_genome, default_value=None, extension=[".fa"])
         if STAR_index_dir:
             check_star_index_compatibility(STAR_index_dir)
+            d["STAR_index_dir"] = STAR_index_dir
+
+        if BT2_index:
+            d["BT2_index"] = BT2_index
+
+        if BT2_flags:
+            d["BT2_flags"] = BT2_flags
+
+        if STAR_flags:
+            d["STAR_flags"] = BT2_flags
 
         species_refs = self.variables["species"].get(name, {})
-        species_refs[reference] = dict(
-            sequence=sequence,
-            annotation=annotation,
-            STAR_index_dir=STAR_index_dir,
-            BT2_index=BT2_index,
-        )
+        species_refs[reference] = d
         self.variables["species"][name] = species_refs
         return species_refs
 
