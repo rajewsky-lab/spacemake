@@ -153,10 +153,17 @@ def get_species_parser(required=True):
     parser.add_argument("--name", help="name of the species", type=str, required=True)
     parser.add_argument(
         "--sequence",
-        help="path to the genome (.fa) file for the species to be added",
+        help="path to the sequence (.fa) file for the species/reference to be added (e.g. the genome)",
         type=str,
         required=required,
     )
+    parser.add_argument(
+        "--genome",
+        help="[DEPRECATED] path to the genome (.fa) file for the species to be added. --genome=<arg> is a synonym for --reference=genome --sequence=<arg>",
+        type=str,
+        required=False,
+    )
+
     parser.add_argument(
         "--annotation",
         help="path to the genome annotation (.gtf) file for the species to be added",
@@ -719,6 +726,12 @@ class ConfigFile:
 
         if variable == "species":
             # for the species command, collision check is on the reference name, not the species name
+            if "genome" in kwargs:
+                # deprecated cmdline option --genome ... was used. Translate to
+                # --sequence ... --reference=genome
+                kwargs["sequence"] = kwargs["genome"]
+                kwargs["reference"] = "genome"
+
             ref = kwargs["reference"]
             if ref in self.variables[variable].get(name, {}):
                 raise DuplicateConfigVariableError(variable, f"{name}.{ref}")

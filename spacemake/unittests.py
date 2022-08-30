@@ -50,6 +50,14 @@ test_project_data = [
         f"{base_dir}/test_data/test_reads.R2.fastq.gz",
         "--map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final'",
     ),
+    (
+        "test_hsa",
+        "test",
+        "test_03_nofinal",
+        f"{base_dir}/test_data/test_reads.R1.fastq.gz",
+        f"{base_dir}/test_data/test_reads.R2.fastq.gz",
+        "--map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome'",
+    ),
 ]
 
 
@@ -168,6 +176,16 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
         )
         return self.load_config()
 
+    def add_genome_old(self, name, seq, ann, **kw):
+        p = self.run_spacemake(
+            f"{spacemake_cmd} config add_species"
+            f" --name={name}"
+            f" --genome={seq}"
+            f" --annotation={ann}",
+            **kw,
+        )
+        return self.load_config()
+
     def add_sample(self, species, pid, sid, r1, r2, options, **kw):
         p = self.run_spacemake(
             f"{spacemake_cmd} projects add_sample"
@@ -186,7 +204,11 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
 
     def test_1_add_species(self):
         for name, ref, seq, ann in test_species_data:
-            y = self.add_species(name, ref, seq, ann)
+            if name == "genome":
+                # test backward-compatible --genome option
+                y = self.add_genome_old(name, seq, ann)
+            else:
+                y = self.add_species(name, ref, seq, ann)
 
             self.assertTrue("species" in y)
             self.assertTrue(name in y["species"])

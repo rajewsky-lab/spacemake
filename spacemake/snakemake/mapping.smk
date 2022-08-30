@@ -104,22 +104,27 @@ def wc_fill(x, wc):
 
 def mapstr_to_targets(mapstr, left="uBAM", final="final"):
     """
-    Converts a mapping strategy provided as a string into a series of BAM names
-    and their dependencies. Downstream, rule matching is guided by the convention of the 
+    Converts a mapping strategy provided as a string into a series of map rules, which translate into 
+    BAM names and their dependencies. Downstream, rule matching is guided by the convention of the 
     strategy-defined BAM filenames ending in "STAR.bam" or "bowtie2.bam".
 
     Examples:
 
-        [uBAM->]bowtie2:rRNA->STAR:genome:final
+        bowtie2:rRNA->STAR:genome:final
 
-    Here, uBAM stands for the CB and UMI tagged, pre-processed, but unmapped reads.
-    The '->' operator extracts the unmapped fraction of reads from the bam file
-    on the left.
-    On the right of the operator are the main parameters for the mapping rule <mapper>:<reference>.
-    The target BAM will have the name <reference>.<mapper>.bam.
+    The input to the first mappings is always the uBAM - the CB and UMI tagged, pre-processed, 
+    but unmapped reads.
+    map-rules are composed of two or three paramters, separated by ':'.
+    The first two parameters for the mapping are <mapper>:<reference>. The target BAM will have 
+    the name <reference>.<mapper>.bam.
     Optionally, a triplet can be used <mapper>:<reference>:<symlink> where the presence of <symlink> 
-    indicates that the BAM file should additionally be made accessible under the name <symlink>, a useful 
-    shorthand or common hook expected by other stages of SPACEMAKE ("final.bam" for instance).
+    indicates that the BAM file should additionally be made accessible under the name <symlink>.bam, a useful 
+    shorthand or common hook expected by other stages of SPACEMAKE. A special symlink name is "final"
+    which is required by downstream stages of SPACEMAKE. If no "final" is specified, the last map-rule
+    automatically is selected and symlinked as "final".
+    Note, due to the special importance of "final", it may get modified to contain other flags of the run-mode
+    that are presently essential for SPACEMAKE to have in the file name ("final.bam" may in fact be 
+    "final.polyA_adapter_trimmed.bam")
 
     The example above is going to create
         
@@ -133,22 +138,23 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
             using STAR on the *unmapped* reads from BAM (1)
 
 
-        (3) final.bam
+        (3) final..bam
         
             a symlink pointing to the actual BAM created in (2).
 
-    Note that one BAM must be designated 'final.bam'. It file will be the input to 
-    downstream processing rules (for DGE creation).
+    Note that one BAM must be designated 'final.bam', or the last BAM file created will be selected as final.
+    (used as input to downstream processing rules for DGE creation, etc.)
 
     NOTE: Parallel mappings can be implemented by using commata:
 
-        [uBAM->]bowtie2:rRNA:rRNA,STAR:genome:final
+        bowtie2:rRNA:rRNA,STAR:genome:final
 
         This rule differs from the first example because it will align the unmapped reads from the uBAM
         in parallel to the rRNA reference and to the genome. In this way the same reads can match to both
         indices.
 
-    NOTE: Gene tagging will be applied automatically if annotation rules are provided for the associated mapping index
+    NOTE: Gene tagging will be applied automatically if annotation data were provided for the associated 
+    reference index (by using spacemake config add_species --annotation=... )
     """
     def process(token, left):
         """
@@ -173,7 +179,7 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
         mr.out_name = f"{ref}.{mapper}"
 
         if link_name:
-            lr = dotdict(link_src=mr.out_name, link_name=link_name, ref_name=ref)
+            lr = dotdict(link_src=mr.out_name, link_name=link_name, ref_name=mr.ref_name)
 
         return mr, lr
 
@@ -182,6 +188,8 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
     link_rules = []
 
     chain = mapstr.split("->")
+    final_link = None
+
     while chain:
         # print("chain:", chain)
         right = chain.pop(0)
@@ -195,8 +203,16 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
             
             if lr:
                 link_rules.append(lr)
+                # check if we have a "final" mapping
+                if final in lr.link_name:
+                    final_link = lr
 
         left = mr.out_name
+
+    if not final_link:
+        # we need to manufacture a "final" link_rule by taking the last mapping
+        last = map_rules[-1]
+        link_rules.append(dotdict(link_src=last.out_name, link_name=final, ref_name=last.ref_name))
 
     return map_rules, link_rules
 
