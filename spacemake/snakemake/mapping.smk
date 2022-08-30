@@ -169,9 +169,11 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
         if len(parts) == 2:
             mapper, ref = parts
             link_name = None
-        else:
+        elif len(parts) == 3:
             mapper, ref, link_name = parts
             link_name = link_name.replace("final", final)
+        else:
+            raise ValueError(f"map_strategy contains a map-rule with unexpected number of parameters: {parts}")
 
         mr.input_name = left
         mr.mapper = mapper
