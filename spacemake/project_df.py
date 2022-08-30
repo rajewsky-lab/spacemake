@@ -1344,6 +1344,15 @@ class ProjectDF:
         kwargs["is_merged"] = is_merged
         kwargs["map_strategy"] = map_strategy
 
+        if map_strategy.endswith("-"):
+            self.logger.warning(
+                (
+                    f"\n!!!!WARNING!!!\n map_strategy '{map_strategy}' ends with a trailing dash."
+                    " Please ensure map_strategy is escaped with double-quotes, or the shell"
+                    " interpretes the chevron in '->' as a redirect."
+                )
+            )
+
         # populate puck_barcode_file
         if puck_barcode_file is not None:
             if isinstance(puck_barcode_file, str):
