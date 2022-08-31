@@ -15,6 +15,8 @@ from spacemake.snakemake.variables import puck_barcode_files_summary
 from typing import List, Dict
 
 logger_name = "spacemake.project_df"
+logger = logging.getLogger(logger_name)
+# logging.basicConfig(level=logging.INFO)
 
 
 def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
@@ -29,8 +31,9 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
     :return: a parser object
     :rtype: argparse.ArgumentParser
     """
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
+    logger.info(f"get_project_sample_parser(prepend={prepend}) called")
 
+    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     project_argument = "project_id"
     sample_argument = "sample_id"
     required = True
@@ -72,6 +75,7 @@ def get_add_sample_sheet_parser():
     :return: parser
     :rtype: argparse.ArgumentParser
     """
+    logger.info("get_add_sample_sheet_parser() called")
     parser = argparse.ArgumentParser(
         allow_abbrev=False,
         description="add a new sample sheet to the samples",
@@ -99,6 +103,9 @@ def get_sample_main_variables_parser(
     main_variables=["barcode_flavor", "species", "puck", "run_mode", "map_strategy"],
 ):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
+    logger.info(
+        f"get_sample_main_variables_parser called with main_variables={main_variables}"
+    )
 
     if "barcode_flavor" in main_variables:
         parser.add_argument(
@@ -119,7 +126,7 @@ def get_sample_main_variables_parser(
             type=str,
             help="string constant definining mapping strategy. Can be multi-stage and use bowtie2 or STAR (see documentation)",
             required=False,
-            default=ProjectDF.project_df_default_values["map_strategy"],
+            default=None,
         )
 
     if "puck" in main_variables:
@@ -162,6 +169,7 @@ def get_sample_main_variables_parser(
 
 
 def get_sample_extra_info_parser():
+    logger.info("get_sample_extra_info_parser() called")
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
 
     parser.add_argument(
@@ -195,7 +203,7 @@ def get_data_parser(reads_required=False):
         required during parsing.
     """
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-
+    logger.info("get_data_parser() called")
     parser.add_argument(
         "--R1",
         type=str,
@@ -252,6 +260,8 @@ def get_set_remove_variable_subparsers(
     else:
         nargs = None
 
+    logger.info(f"get_set_remove_variable_subparsers(varname={variable_name}) called")
+
     def get_action_parser(action):
         """get_action_parser.
 
@@ -285,6 +295,7 @@ def get_action_sample_parser(parent_parser, action, func):
     :param action:
     :param func:
     """
+    logger.info(f"get_action_sample_parser(action={action}) called")
     if action not in ["add", "update", "delete", "merge"]:
         raise ValueError(f"Invalid action: {action}")
 
@@ -447,6 +458,10 @@ def setup_project_parser(pdf, parent_parser_subparsers):
     # setting species
     # setting puck
     # setting barcode_flavor
+    # NOTE: the ConfigFile.main_variable_sg2type keys determine
+    # which commandline args will be defined for the parser.
+    # this is a little un-intuitive...
+    # TODO: cleaner factory functions for the commandline-parsers
     for main_var_sg, main_var_type in ConfigFile.main_variable_sg2type.items():
         allow_multiple = False
         if isinstance(main_var_type, str) and main_var_type.endswith("_list"):
@@ -458,7 +473,6 @@ def setup_project_parser(pdf, parent_parser_subparsers):
             func=lambda args: set_remove_variable_cmdline(pdf, args),
             allow_multiple=allow_multiple,
         )
-
     return parser
 
 
@@ -882,6 +896,14 @@ class ProjectDF:
         else:
             return False
 
+    def get_default_map_strategy_for_species(self, species):
+        have_rRNA = "rRNA" in self.config.variables["species"][species]
+        map_strategy = self.project_df_default_values["map_strategy"][have_rRNA]
+        print(
+            f"getting default for '{species}' have_rRNA={have_rRNA} -> {map_strategy}"
+        )
+        return map_strategy
+
     def fix(self):
         import numpy as np
 
@@ -918,12 +940,9 @@ class ProjectDF:
 
         # required if upgrading from pre-bowtie2/map-strategy tree
         if not "map_strategy" in self.df.columns:
-
-            def assign_map_strategy(species):
-                have_rRNA = "rRNA" in self.config.variables["species"][species]
-                return self.project_df_default_values["map_strategy"][have_rRNA]
-
-            self.df["map_strategy"] = self.df["species"].apply(assign_map_strategy)
+            self.df["map_strategy"] = self.df["species"].apply(
+                self.get_default_map_strategy_for_species
+            )
 
         # per row updates
         # first create a series of a
@@ -1213,7 +1232,7 @@ class ProjectDF:
         basecalls_dir=None,
         is_merged=False,
         return_series=False,
-        map_strategy="STAR:genome:final",
+        map_strategy=None,
         puck_barcode_file=None,
         puck_barcode_file_id=None,
         **kwargs,
@@ -1342,7 +1361,11 @@ class ProjectDF:
         kwargs["sample_sheet"] = sample_sheet
         kwargs["basecalls_dir"] = basecalls_dir
         kwargs["is_merged"] = is_merged
-        kwargs["map_strategy"] = map_strategy
+
+        if map_strategy is None:
+            # was not specified! Let's evaluate the default for this species
+            # (depends on having rRNA reference or not)
+            map_strategy = self.get_default_map_strategy_for_species(kwargs["species"])
 
         if map_strategy.endswith("-"):
             self.logger.warning(
@@ -1352,6 +1375,7 @@ class ProjectDF:
                     " interpretes the chevron in '->' as a redirect."
                 )
             )
+        kwargs["map_strategy"] = map_strategy
 
         # populate puck_barcode_file
         if puck_barcode_file is not None:

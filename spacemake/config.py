@@ -429,6 +429,7 @@ class ConfigFile:
         "barcode_flavor": str,
         "run_mode": "str_list",
         "species": str,
+        "map_strategy": str,
     }
 
     def __init__(self):
