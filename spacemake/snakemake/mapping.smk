@@ -235,6 +235,12 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
         map_rules, link_rules = mapstr_to_targets(map_strategy, left=ubam_input, final=final_target)
 
         species_d = project_df.config.get_variable("species", name=row.species)
+        is_merged = project_df.get_metadata(
+            "is_merged", project_id=index[0], sample_id=index[1]
+        )
+        if is_merged:
+            continue
+
         for mr in map_rules:
             mr.project_id = index[0]
             mr.sample_id = index[1]
@@ -268,7 +274,7 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
 
             MAP_RULES_LKUP[mr.out_path] = mr
             INDEX_FASTA_LKUP[mr.map_index_file] = mr
-            out_files.append(mr.out_path)
+            #out_files.append(mr.out_path)
 
         # process all symlink rules
         for lr in link_rules:
@@ -281,8 +287,8 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
                 final_log = star_target_log_file.format(ref_name=lr.ref_name, project_id=index[0], sample_id=index[1])
                 # print("STAR_FINAL_LOG_SYMLINKS preparation", target, src, final_log_name, "->", final_log)
                 STAR_FINAL_LOG_SYMLINKS[final_log_name] = final_log
-
-            out_files.append(lr.link_path)
+                
+                out_files.append(lr.link_path)
 
     # for k,v in sorted(MAP_RULES_LKUP.items()):
     #     print(f"map_rules for '{k}'")
