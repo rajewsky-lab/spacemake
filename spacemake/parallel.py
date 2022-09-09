@@ -110,6 +110,13 @@ def chunkify(src, n_chunk=1000):
         yield n, chunk
 
 
+def log_qerr(qerr):
+    "helper function for reporting errors in sub processes"
+    for name, lines in qerr:
+        for line in lines:
+            logging.error(f"subprocess {name} exception {line}")
+
+
 class ExceptionLogging:
     """
     A context manager that handles otherwise uncaught exceptions by logging

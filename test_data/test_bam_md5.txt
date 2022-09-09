@@ -1,0 +1,10 @@
+./projects/test/processed_data/test_01/illumina/complete_data/final.polyA_adapter_trimmed.bam	85b00c5c1c699e4e3afda2b52b9d6442
+./projects/test/processed_data/test_01/illumina/complete_data/genome.STAR.bam	85b00c5c1c699e4e3afda2b52b9d6442
+./projects/test/processed_data/test_01/illumina/complete_data/unaligned_bc_tagged.bam	75d9ee7a618f8f766938192c84c9ac5a
+./projects/test/processed_data/test_01/illumina/complete_data/unaligned_bc_unassigned.bam	d41d8cd98f00b204e9800998ecf8427e
+./projects/test/processed_data/test_02/illumina/complete_data/final.polyA_adapter_trimmed.bam	c6fa15dcf2a36cea7479349ccf004523
+./projects/test/processed_data/test_02/illumina/complete_data/genome.STAR.bam	c6fa15dcf2a36cea7479349ccf004523
+./projects/test/processed_data/test_02/illumina/complete_data/miRNA.bowtie2.bam	98b57c64f1814c61e320b4fc96d75deb
+./projects/test/processed_data/test_02/illumina/complete_data/rRNA.bowtie2.bam	ec87ba1ac2e64f78db4fb9ea84162dc5
+./projects/test/processed_data/test_02/illumina/complete_data/unaligned_bc_tagged.bam	75d9ee7a618f8f766938192c84c9ac5a
+./projects/test/processed_data/test_02/illumina/complete_data/unaligned_bc_unassigned.bam	d41d8cd98f00b204e9800998ecf8427e

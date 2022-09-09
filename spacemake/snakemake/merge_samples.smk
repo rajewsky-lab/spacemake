@@ -1,6 +1,6 @@
 final_merged_bam = complete_data_root + final_bam_suffix + '.merged.bam'
 merged_ribo_depletion_log = complete_data_root + '/ribo_depletion_log.merged.txt'
-merged_star_log_file = star_prefix + 'merged.Log.final.out'
+merged_star_log_file = complete_data_root + '/star.merged.Log.final.out'
 
 rule create_final_merged_bam:
     input:

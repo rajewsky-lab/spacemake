@@ -71,12 +71,37 @@ species_annotation = 'species_data/{species}/annotation.gtf'
 ####################
 include: 'scripts/snakemake_helper_functions.py'
 
+_module_output_hooks = []
+def register_module_output_hook(hook, module="built-in"):
+    _module_output_hooks.append( (hook, module) )
+
+def get_module_outputs():
+    outputs = []
+    for hook, module in _module_output_hooks:
+        for out in hook():
+            print(f"output provided by '{module}' module (via '{hook.__name__}'): '{out}'")
+            outputs.append(out)
+    
+    return outputs
+
 ######################### 
 # INCLUDE OTHER MODULES #
 #########################
 include: 'downsample.smk'
+include: 'mapping.smk'
 include: 'dropseq.smk'
-include: 'longread.smk' 
+include: 'longread.smk'
+
+#####################
+# CUSTOM USER RULES #
+#####################
+# top-level targets to be injected as input-dependencies of the 
+# master rule should be registered by calling register_module_output_hook()
+# with a function that returns a list of output files.
+
+if "custom_rules" in config:
+    custom = os.path.join(config["pwd"], config["custom_rules"])
+    include: custom
 
 
 # global wildcard constraints
@@ -93,6 +118,7 @@ wildcard_constraints:
     spot_distance_um = '[0-9]+|hexagon',
     data_root_type = 'complete_data|downsampled_data',
     downsampling_percentage = '\/[0-9]+|',
+    puck_barcode_file_id = '[^.]+'
 
 #############
 # Main rule #
@@ -114,7 +140,9 @@ rule run_analysis:
         get_output_files(qc_sheet, data_root_type = 'complete_data',
             downsampling_percentage='', run_on_external=False,
             puck_barcode_file_matching_type='spatial_matching'),
-        get_longread_output()
+        # finally, everything registered via register_module_output_hook()
+        get_module_outputs(),
+
 
 rule get_whitelist_barcodes:
     input:
@@ -440,11 +468,6 @@ rule create_mesh_spatial_dge:
         adata.write(output[0])
         adata.obs.to_csv(output[1])
 
-rule parse_ribo_log:
-    input: unpack(get_ribo_depletion_log)
-    output: parsed_ribo_depletion_log
-    script: 'scripts/parse_ribo_log.py'
-
 rule create_qc_sheet:
     input:
         unpack(get_qc_sheet_input_files),
@@ -567,61 +590,6 @@ rule split_reads_sam_to_bam:
     threads: 2
     shell:
         "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
-
-rule create_species_genome:
-	input:
-		unpack(get_species_genome)
-	output:
-		species_genome	
-	run:
-		if input[0].endswith('.fa.gz'):
-			shell('unpigz -c {input} > {output}')
-		else:
-			shell('ln -sr {input} {output}')
-
-rule create_species_annotation:
-	input:
-		unpack(get_species_annotation)
-	output:
-		species_annotation
-	run:
-		if input[0].endswith('.gtf.gz'):
-			shell('unpigz -c {input} > {output}')
-		else:
-			shell('ln -sr {input} {output}')
-
-rule create_rRNA_index:
-    input:
-        unpack(get_rRNA_genome)
-    output:
-        directory(bt2_rRNA_index_dir)
-    params:
-        basename=bt2_rRNA_index_basename
-    shell:
-        """
-        mkdir -p {output}
-
-        bowtie2-build --ftabchars 12 \
-                      --offrate 1 \
-                      {input} \
-                      {params.basename}
-        """
-
-rule map_to_rRNA:
-    input:
-        unpack(get_bt2_rRNA_index),
-        reads=raw_reads_mate_2
-    output:
-        ribo_depletion_log
-    params:
-        species=lambda wildcards: project_df.get_metadata(
-            'species', project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)
-    run:
-        if 'index' in input.keys():
-            shell("bowtie2 -x {input.index}/{params.species}_rRNA -U {input.reads} -p 20 --very-fast-local > /dev/null 2> {output}")
-        else:
-            shell("echo 'no_rRNA_index' > {output}")
 
 rule create_barcode_files_matching_summary:
     input:

@@ -78,6 +78,8 @@ def get_longread_output():
 
     return out_files
 
+register_module_output_hook(get_longread_output, "longread.smk")
+
 def get_args(wc):
     args = f""" \
     --cache={lr_cache_dir} \

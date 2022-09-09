@@ -10,6 +10,7 @@ from spacemake.util import check_star_index_compatibility
 
 logger_name = "spacemake.config"
 
+
 def get_puck_parser(required=True):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     parser.add_argument("--name", help="name of the puck", type=str, required=True)
@@ -141,32 +142,59 @@ def get_run_mode_parser(required=True):
 
 
 def get_species_parser(required=True):
+    "a parser that allows to add a reference sequence and annotation, belonging to some species"
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     parser.add_argument(
-        "--name", help="name of the species to be added", type=str, required=True
+        "--reference",
+        help="name of the reference (default=genome)",
+        type=str,
+        default="genome",
+    )
+    parser.add_argument("--name", help="name of the species", type=str, required=True)
+    parser.add_argument(
+        "--sequence",
+        help="path to the sequence (.fa) file for the species/reference to be added (e.g. the genome)",
+        type=str,
+        required=required,
     )
     parser.add_argument(
         "--genome",
-        help="path to the genome (.fa) file for the species to be added",
+        help="[DEPRECATED] path to the genome (.fa) file for the species to be added. --genome=<arg> is a synonym for --reference=genome --sequence=<arg>",
         type=str,
-        required=required,
+        required=False,
     )
+
     parser.add_argument(
         "--annotation",
-        help="path to the annotation (.gtf) file for the species to be added",
+        help="path to the genome annotation (.gtf) file for the species to be added",
         type=str,
-        required=required,
-    )
-    parser.add_argument(
-        "--rRNA_genome",
-        help="path to the ribosomal-RNA genome (.fa) file for the species to be added",
-        default=None,
-        type=str,
+        default="",
+        required=False,
     )
     parser.add_argument(
         "--STAR_index_dir",
         help="path to STAR index directory",
         type=str,
+        required=False,
+    )
+    parser.add_argument(
+        "--BT2_index",
+        help="path to BOWTIE2 index",
+        type=str,
+        required=False,
+    )
+    parser.add_argument(
+        "--BT2_flags",
+        help="bt2 mapping arguments for this reference (default=mapping.smk:default_BT2_MAP_FLAGS) ",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--STAR_flags",
+        help="STAR mapping arguments for this reference (default=mapping.smk:default_STAR_MAP_FLAGS)",
+        type=str,
+        default="",
         required=False,
     )
 
@@ -219,7 +247,7 @@ def get_variable_action_subparsers(config, parent_parser, variable):
         "list": f"list {variable} and their settings",
         "delete": f"delete {variable_singular}",
         "add": f"add a new {variable_singular}",
-        "update": f"update an existing barcode_flavor",
+        "update": f"update an existing {variable_singular}",
     }
 
     # list command
@@ -267,8 +295,7 @@ def get_variable_action_subparsers(config, parent_parser, variable):
 
 def setup_config_parser(config, parent_parser_subparsers):
     parser_config = parent_parser_subparsers.add_parser(
-        "config",
-        help="configure spacemake"
+        "config", help="configure spacemake"
     )
     parser_config_subparsers = parser_config.add_subparsers(
         help="config sub-command help"
@@ -302,7 +329,6 @@ def add_update_delete_variable_cmdline(config, args):
         func = config.delete_variable
 
     var_variables = func(variable, name, **args)
-
     # print and dump config file
     config.logger.info(yaml.dump(var_variables, sort_keys=False))
     config.dump()
@@ -403,6 +429,7 @@ class ConfigFile:
         "barcode_flavor": str,
         "run_mode": "str_list",
         "species": str,
+        "map_strategy": str,
     }
 
     def __init__(self):
@@ -493,31 +520,56 @@ class ConfigFile:
             # if species is empty, create a species dictionary
             self.variables["species"] = {}
 
-            if "knowledge" in self.variables:
-                # extract all annotation info, if exists
-                for species in self.variables["knowledge"].get("annotations", {}):
-                    if species not in self.variables["species"]:
-                        self.variables["species"][species] = {}
+            # if "knowledge" in self.variables:
+            #     # TODO: check if this still applies and make compatible with new
+            #     # two-layer species->reference model
+            #     # extract all annotation info, if exists
+            #     for species in self.variables["knowledge"].get("annotations", {}):
+            #         if species not in self.variables["species"]:
+            #             self.variables["species"][species] = {}
 
-                    self.variables["species"][species]["annotation"] = self.variables[
-                        "knowledge"
-                    ]["annotations"][species]
+            #         self.variables["species"][species]["annotation"] = self.variables[
+            #             "knowledge"
+            #         ]["annotations"][species]
 
-                for species in self.variables["knowledge"].get("genomes", {}):
-                    if species not in self.variables["species"]:
-                        self.variables["species"][species] = {}
+            #     for species in self.variables["knowledge"].get("genomes", {}):
+            #         if species not in self.variables["species"]:
+            #             self.variables["species"][species] = {}
 
-                    self.variables["species"][species]["genome"] = self.variables[
-                        "knowledge"
-                    ]["genomes"][species]
+            #         self.variables["species"][species]["genome"] = self.variables[
+            #             "knowledge"
+            #         ]["genomes"][species]
 
-                for species in self.variables["knowledge"].get("rRNA_genomes", {}):
-                    if species not in self.variables["species"]:
-                        self.variables["species"][species] = {}
+            #     for species in self.variables["knowledge"].get("rRNA_genomes", {}):
+            #         if species not in self.variables["species"]:
+            #             self.variables["species"][species] = {}
 
-                    self.variables["species"][species]["rRNA_genome"] = self.variables[
-                        "knowledge"
-                    ]["rRNA_genomes"][species]
+            #         self.variables["species"][species]["rRNA_genome"] = self.variables[
+            #             "knowledge"
+            #         ]["rRNA_genomes"][species]
+
+        for name, species_data in self.variables["species"].items():
+            if "annotation" in species_data:
+                # we have a pre-bowtie2-support config.yaml with following structur
+                # species:
+                #   human:
+                #     genome: ....
+                #     annotation: ....
+                self.logger.warning(
+                    f"converting old-style config.yaml species section for '{name}' {species_data}..."
+                )
+                new_data = {}
+                new_data["genome"] = {
+                    "sequence": species_data["genome"],
+                    "annotation": species_data["annotation"],
+                }
+                if "rRNA_genome" in species_data:
+                    new_data["rRNA"] = {
+                        "sequence": species_data["rRNA_genome"],
+                        "annotation": "",
+                    }
+
+                self.variables["species"][name] = new_data
 
         if "knowledge" in self.variables:
             del self.variables["knowledge"]
@@ -601,31 +653,41 @@ class ConfigFile:
 
     def process_species_args(
         self,
-        genome=None,
+        name=None,
+        sequence=None,
         annotation=None,
-        rRNA_genome=None,
+        reference=None,
         STAR_index_dir=None,
+        BT2_index=None,
+        BT2_flags=None,
+        STAR_flags=None,
     ):
-        assert_file(genome, default_value=None, extension=[".fa", ".fa.gz"])
-        assert_file(annotation, default_value=None, extension=[".gtf", ".gtf.gz"])
-        assert_file(rRNA_genome, default_value=None, extension=[".fa"])
+        assert_file(sequence, default_value=None, extension=[".fa", ".fa.gz"])
+        if annotation:
+            assert_file(annotation, default_value=None, extension=[".gtf", ".gtf.gz"])
 
-        species = {}
-
-        if genome is not None:
-            species["genome"] = genome
-
-        if annotation is not None:
-            species["annotation"] = annotation
-
-        if rRNA_genome is not None:
-            species["rRNA_genome"] = rRNA_genome
-
-        if STAR_index_dir is not None:
+        d = dict(
+            sequence=sequence,
+            annotation=annotation,
+        )
+        # assert_file(STAR_genome, default_value=None, extension=[".fa"])
+        if STAR_index_dir:
             check_star_index_compatibility(STAR_index_dir)
-            species["STAR_index_dir"] = STAR_index_dir
+            d["STAR_index_dir"] = STAR_index_dir
 
-        return species
+        if BT2_index:
+            d["BT2_index"] = BT2_index
+
+        if BT2_flags:
+            d["BT2_flags"] = BT2_flags
+
+        if STAR_flags:
+            d["STAR_flags"] = BT2_flags
+
+        species_refs = self.variables["species"].get(name, {})
+        species_refs[reference] = d
+        self.variables["species"][name] = species_refs
+        return species_refs
 
     def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None):
         assert_file(barcodes, default_value=None, extension="all")
@@ -633,7 +695,7 @@ class ConfigFile:
         puck = {}
 
         if width_um is not None:
-            puck['width_um'] = float(width_um)
+            puck["width_um"] = float(width_um)
 
         if spot_diameter_um is not None:
             puck["spot_diameter_um"] = float(spot_diameter_um)
@@ -656,15 +718,38 @@ class ConfigFile:
             ValueError(f"Invalid variable: {variable}")
 
     def add_variable(self, variable, name, **kwargs):
-        if not self.variable_exists(variable, name):
-            values = self.process_variable_args(variable, **kwargs)
-            self.variables[variable][name] = values
-        else:
-            if variable in ["run_modes", "pucks", "barcode_flavors"]:
-                # drop the last s
-                variable = variable[:-1]
+        kwargs["name"] = name
+        # It's not very clear that a cmdline arg
+        # --name is absolutely REQUIRED and its value has to map somehow onto
+        # an internal function name
+        # @TAMAS: can you help?
+        print(f"add_variable() called with variable={variable} name={name} kw={kwargs}")
 
-            raise DuplicateConfigVariableError(variable, name)
+        if variable == "species":
+            # for the species command, collision check is on the reference name, not the species name
+            if "genome" in kwargs:
+                # deprecated cmdline option --genome ... was used. Translate to
+                # --sequence ... --reference=genome
+                kwargs["sequence"] = kwargs["genome"]
+                kwargs["reference"] = "genome"
+
+            ref = kwargs["reference"]
+            if ref in self.variables[variable].get(name, {}):
+                raise DuplicateConfigVariableError(variable, f"{name}.{ref}")
+            else:
+                values = self.process_variable_args(variable, **kwargs)
+                self.variables[variable][name] = values
+
+        else:
+            if not self.variable_exists(variable, name):
+                values = self.process_variable_args(variable, **kwargs)
+                self.variables[variable][name] = values
+            else:
+                if variable in ["run_modes", "pucks", "barcode_flavors"]:
+                    # drop the last s
+                    variable = variable[:-1]
+
+                raise DuplicateConfigVariableError(variable, name)
 
         return kwargs
 

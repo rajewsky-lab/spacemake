@@ -461,6 +461,7 @@ def spacemake_run(pdf, args):
         "samples": samples,
         "projects": projects,
         "with_fastqc": with_fastqc,
+        "pwd": os.getcwd(),
     }
 
     # join config_variables and novosparc_variables

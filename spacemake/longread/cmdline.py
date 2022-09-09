@@ -512,13 +512,13 @@ def cmd_extract(args):
 
         n += 1
         seq = annotation.raw_sequences[qname]
-        header = (
-            f">{n}__CB:{CB}__UMI:{UMI}__"
-            + f"sig:{sig_str}__cDNA:{cDNA_start}-{cDNA_end}__oli:{start_oli}-{end_oli}__"
-            + f"L_read={len(seq)}__L_cDNA={cDNA_end - cDNA_start}"
-        )
-        # print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
         if r2:
+            header = (
+                f">{n}__CB:{CB}__UMI:{UMI}__"
+                + f"sig:{sig_str}__cDNA:{cDNA_start}-{cDNA_end}__oli:{start_oli}-{end_oli}__"
+                + f"L_read={len(seq)}__L_cDNA={cDNA_end - cDNA_start}"
+            )
+            # print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{cDNA}")
             print(header[: (254 - 14)] + " 1:N:0:TCCTGAGC" + f"\n{r2}")
 
     if len(known):
