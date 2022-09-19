@@ -647,6 +647,21 @@ def main_combinatorial(args):
                     )
 
 
+def quality_trim_read2(reads, min_qual=20, phred_base=33, min_len=18):
+    for (name1, seq1, name2, seq2, qual2) in reads:
+        end = len(seq2)
+        qual = np.array(bytearray(qual2.encode("ASCII"))) - phred_base
+        qtrim = qual >= min_qual
+        if qtrim.sum():
+            new_end = end - (qtrim[::-1]).argmax()
+            if new_end != end:
+                qual2 = qual2[:new_end]
+                seq2 = seq2[:new_end]
+
+        if len(seq2) >= min_len:
+            yield (name1, seq1, name2, seq2, qual2)
+
+
 def process_dropseq(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
     with ExceptionLogging("worker", Qerr=Qerr, exc_flag=abort_flag) as el:
         el.logger.debug(
@@ -657,6 +672,11 @@ def process_dropseq(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
         for n_chunk, reads in queue_iter(Qfq, abort_flag):
             el.logger.debug(f"received chunk {n_chunk} of {len(reads)} reads")
             results = []
+            if args.min_qual_trim:
+                reads = quality_trim_read2(
+                    reads, min_qual=args.min_qual_trim, phred_base=args.phred_base
+                )
+
             for fqid, r1, fqid2, r2, qual2 in reads:
                 N["total"] += 1
                 rec = out.make_record(
@@ -890,15 +910,21 @@ class Output:
         assert Output.safety_check_eval(args.cell_raw)
         assert Output.safety_check_eval(args.cell)
         assert Output.safety_check_eval(args.UMI)
+        assert Output.safety_check_eval(args.seq)
+        assert Output.safety_check_eval(args.qual)
         self.cell_raw = args.cell_raw
         self.cell = args.cell
         self.UMI = args.UMI
+        self.seq = args.seq
+        self.qual = args.qual
         self.na = args.na
 
         # precompile functions for speed-up
         self.f_cell_raw = compile(self.cell_raw, "<string cell_raw>", "eval")
         self.f_cell = compile(self.cell, "<string cell>", "eval")
         self.f_UMI = compile(self.UMI, "<string UMI>", "eval")
+        self.f_seq = compile(self.seq, "<string seq>", "eval")
+        self.f_qual = compile(self.qual, "<string qual>", "eval")
 
         self.fq_qual = args.fq_qual
         self.bc_na = args.na
@@ -932,7 +958,7 @@ class Output:
                 ],
             }
             self.bam_header = pysam.AlignmentHeader.from_dict(header)
-            fopen = lambda x: pysam.AlignmentFile(x, "wbu", header=header)
+            fopen = lambda x: pysam.AlignmentFile(x, "wbu", header=header, threads=4)
             self._write_record = self.write_bam
             self._make_record = self.make_bam_record
         else:
@@ -958,9 +984,11 @@ class Output:
         a = pysam.AlignedSegment(self.bam_header)
         # STAR does not like spaces in read names so we have to split
         a.query_name = kw["r2_qname"].split()[0]
-        a.query_sequence = kw["r2"]
+        a.query_sequence = kw["seq"]  # kw["r2"]
         a.flag = 4
-        a.query_qualities = pysam.qualitystring_to_array(kw["r2_qual"])
+        a.query_qualities = pysam.qualitystring_to_array(
+            kw["qual"]
+        )  # pysam.qualitystring_to_array(kw["r2_qual"])
         a.tags = [(name, templ.format(**kw)) for name, templ in self.tags]
         if self.count_cb:
             self.raw_cb_counts[kw["cell"]] += 1
@@ -973,7 +1001,7 @@ class Output:
         return f"@{kw['qname']}\n{seq}\n+\n{qual}\n"
 
     def make_record(self, assigned=True, **kw):
-        kw["raw"], kw["cell"], kw["UMI"] = self.format(**kw)
+        kw["raw"], kw["cell"], kw["UMI"], kw["seq"], kw["qual"] = self.format(**kw)
         kw["assigned"] = "A" if assigned else "U"
         return self._make_record(**kw)
 
@@ -1013,6 +1041,9 @@ class Output:
         cell = eval(self.f_cell)
         raw = eval(self.f_cell_raw)
         UMI = eval(self.f_UMI)
+        seq = eval(self.f_seq)
+        qual = eval(self.f_qual)
+
         # cell = eval(self.cell)
         # raw = eval(self.cell_raw)
         # UMI = eval(self.UMI)
@@ -1023,7 +1054,7 @@ class Output:
                 f"UMI=eval('{self.UMI}')='{UMI}' evaluated to None"
             )
 
-        return raw, cell, UMI
+        return raw, cell, UMI, seq, qual
 
     def close(self):
         self.out_assigned.close()
@@ -1081,6 +1112,9 @@ def parse_args():
     parser.add_argument("--cell", default="r1[8:20][::-1]")
     parser.add_argument("--cell-raw", default="None")
     parser.add_argument("--UMI", default="r1[0:8]")
+    parser.add_argument("--seq", default="r2")
+    parser.add_argument("--qual", default="r2_qual")
+
     parser.add_argument(
         "--out-format",
         default="bam",
@@ -1124,6 +1158,25 @@ def parse_args():
         "--fq-qual",
         default="E",
         help="phred qual for assigned barcode bases in FASTQ output (default='E')",
+    )
+    parser.add_argument(
+        "--min-qual-trim",
+        default=0,
+        type=int,
+        help="clip low quality-bases from a read2 3' end (e.g. pre-detected adapter)",
+    )
+    parser.add_argument(
+        "--min-len",
+        default=18,
+        type=int,
+        help="minimum read2 length to keep after quality trimming (default=18)",
+    )
+
+    parser.add_argument(
+        "--phred-base",
+        default=33,
+        type=int,
+        help="phred quality base (default=33)",
     )
 
     # combinatorial barcode specific options
