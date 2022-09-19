@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 __version__ = "0.9"
-__author__ = ["Marvin Jens", ]
+__author__ = [
+    "Marvin Jens",
+]
 __license__ = "GPL"
-__email__ = ['marvin.jens@mdc-berlin.de', ]
+__email__ = [
+    "marvin.jens@mdc-berlin.de",
+]
 
 import pysam
 import argparse
 import os
 import sys
 import logging
+
 
 def print_header(header):
     for k, v in sorted(header.items()):
@@ -28,24 +33,27 @@ def print_header(header):
 
 def merge_headers(orig, star):
     merged = dict(orig)
-    merged['PG'].extend(star['PG'])
-    merged['SQ'] = star['SQ']
-    # merged['HD']['SO'] = star['HD']['SO']  # sorted by
+    # most recent program should be on top
+    merged["PG"] = star["PG"] + merged["PG"]
+    merged["SQ"] = star["SQ"]
+    merged["HD"]["SO"] = star["HD"]["SO"]  # sorted by
 
     return merged
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Fix .bam header of the STAR mapped output .bam')
 
-    parser.add_argument('--in-bam-star', help='mapped star bam input')
-    parser.add_argument('--in-bam-tagged', help='unmapped dropseq tagged bam')
-    parser.add_argument('--out-bam', help='output bam')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Fix .bam header of the STAR mapped output .bam"
+    )
+
+    parser.add_argument("--in-bam-star", help="mapped star bam input")
+    parser.add_argument("--in-bam-tagged", help="unmapped dropseq tagged bam")
+    parser.add_argument("--out-bam", help="output bam")
 
     args = parser.parse_args()
 
-    bam_star = pysam.AlignmentFile(args.in_bam_star, 'rb')
-    bam_tagged = pysam.AlignmentFile(args.in_bam_tagged, 'rb', check_sq=False)
-
+    bam_star = pysam.AlignmentFile(args.in_bam_star, "rb")
+    bam_tagged = pysam.AlignmentFile(args.in_bam_tagged, "rb", check_sq=False)
 
     star_header = bam_star.header.to_dict()
     tagged_header = bam_tagged.header.to_dict()
@@ -60,6 +68,6 @@ if __name__ == '__main__':
     # print_header(merged_header)
 
     # copy input to output, just with the new header
-    bam_out = pysam.AlignmentFile(args.out_bam,'wb', header=merged_header)
+    bam_out = pysam.AlignmentFile(args.out_bam, "wb", header=merged_header)
     for aln in bam_star.fetch(until_eof=True):
         bam_out.write(aln)
