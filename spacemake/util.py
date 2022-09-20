@@ -77,7 +77,7 @@ def read_fq(fname, skim=0):
     import gzip
 
     logger = logging.getLogger("spacemake.util.read_fq")
-    if fname is None:
+    if str(fname) == "None":
         logger.warning("yielding empty data forever")
         while True:
             yield ("no_qname", "no_seq", "no_qual")
