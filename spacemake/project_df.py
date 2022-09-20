@@ -818,7 +818,7 @@ class ProjectDF:
             + f"is_merged={bool(data.is_merged)}"
         )
         if (
-            (data.R1 and data.R2)
+            data.R2  # R1 is optional (bulk samples)
             or (data.basecalls_dir and data.sample_sheet)
             or (data.longreads)
             and not data.dge
@@ -859,7 +859,7 @@ class ProjectDF:
 
         if (
             data.is_merged
-            or (data.R1 and data.R2)
+            or data.R2
             or (data.sample_sheet and data.basecalls_dir)
             or data.dge
         ):
@@ -1280,8 +1280,8 @@ class ProjectDF:
         # If longreads not provided, we try with basecalls_dir and sample_sheet
         #   (only used by add_sample_sheet command)
         # If those area also not provided, we try to add a simple dge
-        if action == "add" and (R1 is None or R2 is None) and not is_merged:
-            self.logger.info("R1 or R2 not provided, trying longreads")
+        if action == "add" and (R2 is None) and not is_merged:
+            self.logger.info("R2 not provided, trying longreads")
 
             if not longreads:
                 self.logger.info(
@@ -1293,7 +1293,7 @@ class ProjectDF:
                     )
                     if not dge:
                         raise SpacemakeError(
-                            "Neither R1 & R2, longreads, basecalls_dir & "
+                            "Neither R1,R2, longreads, basecalls_dir & "
                             + "sample_sheet, nor dge were provided.\n"
                             + "Some reads/data has to be provided"
                         )
@@ -1304,7 +1304,9 @@ class ProjectDF:
                     )
 
         # assert files first
-        assert_file(R1, default_value=None, extension=".fastq.gz")
+        if R1 is not None:
+            assert_file(R1, default_value=None, extension=".fastq.gz")
+
         assert_file(R2, default_value=None, extension=".fastq.gz")
         assert_file(longreads, default_value=None, extension="all")
         assert_file(

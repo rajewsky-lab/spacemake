@@ -248,39 +248,46 @@ rule zcat_pipe:
 rule tag_reads_bc_umi:
     input:
         # these implicitly depend on the raw reads via zcat_pipes
-        R1 = raw_reads_mate_1,
-        R2 = raw_reads_mate_2
+        ## TODO: make R1 optional for bulk samples
+        # R1 = raw_reads_mate_1,
+        # R2 = raw_reads_mate_2
+        unpack(get_linked_reads)
     params:
-        bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
+        bc_params = get_bc_preprocess_settings,
+        read1 = lambda wc: get_linked_reads(wc).get("R1", None),
+        read2 = lambda wc: get_linked_reads(wc).get("R2", None)
     output:
         assigned = tagged_bam,
         unassigned = unassigned,
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 4
+    threads: 16
     shell:
         "python {spacemake_dir}/preprocess/cmdline.py "
         "--sample={wildcards.sample_id} "
-        "--read1={input.R1} "
-        "--read2={input.R2} "
+        "--read1={params.read1} "
+        "--read2={params.read2} "
         "--parallel={threads} "
         "--save-stats={output.bc_stats} "
-        "--log-file={log} "
-        "--bc1-ref={params.bc.bc1_ref} "
-        "--bc2-ref={params.bc.bc2_ref} "
-        "--bc1-cache={params.bc.bc1_cache} "
-        "--bc2-cache={params.bc.bc2_cache} "
-        "--threshold={params.bc.score_threshold} "
-        "--cell='{params.bc.cell}' "
-        "--cell-raw='{params.bc.cell_raw}' "
         "--out-format=bam "
         "--out-unassigned={output.unassigned} "
         "--out-assigned=/dev/stdout "
-        "--UMI='{params.bc.UMI}' "
-        "--bam-tags='{params.bc.bam_tags}' "
-        "--min-opseq-score={params.bc.min_opseq_score} "
+        "--log-file={log} "
+        "{params.bc_params} "
         "| samtools view -bh /dev/stdin > {output.assigned} "
+
+        # "--bc1-ref={params.bc.bc1_ref} "
+        # "--bc2-ref={params.bc.bc2_ref} "
+        # "--bc1-cache={params.bc.bc1_cache} "
+        # "--bc2-cache={params.bc.bc2_cache} "
+        # "--score-threshold={params.bc.score_threshold} "
+        # "--cell='{params.bc.cell}' "
+        # "--cell-raw='{params.bc.cell_raw}' "
+        # "--UMI='{params.bc.UMI}' "
+        # "--bam-tags='{params.bc.bam_tags}' "
+        # "--min-opseq-score={params.bc.min_opseq_score} "
+
 
 rule run_fastqc:
     input:

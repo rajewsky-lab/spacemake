@@ -142,9 +142,8 @@ def get_raw_dge(wildcards):
 
 
 def get_reads(wildcards):
-    ###
-    # R1 and R2 for demultiplexed reads will return none
-    ###
+    # TODO: Discuss removal of the raw read symlink. Might just use the actual data directly?
+    "R1 and R2 for demultiplexed reads will return ['none']"
     reads = project_df.get_metadata(
         "R" + wildcards.mate,
         sample_id=wildcards.sample_id,
@@ -155,6 +154,33 @@ def get_reads(wildcards):
     else:
         # reads already
         return reads
+
+
+def get_linked_reads(wildcards):
+    """
+    returns a dictionary with R1 and R2 as key and the raw read symlink as value.
+    Bulk samples will only contain R2!
+    """
+    # print(f"get_linked_reads({wildcards})")
+    reads = {}
+    reads1 = project_df.get_metadata(
+        "R1",
+        sample_id=wildcards.sample_id,
+        project_id=wildcards.project_id,
+    )
+    if str(reads1).lower() != "none":
+        reads["R1"] = raw_reads_mate_1.format(**dict(wildcards.items()))
+
+    reads2 = project_df.get_metadata(
+        "R2",
+        sample_id=wildcards.sample_id,
+        project_id=wildcards.project_id,
+    )
+    if str(reads2).lower() != "none":
+        reads["R2"] = raw_reads_mate_2.format(**dict(wildcards.items()))
+
+    # print(f"resulting reads: {reads}")
+    return reads
 
 
 # barcode flavor parsing and query functions
@@ -177,11 +203,11 @@ class dotdict(dict):
 def parse_barcode_flavors(
     config,
     bc_default_settings=dict(
-        bc1_ref="",
-        bc2_ref="",
-        cell_raw="None",
-        score_threshold=0.0,
-        min_opseq_score=22,
+        # bc1_ref="",
+        # bc2_ref="",
+        # cell_raw="None",
+        # score_threshold=0.0,
+        # min_opseq_score=22,
         bam_tags="CR:{cell},MI:{UMI}",
     ),
 ):
@@ -209,6 +235,24 @@ def parse_barcode_flavors(
 # all barcode flavor info from config.yaml
 # is kept here for convenient lookup
 bc_flavor_data = parse_barcode_flavors(config)
+# print(bc_flavor_data["preprocess_settings"])
+
+
+def get_bam_tag_names(project_id, sample_id):
+    barcode_flavor = project_df.get_metadata(
+        "barcode_flavor", project_id=project_id, sample_id=sample_id
+    )
+
+    # bam_tags = config["barcode_flavors"][barcode_flavor]["bam_tags"]
+    bam_tags = bc_flavor_data["preprocess_settings"][barcode_flavor]["bam_tags"]
+
+    tag_names = {}
+
+    for tag in bam_tags.split(","):
+        tag_name, tag_variable = tag.split(":")
+        tag_names[tag_variable] = tag_name
+
+    return tag_names
 
 
 def get_bc_preprocess_settings(wildcards):
@@ -224,7 +268,13 @@ def get_bc_preprocess_settings(wildcards):
 
     settings = bc_flavor_data.preprocess_settings[flavor]
 
-    return settings
+    params = []
+    # turn dictionary values into commandline arguments
+    for key, value in settings.items():
+        pkey = key.replace("_", "-")
+        params.append(f'--{pkey}="{value}"')
+
+    return " ".join(params)  # settings
 
 
 def get_demux_indicator(wildcards):
@@ -662,23 +712,6 @@ def get_qc_sheet_input_files(wildcards):
         to_return[f"{run_mode}.dge_summary"] = run_mode_dge["dge_summary"]
 
     return to_return
-
-
-def get_bam_tag_names(project_id, sample_id):
-    barcode_flavor = project_df.get_metadata(
-        "barcode_flavor", project_id=project_id, sample_id=sample_id
-    )
-
-    bam_tags = config["barcode_flavors"][barcode_flavor]["bam_tags"]
-
-    tag_names = {}
-
-    for tag in bam_tags.split(","):
-        tag_name, tag_variable = tag.split(":")
-
-        tag_names[tag_variable] = tag_name
-
-    return tag_names
 
 
 def get_puck_file(wildcards):
