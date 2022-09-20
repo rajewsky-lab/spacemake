@@ -475,10 +475,10 @@ def process_combinatorial(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
                         res.start,
                         tstart,
                         N,
-                        threshold=args.threshold,
+                        threshold=args.score_threshold,
                     )
                     # bc2, BC2, ref2, score2 = match_BC2(
-                    #     bc2_matcher, res.seqB, res.end, tend, N, threshold=args.threshold
+                    #     bc2_matcher, res.seqB, res.end, tend, N, threshold=args.score_threshold
                     # )
                     bc2, BC2, ref2, score2 = "na", "NA", "na", -1
 
@@ -1195,7 +1195,7 @@ def parse_args():
         help="minimal score for opseq alignment (default 22 [half of max])",
     )
     parser.add_argument(
-        "--threshold",
+        "--score-threshold",
         default=0.5,
         type=float,
         help="score threshold for calling a match (rel. to max for a given length)",
