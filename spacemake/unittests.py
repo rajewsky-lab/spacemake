@@ -194,6 +194,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             f" --sample_id={sid}"
             f" --R1={r1}"
             f" --R2={r2} {options}",
+            check_stderr=False,
             **kw,
         )
         return self.load_project_df()
