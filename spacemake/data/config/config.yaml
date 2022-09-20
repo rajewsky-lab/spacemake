@@ -93,3 +93,10 @@ barcode_flavors:
         UMI: "r2[0:9]"
         bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
         cell: "r1[0:20]"
+    nextflex:
+        cell: "'A'"
+        read1: "None"
+        UMI: "r2[:4] + r2[-4:]"
+        min_qual_trim: 20
+        seq: "r2[4:-4]"
+        qual: "r2_qual[4:-4]"
