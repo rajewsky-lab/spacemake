@@ -1280,6 +1280,10 @@ class ProjectDF:
         # If longreads not provided, we try with basecalls_dir and sample_sheet
         #   (only used by add_sample_sheet command)
         # If those area also not provided, we try to add a simple dge
+
+        if R1 == ['None']:
+            R1 = None
+
         if action == "add" and (R2 is None) and not is_merged:
             self.logger.info("R2 not provided, trying longreads")
 
