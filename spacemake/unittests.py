@@ -249,8 +249,11 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
         # test correct BAM content
         expect = load_bam_hashes("../test_data/test_bam_md5.txt")
         for bpath, md5 in sorted(gather_bam_hashes(".").items()):
-            print(f"checking '{bpath}'")
-            self.assertEqual(md5, expect[bpath])
+            if bpath in expect:
+                print(f"checking '{bpath}'")
+                self.assertEqual(md5, expect[bpath])
+            else:
+                print(f"missing reference checksum for '{bpath}'- skipping test")
 
         # TODO: test correct DGE content
 
