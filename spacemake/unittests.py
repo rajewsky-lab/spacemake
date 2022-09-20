@@ -6,6 +6,7 @@ import sys
 import subprocess
 import yaml
 import pandas as pd
+import numpy as np
 
 dropseq_tools = "/data/rajewsky/shared_bins/Drop-seq_tools-2.4.0"
 base_dir = os.path.join(os.path.dirname(__file__), "..")
@@ -211,6 +212,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             f" --sample_id={sid}"
             f" --R1={r1}"
             f" --R2={r2} {options}",
+            check_stderr=False,
             **kw,
         )
         return self.load_project_df()
@@ -248,7 +250,11 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             x = df.set_index("sample_id").loc[sid]
             self.assertEqual(x.species, species)
             self.assertEqual(x.project_id, pid)
-            self.assertEqual(x.R1, str([r1]))
+            if r1 == "None":
+                self.assertTrue(np.isnan(x.R1))
+            else:
+                self.assertEqual(x.R1, str([r1]))
+
             self.assertEqual(x.R2, str([r2]))
 
             # expect failure if trying to add the same sample again
