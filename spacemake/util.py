@@ -50,10 +50,6 @@ def str2bool(var):
 
 
 def ensure_path(path):
-    import os
-
-
-def ensure_path(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     return path
 

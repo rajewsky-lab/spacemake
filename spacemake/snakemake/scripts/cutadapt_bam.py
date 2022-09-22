@@ -16,6 +16,7 @@ from spacemake.parallel import (
     ExceptionLogging,
     log_qerr,
 )
+import spacemake.util as util
 from time import time
 import pysam
 import logging
@@ -73,15 +74,15 @@ def parse_cmdline():
     )
     parser.add_argument(
         "--threads-read",
-        help="number of threads for reading bam_in (default=1)",
+        help="number of threads for reading bam_in (default=2)",
         type=int,
-        default=1,
+        default=2,
     )
     parser.add_argument(
         "--threads-write",
-        help="number of threads for writing bam_out (default=1)",
+        help="number of threads for writing bam_out (default=2)",
         type=int,
-        default=1,
+        default=2,
     )
     parser.add_argument(
         "--threads-work",
@@ -157,7 +158,7 @@ class SimpleRead:
         self.query_name = name
         self.query_sequence = seq
         self.query_qualities = qual
-        self.tags = {}
+        self.tags = tags
 
     @classmethod
     def from_BAM(cls, read):
@@ -333,7 +334,7 @@ def main_single(args):
     )
 
     if args.stats_out:
-        with open(args.stats_out, "wt") as f:
+        with open(util.ensure_path(args.stats_out), "wt") as f:
             f.write("key\tcount\tpercent\n")
             for k, v in sorted(stats.items(), key=lambda x: -x[1]):
                 f.write(f"reads\t{k}\t{v}\t{100.0 * v/stats['N_input']:.2f}\n")
@@ -581,7 +582,7 @@ def main_parallel(args):
         total = count_dict_sum(total)
         lhist = count_dict_sum(lhist)
 
-        with open(args.stats_out, "wt") as f:
+        with open(util.ensure_path(args.stats_out), "wt") as f:
             f.write("key\tcount\tpercent\n")
             for k, v in sorted(stats.items(), key=lambda x: -x[1]):
                 f.write(f"reads\t{k}\t{v}\t{100.0 * v/stats['N_input']:.2f}\n")

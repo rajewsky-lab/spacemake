@@ -202,14 +202,7 @@ class dotdict(dict):
 
 def parse_barcode_flavors(
     config,
-    bc_default_settings=dict(
-        # bc1_ref="",
-        # bc2_ref="",
-        # cell_raw="None",
-        # score_threshold=0.0,
-        # min_opseq_score=22,
-        bam_tags="CR:{cell},MI:{UMI}",
-    ),
+    bc_default_settings={},
 ):
     """
     Reads the 'barcode_flavor' from 'knowledge' section of the config.yaml.
@@ -217,8 +210,7 @@ def parse_barcode_flavors(
     """
     preprocess_settings = {}
     for flavor, flavor_settings in config["barcode_flavors"].items():
-        # for each flavor, also retrieve the configuration
-        # first make a copy of the default values
+        # for each flavor, retrieve the configuration
         d = dict(bc_default_settings)
         d.update(flavor_settings)
         preprocess_settings[flavor] = dotdict(d)
@@ -235,7 +227,7 @@ def parse_barcode_flavors(
 # all barcode flavor info from config.yaml
 # is kept here for convenient lookup
 bc_flavor_data = parse_barcode_flavors(config)
-# print(bc_flavor_data["preprocess_settings"])
+# print(bc_flavor_data["preprocess_settings"]["nextflex"])
 
 
 def get_bam_tag_names(project_id, sample_id):
@@ -244,7 +236,9 @@ def get_bam_tag_names(project_id, sample_id):
     )
 
     # bam_tags = config["barcode_flavors"][barcode_flavor]["bam_tags"]
-    bam_tags = bc_flavor_data["preprocess_settings"][barcode_flavor]["bam_tags"]
+    bam_tags = bc_flavor_data["preprocess_settings"][barcode_flavor].get(
+        "bam_tags", "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+    )
 
     tag_names = {}
 

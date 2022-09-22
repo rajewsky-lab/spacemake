@@ -65,7 +65,7 @@ test_project_data = [
         "test_bulk",
         "None",
         f"{base_dir}/test_data/test_reads.R2.fastq.gz",
-        "--map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final'",
+        "--map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final' --barcode_flavor=nextflex",
     ),
 ]
 

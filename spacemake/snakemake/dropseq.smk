@@ -9,41 +9,42 @@ __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-
 ###################################################
 # Snakefile containing the dropseq pipeline rules #
 ###################################################
-rule remove_smart_adapter:
-    input:
-        tagged_bam
-    output:
-        pipe(tagged_trimmed_bam)
-    params:
-        reports_dir = reports_dir
-    shell:
-        """
-        mkdir -p {params.reports_dir}
+# rule remove_smart_adapter:
+#     input:
+#         tagged_bam
+#     output:
+#         pipe(tagged_trimmed_bam)
+#     params:
+#         reports_dir = reports_dir
+#     shell:
+#         """
+#         mkdir -p {params.reports_dir}
 
-        {dropseq_tools}/TrimStartingSequence OUTPUT_SUMMARY={params.reports_dir}/remove_smart_adapter.report.txt \
-            INPUT={input} \
-            OUTPUT={output} \
-            SEQUENCE={smart_adapter} \
-            MISMATCHES=0 \
-            NUM_BASES=5 \
-            COMPRESSION_LEVEL=0
-        """
+#         {dropseq_tools}/TrimStartingSequence OUTPUT_SUMMARY={params.reports_dir}/remove_smart_adapter.report.txt \
+#             INPUT={input} \
+#             OUTPUT={output} \
+#             SEQUENCE={smart_adapter} \
+#             MISMATCHES=0 \
+#             NUM_BASES=5 \
+#             COMPRESSION_LEVEL=0
+#         """
 
 rule remove_polyA:
     input:
-        tagged_trimmed_bam
+        tagged_bam
     output:
         temp(tagged_polyA_adapter_trimmed_bam)
     params:
-        reports_dir = reports_dir
+        reports_dir = reports_dir,
+        adapters = os.path.join(spacemake_dir, "data/adapters.fa")
+    threads: 16
     shell:
-        """
-        {dropseq_tools}/PolyATrimmer OUTPUT_SUMMARY={params.reports_dir}/remove_polyA.report.txt \
-            MISMATCHES=0 \
-            INPUT={input} \
-            OUTPUT={output} \
-            NUM_BASES=6
-        """
+        "python {repo_dir}/scripts/cutadapt_bam.py {input} "
+        " --bam-out={output} --bam-out-mode=b "
+        " --stats-out={params.reports_dir}/cutadapt.csv "
+        " --adapters-right={params.adapters} "
+        " --threads-write=4 " # scales up to 4 bc we use compression
+        " --threads-work={threads} "
 
 rule filter_mm_reads:
     input:
