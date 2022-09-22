@@ -158,7 +158,7 @@ class SimpleRead:
         self.query_name = name
         self.query_sequence = seq
         self.query_qualities = qual
-        self.tags = {}
+        self.tags = tags
 
     @classmethod
     def from_BAM(cls, read):
