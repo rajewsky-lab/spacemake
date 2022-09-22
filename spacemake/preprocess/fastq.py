@@ -1121,7 +1121,7 @@ def parse_args():
     # bam r2 tagging. SAM standard now supports CB=corrected cell barcode, CR=original cell barcode, and MI=molecule identifier/UMI
     parser.add_argument(
         "--bam-tags",
-        default="CB:{cell},MI:{UMI},RG:{assigned}",
+        default="CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}",
         help="raw, uncorrected cell barcode",
     )
     args = parser.parse_args()
