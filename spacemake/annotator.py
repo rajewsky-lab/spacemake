@@ -10,12 +10,15 @@ import ncls
 import itertools
 import pickle
 from time import time
-from collections import defaultdict, OrderedDict, deque
+from collections import defaultdict, OrderedDict, deque, namedtuple
+from dataclasses import dataclass
+import typing
+import cProfile
 
 logging.basicConfig(level=logging.DEBUG)
 
 
-def attr_to_dict(attr_str):
+def attr_to_dict(attr_str: str) -> dict:
     """
     Helper for reading the GTF. Parsers the attr_str found in the GTF
     attribute column (col 9). Returns a dictionary from the key, value
@@ -30,10 +33,22 @@ def attr_to_dict(attr_str):
 
 
 def load_GTF(
-    src,
-    attributes=["gene_id", "gene_type", "gene_name"],
-    features=["exon", "CDS", "UTR"],
-):
+    src: typing.Union[str, typing.TextIO],
+    attributes: list = ["transcript_id", "transcript_type", "gene_name"],
+    features: list = ["exon", "CDS", "UTR", "transcript"],
+) -> pd.DataFrame:
+    """
+    Loads GTF-formatted annotation data (such as GENCODE) and converts into a tabular DataFrame. Coordinates will be converted
+    to zero-based, half-open interval (C, python, BED,...).
+
+    Args:
+        src (filename or file-like object): Source of GTF annotation records. Can be gzip compressed (filename ending in .gz)
+        attributes (list, optional): Which attributes to extract from the attribute column. Defaults to ["transcript_id", "transcript_type", "gene_name"].
+        features (list, optional): which GTF features to care about. Defaults to ["exon", "CDS", "UTR", "transcript"].
+
+    Returns:
+        pandas.DataFrame: all GTF annotation data converted to a DataFrame with columns: chrom, feature, start (0-based), end, strand, [attributes]
+    """
     if type(src) is str:
         if src.endswith(".gz"):
             src = gzip.open(src, "rt")
@@ -45,7 +60,7 @@ def load_GTF(
     for line in src:
         parts = line.split("\t")
         if len(parts) != 9:
-            # not a GFF formatted line
+            # not a GTF/GFF formatted line
             continue
 
         chrom, source, feature, start, end, score, strand, frame, attr_str = parts
@@ -63,87 +78,115 @@ def load_GTF(
     ).drop_duplicates()
 
 
-## Annotation classification matrix
-default_map = {
-    # CDS   UTR    exon -> ga gf tag values
-    (True, False, True): "CDS",  # CODING
-    (True, True, True): "CDS",  # CODING
-    (False, True, True): "UTR",  # UTR
-    (False, False, True): "non-coding",  # CODING
-    (True, False, False): "intron",  # INTRONIC
-    (False, True, False): "intron",  # INTRONIC
-    (False, False, False): "intron",  # INTRONIC
+feat2flag = {
+    "transcript": 1,
+    "exon": 2,
+    "UTR": 4,
+    "CDS": 8,
 }
+
+# idea: encode as bitmask. Sense (low nibble) and antisense (high nibble) sense would both fit into one byte!
+default_map = {
+    # CDS UTR exon transcript-> gm, gf tag values
+    0b1011: ("exon", "cds"),
+    # This should not arise! Unless, isoforms-are merged
+    0b1111: ("exon", "cds_utr"),
+    0b0111: ("exon", "utr"),
+    0b0011: ("exon", "nc"),
+    0b1001: ("intron", "cds"),
+    0b0101: ("intron", "utr"),
+    0b0001: ("intron", "nc"),
+    0b0000: ("intergenic", "n/a"),
+}
+default_lookup = np.array(
+    [default_map.get(i, ("undefined", "n/a")) for i in np.arange(256)], dtype=object
+)
+
+
+@dataclass
+class IsoformOverlap:
+    gene_name: str = "no_name"
+    transcript_type: str = "no_type"
+    flags: int = 0
 
 
 class GTFClassifier:
+    """
+    _summary_
+    A simple classifier. Initizialized with a DataFrame of GTF features, the process() function
+    will combine GTF features for each transcript to produce condensed annotations for the
+    annotation bam tags.
+    To that end, the presence/absence of CDS, UTR, exon, transcript features in the set of DataFrame
+    indices passed into process() is compiled into a boolean vector. This vector is translated into
+    values for gene-model and function values using a feature_map. No hierarchy is enforced at this
+    level. All annotations are reported based on the aggregate isoform info retrieved via the feature
+    ids.
+    """
+
     def __init__(
         self,
         df,
         hierarchy=["CDS", "UTR", "non-coding", "intron"],
-        feature_map=default_map,
+        flags_lookup=default_lookup,
     ):
-        self.feature_map = feature_map
+        self.flags_lookup = flags_lookup
         self.hierarchy = hierarchy
         self.prio = {}
         for i, h in enumerate(hierarchy):
             self.prio[h] = i
 
-        feat2idx = {
-            "CDS": 0,
-            "UTR": 1,
-            "exon": 2,
-            # "transcript": 3,
-        }
-        df["feature_idx"] = df["feature"].apply(lambda x: feat2idx[x])
+        df["feature_flag"] = df["feature"].apply(lambda x: feat2flag[x])
+        self.df_columns = df.columns
         self.df = df.values
+        self.df_core = df[
+            ["transcript_id", "transcript_type", "gene_name", "feature_flag"]
+        ].values
+        # print(self.df)
 
-    def process(self, ids):
-        gene_features = defaultdict(lambda: np.zeros(3, dtype=bool))
-        gene_names = {}
-        gene_types = {}
-        # iterate over the overlapping GTF features only once.
-        # sort by gene_id as we go
+    def process(self, ids: typing.Iterable[int]) -> tuple:
+        """
+        Gather annotation records identified by DataFrame (array) indices
+        by isoform: gene_name, gene_type and overlap-flags
+
+        Args:
+            ids (Iterable of ints): indices into the array-converted DataFrame of GTF records
+
+        Returns:
+            (gn, gm, gf, gt): a tuple with tag values encoding the overlapping GTF features
+        """
+        # print(f">>> process({ids})")
+        isoform_overlaps = defaultdict(IsoformOverlap)
+        # iterate over the overlapping GTF features group by transcript_id as we go
+        i: int
         for i in ids:
-            row = self.df[i][5:]
-            # print(row)
-            (strand, gene_id, gene_type, gene_name, feature_idx) = row
-            gene_names[gene_id] = gene_name
-            gene_types[gene_id] = gene_type
-            # feature_idx encodes CDS, UTR, exon, transcript records
-            # as numbers to quickly construct a correct absence/presence
-            # boolean flag-vector to be used for the lookup
-            gene_features[gene_id][feature_idx] = True
+            # print(f"df entry for id={i}: {self.df_core[i]}")
+            (transcript_id, transcript_type, gene_name, flag) = self.df_core[i]
+            info = isoform_overlaps[transcript_id]
+            info.gene_name = gene_name
+            info.transcript_type = transcript_type
+            info.flags |= flag
 
-        top_prio = np.inf
-        gn_by_prio = defaultdict(list)
-        gf_by_prio = defaultdict(list)
-        gt_by_prio = defaultdict(list)
-        gs_by_prio = defaultdict(list)
+        return overlaps_to_tags(isoform_overlaps)  # isoform_overlaps
 
-        for gene_id, feature_flags in gene_features.items():
-            # here the boolean vector is converted to a tuple
-            # which can serve as a key for lookup
-            if not feature_flags[-1]:
-                print(gene_id)
-                for i in ids:
-                    print(self.df[i])
 
-            cls = self.feature_map[tuple(feature_flags)]
-            # print(tx_id, gene, gene_id, gene_type, features, cls)
-            prio = self.prio[cls]
-            top_prio = min(top_prio, prio)
-            gn_by_prio[prio].append(gene_names[gene_id])
-            gf_by_prio[prio].append(cls)
-            gt_by_prio[prio].append(gene_types[gene_id])
-            gs_by_prio[prio].append(strand)
+def overlaps_to_tags(isoform_overlaps: dict, flags_lookup=default_lookup) -> tuple:
+    tags = set()
+    for transcript_id, info in isoform_overlaps.items():
+        _gm, _gf = flags_lookup[info.flags]
+        # print(f">> {transcript_id} => {info.flags:04b} => {_gm} {_gf}")
+        tags.add((info.gene_name, _gm, _gf, info.transcript_type))
 
-        return (
-            gf_by_prio[top_prio],
-            gn_by_prio[top_prio],
-            gs_by_prio[top_prio],
-            gt_by_prio[top_prio],
-        )
+    gn = []
+    gm = []
+    gf = []
+    gt = []
+    for n, m, f, t in tags:
+        gn.append(n)
+        gm.append(m)
+        gf.append(f)
+        gt.append(t)
+
+    return gn, gm, gf, gt
 
 
 class CompiledClassifier:
@@ -299,6 +342,8 @@ class GenomeAnnotation:
 
     @classmethod
     def from_compiled_index(cls, path):
+        cls.logger.info(f"loading compiled index from '{path}'")
+
         cdf_path, cclass_path = CompiledClassifier.get_filenames(path)
         t0 = time()
         cdf = pd.read_csv(cdf_path, sep="\t")
@@ -315,6 +360,7 @@ class GenomeAnnotation:
 
     @classmethod
     def from_GTF(cls, gtf, df_cache=""):
+        cls.logger.info(f"loading GTF from '{gtf}'")
         # load GTF the first time. Need to build compiled annotation
         t0 = time()
         df = load_GTF(gtf)
@@ -330,6 +376,7 @@ class GenomeAnnotation:
 
     @classmethod
     def from_uncompiled_df(cls, path):
+        cls.logger.info(f"loading from uncompiled df '{path}'")
         t0 = time()
         df = pd.read_csv(path, sep="\t")
         dt = time() - t0
@@ -372,6 +419,8 @@ class GenomeAnnotation:
         return self.processor(idx)
 
     def compile(self, path=""):
+        self.logger.info(f"compiling to '{path}'...")
+
         chroms = []
         strands = []
         cstarts = []
@@ -401,16 +450,19 @@ class GenomeAnnotation:
             dict(chrom=chroms, strand=strands, start=cstarts, end=cends, cid=cids)
         )
         dt = time() - t0
-        self.logger.debug(f"decomposed original GTF annotation in {dt:.3f} seconds")
+        self.logger.debug(
+            f"decomposed original GTF annotation in {dt:.3f} seconds. Pre-classifying all disjunct combinations..."
+        )
 
         # pre-classify all unique feature combinations
         classifications = []
         t0 = time()
         for n, idx in enumerate(cidx):
             res = self.processor(idx)
+            # classifications.append(overlaps_to_tags(res))
             classifications.append(res)
 
-        ## Turn into np.array to turn lookup into super-fast array index operation
+        ## Turn into np.array to make lookup a super-fast array index operation
         classifications = np.array(classifications, dtype=object)
         dt = time() - t0
         self.logger.debug(
@@ -433,7 +485,7 @@ class GenomeAnnotation:
 
         return gc
 
-    def annotate_BAM(self, src, out, antisense=False, interval=5):
+    def annotate_BAM(self, src, out, antisense=False, interval=5, repeat=5):
         import pysam
 
         as_strand = {"+": "-", "-": "+"}
@@ -441,35 +493,41 @@ class GenomeAnnotation:
             f"beginning BAM annotation: {src} -> {out}. is_compiled={self.is_compiled}"
         )
         bam = pysam.AlignmentFile(src)
-        out = pysam.AlignmentFile(out, "wbu", template=bam)
+        out = pysam.AlignmentFile(out, "wbu", template=bam, threads=8)
         t0 = time()
         T = interval
-        for n, read in enumerate(bam.fetch(until_eof=True)):
-            if not read.is_unmapped:
-                chrom = bam.get_reference_name(read.tid)
-                strand = "-" if read.is_reverse else "+"
+        n: str = 0
+        for read in bam.fetch(until_eof=True):
+            for i in range(repeat):
+                n += 1
+                if not read.is_unmapped:
+                    chrom = bam.get_reference_name(read.tid)
+                    strand = "-" if read.is_reverse else "+"
 
-                gf, gn, gs, gt = self.query_blocks(chrom, strand, read.get_blocks())
-                if antisense:
-                    gf_as, gn_as, gs_as, gt_as = self.query_blocks(
-                        chrom, as_strand[strand], read.get_blocks()
-                    )
-                    gf += gf_as
-                    gn += gn_as
-                    gs += gs_as
-                    gt += gt_as
+                    # isoform_overlaps = self.query_blocks(
+                    #     chrom, strand, read.get_blocks()
+                    # )
+                    # gn, gm, gf, gt = overlaps_to_tags(isoform_overlaps)
+                    gn, gm, gf, gt = self.query_blocks(chrom, strand, read.get_blocks())
+                    if antisense:
+                        gf_as, gn_as, gm_as, gt_as = self.query_blocks(
+                            chrom, as_strand[strand], read.get_blocks()
+                        )
+                        gf += gf_as
+                        gn += gn_as
+                        gm += gm_as
+                        gt += gt_as
 
-                if len(gf):
-                    read.tags += [
-                        ("gF", ",".join(gf)),
-                        ("gN", ",".join(gn)),
-                        ("gS", ",".join(gs)),
-                        ("gT", ",".join(gt)),
-                    ]
-                else:
-                    read.tags += [("gF", "INTERGENIC")]
+                    if len(gf):
+                        read.set_tag("gF", ",".join(gf))
+                        read.set_tag("gN", ",".join(gn))
+                        read.set_tag("gM", ",".join(gm))
+                        read.set_tag("gT", ",".join(gt))
+                    else:
+                        read.set_tag("gF", "INTERGENIC")
 
-            out.write(read)
+                out.write(read)
+
             dt = time() - t0
             if dt > T:
                 self.logger.info(
@@ -482,12 +540,18 @@ class GenomeAnnotation:
         )
 
 
-if __name__ == "__main__":
+def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--gtf",
         required=True,
         help="path to the original annotation (e.g. gencodev38.gtf.gz)",
+    )
+    parser.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="repeat each read n times (for benchmarking purposes)",
     )
     parser.add_argument(
         "--tabular",
@@ -496,6 +560,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--compiled",
+        default="",
         help="path to keep a compiled version of the GTF in (used as cache)",
     )
     parser.add_argument(
@@ -517,13 +582,15 @@ if __name__ == "__main__":
         help="emulate dropseqtools behavior",
     )
 
-    parser.add_argument("--bam-in", help="path for the input BAM to be tagged")
-    parser.add_argument(
-        "--bam-out",
-        help="path for the tagged BAM output",
-    )
+    parser.add_argument("--bam-in", default="", help="path to the input BAM")
+    parser.add_argument("--bam-out", default="", help="path for the tagged BAM output")
     args = parser.parse_args()
 
+    return args
+
+
+def main(args):
+    logger = logging.getLogger("annotator")
     if CompiledClassifier.files_exist(args.compiled) and args.use_compiled:
         ga = GenomeAnnotation.from_compiled_index(args.compiled)
 
@@ -532,9 +599,20 @@ if __name__ == "__main__":
 
     else:
         ga = GenomeAnnotation.from_GTF(args.gtf, df_cache=args.tabular)
-
     # perform compilation if that's what we want
     if not ga.is_compiled and args.use_compiled:
         ga = ga.compile(args.compiled)
 
-    ga.annotate_BAM(args.bam_in, args.bam_out, antisense=args.antisense)
+    if args.bam_in:
+        ga.annotate_BAM(
+            args.bam_in, args.bam_out, antisense=args.antisense, repeat=args.repeat
+        )
+
+
+def cmdline():
+    args = parse_args()
+    main(args)
+
+
+if __name__ == "__main__":
+    cProfile.run("cmdline()", "prof_stats")
