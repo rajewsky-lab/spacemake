@@ -652,11 +652,12 @@ def quality_trim_read2(reads, min_qual=20, phred_base=33, min_len=18):
         end = len(seq2)
         qual = np.array(bytearray(qual2.encode("ASCII"))) - phred_base
         qtrim = qual >= min_qual
-        if qtrim.sum():
-            new_end = end - (qtrim[::-1]).argmax()
-            if new_end != end:
-                qual2 = qual2[:new_end]
-                seq2 = seq2[:new_end]
+        new_end = end - (qtrim[::-1]).argmax()
+
+        # TODO: yield A3,T3 adapter-trimming tags
+        if new_end != end:
+            qual2 = qual2[:new_end]
+            seq2 = seq2[:new_end]
 
         if len(seq2) >= min_len:
             yield (name1, seq1, name2, seq2, qual2)

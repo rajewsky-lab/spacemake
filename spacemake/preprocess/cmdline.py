@@ -9,6 +9,7 @@ from spacemake.preprocess.fastq import (
     setup_logging,
     main_combinatorial,
     main_dropseq,
+    # main_bulk
 )
 
 from spacemake.parallel import ExceptionLogging
