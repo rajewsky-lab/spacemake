@@ -14,6 +14,7 @@ from collections import defaultdict, OrderedDict, deque, namedtuple
 from dataclasses import dataclass
 import typing
 import cProfile
+import pysam
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -73,9 +74,16 @@ def load_GTF(
         ]
         data.append(row)
 
-    return pd.DataFrame(
+    df = pd.DataFrame(
         data, columns=["chrom", "feature", "start", "end", "strand"] + attributes
     ).drop_duplicates()
+
+    df["feature_flag"] = df["feature"].apply(lambda x: feat2flag[x])
+    df["transcript_type"] = df["transcript_type"].apply(
+        lambda t: abbreviations.get(t, t)
+    )
+
+    return df
 
 
 feat2flag = {
@@ -86,21 +94,41 @@ feat2flag = {
 }
 
 # idea: encode as bitmask. Sense (low nibble) and antisense (high nibble) sense would both fit into one byte!
+# default_map = {
+#     # CDS UTR exon transcript-> gm, gf tag values
+#     0b1011: ("exon", "cds"),
+#     # This should not arise! Unless, isoforms-are merged
+#     0b1111: ("exon", "cds_utr"),
+#     0b0111: ("exon", "utr"),
+#     0b0011: ("exon", "nc"),
+#     0b1001: ("intron", "cds"),
+#     0b0101: ("intron", "utr"),
+#     0b0001: ("intron", "nc"),
+#     0b0000: ("intergenic", "n/a"),
+# }
 default_map = {
     # CDS UTR exon transcript-> gm, gf tag values
-    0b1011: ("exon", "cds"),
+    0b1011: "C",  # CDS exon
     # This should not arise! Unless, isoforms-are merged
-    0b1111: ("exon", "cds_utr"),
-    0b0111: ("exon", "utr"),
-    0b0011: ("exon", "nc"),
-    0b1001: ("intron", "cds"),
-    0b0101: ("intron", "utr"),
-    0b0001: ("intron", "nc"),
-    0b0000: ("intergenic", "n/a"),
+    0b1111: "CU",  # CDS and UTR exon
+    0b0111: "U",  # UTR exon
+    0b0011: "N",  # exon of a non-coding transcript
+    0b1001: "I",  # intron
+    0b0101: "I",
+    0b0001: "I",
+    0b0000: "-",  # intergenic
 }
 default_lookup = np.array(
-    [default_map.get(i, ("undefined", "n/a")) for i in np.arange(256)], dtype=object
+    [default_map.get(i, "?") for i in np.arange(256)], dtype=object
 )
+abbreviations = {
+    "protein_coding": "c",
+    "processed_transcript": "t",
+    "processed_pseudogene": "p",
+    "lncRNA": "l",
+    "nonsense_mediated_decay": "n",
+    "retained_intron": "i",
+}
 
 
 @dataclass
@@ -135,7 +163,6 @@ class GTFClassifier:
         for i, h in enumerate(hierarchy):
             self.prio[h] = i
 
-        df["feature_flag"] = df["feature"].apply(lambda x: feat2flag[x])
         self.df_columns = df.columns
         self.df = df.values
         self.df_core = df[
@@ -172,21 +199,19 @@ class GTFClassifier:
 def overlaps_to_tags(isoform_overlaps: dict, flags_lookup=default_lookup) -> tuple:
     tags = set()
     for transcript_id, info in isoform_overlaps.items():
-        _gm, _gf = flags_lookup[info.flags]
+        _gf = flags_lookup[info.flags]
         # print(f">> {transcript_id} => {info.flags:04b} => {_gm} {_gf}")
-        tags.add((info.gene_name, _gm, _gf, info.transcript_type))
+        tags.add((info.gene_name, _gf, info.transcript_type))
 
     gn = []
-    gm = []
     gf = []
     gt = []
-    for n, m, f, t in tags:
+    for n, f, t in tags:
         gn.append(n)
-        gm.append(m)
         gf.append(f)
         gt.append(t)
 
-    return gn, gm, gf, gt
+    return gn, gf, gt
 
 
 class CompiledClassifier:
@@ -213,7 +238,6 @@ class CompiledClassifier:
         seen = set()
         gf = []
         gn = []
-        gs = []
         gt = []
         for i in tuple(cidx):
             cid = self.cid_table[i]
@@ -222,10 +246,9 @@ class CompiledClassifier:
                     seen.add(ann)
                     gf.append(ann[0])
                     gn.append(ann[1])
-                    gs.append(ann[2])
-                    gt.append(ann[3])
+                    gt.append(ann[2])
 
-        return gf, gn, gs, gt
+        return gf, gn, gt
 
     def process(self, cidx):
         # fast path
@@ -244,7 +267,8 @@ def query(nc, x0, x1):
     (start, end, id) tuples returned by NCLS.find_overlap().
     format is frozenset bc that can be hashed and used as a key.
     """
-    return frozenset((o[2] for o in nc.find_overlap(x0, x1)))
+    # return frozenset((o[2] for o in nc.find_overlap(x0, x1)))
+    return [o[2] for o in nc.find_overlap(x0, x1)]
 
 
 def decompose(nc):
@@ -279,7 +303,7 @@ def decompose(nc):
 
     # since we sorted, the first must be a start position
     last_pos = breakpoints[0]
-    last_key = query(nc, last_pos, last_pos + 1)
+    last_key = frozenset(query(nc, last_pos, last_pos + 1))
     for bp in breakpoints[1:]:
         # depending on wether this is another start or
         # end position, the transition point can be off by one nt
@@ -289,7 +313,7 @@ def decompose(nc):
             if bp + x <= last_pos:
                 continue
 
-            key = query(nc, bp + x, bp + x + 1)
+            key = frozenset(query(nc, bp + x, bp + x + 1))
             if key != last_key:
                 if len(last_key):
                     # ensure we do not yield the empty set
@@ -322,17 +346,18 @@ class GenomeAnnotation:
 
         # find all unique combinations of chrom + strand
         strands = df[["chrom", "strand"]].drop_duplicates().values
-        self.strand_keys = [tuple(s) for s in strands]
+        self.strand_keys = []
         self.strand_map = {}
-        self.empty = frozenset([])
+        self.empty = []  # frozenset([])
 
         t0 = time()
-        for strand_key in sorted(self.strand_keys):
-            chrom, strand = strand_key
+        for chrom, strand in df[["chrom", "strand"]].drop_duplicates().values:
+            strand_key = chrom + strand
 
             d = df.query(f"chrom == '{chrom}' and strand == '{strand}'")
             nested_list = ncls.NCLS(d["start"], d["end"], d.index)
             self.strand_map[strand_key] = nested_list
+            self.strand_keys.append(strand_key)
 
         dt = time() - t0
         self.logger.info(
@@ -397,18 +422,19 @@ class GenomeAnnotation:
             assert idx.max() < len(df)
 
     def query_idx(self, chrom, start, end, strand):
-        strand_key = (chrom, strand)
-        if not strand_key in self.strand_map:
+        strand_key = chrom + strand
+        nested_list = self.strand_map.get(strand_key, [])
+        if nested_list:
+            return query(nested_list, start, end)
+        else:
             return self.empty
 
-        nested_list = self.strand_map[strand_key]
-        return query(nested_list, start, end)
-
     def query_idx_blocks(self, chrom, strand, blocks):
-        idx = set()
+        idx = []
         for start, end in blocks:
-            idx |= self.query_idx(chrom, start, end, strand)
-        return frozenset(idx)
+            idx.extend(self.query_idx(chrom, start, end, strand))
+
+        return idx
 
     def query(self, chrom, start, end, strand):
         idx = self.query_idx(chrom, start, end, strand)
@@ -431,7 +457,8 @@ class GenomeAnnotation:
 
         t0 = time()
         for strand_key, nc in self.strand_map.items():
-            chrom, strand = strand_key
+            chrom = strand_key[:-1]
+            strand = strand_key[-1]
             self.logger.info(f"decomposing {chrom} {strand}")
             for start, end, idx in decompose(nc):
                 # print(f"start={start} end={end} idx={idx}")
@@ -459,7 +486,7 @@ class GenomeAnnotation:
         t0 = time()
         for n, idx in enumerate(cidx):
             res = self.processor(idx)
-            # classifications.append(overlaps_to_tags(res))
+            # classifications.append(to_tags(res))
             classifications.append(res)
 
         ## Turn into np.array to make lookup a super-fast array index operation
@@ -485,59 +512,25 @@ class GenomeAnnotation:
 
         return gc
 
-    def annotate_BAM(self, src, out, antisense=False, interval=5, repeat=5):
-        import pysam
+    def get_annotation_tags(self, chrom: str, strand: str, blocks, antisense=False):
+        def collapse_tag_values(values):
+            if len(set(values)) == 1:
+                return [
+                    values[0],
+                ]
+            else:
+                return values
 
-        as_strand = {"+": "-", "-": "+"}
-        self.logger.info(
-            f"beginning BAM annotation: {src} -> {out}. is_compiled={self.is_compiled}"
-        )
-        bam = pysam.AlignmentFile(src)
-        out = pysam.AlignmentFile(out, "wbu", template=bam, threads=8)
-        t0 = time()
-        T = interval
-        n: str = 0
-        for read in bam.fetch(until_eof=True):
-            for i in range(repeat):
-                n += 1
-                if not read.is_unmapped:
-                    chrom = bam.get_reference_name(read.tid)
-                    strand = "-" if read.is_reverse else "+"
+        gn, gf, gt = self.query_blocks(chrom, strand, blocks)
+        if antisense:
+            gn_as, gf_as, gt_as = self.query_blocks(
+                chrom, as_strand[strand], read.get_blocks()
+            )
+            gn += gn_as
+            gf += gf_as
+            gt += gt_as
 
-                    # isoform_overlaps = self.query_blocks(
-                    #     chrom, strand, read.get_blocks()
-                    # )
-                    # gn, gm, gf, gt = overlaps_to_tags(isoform_overlaps)
-                    gn, gm, gf, gt = self.query_blocks(chrom, strand, read.get_blocks())
-                    if antisense:
-                        gf_as, gn_as, gm_as, gt_as = self.query_blocks(
-                            chrom, as_strand[strand], read.get_blocks()
-                        )
-                        gf += gf_as
-                        gn += gn_as
-                        gm += gm_as
-                        gt += gt_as
-
-                    if len(gf):
-                        read.set_tag("gF", ",".join(gf))
-                        read.set_tag("gN", ",".join(gn))
-                        read.set_tag("gM", ",".join(gm))
-                        read.set_tag("gT", ",".join(gt))
-                    else:
-                        read.set_tag("gF", "INTERGENIC")
-
-                out.write(read)
-
-            dt = time() - t0
-            if dt > T:
-                self.logger.info(
-                    f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
-                )
-                T += interval
-
-        self.logger.info(
-            f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
-        )
+        return collapse_tag_values(gn), gf, collapse_tag_values(gt)
 
 
 def parse_args():
@@ -589,6 +582,102 @@ def parse_args():
     return args
 
 
+def chunks_from_BAM(bam, repeat=1, interval=5, chunk_size=1):
+    import pysam
+
+    # as_strand = {"+": "-", "-": "+"}
+    logger = logging.getLogger("chunks_from_BAM")
+
+    t0 = time()
+    T = interval
+    n: str = 0
+
+    tid_cache = {}
+
+    def get_reference_name(tid):
+        if not tid in tid_cache:
+            tid_cache[tid] = bam.get_reference_name(tid)
+        return tid_cache[tid]
+
+    reads_chunk = []
+    blocks_chunk = []
+    for read in bam.fetch(until_eof=True):
+        n += 1
+        reads_chunk.append(read)
+        if read.is_unmapped:
+            blocks_chunk.append(None)
+        else:
+            chrom = get_reference_name(read.tid)
+            strand = "-" if read.is_reverse else "+"
+            blocks_chunk.append((chrom, strand, read.get_blocks()))
+
+        if len(reads_chunk) >= chunk_size:
+            yield reads_chunk, blocks_chunk
+            reads_chunk = []
+            blocks_chunk = []
+
+        dt = time() - t0
+        if dt > T:
+            logger.info(
+                f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
+            )
+            T += interval
+
+    logger.info(
+        f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
+    )
+
+
+def process_BAM_linear(bam, ga, out, repeat=1, interval=5):
+    import pysam
+
+    # as_strand = {"+": "-", "-": "+"}
+    logger = logging.getLogger("chunks_from_BAM")
+
+    t0 = time()
+    T = interval
+    n: str = 0
+
+    tid_cache = {}
+
+    def get_reference_name(tid):
+        if not tid in tid_cache:
+            tid_cache[tid] = bam.get_reference_name(tid)
+        return tid_cache[tid]
+
+    for read in bam.fetch(until_eof=True):
+        n += 1
+        gn_val = None
+        gf_val = "-"
+        gt_val = None
+        if not read.is_unmapped:
+            chrom = get_reference_name(read.tid)
+            strand = "-" if read.is_reverse else "+"
+            gn, gf, gt = ga.get_annotation_tags(chrom, strand, read.get_blocks())
+            if len(gf):
+                gn_val = ",".join(gn)
+                gf_val = ",".join(gf)
+                gt_val = ",".join(gt)
+
+        read.set_tag("gn", gn_val)
+        read.set_tag("gf", gf_val)
+        read.set_tag("gt", gt_val)
+        read.set_tag("XF", None)
+        read.set_tag("gs", None)
+        out.write(read)
+
+        dt = time() - t0
+        if dt > T:
+            logger.info(
+                f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
+            )
+            T += interval
+
+    logger.info(
+        f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
+    )
+
+
 def main(args):
     logger = logging.getLogger("annotator")
     if CompiledClassifier.files_exist(args.compiled) and args.use_compiled:
@@ -599,14 +688,35 @@ def main(args):
 
     else:
         ga = GenomeAnnotation.from_GTF(args.gtf, df_cache=args.tabular)
+
     # perform compilation if that's what we want
     if not ga.is_compiled and args.use_compiled:
         ga = ga.compile(args.compiled)
 
-    if args.bam_in:
-        ga.annotate_BAM(
-            args.bam_in, args.bam_out, antisense=args.antisense, repeat=args.repeat
-        )
+    if not args.bam_in:
+        return
+
+    logger.info(f"beginning BAM annotation: {args.bam_in} -> {args.bam_out}.")
+    bam = pysam.AlignmentFile(args.bam_in, threads=2)
+    out = pysam.AlignmentFile(args.bam_out, "wb", template=bam, threads=8)
+
+    process_BAM_linear(bam, ga, out, repeat=args.repeat)
+    # for read_chunk, block_chunk in chunks_from_BAM(bam):
+    #     for read, aln in zip(read_chunk, block_chunk):
+    #         read.set_tag("XF", None)
+    #         read.set_tag("gs", None)
+    #         if aln:
+    #             gn, gf, gt = ga.get_annotation_tags(*aln)
+    #             if len(gf):
+    #                 read.set_tag("gn", ",".join(gn))
+    #                 read.set_tag("gf", ",".join(gf))
+    #                 read.set_tag("gt", ",".join(gt))
+    #             else:
+    #                 read.set_tag("gn", None)
+    #                 read.set_tag("gf", "-")
+    #                 read.set_tag("gt", None)
+
+    #         out.write(read)
 
 
 def cmdline():
@@ -615,4 +725,5 @@ def cmdline():
 
 
 if __name__ == "__main__":
-    cProfile.run("cmdline()", "prof_stats")
+    cmdline()
+    # cProfile.run("cmdline()", "prof_stats")
