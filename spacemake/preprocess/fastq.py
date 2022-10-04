@@ -24,6 +24,7 @@ from spacemake.parallel import (
     join_with_empty_queues,
     chunkify,
     ExceptionLogging,
+    log_qerr,
 )
 from spacemake.util import read_fq
 
@@ -523,11 +524,11 @@ def process_combinatorial(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
         bccounts2.append(bc2_matcher.bc_count)
 
 
-def log_qerr(qerr):
-    "helper function for reporting errors in sub processes"
-    for name, lines in qerr:
-        for line in lines:
-            logging.error(f"subprocess {name} exception {line}")
+# def log_qerr(qerr):
+#     "helper function for reporting errors in sub processes"
+#     for name, lines in qerr:
+#         for line in lines:
+#             logging.error(f"subprocess {name} exception {line}")
 
 
 def main_combinatorial(args):

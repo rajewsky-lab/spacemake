@@ -7,6 +7,13 @@ import logging
 import time
 
 
+def log_qerr(qerr):
+    "helper function for reporting errors in sub processes"
+    for name, lines in qerr:
+        for line in lines:
+            logging.error(f"subprocess {name} exception {line}")
+
+
 def put_or_abort(Q, item, abort_flag, timeout=1):
     """
     Small wrapper around queue.put() to prevent

@@ -15,8 +15,91 @@ from dataclasses import dataclass
 import typing
 import cProfile
 import pysam
+import multiprocessing as mp
 
-logging.basicConfig(level=logging.DEBUG)
+from spacemake.parallel import (
+    put_or_abort,
+    queue_iter,
+    join_with_empty_queues,
+    chunkify,
+    ExceptionLogging,
+)
+
+
+def order_results(res_queue, abort_flag, logger):
+    import heapq
+    import time
+
+    heap = []
+    n_chunk_needed = 0
+    t0 = time.time()
+    t1 = t0
+    n_rec = 0
+
+    for n_chunk, results in queue_iter(res_queue, abort_flag):
+        heapq.heappush(heap, (n_chunk, results))
+
+        # as long as the root of the heap is the next needed chunk
+        # pass results on to storage
+        while heap and (heap[0][0] == n_chunk_needed):
+            n_chunk, results = heapq.heappop(heap)  # retrieves heap[0]
+            for record in results:
+                # print("record in process_ordered_results", record)
+                yield record
+                n_rec += 1
+
+            n_chunk_needed += 1
+
+        # debug output on average throughput
+        t2 = time.time()
+        if t2 - t1 > 30:
+            dT = t2 - t0
+            rate = n_rec / dT
+            logger.info(
+                "processed {0} records in {1:.0f} seconds (average {2:.0f} reads/second).".format(
+                    n_rec, dT, rate
+                )
+            )
+            t1 = t2
+
+    # by the time None pops from the queue, all chunks
+    # should have been processed!
+    if not abort_flag.value:
+        assert len(heap) == 0
+    else:
+        logger.warning(
+            f"{len(heap)} chunks remained on the heap due to missing data upon abort."
+        )
+
+    dT = time.time() - t0
+    logger.info(
+        "finished processing {0} records in {1:.0f} seconds (average {2:.0f} reads/second)".format(
+            n_rec, dT, n_rec / dT
+        )
+    )
+
+
+def merge_annotations_with_BAM(bam_in, bam_out, bam_mode, Qres, Qerr, abort_flag):
+    with ExceptionLogging(
+        "spacemake.annotator.order_results", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
+        logger = el.logger
+        logger.info(f"beginning BAM annotation: {bam_in} -> {bam_out}.")
+        bam = pysam.AlignmentFile(bam_in, threads=2)
+        out = pysam.AlignmentFile(bam_out, f"w{bam_mode}", template=bam, threads=8)
+
+        for read, annotation in zip(
+            bam.fetch(until_eof=True), order_results(Qres, abort_flag, logger=el.logger)
+        ):
+            # set BAM tags and write
+            (n_read, qname, gn_val, gf_val, gt_val) = annotation
+            # assert qname == read.query_name
+            read.set_tag("gn", gn_val)
+            read.set_tag("gf", gf_val)
+            read.set_tag("gt", gt_val)
+            read.set_tag("XF", None)
+            read.set_tag("gs", None)
+            out.write(read)
 
 
 def attr_to_dict(attr_str: str) -> dict:
@@ -94,18 +177,6 @@ feat2flag = {
 }
 
 # idea: encode as bitmask. Sense (low nibble) and antisense (high nibble) sense would both fit into one byte!
-# default_map = {
-#     # CDS UTR exon transcript-> gm, gf tag values
-#     0b1011: ("exon", "cds"),
-#     # This should not arise! Unless, isoforms-are merged
-#     0b1111: ("exon", "cds_utr"),
-#     0b0111: ("exon", "utr"),
-#     0b0011: ("exon", "nc"),
-#     0b1001: ("intron", "cds"),
-#     0b0101: ("intron", "utr"),
-#     0b0001: ("intron", "nc"),
-#     0b0000: ("intergenic", "n/a"),
-# }
 default_map = {
     # CDS UTR exon transcript-> gm, gf tag values
     0b1011: "C",  # CDS exon
@@ -117,6 +188,15 @@ default_map = {
     0b0101: "I",
     0b0001: "I",
     0b0000: "-",  # intergenic
+    ## TODO: Antisense is shifted left by 4 bits and uses lower-case letters
+    0b10110000: "c",  # CDS exon (antisense)
+    # This should not arise! Unless, isoforms-are merged
+    0b11110000: "cu",  # CDS and UTR exon (antisense)
+    0b01110000: "u",  # UTR exon (antisense)
+    0b00110000: "n",  # exon of a non-coding transcript (antisense)
+    0b10010000: "i",  # intron (antisense)
+    0b01010000: "i",  # (antisense)
+    0b00010000: "i",  # (antisense)
 }
 default_lookup = np.array(
     [default_map.get(i, "?") for i in np.arange(256)], dtype=object
@@ -537,14 +617,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--gtf",
-        required=True,
+        default=None,
         help="path to the original annotation (e.g. gencodev38.gtf.gz)",
-    )
-    parser.add_argument(
-        "--repeat",
-        type=int,
-        default=1,
-        help="repeat each read n times (for benchmarking purposes)",
     )
     parser.add_argument(
         "--tabular",
@@ -553,78 +627,122 @@ def parse_args():
     )
     parser.add_argument(
         "--compiled",
-        default="",
+        default=None,
         help="path to keep a compiled version of the GTF in (used as cache)",
     )
+    # parser.add_argument(
+    #     "--repeat",
+    #     type=int,
+    #     default=1,
+    #     help="repeat each read n times (for benchmarking purposes)",
+    # )
     parser.add_argument(
-        "--use-compiled",
-        default=False,
-        action="store_true",
-        help="enable using the compiled version of GenomeAnnotation (faster)",
+        "--parallel",
+        type=int,
+        default=4,
+        help="how many parallel annotation processes to create (default=4)",
     )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=10000,
+        help="how many BAM-records form a chunk for parallel processing (default=10000)",
+    )
+    # parser.add_argument(
+    #     "--use-compiled",
+    #     default=False,
+    #     action="store_true",
+    #     help="enable using the compiled version of GenomeAnnotation (faster)",
+    # )
     parser.add_argument(
         "--antisense",
         default=False,
         action="store_true",
         help="enable annotating against the opposite strand (antisense to the alignment) as well",
     )
-    parser.add_argument(
-        "--dropseqtools",
-        default=False,
-        action="store_true",
-        help="emulate dropseqtools behavior",
-    )
+    # parser.add_argument(
+    #     "--dropseqtools",
+    #     default=False,
+    #     action="store_true",
+    #     help="emulate dropseqtools behavior",
+    # )
 
     parser.add_argument("--bam-in", default="", help="path to the input BAM")
     parser.add_argument("--bam-out", default="", help="path for the tagged BAM output")
+    parser.add_argument(
+        "--bam-mode", default="b", help="mode of the output BAM file (default=b)"
+    )
     args = parser.parse_args()
 
     return args
 
 
-def chunks_from_BAM(bam, repeat=1, interval=5, chunk_size=1):
+def annotation_chunks_from_BAM(
+    bam_in, compiled_annotation, rr_n=0, rr_i=0, chunk_size=100
+):
     import pysam
 
     # as_strand = {"+": "-", "-": "+"}
-    logger = logging.getLogger("chunks_from_BAM")
+    logger = logging.getLogger("interval_chunks_from_BAM")
+    ga = GenomeAnnotation.from_compiled_index(compiled_annotation)
 
     t0 = time()
-    T = interval
-    n: str = 0
-
+    T = 5
     tid_cache = {}
+
+    bam = pysam.AlignmentFile(bam_in, threads=2)
 
     def get_reference_name(tid):
         if not tid in tid_cache:
             tid_cache[tid] = bam.get_reference_name(tid)
         return tid_cache[tid]
 
-    reads_chunk = []
-    blocks_chunk = []
+    n_read = 0
+    n_chunk = 0
+    n_in_chunk = 0
+    chunk = []
     for read in bam.fetch(until_eof=True):
-        n += 1
-        reads_chunk.append(read)
-        if read.is_unmapped:
-            blocks_chunk.append(None)
+        if rr_n:
+            rr = n_chunk % rr_n
         else:
-            chrom = get_reference_name(read.tid)
-            strand = "-" if read.is_reverse else "+"
-            blocks_chunk.append((chrom, strand, read.get_blocks()))
+            rr = 0
+        if rr == rr_i:
+            gn_val = None
+            gf_val = "-"
+            gt_val = None
+            if not read.is_unmapped:
+                chrom = get_reference_name(read.tid)
+                strand = "-" if read.is_reverse else "+"
+                gn, gf, gt = ga.get_annotation_tags(chrom, strand, read.get_blocks())
+                if len(gf):
+                    gn_val = ",".join(gn)
+                    gf_val = ",".join(gf)
+                    gt_val = ",".join(gt)
 
-        if len(reads_chunk) >= chunk_size:
-            yield reads_chunk, blocks_chunk
-            reads_chunk = []
-            blocks_chunk = []
+            chunk.append((n_read, read.query_name, gn_val, gf_val, gt_val))
+
+        n_read += 1
+        n_in_chunk += 1
+        if n_in_chunk >= chunk_size:
+            if rr == rr_i:
+                yield n_chunk, chunk
+
+            chunk = []
+            n_in_chunk = 0
+            n_chunk += 1
 
         dt = time() - t0
         if dt > T:
             logger.info(
-                f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
+                f"processed {n_read} alignments in {dt:.2f} seconds ({n_read/dt:.2f} reads/second)"
             )
-            T += interval
+            T += 5
+
+    if chunk:
+        yield n_chunk, chunk
 
     logger.info(
-        f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
+        f"processed {n_read} alignments in {dt:.2f} seconds ({n_read/dt:.2f} reads/second)"
     )
 
 
@@ -678,21 +796,103 @@ def process_BAM_linear(bam, ga, out, repeat=1, interval=5):
     )
 
 
-def main(args):
-    logger = logging.getLogger("annotator")
+def build_compiled_annotation(args):
+    logger = logging.getLogger("spacemake.annotator.build_compiled_annotation")
     if CompiledClassifier.files_exist(args.compiled) and args.use_compiled:
-        ga = GenomeAnnotation.from_compiled_index(args.compiled)
+        logger.warning(
+            "already found a compiled annotation. use --force-overwrite to overwrite"
+        )
+        # ga = GenomeAnnotation.from_compiled_index(args.compiled)
+        if not args.force_overwrite:
+            return
 
-    elif args.tabular and os.access(args.tabular, os.R_OK):
+    if args.tabular and os.access(args.tabular, os.R_OK):
         ga = GenomeAnnotation.from_uncompiled_df(args.tabular)
-
     else:
         ga = GenomeAnnotation.from_GTF(args.gtf, df_cache=args.tabular)
 
-    # perform compilation if that's what we want
-    if not ga.is_compiled and args.use_compiled:
-        ga = ga.compile(args.compiled)
+    ga = ga.compile(args.compiled)
+    return ga
 
+
+def round_robin_worker(
+    bam_in, compiled_annotation, Qres, Qerr, rr_n, rr_i, abort_flag, chunk_size
+):
+    with ExceptionLogging(f"worker_{rr_i}", Qerr=Qerr, exc_flag=abort_flag) as el:
+        el.logger.debug(
+            f"round_robin_worker {rr_i}/{rr_n} starting up with Qres={Qres}"
+        )
+
+        for n_chunk, data in annotation_chunks_from_BAM(
+            bam_in, compiled_annotation, rr_n=rr_n, rr_i=rr_i, chunk_size=chunk_size
+        ):
+            Qres.put((n_chunk, data))
+
+
+def annotate_BAM_parallel(args):
+    Qres = mp.Queue()  # extracted BCs from process_combinatorial->collector
+    Qerr = mp.Queue()  # child-processes can report errors back to the main process here
+
+    # Proxy objects to allow workers to report statistics about the run
+    manager = mp.Manager()
+    abort_flag = mp.Value("b")
+    abort_flag.value = False
+    # Ns = manager.list()
+    # cb_counts = manager.list()
+    # stat_lists = [Ns, cb_counts]
+
+    with ExceptionLogging("annotate_BAM_parallel", exc_flag=abort_flag) as el:
+        # each worker opens the BAM independently and process chunks in round-
+        # robin fashion. Puts annotation tag values on the results Queue
+        workers = []
+        for i in range(args.parallel):
+            w = mp.Process(
+                target=round_robin_worker,
+                name=f"worker_{i}",
+                args=(
+                    args.bam_in,
+                    args.compiled,
+                    Qres,
+                    Qerr,
+                    args.parallel,
+                    i,
+                    abort_flag,
+                    args.chunk_size,
+                ),
+            )
+            w.start()
+            workers.append(w)
+
+        el.logger.info("Started workers")
+        collector = mp.Process(
+            target=merge_annotations_with_BAM,
+            name="output",
+            args=(args.bam_in, args.bam_out, args.bam_mode, Qres, Qerr, abort_flag),
+        )
+        collector.start()
+        el.logger.info("Started collector")
+
+        for w in workers:
+            # make sure all results are on Qres by waiting for
+            # workers to exit. Or, empty queues if aborting.
+            qres, qerr = join_with_empty_queues(w, [Qres, Qerr], abort_flag)
+            if qres or qerr:
+                el.logger.info(f"{len(qres)} chunks were drained from Qres upon abort.")
+                log_qerr(qerr)
+
+        el.logger.info(
+            "All worker processes have joined. Signalling collector to finish."
+        )
+        # signal the collector to stop
+        Qres.put(None)
+
+        # and wait until all output has been generated
+        collector.join()
+        el.logger.info("Collector has joined. Merging worker statistics.")
+
+
+def main(args):
+    logger = logging.getLogger("annotator")
     if not args.bam_in:
         return
 
@@ -700,7 +900,13 @@ def main(args):
     bam = pysam.AlignmentFile(args.bam_in, threads=2)
     out = pysam.AlignmentFile(args.bam_out, "wb", template=bam, threads=8)
 
-    process_BAM_linear(bam, ga, out, repeat=args.repeat)
+    for chunk in interval_chunks_from_BAM(args.bam_in, args.compiled, 0, 0):
+        pass
+        # for data in chunk:
+        #     print(data)
+
+    # process_BAM_linear(bam, ga, out, repeat=args.repeat)
+
     # for read_chunk, block_chunk in chunks_from_BAM(bam):
     #     for read, aln in zip(read_chunk, block_chunk):
     #         read.set_tag("XF", None)
@@ -721,9 +927,11 @@ def main(args):
 
 def cmdline():
     args = parse_args()
-    main(args)
+    # main(args)
+    annotate_BAM_parallel(args)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     cmdline()
     # cProfile.run("cmdline()", "prof_stats")
