@@ -7,13 +7,6 @@ import logging
 import time
 
 
-def log_qerr(qerr):
-    "helper function for reporting errors in sub processes"
-    for name, lines in qerr:
-        for line in lines:
-            logging.error(f"subprocess {name} exception {line}")
-
-
 def put_or_abort(Q, item, abort_flag, timeout=1):
     """
     Small wrapper around queue.put() to prevent
@@ -97,6 +90,59 @@ def join_with_empty_queues(proc, Qs, abort_flag, timeout=1):
                 content.extend(drain(Q))
 
     return contents
+
+
+def order_results(res_queue, abort_flag, logger):
+    import heapq
+    import time
+
+    heap = []
+    n_chunk_needed = 0
+    t0 = time.time()
+    t1 = t0
+    n_rec = 0
+
+    for n_chunk, results in queue_iter(res_queue, abort_flag):
+        heapq.heappush(heap, (n_chunk, results))
+
+        # as long as the root of the heap is the next needed chunk
+        # pass results on to storage
+        while heap and (heap[0][0] == n_chunk_needed):
+            n_chunk, results = heapq.heappop(heap)  # retrieves heap[0]
+            for record in results:
+                # print("record in process_ordered_results", record)
+                yield record
+                n_rec += 1
+
+            n_chunk_needed += 1
+
+        # debug output on average throughput
+        t2 = time.time()
+        if t2 - t1 > 30:
+            dT = t2 - t0
+            rate = n_rec / dT
+            logger.info(
+                "processed {0} records in {1:.0f} seconds (average {2:.0f} reads/second).".format(
+                    n_rec, dT, rate
+                )
+            )
+            t1 = t2
+
+    # by the time None pops from the queue, all chunks
+    # should have been processed!
+    if not abort_flag.value:
+        assert len(heap) == 0
+    else:
+        logger.warning(
+            f"{len(heap)} chunks remained on the heap due to missing data upon abort."
+        )
+
+    dT = time.time() - t0
+    logger.info(
+        "finished processing {0} records in {1:.0f} seconds (average {2:.0f} reads/second)".format(
+            n_rec, dT, n_rec / dT
+        )
+    )
 
 
 def chunkify(src, n_chunk=1000):
