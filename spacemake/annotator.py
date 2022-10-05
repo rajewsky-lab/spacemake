@@ -7,10 +7,8 @@ import re
 import gzip
 import logging
 import ncls
-import itertools
-import pickle
 from time import time
-from collections import defaultdict, OrderedDict, deque, namedtuple
+from collections import defaultdict
 from dataclasses import dataclass
 import typing
 import cProfile
@@ -18,90 +16,14 @@ import pysam
 import multiprocessing as mp
 
 from spacemake.parallel import (
-    put_or_abort,
-    queue_iter,
     join_with_empty_queues,
-    chunkify,
+    order_results,
     ExceptionLogging,
+    log_qerr,
 )
+import spacemake.util as util
 
-
-def order_results(res_queue, abort_flag, logger):
-    import heapq
-    import time
-
-    heap = []
-    n_chunk_needed = 0
-    t0 = time.time()
-    t1 = t0
-    n_rec = 0
-
-    for n_chunk, results in queue_iter(res_queue, abort_flag):
-        heapq.heappush(heap, (n_chunk, results))
-
-        # as long as the root of the heap is the next needed chunk
-        # pass results on to storage
-        while heap and (heap[0][0] == n_chunk_needed):
-            n_chunk, results = heapq.heappop(heap)  # retrieves heap[0]
-            for record in results:
-                # print("record in process_ordered_results", record)
-                yield record
-                n_rec += 1
-
-            n_chunk_needed += 1
-
-        # debug output on average throughput
-        t2 = time.time()
-        if t2 - t1 > 30:
-            dT = t2 - t0
-            rate = n_rec / dT
-            logger.info(
-                "processed {0} records in {1:.0f} seconds (average {2:.0f} reads/second).".format(
-                    n_rec, dT, rate
-                )
-            )
-            t1 = t2
-
-    # by the time None pops from the queue, all chunks
-    # should have been processed!
-    if not abort_flag.value:
-        assert len(heap) == 0
-    else:
-        logger.warning(
-            f"{len(heap)} chunks remained on the heap due to missing data upon abort."
-        )
-
-    dT = time.time() - t0
-    logger.info(
-        "finished processing {0} records in {1:.0f} seconds (average {2:.0f} reads/second)".format(
-            n_rec, dT, n_rec / dT
-        )
-    )
-
-
-def merge_annotations_with_BAM(bam_in, bam_out, bam_mode, Qres, Qerr, abort_flag):
-    with ExceptionLogging(
-        "spacemake.annotator.order_results", Qerr=Qerr, exc_flag=abort_flag
-    ) as el:
-        logger = el.logger
-        logger.info(f"beginning BAM annotation: {bam_in} -> {bam_out}.")
-        bam = pysam.AlignmentFile(bam_in, threads=2)
-        out = pysam.AlignmentFile(bam_out, f"w{bam_mode}", template=bam, threads=8)
-
-        for read, annotation in zip(
-            bam.fetch(until_eof=True), order_results(Qres, abort_flag, logger=el.logger)
-        ):
-            # set BAM tags and write
-            (n_read, qname, gn_val, gf_val, gt_val) = annotation
-            # assert qname == read.query_name
-            read.set_tag("gn", gn_val)
-            read.set_tag("gf", gf_val)
-            read.set_tag("gt", gt_val)
-            read.set_tag("XF", None)
-            read.set_tag("gs", None)
-            out.write(read)
-
-
+## GTF I/O
 def attr_to_dict(attr_str: str) -> dict:
     """
     Helper for reading the GTF. Parsers the attr_str found in the GTF
@@ -161,7 +83,7 @@ def load_GTF(
         data, columns=["chrom", "feature", "start", "end", "strand"] + attributes
     ).drop_duplicates()
 
-    df["feature_flag"] = df["feature"].apply(lambda x: feat2flag[x])
+    df["feature_flag"] = df["feature"].apply(lambda x: feat2bit[x])
     df["transcript_type"] = df["transcript_type"].apply(
         lambda t: abbreviations.get(t, t)
     )
@@ -169,14 +91,20 @@ def load_GTF(
     return df
 
 
-feat2flag = {
+## Efficient representation of GTF features as bit-mask
+feat2bit = {
     "transcript": 1,
     "exon": 2,
     "UTR": 4,
     "CDS": 8,
 }
 
-# idea: encode as bitmask. Sense (low nibble) and antisense (high nibble) sense would both fit into one byte!
+# IDEA: plus (low nibble) and minus strand (high nibble) sense would both fit into one byte!
+# extracting only specific-strand features:
+#
+#   f_plus = mask & 0b1111
+#   f_minus = mask >> 4
+
 default_map = {
     # CDS UTR exon transcript-> gm, gf tag values
     0b1011: "C",  # CDS exon
@@ -211,6 +139,8 @@ abbreviations = {
 }
 
 
+## Space-efficient container of aggregating overlap information (isoform resolution)
+## TODO: find a better, more compact/faster intermediate layer
 @dataclass
 class IsoformOverlap:
     gene_name: str = "no_name"
@@ -218,6 +148,37 @@ class IsoformOverlap:
     flags: int = 0
 
 
+def overlaps_to_tags(isoform_overlaps: dict, flags_lookup=default_lookup) -> tuple:
+    """_summary_
+    Take a dictionary of transcript_id -> IsoformOverlap as input and populate annotation tuples
+
+    Args:
+        isoform_overlaps (dict): _description_
+        flags_lookup (_type_, optional): _description_. Defaults to default_lookup.
+
+    Returns:
+        tuple: gn, gf, gt (each is a list of strings n: gene names f: function t: transcript type)
+    """
+    tags = set()
+    for transcript_id, info in isoform_overlaps.items():
+        _gf = flags_lookup[info.flags]
+        # print(f">> {transcript_id} => {info.flags:04b} => {_gm} {_gf}")
+        tags.add((info.gene_name, _gf, info.transcript_type))
+
+    gn = []
+    gf = []
+    gt = []
+    for n, f, t in tags:
+        gn.append(n)
+        gf.append(f)
+        gt.append(t)
+
+    return gn, gf, gt
+
+
+# First implementation: uses the GTF features directly. Not very optimized. Mainly used to
+# build compiled annotation (see below).
+# A Classifier instance needs to be passed to GenomeAnnotation as a parameter to __init__ (see below)
 class GTFClassifier:
     """
     _summary_
@@ -248,7 +209,6 @@ class GTFClassifier:
         self.df_core = df[
             ["transcript_id", "transcript_type", "gene_name", "feature_flag"]
         ].values
-        # print(self.df)
 
     def process(self, ids: typing.Iterable[int]) -> tuple:
         """
@@ -276,24 +236,17 @@ class GTFClassifier:
         return overlaps_to_tags(isoform_overlaps)  # isoform_overlaps
 
 
-def overlaps_to_tags(isoform_overlaps: dict, flags_lookup=default_lookup) -> tuple:
-    tags = set()
-    for transcript_id, info in isoform_overlaps.items():
-        _gf = flags_lookup[info.flags]
-        # print(f">> {transcript_id} => {info.flags:04b} => {_gm} {_gf}")
-        tags.add((info.gene_name, _gf, info.transcript_type))
-
-    gn = []
-    gf = []
-    gt = []
-    for n, f, t in tags:
-        gn.append(n)
-        gf.append(f)
-        gt.append(t)
-
-    return gn, gf, gt
-
-
+## Second iteration. Here, we load already pre-compiled, unique combinations of original GTF
+# features as they occur in the genome. The beauty is that each of these "compiled" features now
+# has zero overlap with other compiled features and each of them already has the gn, gf, gt values
+# pre-evaluated ("compiled"). The only issue arises if a read overlaps multiple of these pre-compiled
+# "meta"-features. For this we need the joiner() function which aims to combine two sets of gn, gf, gt
+# values in a meaningful way. This is slow, but rare enough to leave a substantial speed boost
+# on average, when comparing to using raw GTF features directly.
+# of note, this still plugs into the same GenomeAnnotation facility (see below). It just changes the
+# meaning and number of the underlying features (from individual GTF records to combinatorial overlaps
+# these GTF records as they occur in the genome), and it also changes the processing because we no
+# longer deal with DataFrame entries but already with gn, gf, gt tuples.
 class CompiledClassifier:
     def __init__(self, df, classifications):
         self.cid_table = df["cid"].values
@@ -346,6 +299,7 @@ def query(nc, x0, x1):
     report only the target_ids from the overlapping
     (start, end, id) tuples returned by NCLS.find_overlap().
     format is frozenset bc that can be hashed and used as a key.
+    TODO: directly hook into NCLSIterator functionality to get rid of this overhead
     """
     # return frozenset((o[2] for o in nc.find_overlap(x0, x1)))
     return [o[2] for o in nc.find_overlap(x0, x1)]
@@ -405,7 +359,13 @@ def decompose(nc):
 
 class GenomeAnnotation:
     """
-    NCLS-based lookup of genome annotation
+    NCLS-based lookup of genome annotation. This is the top-level interface for the query of genomic intervals.
+    GenomeAnnotation is actually a pretty thin wrapper around NCLS for fast 1d-interval queries. The raw
+    query results are just sets of numerical ids. Interpretation of these sets is deferred to a "processor", an
+    instance of either GTFClassifier or CompiledClassifier. These take on the task of processing the raw ids
+    into tuples of gn, gf, gt.
+    Because these two layers are tightly integrated, there are convenience classmethods to construct a fully
+    functional GenomeAnnotation instance for the most common scenarios (from GTF, from compiled data, ...).
     """
 
     logger = logging.getLogger("GenomeAnnotation")
@@ -455,13 +415,13 @@ class GenomeAnnotation:
         classifications = np.load(cclass_path, allow_pickle=True)
         dt = time() - t0
         cls.logger.info(
-            f"re-read compiled annotation index with {len(cdf)} original GTF feature combinations and {len(classifications)} in {dt:.3f} seconds"
+            f"loaded compiled annotation index with {len(cdf)} original GTF feature combinations and {len(classifications)} in {dt:.3f} seconds"
         )
-        ## Create a secondary Annotator which uses the non-overlapping combinations
-        ## and the pre-classified annotations for the actual tagging
+        ## Create a classifier which uses the pre-compiled, non-overlapping combinations
+        ## and corresponding pre-computed annotation tags
         cl = CompiledClassifier(cdf, classifications)
-        gc = cls(cdf, lambda idx: cl.process(idx), is_compiled=True)
-        return gc
+        ga = cls(cdf, lambda idx: cl.process(idx), is_compiled=True)
+        return ga
 
     @classmethod
     def from_GTF(cls, gtf, df_cache=""):
@@ -525,7 +485,14 @@ class GenomeAnnotation:
         return self.processor(idx)
 
     def compile(self, path=""):
+        if self.is_compiled:
+            raise ValueError(
+                "attempting to compile an already compiled annotation. Why?? :-( "
+            )
+
         self.logger.info(f"compiling to '{path}'...")
+        if path:
+            path = util.ensure_path(path + "/")
 
         chroms = []
         strands = []
@@ -613,73 +580,68 @@ class GenomeAnnotation:
         return collapse_tag_values(gn), gf, collapse_tag_values(gt)
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--gtf",
-        default=None,
-        help="path to the original annotation (e.g. gencodev38.gtf.gz)",
-    )
-    parser.add_argument(
-        "--tabular",
-        default="",
-        help="path to tabular version of the relevant features only (e.g. gencodev38.tsv)",
-    )
-    parser.add_argument(
-        "--compiled",
-        default=None,
-        help="path to keep a compiled version of the GTF in (used as cache)",
-    )
-    # parser.add_argument(
-    #     "--repeat",
-    #     type=int,
-    #     default=1,
-    #     help="repeat each read n times (for benchmarking purposes)",
-    # )
-    parser.add_argument(
-        "--parallel",
-        type=int,
-        default=4,
-        help="how many parallel annotation processes to create (default=4)",
-    )
-    parser.add_argument(
-        "--chunk-size",
-        type=int,
-        default=10000,
-        help="how many BAM-records form a chunk for parallel processing (default=10000)",
-    )
-    # parser.add_argument(
-    #     "--use-compiled",
-    #     default=False,
-    #     action="store_true",
-    #     help="enable using the compiled version of GenomeAnnotation (faster)",
-    # )
-    parser.add_argument(
-        "--antisense",
-        default=False,
-        action="store_true",
-        help="enable annotating against the opposite strand (antisense to the alignment) as well",
-    )
-    # parser.add_argument(
-    #     "--dropseqtools",
-    #     default=False,
-    #     action="store_true",
-    #     help="emulate dropseqtools behavior",
-    # )
+def merge_annotations_from_queue_with_BAM(
+    bam_in, bam_out, bam_mode, Qres, Qerr, abort_flag
+):
+    """_summary_
+    The output generating sub-process. Iterate over the input BAM and gather the annotation tags generated by
+    parallel worker sub-processes simultaneously. Then assign the tags to the BAM records and write them to the
+    output BAM.
 
-    parser.add_argument("--bam-in", default="", help="path to the input BAM")
-    parser.add_argument("--bam-out", default="", help="path for the tagged BAM output")
-    parser.add_argument(
-        "--bam-mode", default="b", help="mode of the output BAM file (default=b)"
-    )
-    args = parser.parse_args()
+    Args:
+        bam_in (str): file name of input BAM file
+        bam_out (str): fila name of output BAM file
+        bam_mode (str): mode for output BAM. Can be used to set compression level (e.g. bu or b6)
+        Qres (mp.Queue): source for chunks of annotation data
+        Qerr (mp.Queue): in case of error, dump exception information onto this queue so that it can be
+            extracted from the main process
+        abort_flag (mp.Value): inter-process flag to indicate abort conditions (i.e sth went wrong elsewhere)
+    """
+    with ExceptionLogging(
+        "spacemake.annotator.order_results", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
+        logger = el.logger
+        logger.info(f"beginning BAM annotation: {bam_in} -> {bam_out}.")
+        bam = pysam.AlignmentFile(bam_in, threads=2)
+        out = pysam.AlignmentFile(bam_out, f"w{bam_mode}", template=bam, threads=8)
 
-    return args
+        for read, annotation in zip(
+            bam.fetch(until_eof=True), order_results(Qres, abort_flag, logger=el.logger)
+        ):
+            # set BAM tags and write
+            # (n_read, qname, gn_val, gf_val, gt_val) = annotation
+            (gn_val, gf_val, gt_val) = annotation
+            # assert qname == read.query_name
+            read.set_tag("gn", gn_val)
+            read.set_tag("gf", gf_val)
+            read.set_tag("gt", gt_val)
+            read.set_tag("XF", None)
+            read.set_tag("gs", None)
+            out.write(read)
 
 
 def annotation_chunks_from_BAM(
     bam_in, compiled_annotation, rr_n=0, rr_i=0, chunk_size=100
 ):
+    """_summary_
+    The main work of the parallel workers is actually implemented in this generator.
+    It can also be run in a non-parallel, single-process fashion as well (set rr_n=0 and rr_i=0).
+
+    Args:
+        bam_in (_type_): _description_
+        compiled_annotation (_type_): _description_
+        rr_n (int, optional): _description_. Defaults to 0.
+        rr_i (int, optional): _description_. Defaults to 0.
+        chunk_size (int, optional): _description_. Defaults to 100.
+
+    Returns:
+        None
+
+    Yields:
+        n_chunk, chunk: list of up to chunk_size tuples of (gn_val, gf_val, gt_val) strings. n_chunk is consistent
+        across parallel workers and increments linearly. Allows to sort chunks for correct output ordering and merging
+        with the original BAM records from the input.
+    """
     import pysam
 
     # as_strand = {"+": "-", "-": "+"}
@@ -719,7 +681,7 @@ def annotation_chunks_from_BAM(
                     gf_val = ",".join(gf)
                     gt_val = ",".join(gt)
 
-            chunk.append((n_read, read.query_name, gn_val, gf_val, gt_val))
+            chunk.append((gn_val, gf_val, gt_val))
 
         n_read += 1
         n_in_chunk += 1
@@ -746,8 +708,103 @@ def annotation_chunks_from_BAM(
     )
 
 
-def process_BAM_linear(bam, ga, out, repeat=1, interval=5):
-    import pysam
+def round_robin_worker(
+    bam_in, compiled_annotation, Qres, Qerr, rr_n, rr_i, abort_flag, chunk_size
+):
+    """_summary_
+    Worker sub-process. Iterate over the BAM file independently, skip everything that is not in our chunk
+    (every rr_i'th chunk) if chunk_size BAM records. Annotate our chunk using compiled GenomeAnnotation
+    and place complete gn, gf, gt string values on a results Queue.
+
+    Args:
+        bam_in (str): file name of input BAM
+        compiled_annotation (str): path to directory with compiled annotation information
+        Qres (mp.Quere): Queue to place chunks of complete annotation tags in
+        Qerr (mp.Queue): see merge_annotations_from_queue_with_BAM
+        rr_n (int): how many round-robin workers are there in total
+        rr_i (int): which round-robin worker are we? 0..rr_n-1 . Determines which
+            chunks this worker feels responsible for.
+        abort_flag (mp.Value): see merge_annotations_from_queue_with_BAM
+        chunk_size (int): number of consecutive BAM records to process
+    """
+    with ExceptionLogging(f"worker_{rr_i}", Qerr=Qerr, exc_flag=abort_flag) as el:
+        el.logger.debug(
+            f"round_robin_worker {rr_i}/{rr_n} starting up with Qres={Qres}"
+        )
+
+        for n_chunk, data in annotation_chunks_from_BAM(
+            bam_in, compiled_annotation, rr_n=rr_n, rr_i=rr_i, chunk_size=chunk_size
+        ):
+            Qres.put((n_chunk, data))
+
+
+def annotate_BAM_parallel(args):
+    """_summary_
+    Main function of the 'annotate' command. Create the plumbing for parallel worker processes and a single
+    collector/writer process.
+
+    Args:
+        args (namespace): the command-line arguments reported from the parser
+    """
+    Qres = (
+        mp.Queue()
+    )  # annotation tags are placed by the worker processes in chunks onto this queue
+    Qerr = mp.Queue()  # child-processes can report errors back to the main process here
+
+    # Proxy objects to allow workers to report statistics about the run
+    abort_flag = mp.Value("b")
+    abort_flag.value = False
+
+    with ExceptionLogging("annotate_BAM_parallel", exc_flag=abort_flag) as el:
+        workers = []
+        for i in range(args.parallel):
+            w = mp.Process(
+                target=round_robin_worker,
+                name=f"worker_{i}",
+                args=(
+                    args.bam_in,
+                    args.compiled,
+                    Qres,
+                    Qerr,
+                    args.parallel,
+                    i,
+                    abort_flag,
+                    args.chunk_size,
+                ),
+            )
+            w.start()
+            workers.append(w)
+
+        el.logger.info("Started workers")
+        collector = mp.Process(
+            target=merge_annotations_from_queue_with_BAM,
+            name="output",
+            args=(args.bam_in, args.bam_out, args.bam_mode, Qres, Qerr, abort_flag),
+        )
+        collector.start()
+        el.logger.info("Started collector")
+
+        for w in workers:
+            # make sure all results are on Qres by waiting for
+            # workers to exit. Or, empty queues if aborting.
+            qres, qerr = join_with_empty_queues(w, [Qres, Qerr], abort_flag)
+            if qres or qerr:
+                el.logger.info(f"{len(qres)} chunks were drained from Qres upon abort.")
+                log_qerr(qerr)
+
+        el.logger.info(
+            "All worker processes have joined. Signalling collector to finish."
+        )
+        # signal the collector to stop
+        Qres.put(None)
+
+        # and wait until all output has been generated
+        collector.join()
+        el.logger.info("Collector has joined. Merging worker statistics.")
+
+
+def annotate_BAM_linear(bam, ga, out, repeat=1, interval=5):
+    # import pysam
 
     # as_strand = {"+": "-", "-": "+"}
     logger = logging.getLogger("chunks_from_BAM")
@@ -798,7 +855,7 @@ def process_BAM_linear(bam, ga, out, repeat=1, interval=5):
 
 def build_compiled_annotation(args):
     logger = logging.getLogger("spacemake.annotator.build_compiled_annotation")
-    if CompiledClassifier.files_exist(args.compiled) and args.use_compiled:
+    if CompiledClassifier.files_exist(args.compiled):
         logger.warning(
             "already found a compiled annotation. use --force-overwrite to overwrite"
         )
@@ -815,120 +872,124 @@ def build_compiled_annotation(args):
     return ga
 
 
-def round_robin_worker(
-    bam_in, compiled_annotation, Qres, Qerr, rr_n, rr_i, abort_flag, chunk_size
-):
-    with ExceptionLogging(f"worker_{rr_i}", Qerr=Qerr, exc_flag=abort_flag) as el:
-        el.logger.debug(
-            f"round_robin_worker {rr_i}/{rr_n} starting up with Qres={Qres}"
-        )
+def parse_args():
 
-        for n_chunk, data in annotation_chunks_from_BAM(
-            bam_in, compiled_annotation, rr_n=rr_n, rr_i=rr_i, chunk_size=chunk_size
-        ):
-            Qres.put((n_chunk, data))
+    parser = argparse.ArgumentParser()
 
+    def usage(args):
+        parser.print_help()
 
-def annotate_BAM_parallel(args):
-    Qres = mp.Queue()  # extracted BCs from process_combinatorial->collector
-    Qerr = mp.Queue()  # child-processes can report errors back to the main process here
+    parser.set_defaults(func=usage)
 
-    # Proxy objects to allow workers to report statistics about the run
-    manager = mp.Manager()
-    abort_flag = mp.Value("b")
-    abort_flag.value = False
-    # Ns = manager.list()
-    # cb_counts = manager.list()
-    # stat_lists = [Ns, cb_counts]
+    subparsers = parser.add_subparsers()
 
-    with ExceptionLogging("annotate_BAM_parallel", exc_flag=abort_flag) as el:
-        # each worker opens the BAM independently and process chunks in round-
-        # robin fashion. Puts annotation tag values on the results Queue
-        workers = []
-        for i in range(args.parallel):
-            w = mp.Process(
-                target=round_robin_worker,
-                name=f"worker_{i}",
-                args=(
-                    args.bam_in,
-                    args.compiled,
-                    Qres,
-                    Qerr,
-                    args.parallel,
-                    i,
-                    abort_flag,
-                    args.chunk_size,
-                ),
-            )
-            w.start()
-            workers.append(w)
+    build_parser = subparsers.add_parser("build")
+    build_parser.set_defaults(func=build_compiled_annotation)
 
-        el.logger.info("Started workers")
-        collector = mp.Process(
-            target=merge_annotations_with_BAM,
-            name="output",
-            args=(args.bam_in, args.bam_out, args.bam_mode, Qres, Qerr, abort_flag),
-        )
-        collector.start()
-        el.logger.info("Started collector")
+    tag_parser = subparsers.add_parser("tag")
+    tag_parser.set_defaults(func=annotate_BAM_parallel)
 
-        for w in workers:
-            # make sure all results are on Qres by waiting for
-            # workers to exit. Or, empty queues if aborting.
-            qres, qerr = join_with_empty_queues(w, [Qres, Qerr], abort_flag)
-            if qres or qerr:
-                el.logger.info(f"{len(qres)} chunks were drained from Qres upon abort.")
-                log_qerr(qerr)
+    build_parser.add_argument(
+        "--gtf",
+        default=None,
+        required=True,
+        help="path to the original annotation (e.g. gencodev38.gtf.gz)",
+    )
+    build_parser.add_argument(
+        "--compiled",
+        default=None,
+        help="path to a directoy in which a compiled version of the GTF is stored",
+    )
+    build_parser.add_argument(
+        "--tabular",
+        default="",
+        help="path to a cache of the tabular version of the relevant GTF features (optional)",
+    )
+    build_parser.add_argument(
+        "--force-overwrite",
+        default=False,
+        action="store_true",
+        help="re-compile GTF and overwrite the pre-existing compiled annotation",
+    )
 
-        el.logger.info(
-            "All worker processes have joined. Signalling collector to finish."
-        )
-        # signal the collector to stop
-        Qres.put(None)
+    tag_parser.add_argument(
+        "--compiled",
+        default=None,
+        help="path to a directoy in which a compiled version of the GTF is stored",
+    )
+    tag_parser.add_argument("--bam-in", default="", help="path to the input BAM")
+    tag_parser.add_argument(
+        "--bam-out", default="", help="path for the tagged BAM output"
+    )
+    tag_parser.add_argument(
+        "--bam-mode", default="b", help="mode of the output BAM file (default=b)"
+    )
+    tag_parser.add_argument(
+        "--parallel",
+        type=int,
+        default=4,
+        help="how many parallel annotation processes to create (default=4)",
+    )
+    tag_parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=10000,
+        help="how many BAM-records form a chunk for parallel processing (default=10000)",
+    )
+    tag_parser.add_argument(
+        "--antisense",
+        default=False,
+        action="store_true",
+        help="enable annotating against the opposite strand (antisense to the alignment) as well",
+    )
 
-        # and wait until all output has been generated
-        collector.join()
-        el.logger.info("Collector has joined. Merging worker statistics.")
+    return parser.parse_args()
 
 
-def main(args):
-    logger = logging.getLogger("annotator")
-    if not args.bam_in:
-        return
+# def main(args):
+#     logger = logging.getLogger("annotator")
+#     if not args.bam_in:
+#         return
 
-    logger.info(f"beginning BAM annotation: {args.bam_in} -> {args.bam_out}.")
-    bam = pysam.AlignmentFile(args.bam_in, threads=2)
-    out = pysam.AlignmentFile(args.bam_out, "wb", template=bam, threads=8)
+#     logger.info(f"beginning BAM annotation: {args.bam_in} -> {args.bam_out}.")
+#     bam = pysam.AlignmentFile(args.bam_in, threads=2)
+#     out = pysam.AlignmentFile(args.bam_out, "wb", template=bam, threads=8)
 
-    for chunk in interval_chunks_from_BAM(args.bam_in, args.compiled, 0, 0):
-        pass
-        # for data in chunk:
-        #     print(data)
+#     for chunk in interval_chunks_from_BAM(args.bam_in, args.compiled, 0, 0):
+#         pass
+#         # for data in chunk:
+#         #     print(data)
 
-    # process_BAM_linear(bam, ga, out, repeat=args.repeat)
+# annotate_BAM_linear(bam, ga, out, repeat=args.repeat)
 
-    # for read_chunk, block_chunk in chunks_from_BAM(bam):
-    #     for read, aln in zip(read_chunk, block_chunk):
-    #         read.set_tag("XF", None)
-    #         read.set_tag("gs", None)
-    #         if aln:
-    #             gn, gf, gt = ga.get_annotation_tags(*aln)
-    #             if len(gf):
-    #                 read.set_tag("gn", ",".join(gn))
-    #                 read.set_tag("gf", ",".join(gf))
-    #                 read.set_tag("gt", ",".join(gt))
-    #             else:
-    #                 read.set_tag("gn", None)
-    #                 read.set_tag("gf", "-")
-    #                 read.set_tag("gt", None)
+# for read_chunk, block_chunk in chunks_from_BAM(bam):
+#     for read, aln in zip(read_chunk, block_chunk):
+#         read.set_tag("XF", None)
+#         read.set_tag("gs", None)
+#         if aln:
+#             gn, gf, gt = ga.get_annotation_tags(*aln)
+#             if len(gf):
+#                 read.set_tag("gn", ",".join(gn))
+#                 read.set_tag("gf", ",".join(gf))
+#                 read.set_tag("gt", ",".join(gt))
+#             else:
+#                 read.set_tag("gn", None)
+#                 read.set_tag("gf", "-")
+#                 read.set_tag("gt", None)
 
-    #         out.write(read)
+#         out.write(read)
 
 
 def cmdline():
     args = parse_args()
+    args.func(args)
     # main(args)
-    annotate_BAM_parallel(args)
+    # annotate_BAM_parallel(args)
+
+    # if args.parallel > 1:
+    #     annotate_BAM_parallel(args)
+    # else:
+    #     annotate_BAM_linear(args)
 
 
 if __name__ == "__main__":
