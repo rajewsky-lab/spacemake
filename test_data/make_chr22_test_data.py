@@ -13,28 +13,47 @@ df_genes = pd.read_csv(
 # keep track of the few dozen reads that Nikos has selected
 selected_reads = {}
 for fa_id, seq, qual in read_fq("reads_chr22_R2.fastq.gz"):
+    if "IGLC3" in fa_id:
+        print(f"selecting IGLC3 read {fa_id} -> {fa_id.split('_')[0]}")
     selected_reads[fa_id.split("_")[0]] = fa_id
 
 # then go through the SAM file (no header) to get the mapping position of these reads (not ideal)
 df = pd.read_csv(
     "/data/rajewsky/home/nkarais/murphy/fc_sts/collect_reads_chr22/final.polyA_adapter_trimmed_chr22.sam",
     sep="\t",
+    header=None,
 )
 
 starts = []
 for row in df.itertuples():
+    # print(row)
     qname = row[1]
+    if "A00643:496:HFJ5MDRX2:1:2101:12888:1172" in qname:
+        print(f"YAY! detected IGLC3 read {qname}")
 
     if qname in selected_reads:
+        print(f"selecting read {qname}")
         starts.append(row[4])
 
 # find genes that overlap the selected reads mapping position
 # this intersection code is very crude, but effective
 intervals = set()
+starts = set(starts)
 for row in df_genes.itertuples():
+    next_starts = set(starts)
     for x in starts:
         if row.start < x and row.end > x:
             intervals.add((row.start, row.end))
+            print(f"selecting gene entry '{row}'")
+            next_starts.discard(x)
+
+    starts = next_starts
+
+print(
+    f"we have the following start coordinates left. selecting buffer regions around these"
+)
+print(starts)
+
 
 # Okay, now we know the gene loci which are needed to map the test reads!
 intervals = list(sorted(intervals))
