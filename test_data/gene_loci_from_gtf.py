@@ -16,8 +16,8 @@ for line in open("gencode.v38.chr22.gtf", "rt"):
     if line.startswith("#"):
         continue
 
-    if not "protein_coding" in line:
-        continue
+    # if not "protein_coding" in line:
+    #     continue
 
     # print(line)
     parts = line.rstrip().split("\t")
