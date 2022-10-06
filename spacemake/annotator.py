@@ -6,12 +6,10 @@ import argparse
 import re
 import gzip
 import logging
-import ncls
 from time import time
 from collections import defaultdict
 from dataclasses import dataclass
 import typing
-import cProfile
 import pysam
 import multiprocessing as mp
 
@@ -83,11 +81,19 @@ def load_GTF(
         data, columns=["chrom", "feature", "start", "end", "strand"] + attributes
     ).drop_duplicates()
 
-    df["feature_flag"] = df["feature"].apply(lambda x: feat2bit[x])
+    def bitflags(columns):
+        strand, feature = columns
+        flag = feat2bit[feature]
+        # if strand == "-":
+        #     # features on minus strand use the high-nibble of the bit-flags
+        #     flag = flag << 4
+
+        return flag
+
+    df["feature_flag"] = df[["strand", "feature"]].apply(bitflags, axis=1)
     df["transcript_type"] = df["transcript_type"].apply(
         lambda t: abbreviations.get(t, t)
     )
-
     return df
 
 
@@ -116,15 +122,6 @@ default_map = {
     0b0101: "I",
     0b0001: "I",
     0b0000: "-",  # intergenic
-    ## TODO: Antisense is shifted left by 4 bits and uses lower-case letters
-    0b10110000: "c",  # CDS exon (antisense)
-    # This should not arise! Unless, isoforms-are merged
-    0b11110000: "cu",  # CDS and UTR exon (antisense)
-    0b01110000: "u",  # UTR exon (antisense)
-    0b00110000: "n",  # exon of a non-coding transcript (antisense)
-    0b10010000: "i",  # intron (antisense)
-    0b01010000: "i",  # (antisense)
-    0b00010000: "i",  # (antisense)
 }
 default_lookup = np.array(
     [default_map.get(i, "?") for i in np.arange(256)], dtype=object
@@ -873,7 +870,6 @@ def build_compiled_annotation(args):
 
 
 def parse_args():
-
     parser = argparse.ArgumentParser()
 
     def usage(args):
@@ -885,10 +881,6 @@ def parse_args():
 
     build_parser = subparsers.add_parser("build")
     build_parser.set_defaults(func=build_compiled_annotation)
-
-    tag_parser = subparsers.add_parser("tag")
-    tag_parser.set_defaults(func=annotate_BAM_parallel)
-
     build_parser.add_argument(
         "--gtf",
         default=None,
@@ -912,6 +904,8 @@ def parse_args():
         help="re-compile GTF and overwrite the pre-existing compiled annotation",
     )
 
+    tag_parser = subparsers.add_parser("tag")
+    tag_parser.set_defaults(func=annotate_BAM_parallel)
     tag_parser.add_argument(
         "--compiled",
         default=None,
@@ -946,53 +940,13 @@ def parse_args():
     return parser.parse_args()
 
 
-# def main(args):
-#     logger = logging.getLogger("annotator")
-#     if not args.bam_in:
-#         return
-
-#     logger.info(f"beginning BAM annotation: {args.bam_in} -> {args.bam_out}.")
-#     bam = pysam.AlignmentFile(args.bam_in, threads=2)
-#     out = pysam.AlignmentFile(args.bam_out, "wb", template=bam, threads=8)
-
-#     for chunk in interval_chunks_from_BAM(args.bam_in, args.compiled, 0, 0):
-#         pass
-#         # for data in chunk:
-#         #     print(data)
-
-# annotate_BAM_linear(bam, ga, out, repeat=args.repeat)
-
-# for read_chunk, block_chunk in chunks_from_BAM(bam):
-#     for read, aln in zip(read_chunk, block_chunk):
-#         read.set_tag("XF", None)
-#         read.set_tag("gs", None)
-#         if aln:
-#             gn, gf, gt = ga.get_annotation_tags(*aln)
-#             if len(gf):
-#                 read.set_tag("gn", ",".join(gn))
-#                 read.set_tag("gf", ",".join(gf))
-#                 read.set_tag("gt", ",".join(gt))
-#             else:
-#                 read.set_tag("gn", None)
-#                 read.set_tag("gf", "-")
-#                 read.set_tag("gt", None)
-
-#         out.write(read)
-
-
 def cmdline():
     args = parse_args()
     args.func(args)
-    # main(args)
-    # annotate_BAM_parallel(args)
-
-    # if args.parallel > 1:
-    #     annotate_BAM_parallel(args)
-    # else:
-    #     annotate_BAM_linear(args)
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     cmdline()
+    # import cProfile
     # cProfile.run("cmdline()", "prof_stats")
