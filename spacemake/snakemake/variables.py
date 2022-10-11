@@ -96,7 +96,7 @@ dge_root = data_root + "/dge"
 dge_out_prefix = dge_root + "/dge"
 dge_out_suffix = "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}"
 dge_out = (
-    dge_out_prefix + dge_out_suffix + ".{n_beads}_beads_{puck_barcode_file_id}.txt.gz"
+    dge_out_prefix + dge_out_suffix + ".{n_beads}_beads_{puck_barcode_file_id}.raw.h5ad"
 )
 dge_out_summary = (
     dge_out_prefix
