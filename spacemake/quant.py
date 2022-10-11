@@ -5,17 +5,34 @@ import logging
 import argparse
 from collections import defaultdict, OrderedDict
 import spacemake.util as util
+from spacemake.contrib import __version__, __author__, __license__, __email__
+import datetime
 import os
 
 
 class DGE:
-    def __init__(self, channels=["count"]):
+    logger = logging.getLogger("spacemake.quant.DGE")
+
+    def __init__(self, channels=["count"], cell_bc_allowlist=""):
         self.channels = channels
         self.counts = defaultdict(lambda: defaultdict(int))
         self.DGE_cells = set()
         self.DGE_genes = set()
+        self.allowed_bcs = self.load_list(cell_bc_allowlist)
+
+    @staticmethod
+    def load_list(fname):
+        if fname:
+            allowed_bcs = set([line.rstrip() for line in open(fname)])
+            DGE.logger.debug(f"restricting to {len(allowed_bcs)} allowed cell barcodes")
+            return allowed_bcs
+        else:
+            DGE.logger.debug("all barcodes allowed")
 
     def add_read(self, gene, cell, channels=["count"]):
+        if self.allowed_bcs and not cell in self.allowed_bcs:
+            return
+
         self.DGE_cells.add(cell)
         self.DGE_genes.add(gene)
 
@@ -94,10 +111,12 @@ class DGE:
 
 
 class DefaultCounter:
+
+    channels = ["exonic_UMI", "exonic_read", "intronic_UMI", "intronic_read"]
+
     def __init__(self, bam, **kw):
         self.kw = kw
         self.bam = bam
-        self.channels = ["exonic_UMI", "exonic_read", "intronic_UMI", "intronic_read"]
         self.exonic_set = set(["C", "U", "CU", "N"])
         self.intronic_set = set(["I"])
         self.uniq = set()
@@ -139,8 +158,8 @@ def parse_cmdline():
     parser.add_argument(
         "bam_in",
         help="bam input (default=stdin)",
-        default="/dev/stdin",
-        # nargs="+",
+        default=["/dev/stdin"],
+        nargs="+",
     )
     parser.add_argument(
         "--sample-name",
@@ -169,12 +188,33 @@ def parse_cmdline():
         help="name of the channel to be stored as AnnData.X (default='exonic_UMI')",
         default="exonic_UMI",
     )
+    parser.add_argument(
+        "--cell-bc-allowlist",
+        help="[OPTIONAL] a text file with cell barcodes. All barcodes not in the list are ignored.",
+        default="",
+    )
 
     parser.add_argument(
         "--output",
         help="directory to store the output h5ad and statistics/marginal counts",
         default="dge",
     )
+    parser.add_argument(
+        "--out-dge",
+        help="filename for the output h5ad",
+        default="{args.output}/{args.sample_name}.h5ad",
+    )
+    parser.add_argument(
+        "--out-summary",
+        help="filename for the output summary (sum over all vars/genes)",
+        default="{args.output}/{args.sample_name}.summary.tsv",
+    )
+    parser.add_argument(
+        "--out-bulk",
+        help="filename for the output summary (sum over all vars/genes)",
+        default="{args.output}/{args.sample_name}.pseudo_bulk.tsv",
+    )
+
     return parser.parse_args()
 
 
@@ -195,57 +235,71 @@ def sparse_summation(X, axis=0):
 
 
 def main(args):
-    logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger("spacemake.quant.main")
-    # prepare input and output
-    bam = pysam.AlignmentFile(args.bam_in, "rb", check_sq=False, threads=4)
     util.ensure_path(args.output + "/")
 
     # prepare counter instance
     count_kw = util.load_yaml(args.count_class_params)
-    count_cls = get_counter_class(args.count_class)
-    counter = count_cls(bam, **count_kw)
+    count_class = get_counter_class(args.count_class)
+    dge = DGE(channels=count_class.channels, cell_bc_allowlist=args.cell_bc_allowlist)
 
-    # prepare the sparse-matrix data collection (for multiple channels in parallel)
-    dge = DGE(channels=counter.channels)
-    # iterate over BAM and count
-    for aln in util.timed_loop(bam.fetch(until_eof=True), logger, skim=args.skim):
-        if aln.is_unmapped:
-            continue
+    # iterate over all annotated BAMs from the input
+    gene_source = {}
+    for bam_name in args.bam_in:
+        reference_name = os.path.basename(bam_name).split(".")[0]
+        bam = pysam.AlignmentFile(bam_name, "rb", check_sq=False, threads=4)
+        counter = count_class(bam, **count_kw)
 
-        tags = dict(aln.get_tags())
-        gene, cell, umi, channels = counter.parse_bam_record(aln, tags)
-        dge.add_read(gene=gene, cell=cell, channels=channels)
+        # prepare the sparse-matrix data collection (for multiple channels in parallel)
+        # iterate over BAM and count
+        for aln in util.timed_loop(bam.fetch(until_eof=True), logger, skim=args.skim):
+            if aln.is_unmapped:
+                continue
+
+            tags = dict(aln.get_tags())
+            # count the alignment every way that the counter prescribes
+            gene, cell, umi, channels = counter.parse_bam_record(aln, tags)
+            dge.add_read(gene=gene, cell=cell, channels=channels)
+
+            # keep track of the BAM origin of every gene (in case we combine multiple BAMs)
+            gene_source[gene] = reference_name
 
     sparse_d, obs, var = dge.make_sparse_arrays()
     adata = dge.sparse_arrays_to_adata(
         sparse_d, obs, var, main_channel=args.main_channel
     )
-    adata.write(os.path.join(args.output, f"{args.sample_name}.h5ad"))
+    adata.var["reference"] = [gene_source[gene] for gene in var]
+    adata.obs["sample_name"] = args.sample_name
+    adata.uns[
+        "DGE_info"
+    ] = f"created with spacemake.quant version={__version__} on {datetime.datetime.today().isoformat()}"
+    adata.uns["DGE_cmdline"] = sys.argv
+    adata.write(args.out_dge.format(args=args))
 
-    # write out marginal counts across both axes:
+    ## write out marginal counts across both axes:
     #   summing over obs/cells -> pseudo bulk
     #   summing over genes -> UMI/read distribution
-    pname = os.path.join(args.output, f"{args.sample_name}.pseudo_bulk.tsv")
+    pname = args.out_bulk.format(args=args)
 
     data = OrderedDict()
 
     data["sample_name"] = args.sample_name
+    data["reference"] = [gene_source[gene] for gene in var]
     data["gene"] = var
     for channel, M in sparse_d.items():
         data[channel] = sparse_summation(M)
 
     import pandas as pd
 
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(data).sort_values(args.main_channel)
     df.to_csv(pname, sep="\t")
 
-    tname = os.path.join(args.output, f"{args.sample_name}.totals.tsv")
+    tname = args.out_summary.format(args=args)
 
     data = OrderedDict()
 
     data["sample_name"] = args.sample_name
-    data["cell"] = obs
+    data["cell_bc"] = obs
     for channel, M in sparse_d.items():
         data[channel] = sparse_summation(M, axis=1)
 
@@ -256,5 +310,6 @@ def main(args):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     args = parse_cmdline()
     main(args)

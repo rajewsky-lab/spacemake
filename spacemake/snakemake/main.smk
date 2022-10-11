@@ -1,10 +1,11 @@
 #########
 # about #
 #########
-__version__ = '0.1.1'
-__author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
-__license__ = 'GPL'
-__email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
+from spacemake import __version__, __author__, __license__, __email__
+# __version__ = '0.1.1'
+# __author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
+# __license__ = 'GPL'
+# __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
 ###########
 # imports #
@@ -259,23 +260,25 @@ rule tag_reads_bc_umi:
     output:
         assigned = tagged_bam,
         unassigned = unassigned,
-        bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
+        bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv"),
+        # bc_counts = barcode_readcounts
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
     threads: 16
     shell:
         "python {spacemake_dir}/preprocess/cmdline.py "
-        "--sample={wildcards.sample_id} "
-        "--read1={params.read1} "
-        "--read2={params.read2} "
-        "--parallel={threads} "
-        "--save-stats={output.bc_stats} "
-        "--out-format=bam "
-        "--out-unassigned={output.unassigned} "
-        "--out-assigned=/dev/stdout "
-        "--log-file={log} "
-        "{params.bc_params} "
-        "| samtools view -bh /dev/stdin > {output.assigned} "
+        "  --sample={wildcards.sample_id} "
+        "  --read1={params.read1} "
+        "  --read2={params.read2} "
+        "  --parallel={threads} "
+        "  --save-stats={output.bc_stats} "
+        # "  --save-cell-barcodes={output.bc_counts} "
+        "  --out-format=bam "
+        "  --out-unassigned={output.unassigned} "
+        "  --out-assigned=/dev/stdout "
+        "  --log-file={log} "
+        "  {params.bc_params} "
+        " | samtools view -bh --threads=4 /dev/stdin > {output.assigned} "
 
         # "--bc1-ref={params.bc.bc1_ref} "
         # "--bc2-ref={params.bc.bc2_ref} "
@@ -384,8 +387,9 @@ rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
     # topBarcodesClean.txt file or just the regular topBarcodes.txt
     input:
-        unpack(get_top_barcodes),
-        unpack(get_dge_input_bam)
+        unpack(get_top_barcodes),  # snakemake_helper_functions.py either top barcodes or spatial allowlist
+        unpack(get_annotated_bams),  # comes from the mapping.smk core module
+        # unpack(get_dge_input_bam)
     output:
         dge=dge_out,
         dge_summary=dge_out_summary
@@ -401,20 +405,29 @@ rule create_dge:
     # at most 8 dges will be created the same time
     threads: max(workflow.cores * 0.125, 1)
     shell:
-        """
-        mkdir -p {params.dge_root}
+        "python {spacemake_dir}/quant.py "
+        " --sample-name={wildcards.sample_id} "
+        " --output={params.dge_root}/ "
+        " --out-dge={output.dge} "
+        " --out-summary={output.dge_summary} "
+        " --cell-bc-allowlist={input.top_barcodes} "
+        "{input.annotated_bams}"
 
-        {dropseq_tools}/DigitalExpression \
-        -m 16g \
-        I= {input.reads}\
-        O= {output.dge} \
-        SUMMARY= {output.dge_summary} \
-        CELL_BC_FILE={input.top_barcodes} \
-        CELL_BARCODE_TAG={params.cell_barcode_tag} \
-        MOLECULAR_BARCODE_TAG={params.umi_tag} \
-        TMP_DIR={global_tmp} \
-        {params.dge_extra_params}
-        """
+        # """
+        # mkdir -p {params.dge_root}
+
+        # {dropseq_tools}/DigitalExpression \
+        # -m 16g \
+        # I= {input.reads}\
+        # O= {output.dge} \
+        # SUMMARY= {output.dge_summary} \
+        # CELL_BC_FILE={input.top_barcodes} \
+        # CELL_BARCODE_TAG={params.cell_barcode_tag} \
+        # MOLECULAR_BARCODE_TAG={params.umi_tag} \
+        # TMP_DIR={global_tmp} \
+        # {params.dge_extra_params}
+        # """
+
 
 rule create_h5ad_dge:
     input:

@@ -44,12 +44,16 @@ bt2_index_file = bt2_index_param + '.1.bt2'
 
 species_reference_sequence = 'species_data/{species}/{ref_name}/sequence.fa'
 species_reference_annotation = 'species_data/{species}/{ref_name}/annotation.gtf'
+species_reference_annotation_compiled = 'species_data/{species}/{ref_name}/compiled_annotation'
+species_reference_annotation_compiled_target = 'species_data/{species}/{ref_name}/compiled_annotation/non_overlapping.csv'
 
 # used to fetch all info needed to create a BAM file
 MAP_RULES_LKUP = {}
 #   key: path of output BAM file
 #   value: dotdict with plenty of attributes
 
+from collections import defaultdict
+ANNOTATED_BAMS = defaultdict(set)
 # used for symlink name to source mapping
 BAM_SYMLINKS = {}
 
@@ -255,6 +259,12 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             mr.ann_path = species_d[mr.ref_name].get("annotation", None)
             if mr.ann_path:
                 mr.ann_final = wc_fill(species_reference_annotation, mr)
+                mr.ann_final_compiled = wc_fill(species_reference_annotation_compiled, mr)
+                mr.ann_final_compiled_target = wc_fill(species_reference_annotation_compiled_target, mr)
+
+                # keep track of all annotated BAM files we are going to create
+                # for subsequent counting into DGE matrices/h5ad
+                ANNOTATED_BAMS[(index[0], index[1])].add(mr.out_path)
             else:
                 mr.ann_final = []
 
@@ -301,6 +311,10 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
     # print("out_files", out_files)
     return out_files
 
+def get_annotated_bams(wc):
+    print(wc)
+    return {'annotated_bams' : sorted(ANNOTATED_BAMS[(wc.project_id, wc.sample_id)])}
+
 register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
 
 #############################################
@@ -321,6 +335,7 @@ def get_map_rule(wc):
     return MAP_RULES_LKUP[output]
 
 def get_map_inputs(wc, mapper="STAR"):
+    print("get_map_inputs()")
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
@@ -328,12 +343,15 @@ def get_map_inputs(wc, mapper="STAR"):
         'bam' : mr.input_path,
         'index_file' : mr.map_index_file
     }
-    if hasattr(mr, "ann_final"):
-        d['annotation'] = mr.ann_final
+    if hasattr(mr, "ann_final_compiled_target") and mr.ann_final_compiled_target:
+        d['annotation'] = mr.ann_final_compiled_target
 
+    print(d)
+    print("done.")
     return d
 
 def get_map_params(wc, output, mapper="STAR"):
+    print("get_map_params()")
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
@@ -342,15 +360,18 @@ def get_map_params(wc, output, mapper="STAR"):
     if hasattr(mr, "ann_final"):
         ann = mr.ann_final
         if ann and ann.lower().endswith(".gtf"):
-            tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={mr.out_path} ANNOTATIONS_FILE={mr.ann_final}"
-            annotation_cmd = tagging_cmd.format(dropseq_tools=dropseq_tools, mr=mr)
+            # tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={mr.out_path} ANNOTATIONS_FILE={mr.ann_final}"
+            tagging_cmd =  "| python {spacemake_dir}/annotator.py tag --bam-in=/dev/stdin --bam-out={mr.out_path} --compiled={mr.ann_final_compiled}"
+            annotation_cmd = tagging_cmd.format(mr=mr, spacemake_dir=spacemake_dir)
 
-    return {
+    d = {
         'annotation_cmd' : annotation_cmd,
         'annotation' : mr.ann_final,
         'index' : mr.map_index_param,
         'flags' : mr.map_flags,
     }
+    print("done..")
+    return d
 
 
 ##############################################################################
@@ -540,3 +561,12 @@ rule create_star_index:
              --genomeFastaFiles {input.sequence} \
              --sjdbGTFfile {input.annotation}
         """
+
+rule compile_annotation:
+    input: species_reference_annotation
+    output: 
+        target = species_reference_annotation_compiled_target,
+        path = directory(species_reference_annotation_compiled)
+    shell:
+        "python {spacemake_dir}/annotator.py build --gtf={input} --compiled={output.path}"
+

@@ -17,11 +17,16 @@ def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
     if dge_summary_path is not None:
         dge_summary = pd.read_csv(
             dge_summary_path,
-            skiprows=7,
+            # skiprows=7,
             sep="\t",
-            index_col="cell_bc",
-            names=["cell_bc", "n_reads", "n_umi", "n_genes"],
+            # index_col="cell_bc",
+            # names=["cell_bc", "n_reads", "n_umi", "n_genes"],
         )
+        dge_summary["n_reads"] = (
+            dge_summary["exonic_read"] + dge_summary["intronic_read"]
+        )
+        dge_summary["n_umi"] = dge_summary["exonic_UMI"] + dge_summary["intronic_UMI"]
+        dge_summary["n_genes"] = (adata.X > 0).sum(axis=1)
 
         adata.obs = pd.merge(
             adata.obs, dge_summary[["n_reads"]], left_index=True, right_index=True
@@ -86,90 +91,97 @@ def calculate_shannon_entropy_scompression(adata):
 def dge_to_sparse_adata(dge_path, dge_summary_path):
     import anndata
     import numpy as np
-    import gzip
+
+    # import gzip
     import pandas as pd
-    from scipy.sparse import csr_matrix, vstack
 
-    ix = 0
-    mix = 0
-    matrices = []
-    gene_names = []
+    # from scipy.sparse import csr_matrix, vstack
 
-    with gzip.open(dge_path, "rt") as dge:
-        first_line = dge.readline().strip().split("\t")
-        has_mt = False
-        barcodes = first_line[1:]
-        ncol = len(barcodes)
+    # ix = 0
+    # mix = 0
+    # matrices = []
+    # gene_names = []
 
-        # create an intermediate matrix, which will contain 1000 rows
-        # and cell_number columns. we will parse the dge file and fill
-        # this matrix line by line. Like this we create gene_number/1000 number
-        # of CSR (compressed sparse row) matrices which we join at the end
-        M = np.zeros((1000, ncol))
+    # with gzip.open(dge_path, "rt") as dge:
+    #     first_line = dge.readline().strip().split("\t")
+    #     has_mt = False
+    #     barcodes = first_line[1:]
+    #     ncol = len(barcodes)
 
-        # read DGE line by line
-        # first row: contains CELL BARCODEs
-        # each next row contains one gene name, and the counts of that gene
-        for line in dge:
-            vals = line.strip().split("\t")
-            # first element contains the gene name
-            # append gene name to gene_names
-            gene_names.append(vals[0])
-            if vals[0].lower().startswith("mt-"):
-                has_mt = True
+    #     # create an intermediate matrix, which will contain 1000 rows
+    #     # and cell_number columns. we will parse the dge file and fill
+    #     # this matrix line by line. Like this we create gene_number/1000 number
+    #     # of CSR (compressed sparse row) matrices which we join at the end
+    #     M = np.zeros((1000, ncol))
 
-            vals = vals[1:]
+    #     # read DGE line by line
+    #     # first row: contains CELL BARCODEs
+    #     # each next row contains one gene name, and the counts of that gene
+    #     for line in dge:
+    #         vals = line.strip().split("\t")
+    #         # first element contains the gene name
+    #         # append gene name to gene_names
+    #         gene_names.append(vals[0])
+    #         if vals[0].lower().startswith("mt-"):
+    #             has_mt = True
 
-            # store counts as np.array
-            vals = np.array(vals, dtype=np.int64)
+    #         vals = vals[1:]
 
-            # update the 1000xcell_number matrix
-            M[ix] = vals
+    #         # store counts as np.array
+    #         vals = np.array(vals, dtype=np.int64)
 
-            if ix % 1000 == 999:
-                # if we reached the end of M, make it sparse and append to other
-                # already read matrices
-                mix = mix + 1
-                matrices.append(csr_matrix(M))
-                ix = 0
+    #         # update the 1000xcell_number matrix
+    #         M[ix] = vals
 
-                # reset M
-                M = np.zeros((1000, ncol))
-            else:
-                ix = ix + 1
+    #         if ix % 1000 == 999:
+    #             # if we reached the end of M, make it sparse and append to other
+    #             # already read matrices
+    #             mix = mix + 1
+    #             matrices.append(csr_matrix(M))
+    #             ix = 0
 
-        # get the leftovers: these are the overhang lines, when gene_number is
-        # not divisible by 1000
-        M = M[:ix]
-        matrices.append(csr_matrix(M))
+    #             # reset M
+    #             M = np.zeros((1000, ncol))
+    #         else:
+    #             ix = ix + 1
 
-        # sparse expression matrix
-        X = vstack(matrices, format="csr")
-        if not has_mt:
-            # ensure we have an entry for mitochondrial transcripts even if it's just all zeros
-            print(
-                "need to add mt-missing because no mitochondrial stuff was among the genes for annotation"
-            )
-            gene_names.append("mt-missing")
-            X = vstack([X, np.zeros(X.shape[1])]).tocsr()
+    #     # get the leftovers: these are the overhang lines, when gene_number is
+    #     # not divisible by 1000
+    #     M = M[:ix]
+    #     matrices.append(csr_matrix(M))
 
-        # create anndata object, but we get the transpose of X, so matrix will
-        # be in CSC format
-        adata = anndata.AnnData(
-            X.T, obs=pd.DataFrame(index=barcodes), var=pd.DataFrame(index=gene_names)
-        )
+    #     # sparse expression matrix
+    #     X = vstack(matrices, format="csr")
+    #     if not has_mt:
+    #         # ensure we have an entry for mitochondrial transcripts even if it's just all zeros
+    #         print(
+    #             "need to add mt-missing because no mitochondrial stuff was among the genes for annotation"
+    #         )
+    #         gene_names.append("mt-missing")
+    #         X = vstack([X, np.zeros(X.shape[1])]).tocsr()
 
-        # name the index
-        adata.obs.index.name = "cell_bc"
+    # create anndata object, but we get the transpose of X, so matrix will
+    # be in CSC format
 
-        # attach metrics such as: total_counts, pct_mt_counts, etc
-        # also attach n_genes, and calculate pcr
-        calculate_adata_metrics(adata, dge_summary_path)
+    # adata = anndata.AnnData(
+    #     X.T, obs=pd.DataFrame(index=barcodes), var=pd.DataFrame(index=gene_names)
+    # )
 
-        # calculate per shannon_entropy and string_compression per bead
-        calculate_shannon_entropy_scompression(adata)
+    adata = anndata.read_h5ad(dge_path)
+    # has_mt = np.array([name.startswith("mt-") for name in adata.var_names]).any()
+    # if not has_mt:
+    #     X = np.zeros((len(adata.obs_names), 1))
+    # name the index
+    adata.obs.index.name = "cell_bc"
 
-        return adata
+    # attach metrics such as: total_counts, pct_mt_counts, etc
+    # also attach n_genes, and calculate pcr
+    calculate_adata_metrics(adata, dge_summary_path)
+
+    # calculate per shannon_entropy and string_compression per bead
+    calculate_shannon_entropy_scompression(adata)
+
+    return adata
 
 
 def load_external_dge(dge_path):
