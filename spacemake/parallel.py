@@ -208,6 +208,6 @@ class ExceptionLogging:
             if self.Qerr is not None:
                 self.Qerr.put((self.name, lines))
 
-            if self.exc_flag:
+            if self.exc_flag is not None:
                 self.logger.error(f"raising exception flag {self.exc_flag}")
                 self.exc_flag.value = True
