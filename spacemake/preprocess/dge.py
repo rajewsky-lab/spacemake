@@ -19,7 +19,7 @@ def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
             dge_summary_path,
             # skiprows=7,
             sep="\t",
-            # index_col="cell_bc",
+            index_col="cell_bc",
             # names=["cell_bc", "n_reads", "n_umi", "n_genes"],
         )
         dge_summary["n_reads"] = (
@@ -28,6 +28,9 @@ def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
         dge_summary["n_umi"] = dge_summary["exonic_UMI"] + dge_summary["intronic_UMI"]
         dge_summary["n_genes"] = (adata.X > 0).sum(axis=1)
 
+        # print(dge_summary)
+        # print("about to do weird merge")
+        # adata.obs["n_reads"] = dge_summary[adata.obs_names, "n_reads"]
         adata.obs = pd.merge(
             adata.obs, dge_summary[["n_reads"]], left_index=True, right_index=True
         )
@@ -168,6 +171,7 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
     # )
 
     adata = anndata.read_h5ad(dge_path)
+    # print(adata)
     # has_mt = np.array([name.startswith("mt-") for name in adata.var_names]).any()
     # if not has_mt:
     #     X = np.zeros((len(adata.obs_names), 1))
