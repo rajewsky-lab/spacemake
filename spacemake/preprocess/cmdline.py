@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-__version__ = "0.9"
-__author__ = ["Marvin Jens"]
-__license__ = "GPL"
-__email__ = ["marvin.jens@mdc-berlin.de"]
-
+from spacemake.contrib import __version__, __license__, __author__, __email__
 from spacemake.preprocess.fastq import (
     parse_args,
     setup_logging,
@@ -16,7 +12,7 @@ from spacemake.parallel import ExceptionLogging
 
 
 def cmdline():
-    with ExceptionLogging("main"):
+    with ExceptionLogging("main") as el:
         args = parse_args()
         NO_CALL = args.na
         setup_logging(args)
@@ -36,6 +32,12 @@ def cmdline():
         else:
             main_dropseq(args)
 
+    if el.exception:
+        return -1
+
 
 if __name__ == "__main__":
-    cmdline()
+    import sys
+
+    ret_code = cmdline()
+    sys.exit(ret_code)

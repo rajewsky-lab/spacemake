@@ -8,6 +8,7 @@ from spacemake.errors import SpacemakeError, FileWrongExtensionError
 LINE_SEPARATOR = "-" * 50 + "\n"
 
 bool_in_str = ["True", "true", "False", "false"]
+__version__ = "0.9"
 
 
 def assert_file(file_path, default_value=None, extension=["all"]):
@@ -95,6 +96,30 @@ def read_fq(fname, skim=0):
                 yield name, seq, qual
 
     logger.info(f"processed {i} FASTQ records from '{fname}'")
+
+
+def make_header(bam, progname):
+    import os
+    import sys
+
+    header = bam.header.to_dict()
+    # if "PG" in header:
+    # for pg in header['PG']:
+    #     if pg["ID"] == progname:
+    #         progname = progname + ".1"
+
+    pg_list = header.get("PG", [])
+    pg = {
+        "ID": progname,
+        "PN": progname,
+        "CL": " ".join(sys.argv[1:]),
+        "VN": __version__,
+    }
+    if len(pg_list):
+        pg["PP"] = pg_list[-1]["ID"]
+
+    header["PG"] = pg_list + [pg]
+    return header
 
 
 def dge_to_sparse(dge_path):
@@ -303,3 +328,40 @@ def check_star_index_compatibility(star_index_dir):
                 f"STAR index version ({index_version}) is"
                 + f" incompatible with your STAR version ({star_version})"
             )
+
+
+def load_yaml(path, mode="rt"):
+    if not path:
+        return {}
+    else:
+        import yaml
+
+        return yaml.load(path, mode)
+
+
+def timed_loop(
+    src,
+    logger,
+    T=5,
+    chunk_size=10000,
+    template="processed {i} BAM records in {dT:.1f}sec. ({rate:.3f} k rec/sec)",
+    skim=0,
+):
+    from time import time
+
+    t0 = time()
+    t_last = t0
+    for i, x in enumerate(src):
+        if skim:
+            if i % skim == 0:
+                yield x
+        else:
+            yield x
+
+        if i % chunk_size == 0:
+            t = time()
+            if t - t_last > T:
+                dT = t - t0
+                rate = i / dT / 1000.0
+                logger.debug(template.format(**locals()))
+                t_last = t

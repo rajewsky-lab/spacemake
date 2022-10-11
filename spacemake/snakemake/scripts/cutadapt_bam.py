@@ -20,6 +20,7 @@ import spacemake.util as util
 from time import time
 import pysam
 import logging
+import os
 
 
 def parse_cmdline():
@@ -155,31 +156,6 @@ def load_adapters(right, left, max_errors=0.1, min_overlap=3):
             )
 
     return adapters_right, adapters_left
-
-
-def make_header(bam):
-    import os
-    import sys
-
-    header = bam.header.to_dict()
-    progname = os.path.basename(__file__)
-    # if "PG" in header:
-    # for pg in header['PG']:
-    #     if pg["ID"] == progname:
-    #         progname = progname + ".1"
-
-    pg_list = header.get("PG", [])
-    pg = {
-        "ID": progname,
-        "PN": progname,
-        "CL": " ".join(sys.argv[1:]),
-        "VN": __version__,
-    }
-    if len(pg_list):
-        pg["PP"] = pg_list[-1]["ID"]
-
-    header["PG"] = pg_list + [pg]
-    return header
 
 
 class SimpleRead:
@@ -352,7 +328,7 @@ def main_single(args):
     bam_out = pysam.AlignmentFile(
         args.bam_out,
         f"w{args.bam_out_mode}",
-        header=make_header(bam_in),
+        header=util.make_header(bam_in, progname=os.path.basename(__file__)),
         threads=args.threads_write,
     )
 
@@ -668,11 +644,17 @@ def main_parallel(args):
         #             f.write(
         #                 f"BC2\t{k}\t{v}\t{100.0 * v/max(bccount2['total'], 1):.2f}\n"
         #             )
+    if el.exception:
+        return -1
 
 
 if __name__ == "__main__":
     args = parse_cmdline()
     if args.threads_work == 1:
-        main_single(args)
+        ret_code = main_single(args)
     else:
-        main_parallel(args)
+        ret_code = main_parallel(args)
+
+    import sys
+
+    sys.exit(ret_code)
