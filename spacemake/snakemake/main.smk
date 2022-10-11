@@ -403,7 +403,7 @@ rule create_dge:
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{UMI}']
     # at most 8 dges will be created the same time
-    threads: max(workflow.cores * 0.125, 1)
+    # threads: max(workflow.cores * 0.125, 1)
     shell:
         "python {spacemake_dir}/quant.py "
         " --sample-name={wildcards.sample_id} "
@@ -412,21 +412,6 @@ rule create_dge:
         " --out-summary={output.dge_summary} "
         " --cell-bc-allowlist={input.top_barcodes} "
         "{input.annotated_bams}"
-
-        # """
-        # mkdir -p {params.dge_root}
-
-        # {dropseq_tools}/DigitalExpression \
-        # -m 16g \
-        # I= {input.reads}\
-        # O= {output.dge} \
-        # SUMMARY= {output.dge_summary} \
-        # CELL_BC_FILE={input.top_barcodes} \
-        # CELL_BARCODE_TAG={params.cell_barcode_tag} \
-        # MOLECULAR_BARCODE_TAG={params.umi_tag} \
-        # TMP_DIR={global_tmp} \
-        # {params.dge_extra_params}
-        # """
 
 
 rule create_h5ad_dge:
