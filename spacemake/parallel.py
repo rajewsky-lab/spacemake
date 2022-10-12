@@ -1,8 +1,4 @@
-__version__ = "0.9"
-__author__ = ["Marvin Jens"]
-__license__ = "GPL"
-__email__ = ["marvin.jens@mdc-berlin.de"]
-
+from spacemake.contrib import __version__, __author__, __license__, __email__
 import logging
 import time
 
