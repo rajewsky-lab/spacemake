@@ -28,11 +28,11 @@ def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
         dge_summary["n_umi"] = dge_summary["exonic_UMI"] + dge_summary["intronic_UMI"]
         dge_summary["n_genes"] = (adata.X > 0).sum(axis=1)
 
-        # print(dge_summary)
-        # print("about to do weird merge")
-        # adata.obs["n_reads"] = dge_summary[adata.obs_names, "n_reads"]
         adata.obs = pd.merge(
-            adata.obs, dge_summary[["n_reads"]], left_index=True, right_index=True
+            adata.obs,
+            dge_summary[["n_reads", "n_umi", "n_genes"]],
+            left_index=True,
+            right_index=True,
         )
 
         add_reads = True
