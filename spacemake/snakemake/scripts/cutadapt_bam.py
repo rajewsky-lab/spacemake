@@ -375,7 +375,7 @@ def parallel_read(Qsam, args, Qerr, abort_flag, stat_list):
         bam_in = pysam.AlignmentFile(
             args.bam_in, "rb", check_sq=False, threads=args.threads_read
         )
-        bam_header.append(make_header(bam_in))
+        bam_header.append(util.make_header(bam_in, progname=os.path.basename(__file__)))
 
         # read_source = BAM_to_string(skim_reads(bam_in.fetch(until_eof=True), args.skim))
         if args.skim:

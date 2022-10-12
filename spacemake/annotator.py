@@ -865,7 +865,7 @@ def build_compiled_annotation(args):
         ga = GenomeAnnotation.from_GTF(args.gtf, df_cache=args.tabular)
 
     ga = ga.compile(args.compiled)
-    return ga
+
 
 
 def parse_args():
