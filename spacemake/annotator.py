@@ -594,7 +594,9 @@ def read_BAM_to_queue(
         for read in bam.fetch(until_eof=True):
             yield (read.tostring(), read.get_blocks())
 
-    with ExceptionLogging("read_BAM_to_queue", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging(
+        "spacemake.annotator.read_BAM_to_queue", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
         bam_in = pysam.AlignmentFile(
             bam_in, "rb", check_sq=False, threads=reader_threads
         )
@@ -603,7 +605,7 @@ def read_BAM_to_queue(
         )
         # print(f"read process shared={shared}")
         for chunk in chunkify(read_source(bam_in), n_chunk=chunk_size):
-            logging.debug(
+            el.logger.debug(
                 f"placing {chunk[0]} {len(chunk[1])} in queue of depth {Qsam.qsize()}"
             )
             if put_or_abort(Qsam, chunk, abort_flag):
@@ -924,8 +926,8 @@ def parse_args():
     tag_parser.add_argument(
         "--chunk-size",
         type=int,
-        default=10000,
-        help="how many BAM-records form a chunk for parallel processing (default=10000)",
+        default=20000,
+        help="how many BAM-records form a chunk for parallel processing (default=20000)",
     )
     tag_parser.add_argument(
         "--antisense",
