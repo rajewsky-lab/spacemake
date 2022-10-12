@@ -39,3 +39,5 @@ dependencies:
         - squidpy>=1.0.0
         - novosparc
         - opencv-python
+        - cutadapt
+        - ncls
