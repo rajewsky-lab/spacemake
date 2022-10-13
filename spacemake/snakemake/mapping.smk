@@ -53,7 +53,10 @@ MAP_RULES_LKUP = {}
 #   value: dotdict with plenty of attributes
 
 from collections import defaultdict
+# these support lookup by (project_id, sample_id)
 ANNOTATED_BAMS = defaultdict(set)
+ALL_BAMS = defaultdict(set)
+
 # used for symlink name to source mapping
 BAM_SYMLINKS = {}
 
@@ -257,6 +260,7 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
 
             mr.ref_path = species_d[mr.ref_name]["sequence"]
             mr.ann_path = species_d[mr.ref_name].get("annotation", None)
+            ALL_BAMS[(index[0], index[1])].add(mr.out_path)
             if mr.ann_path:
                 mr.ann_final = wc_fill(species_reference_annotation, mr)
                 mr.ann_final_compiled = wc_fill(species_reference_annotation_compiled, mr)
@@ -314,6 +318,10 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
 def get_annotated_bams(wc):
     print(wc)
     return {'annotated_bams' : sorted(ANNOTATED_BAMS[(wc.project_id, wc.sample_id)])}
+
+def get_all_bams(wc):
+    print(wc)
+    return {'bams' : sorted(ALL_BAMS[(wc.project_id, wc.sample_id)])}
 
 register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
 

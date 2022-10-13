@@ -37,7 +37,7 @@ def parse_cmdline():
         type=int
     )
     parser.add_argument(
-        "--cb-tag",
+        "--tag",
         help="bam tag to investigate (default='CB')",
         default="CB",
     )
@@ -72,7 +72,8 @@ def main(args):
         reference_name = os.path.basename(bam_name).split(".")[0]
         ref_counts = defaultdict(int)
         logger.info(f"processing {bam_name}")
-        bam = pysam.AlignmentFile(bam_name, check_sq=False)
+        # bam = pysam.AlignmentFile(bam_name, check_sq=False)
+        bam = util.quiet_bam_open(bam_name, check_sq=False)
         
         for aln in util.timed_loop(bam.fetch(until_eof=True), logger, skim=args.skim):
             n_aln += 1
@@ -86,7 +87,7 @@ def main(args):
                 unique.add(aln.query_name)
 
             tags = dict(aln.get_tags())
-            cell = tags.get(args.cb_tag, "NA")
+            cell = tags.get(args.tag, "NA")
             count[cell] += 1
             ref_counts[cell] += 1
     

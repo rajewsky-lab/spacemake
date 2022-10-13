@@ -9,7 +9,7 @@ nucl_stretches = ['TTTTTT', 'AAAAAAAA', 'CCCCCCCC', 'GGGGGGGG']
 
 with open(snakemake.input[0], 'r') as fi, open(snakemake.output[0], 'w') as fo:
     for barcode in fi:
-        barcode = barcode.strip()
+        barcode = barcode.split()[0].strip()
         barcode_len = len(barcode)
         
         # clean up TAG=XC artifact

@@ -3,10 +3,7 @@ import numpy as np
 # import cutadapt.align
 from collections import defaultdict
 
-__version__ = "0.9"
-__author__ = ["Marvin Jens"]
-__license__ = "GPL"
-
+from spacemake.contrib import __version__, __license__, __author__, __email__
 import multiprocessing as mp
 from spacemake.parallel import (
     put_or_abort,

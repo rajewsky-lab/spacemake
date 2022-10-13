@@ -22,27 +22,26 @@ def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
             index_col="cell_bc",
             # names=["cell_bc", "n_reads", "n_umi", "n_genes"],
         )
-        dge_summary["n_reads"] = (
-            dge_summary["exonic_read"] + dge_summary["intronic_read"]
-        )
-        dge_summary["n_umi"] = dge_summary["exonic_UMI"] + dge_summary["intronic_UMI"]
-        dge_summary["n_genes"] = (adata.X > 0).sum(axis=1)
+        # dge_summary["n_reads"] = (
+        #     dge_summary["exonic_read"] + dge_summary["intronic_read"]
+        # )
+        # dge_summary["n_umi"] = dge_summary["exonic_UMI"] + dge_summary["intronic_UMI"]
+        # dge_summary["n_genes"] = (adata.X > 0).sum(axis=1)
 
-        adata.obs = pd.merge(
-            adata.obs,
-            dge_summary[["n_reads", "n_umi", "n_genes"]],
-            left_index=True,
-            right_index=True,
-        )
+        # adata.obs = pd.merge(
+        #     adata.obs,
+        #     dge_summary[["n_reads", "n_umi", "n_genes"]],
+        #     left_index=True,
+        #     right_index=True,
+        # )
 
         add_reads = True
 
-    if n_reads is not None:
+    print(adata)
+    if not "n_reads" in adata.obs and n_reads is not None:
         adata.obs["n_reads"] = n_reads
-        add_reads = True
 
-    if add_reads:
-        adata.obs["reads_per_counts"] = adata.obs.n_reads / adata.obs.total_counts
+    adata.obs["reads_per_counts"] = adata.obs["n_reads"] / adata.obs["n_UMI"]
 
 
 def calculate_shannon_entropy_scompression(adata):

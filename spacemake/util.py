@@ -10,7 +10,13 @@ LINE_SEPARATOR = "-" * 50 + "\n"
 bool_in_str = ["True", "true", "False", "false"]
 __version__ = "0.9"
 
-
+def quiet_bam_open(*argc, **kw):
+    import pysam
+    save = pysam.set_verbosity(0)
+    bam = pysam.AlignmentFile(*argc, **kw)
+    pysam.set_verbosity(save)    
+    return bam
+    
 def assert_file(file_path, default_value=None, extension=["all"]):
     if file_path == default_value:
         # file doesn't exist but has the default value,

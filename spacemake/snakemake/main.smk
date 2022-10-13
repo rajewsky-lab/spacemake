@@ -313,7 +313,7 @@ rule run_fastqc:
 rule get_barcode_readcounts:
     # this rule takes the final.bam file (output of the dropseq pipeline) and creates a barcode read count file
     input:
-        unpack(get_final_bam)
+        unpack(get_all_bams)
     output:
         barcode_readcounts
     params:
@@ -321,13 +321,16 @@ rule get_barcode_readcounts:
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{cell}'],
     shell:
-        """
-        {dropseq_tools}/BamTagHistogram -m 32g \
-        I= {input} \
-        O= {output} \
-        TAG={params.cell_barcode_tag} \
-        READ_MQ=0
-        """
+        "python {spacemake_dir}/cell_counter.py "
+        " --out=/dev/stdout "
+        " --top=0 "
+        " --tag={params.cell_barcode_tag} "
+        " --unique "
+        " --unmapped "
+        " {input.bams} "
+        "| gzip -c > {output} "
+        
+
 
 rule create_top_barcode_whitelist:
     input:
@@ -335,7 +338,7 @@ rule create_top_barcode_whitelist:
     output:
         top_barcodes
     shell:
-        "zcat {input} | cut -f2 | head -{wildcards.n_beads} > {output}"
+        "zcat {input} | cut -f1 | head -{wildcards.n_beads} > {output}"
 
 rule clean_top_barcodes:
     input:
