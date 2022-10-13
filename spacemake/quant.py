@@ -74,7 +74,7 @@ class DGE:
         sparse_channels = OrderedDict()
         for channel in self.channels:
             counts = counts_by_channel[channel]
-            sparse_channels[channel] = scipy.sparse.csr_array(
+            sparse_channels[channel] = scipy.sparse.csr_matrix(
                 (counts, (row_ind, col_ind))
             )
         return sparse_channels, obs, var
@@ -113,6 +113,7 @@ class DGE:
 class DefaultCounter:
 
     channels = ["exonic_UMI", "exonic_read", "intronic_UMI", "intronic_read"]
+    rank_cells_by = "n_reads"
 
     def __init__(self, bam, **kw):
         self.kw = kw
@@ -137,18 +138,39 @@ class DefaultCounter:
             if uniq:
                 self.uniq.add(key)
 
+            exon = False
+            intron = False
             for f in gf:
                 if f in self.exonic_set:
                     channels.add("exonic_read")
+                    exon = True
                     if uniq:
                         channels.add("exonic_UMI")
                 elif f in self.intronic_set:
                     channels.add("intronic_read")
+                    intron = True
                     if uniq:
                         channels.add("intronic_UMI")
 
+            # post-process: if both exon & intron annotations are present
+            # count the read as exonic
+            if exon and intron:
+                channels -= set(["intronic_read", "intronic_UMI"])
+
         return gene, cell, umi, channels
 
+    @staticmethod
+    def postprocess_adata(adata, sparse_d):
+        # number of genes detected in this cell
+        adata.obs["n_genes"] = sparse_summation(adata.X > 0, axis=1)
+
+        # add marginal counts:
+        for c in DefaultCounter.channels:
+            adata.obs[f"n_{c}"] = sparse_summation(sparse_d[c], axis=1)
+
+        adata.obs["n_reads"] = adata.obs["n_exonic_read"] + adata.obs["n_intronic_read"]
+        adata.obs["n_UMI"] = adata.obs["n_exonic_UMI"] + adata.obs["n_intronic_UMI"]
+        return adata
 
 def parse_cmdline():
     parser = argparse.ArgumentParser(
@@ -199,6 +221,12 @@ def parse_cmdline():
         help="directory to store the output h5ad and statistics/marginal counts",
         default="dge",
     )
+    # parser.add_argument(
+    #     "--cell-rank-cutoff",
+    #     default=100000,
+    #     type=int,
+    #     help="if set to positive value, keep only the top n cells, ranked by counts as specified by the counter class (see Documentation). default=100000"
+    # )
     parser.add_argument(
         "--out-dge",
         help="filename for the output h5ad",
@@ -231,7 +259,14 @@ def get_counter_class(classpath):
 
 
 def sparse_summation(X, axis=0):
-    return np.array(X.sum(axis=axis))
+    # for csr_array this would be fine
+    # return np.array(X.sum(axis=axis))
+    # unfortunately, for the time being scanpy needs csr_matrix
+    # due to h5py lagging somewhat
+    if axis == 0:
+        return np.array(X.sum(axis=0))[0]
+    elif axis == 1:
+        return np.array(X.sum(axis=1))[:,0]
 
 
 def main(args):
@@ -268,6 +303,12 @@ def main(args):
     adata = dge.sparse_arrays_to_adata(
         sparse_d, obs, var, main_channel=args.main_channel
     )
+    adata = count_class.postprocess_adata(adata, sparse_d)
+    # if args.cell_rank_cutoff > 0:
+    #     counts = adata.obs[count_class.rank_cells_by].sort_values(ascending=False)
+    #     keep = counts.iloc[:args.cell_rank_cutoff].index
+    #     adata = adata[keep, :]
+
     adata.var["reference"] = [gene_source[gene] for gene in var]
     adata.obs["sample_name"] = args.sample_name
     adata.uns[
