@@ -55,6 +55,58 @@ print(
 print(starts)
 
 
+def do_merge(s, e, intervals):
+    keep = []
+    for j, (s2, e2) in enumerate(intervals):
+        new = (s2, e2)
+        if s2 <= e and e2 >= e:
+            print(f"overlap on the right, s={s} e={e} s2={s2} e2={e2}")
+            new = (min(s2, s), max(e, e2))
+        elif e2 >= s and s2 <= s:
+            print(f"overlap on the left, s={s} e={e} s2={s2} e2={e2}")
+            new = (min(s2, s), max(e, e2))
+        elif s2 >= s and e2 <= e:
+            print(f"contained in other interval. discard, s={s} e={e} s2={s2} e2={e2}")
+            continue
+
+        keep.append(new)
+
+    return keep
+
+
+# merge intervals that have some overlap
+intervals = sorted(list(intervals), key=lambda x: x[1] - x[0], reverse=True)
+print(intervals)
+
+while True:
+    changed = False
+    for i, (s, e) in enumerate(intervals):
+        others = intervals[i + 1 :]
+        keep = do_merge(s, e, others)
+        if keep != others:
+            print("we had a change!")
+            print("before")
+            for s, e in intervals:
+                print(f"{s} - {e}")
+
+            intervals = intervals[: i + 1] + keep
+            intervals = sorted(list(intervals), key=lambda x: x[1] - x[0], reverse=True)
+            print("after")
+            for s, e in intervals:
+                print(f"{s} - {e}")
+
+            changed = True
+            break  # the for loop
+
+    if not changed:
+        break
+
+intervals = sorted(list(set(intervals)), key=lambda x: x[1] - x[0], reverse=True)
+print("remaining intervals")
+for s, e in intervals:
+    print(f"{s} - {e}")
+
+
 # Okay, now we know the gene loci which are needed to map the test reads!
 intervals = list(sorted(intervals))
 print(f"relevant intervals found: {len(intervals)}")
