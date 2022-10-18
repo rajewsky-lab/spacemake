@@ -172,6 +172,7 @@ class DefaultCounter:
         adata.obs["n_UMI"] = adata.obs["n_exonic_UMI"] + adata.obs["n_intronic_UMI"]
         return adata
 
+
 def parse_cmdline():
     parser = argparse.ArgumentParser(
         description="quantify per-cell gene expression from BAM files by counting into a (sparse) DGE matrix"
@@ -266,7 +267,7 @@ def sparse_summation(X, axis=0):
     if axis == 0:
         return np.array(X.sum(axis=0))[0]
     elif axis == 1:
-        return np.array(X.sum(axis=1))[:,0]
+        return np.array(X.sum(axis=1))[:, 0]
 
 
 def main(args):
@@ -310,7 +311,7 @@ def main(args):
     #     adata = adata[keep, :]
 
     adata.var["reference"] = [gene_source[gene] for gene in var]
-    adata.obs["sample_name"] = args.sample_name
+    adata.uns["sample_name"] = args.sample_name
     adata.uns[
         "DGE_info"
     ] = f"created with spacemake.quant version={__version__} on {datetime.datetime.today().isoformat()}"
@@ -339,7 +340,8 @@ def main(args):
 
     data = OrderedDict()
 
-    data["sample_name"] = args.sample_name
+    # TODO: add back in once we dropped the Rmd QC sheet scripts
+    # data["sample_name"] = args.sample_name
     data["cell_bc"] = obs
     for channel, M in sparse_d.items():
         data[channel] = sparse_summation(M, axis=1)
