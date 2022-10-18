@@ -37,7 +37,7 @@ def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
 
         add_reads = True
 
-    print(adata)
+    # print(adata)
     if not "n_reads" in adata.obs and n_reads is not None:
         adata.obs["n_reads"] = n_reads
 
