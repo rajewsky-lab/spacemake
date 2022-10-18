@@ -27,8 +27,11 @@ final_target = "final.polyA_adapter_trimmed"
 # patterns for auto-generated BAM file names and symlinks
 linked_bam = complete_data_root + "/{link_name}.bam"
 mapped_bam = complete_data_root + "/{ref_name}.{mapper}.bam"
+unmapped_bam = complete_data_root + "/not_{ref_name}.{mapper}.bam"
 star_mapped_bam = complete_data_root + "/{ref_name}.STAR.bam"
+star_unmapped_bam = complete_data_root + "/not_{ref_name}.STAR.bam"
 bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.bam"
+bt2_unmapped_bam = complete_data_root + "/not_{ref_name}.bowtie2.bam"
 
 # special log file used for rRNA "ribo depletion" stats
 bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
@@ -216,7 +219,7 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
                 if final in lr.link_name:
                     final_link = lr
 
-        left = mr.out_name
+        left = f"not_{mr.out_name}"
 
     if not final_link:
         # we need to manufacture a "final" link_rule by taking the last mapping
@@ -316,11 +319,11 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
     return out_files
 
 def get_annotated_bams(wc):
-    print(wc)
+    # print(wc)
     return {'annotated_bams' : sorted(ANNOTATED_BAMS[(wc.project_id, wc.sample_id)])}
 
 def get_all_bams(wc):
-    print(wc)
+    # print(wc)
     return {'bams' : sorted(ALL_BAMS[(wc.project_id, wc.sample_id)])}
 
 register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
@@ -343,7 +346,7 @@ def get_map_rule(wc):
     return MAP_RULES_LKUP[output]
 
 def get_map_inputs(wc, mapper="STAR"):
-    print("get_map_inputs()")
+    # print("get_map_inputs()")
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
@@ -354,12 +357,12 @@ def get_map_inputs(wc, mapper="STAR"):
     if hasattr(mr, "ann_final_compiled_target") and mr.ann_final_compiled_target:
         d['annotation'] = mr.ann_final_compiled_target
 
-    print(d)
-    print("done.")
+    # print(d)
+    # print("done.")
     return d
 
 def get_map_params(wc, output, mapper="STAR"):
-    print("get_map_params()")
+    # print("get_map_params()")
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
@@ -378,7 +381,7 @@ def get_map_params(wc, output, mapper="STAR"):
         'index' : mr.map_index_param,
         'flags' : mr.map_flags,
     }
-    print("done..")
+    # print("done..")
     return d
 
 
@@ -414,7 +417,8 @@ rule map_reads_bowtie2:
         # index=lambda wc: BAM_IDX_LKUP[wc_fill(bt2_mapped_bam, wc)],
         unpack(lambda wc: get_map_inputs(wc, mapper='bowtie2')),
     output:
-        bam=bt2_mapped_bam
+        bam=bt2_mapped_bam,
+        ubam=bt2_unmapped_bam
     log: bt2_mapped_bam + ".log"
     params:
         auto = lambda wc, output: get_map_params(wc, output, mapper='bowtie2'),
@@ -437,7 +441,8 @@ rule map_reads_bowtie2:
         "| python {repo_dir}/scripts/splice_bam_header.py"
         "  --in-ubam {input.bam}"
         " "
-        "{params.auto[annotation_cmd]}"
+        "| tee >( samtools view -F 4 --threads=2 -buh /dev/stdin {params.auto[annotation_cmd]} ) "
+        "| samtools view -f 4 --threads=4 -bh /dev/stdin > {output.ubam}"
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
 
@@ -479,6 +484,7 @@ rule map_reads_STAR:
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
         bam=star_mapped_bam,
+        ubam=star_unmapped_bam,
         log=star_target_log_file,
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
     params:
@@ -501,7 +507,8 @@ rule map_reads_STAR:
         "| python {repo_dir}/scripts/splice_bam_header.py"
         " --in-ubam {input.bam}"
         " "
-        "{params.auto[annotation_cmd]}"
+        "| tee >( samtools view -F 4 --threads=2 -buh /dev/stdin {params.auto[annotation_cmd]} ) "
+        "| samtools view -f 4 --threads=4 -bh /dev/stdin > {output.ubam}"
         " "
         "; rm -rf {params.tmp_dir}"
 
