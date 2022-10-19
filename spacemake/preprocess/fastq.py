@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-__version__ = "0.9"
-__author__ = ["Marvin Jens"]
-__license__ = "GPL"
-__email__ = ["marvin.jens@mdc-berlin.de"]
-
+from spacemake.contrib import __version__, __author__, __license__, __email__
 import argparse
 import logging
 import time
@@ -678,18 +674,42 @@ def process_dropseq(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
                 reads = quality_trim_read2(
                     reads, min_qual=args.min_qual_trim, phred_base=args.phred_base
                 )
+            if args.paired_end:
+                for fqid, r1, fqid2, r2, qual2 in reads:
+                    N["total"] += 1
+                    rec1 = out.make_record(
+                        assigned=True,
+                        qname=fqid,
+                        r1=r1,
+                        r2=r1,
+                        r2_qual=qual2,
+                        r2_qname=fqid2,
+                        flag=69 # unmapped, paired, first in pair
+                    )
+                    rec2 = out.make_record(
+                        assigned=True,
+                        qname=fqid,
+                        r1=r1,
+                        r2=r2,
+                        r2_qual=qual2,
+                        r2_qname=fqid2,
+                        flag=133 # unmapped, paired, second in pair
+                    )
+                    results.append((True, rec1))
+                    results.append((True, rec2))
 
-            for fqid, r1, fqid2, r2, qual2 in reads:
-                N["total"] += 1
-                rec = out.make_record(
-                    assigned=True,
-                    qname=fqid,
-                    r1=r1,
-                    r2=r2,
-                    r2_qual=qual2,
-                    r2_qname=fqid2,
-                )
-                results.append((True, rec))
+            else:
+                for fqid, r1, fqid2, r2, qual2 in reads:
+                    N["total"] += 1
+                    rec = out.make_record(
+                        assigned=True,
+                        qname=fqid,
+                        r1=r1,
+                        r2=r2,
+                        r2_qual=qual2,
+                        r2_qname=fqid2,
+                    )
+                    results.append((True, rec))
 
             Qres.put((n_chunk, results))
 
@@ -879,13 +899,13 @@ class Output:
         else:
             return True
 
-    def make_bam_record(self, **kw):
+    def make_bam_record(self, flag=4, **kw):
         # sys.stderr.write(f"r2_qual={r2_qual}\n")
         a = pysam.AlignedSegment(self.bam_header)
         # STAR does not like spaces in read names so we have to split
         a.query_name = kw["r2_qname"].split()[0]
         a.query_sequence = kw["seq"]  # kw["r2"]
-        a.flag = 4
+        a.flag = flag
         a.query_qualities = pysam.qualitystring_to_array(
             kw["qual"]
         )  # pysam.qualitystring_to_array(kw["r2_qual"])
@@ -938,6 +958,9 @@ class Output:
 
         # slightly concerned about security here...
         # at least all () and ; raise an assertion in __init__
+        # print(qname, r2_qname)
+        i5i7 = r2_qname.split(":N:0:")[1].replace('+', '')
+
         cell = eval(self.f_cell)
         raw = eval(self.f_cell_raw)
         UMI = eval(self.f_UMI)
@@ -1014,6 +1037,7 @@ def parse_args():
     parser.add_argument("--UMI", default="r1[0:8]")
     parser.add_argument("--seq", default="r2")
     parser.add_argument("--qual", default="r2_qual")
+    parser.add_argument("--paired-end", default=False, action="store_true", help="read1 and read2 are paired end mates and store both in the BAM")
 
     parser.add_argument(
         "--out-format",
