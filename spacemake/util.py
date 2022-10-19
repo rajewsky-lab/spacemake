@@ -8,7 +8,6 @@ from spacemake.errors import SpacemakeError, FileWrongExtensionError
 LINE_SEPARATOR = "-" * 50 + "\n"
 
 bool_in_str = ["True", "true", "False", "false"]
-__version__ = "0.9"
 
 def quiet_bam_open(*argc, **kw):
     import pysam
@@ -87,6 +86,14 @@ def read_fq(fname, skim=0):
         while True:
             yield ("no_qname", "no_seq", "no_qual")
 
+    if "*" in fname:
+        logger.warning("EXPERIMENTAL: fname contains wildcards")
+        from glob import glob
+        for match in sorted(glob(fname)):
+            for rec in read_fq(match, skim=skim):
+                yield rec
+
+    logger.info(f"iterating over reads from '{fname}'")
     if fname.endswith(".gz"):
         src = FASTQ_src(gzip.open(fname, mode="rt"))
     elif fname.endswith(".bam"):
