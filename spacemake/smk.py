@@ -220,11 +220,6 @@ def setup_init_parser(parent_parser_subparsers):
         help="if set, upon initialisation, spacemake will download the mouse and human genome and index",
         action="store_true",
     )
-    parser_init.add_argument(
-        "--dropseq_tools",
-        help="absolute path to dropseq_tools directory",
-        required=True,
-    )
     parser_init.set_defaults(func=spacemake_init)
 
     return parser_init
@@ -278,10 +273,6 @@ def spacemake_init(args):
     # add variables from args
     cf.variables["root_dir"] = args["root_dir"]
     cf.variables["temp_dir"] = args["temp_dir"]
-
-    cf.variables['external_bin'] = {
-        'dropseq_tools' : args['dropseq_tools']
-    }
 
     cf.variables['microscopy_out'] = args.get('microscopy_out', '')
 

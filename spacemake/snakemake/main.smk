@@ -29,7 +29,7 @@ project_root = config['root_dir']
 ################
 # Shell prefix #
 ################
-shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
+shell.prefix('set +o pipefail; ')
 
 ####
 # this file should contain all sample information, sample name etc.
@@ -54,9 +54,6 @@ include: 'variables.py'
 ########################
 # UNIQUE PIPELINE VARS #
 ########################
-# set the tool script directories
-dropseq_tools = config['external_bin']['dropseq_tools']
-
 reports_dir = complete_data_root + '/reports'
 smart_adapter = config['adapters']['smart']
 

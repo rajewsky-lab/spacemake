@@ -8,7 +8,6 @@ import yaml
 import pandas as pd
 import numpy as np
 
-dropseq_tools = "/data/rajewsky/shared_bins/Drop-seq_tools-2.4.0"
 base_dir = os.path.join(os.path.dirname(__file__), "..")
 
 # set to true to track code coverage of the tests here using 'coverage'
@@ -218,7 +217,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
         return self.load_project_df()
 
     def test_0_init(self):
-        self.run_spacemake(f"{spacemake_cmd} init --dropseq_tools={dropseq_tools}")
+        self.run_spacemake(f"{spacemake_cmd} init")
         self.assertTrue(os.access("config.yaml", os.R_OK))
 
     def test_1_add_species(self):
