@@ -71,6 +71,13 @@ def parse_cmdline():
         default=20,
     )
     parser.add_argument(
+        "--phred-base",
+        help="phred score base used for qual trimming (default=33)",
+        type=int,
+        default=33,
+    )
+
+    parser.add_argument(
         "--threads-read",
         help="number of threads for reading bam_in (default=2)",
         type=int,
@@ -89,10 +96,10 @@ def parse_cmdline():
         default=1,
     )
     parser.add_argument(
-        "--n-chunk",
-        help="number of reads per chunk. Chunks are processes in parallel by workers (default=20000)",
+        "--chunk-size",
+        help="number of bam records per chunk. Chunks are processes in parallel by workers (default=100000)",
         type=int,
-        default=20000,
+        default=100000,
     )
 
     parser.add_argument(
@@ -208,11 +215,18 @@ def process_reads(read_source, args, stats={}, total={}, lhist={}):
             return False
 
     for read in read_source:
-        read_seq = read.query_sequence
-        read_qual = read.query_qualities
+        # read_seq = read.query_sequence
+        # read_qual = read.query_qualities
+        # we got a string
+        cols = read.split('\t')
+        read_seq = cols[9]
+        qual_str = cols[10]
+        read_qual = np.array(bytearray(qual_str.encode("ASCII"))) - args.phred_base
+
         # print(read_qual)
         start = 0
         end = len(read_seq)
+        tags = []
 
         stats["N_input"] += 1
         total["bp_input"] += end
@@ -242,57 +256,65 @@ def process_reads(read_source, args, stats={}, total={}, lhist={}):
         if check_discard(start, end, "N_too_short_after_Q"):
             continue
 
-        # right end adapter trimming
-        for adap_name, adap_seq, adap in adapters_right:
-            match = adap.match_to(read_seq[start:end])
-            if match:
-                new_end = min(end, match.rstart)
-                n_trimmed = end - new_end
-                end = new_end
-                trimmed_bases_right.append(n_trimmed)
-                trimmed_names_right.append(adap_name)
+        if adapters_right:
+            # right end adapter trimming
+            for adap_name, adap_seq, adap in adapters_right:
+                match = adap.match_to(read_seq[start:end])
+                if match:
+                    new_end = min(end, match.rstart)
+                    n_trimmed = end - new_end
+                    end = new_end
+                    trimmed_bases_right.append(n_trimmed)
+                    trimmed_names_right.append(adap_name)
 
-                stats["N_" + adap_name] += 1
-                total["bp_" + adap_name] += n_trimmed
-                total["bp_trimmed"] += n_trimmed
+                    stats["N_" + adap_name] += 1
+                    total["bp_" + adap_name] += n_trimmed
+                    total["bp_trimmed"] += n_trimmed
 
-        if check_discard(start, end, f"N_too_short_after_right_{adap_name}"):
-            continue
+            if check_discard(start, end, f"N_too_short_after_right_{adap_name}"):
+                continue
 
-        # left end adapter trimming
-        for adap_name, adap_seq, adap in adapters_left:
-            match = adap.match_to(read_seq[start:end])
-            if match:
-                # print(adap_name, adap, match)
-                new_start = max(start, match.rstop)
-                n_trimmed = new_start - start
-                start = new_start
-                trimmed_bases_left.append(n_trimmed)
-                trimmed_names_left.append(adap_name)
+        if adapters_left:
+            # left end adapter trimming
+            for adap_name, adap_seq, adap in adapters_left:
+                match = adap.match_to(read_seq[start:end])
+                if match:
+                    # print(adap_name, adap, match)
+                    new_start = max(start, match.rstop)
+                    n_trimmed = new_start - start
+                    start = new_start
+                    trimmed_bases_left.append(n_trimmed)
+                    trimmed_names_left.append(adap_name)
 
-                stats["N_" + adap_name] += 1
-                total["bp_" + adap_name] += n_trimmed
-                total["bp_trimmed"] += n_trimmed
+                    stats["N_" + adap_name] += 1
+                    total["bp_" + adap_name] += n_trimmed
+                    total["bp_trimmed"] += n_trimmed
 
-        if check_discard(start, end, f"N_too_short_after_left_{adap_name}"):
-            continue
+            if check_discard(start, end, f"N_too_short_after_left_{adap_name}"):
+                continue
 
         # we've made it to the end!
         stats["N_kept"] += 1
         total["bp_kept"] += end
         lhist[end] += 1
         # print(f"keeping read up to {end}")
-        read.query_sequence = read_seq[start:end]
-        read.query_qualities = read_qual[start:end]
+        # read.query_sequence = read_seq[start:end]
+        # read.query_qualities = read_qual[start:end]
+        cols[9] = read_seq[start:end]
+        cols[10] = qual_str[start:end]
+        
         if trimmed_names_right:
-            read.set_tag("A3", ",".join(trimmed_names_right))
-            read.set_tag("T3", ",".join([str(s) for s in trimmed_bases_right]))
+            tags.append(f"A3:Z:{','.join(trimmed_names_right)}")
+            tags.append(f"T3:Z:{','.join([str(s) for s in trimmed_bases_right])}")
 
         if trimmed_names_left:
-            read.set_tag("A5", ",".join(trimmed_names_left))
-            read.set_tag("T5", ",".join([str(s) for s in trimmed_bases_left]))
+            tags.append("A5:Z:{join(trimmed_names_left)}")
+            tags.append("T5:Z:{join([str(s) for s in trimmed_bases_left])}")
 
-        yield read
+        if tags:
+            cols[-1] = cols[-1] + " " + " ".join(tags)
+        
+        yield "\t".join(cols)
         # bam_out.write(read)
         # print(read)
 
@@ -317,7 +339,7 @@ def string_to_BAM(src, header=None):
 
 def main_single(args):
     logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger("cutadapt_bam")
+    logger = logging.getLogger("spacemake.cutadapt_bam.main_single")
 
     bam_in = pysam.AlignmentFile(
         args.bam_in, "rb", check_sq=False, threads=args.threads_read
@@ -367,23 +389,23 @@ def parallel_read(Qsam, args, Qerr, abort_flag, stat_list):
     reads from BAM file, converts to string, groups the records into chunks for
     faster parallel processing, and puts these on a mp.Queue()
     """
-    with ExceptionLogging("read_BAM", Qerr=Qerr, exc_flag=abort_flag) as el:
-        bam_header = stat_list[-1]
+    with ExceptionLogging("spacemake.cutadapt_bam.parallel_read", Qerr=Qerr, exc_flag=abort_flag) as el:
         bam_in = pysam.AlignmentFile(
             args.bam_in, "rb", check_sq=False, threads=args.threads_read
         )
+        bam_header = stat_list[-1]
         bam_header.append(util.make_header(bam_in, progname=os.path.basename(__file__)))
 
         # read_source = BAM_to_string(skim_reads(bam_in.fetch(until_eof=True), args.skim))
         if args.skim:
-            read_source = SimpleRead.iter_BAM(
+            read_source = BAM_to_string(
                 skim_reads(bam_in.fetch(until_eof=True), args.skim)
             )
         else:
-            read_source = SimpleRead.iter_BAM(bam_in.fetch(until_eof=True))
+            read_source = BAM_to_string(bam_in.fetch(until_eof=True))
 
-        for chunk in chunkify(read_source, n_chunk=args.n_chunk):
-            logging.debug(
+        for chunk in chunkify(read_source, n_chunk=args.chunk_size):
+            el.logger.debug(
                 f"placing {chunk[0]} {len(chunk[1])} in queue of depth {Qsam.qsize()}"
             )
             if put_or_abort(Qsam, chunk, abort_flag):
@@ -392,9 +414,9 @@ def parallel_read(Qsam, args, Qerr, abort_flag, stat_list):
 
 
 def parallel_trim(Qsam, Qres, args, Qerr, abort_flag, stat_list):
-    with ExceptionLogging("worker", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging("spacemake.cutadapt_bam.parallel_trim", Qerr=Qerr, exc_flag=abort_flag) as el:
         el.logger.debug(
-            f"parallel_trim() starting up with Qsam={Qsam}, Qres={Qres} and args={args}"
+            f"parallel_trim() starting up with args={args}"
         )
 
         _stats = defaultdict(int)
@@ -421,7 +443,7 @@ def parallel_trim(Qsam, Qres, args, Qerr, abort_flag, stat_list):
 
 
 def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeout=10):
-    with ExceptionLogging("collector", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging("spacemake.cutadapt_bam.process_ordered_results", Qerr=Qerr, exc_flag=abort_flag) as el:
         import heapq
         import time
 
@@ -461,7 +483,8 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeou
             # pass results on to storage
             while heap and (heap[0][0] == n_chunk_needed):
                 n_chunk, results = heapq.heappop(heap)  # retrieves heap[0]
-                for aln in SimpleRead.iter_to_BAM(results, header=bam_out.header):
+                # for aln in SimpleRead.iter_to_BAM(results, header=bam_out.header):
+                for aln in string_to_BAM(results, header=bam_out.header):
                     #     # print("record in process_ordered_results", record)
                     bam_out.write(aln)
                     n_rec += 1
@@ -529,7 +552,7 @@ def main_parallel(args):
     bam_header = manager.list()
     stat_lists = [stats, total, lhist, bam_header]
     print(stat_lists[-1])
-    with ExceptionLogging("main_combinatorial", exc_flag=abort_flag) as el:
+    with ExceptionLogging("spacemake.cutadapt_bam.main_parallel", exc_flag=abort_flag) as el:
 
         # read BAM in chunks and put them in Qsam
         dispatcher = mp.Process(
@@ -608,39 +631,6 @@ def main_parallel(args):
             for k, v in sorted(lhist.items()):
                 f.write(f"L_final\t{k}\t{v}\t{100.0 * v/stats['N_kept']:.2f}\n")
 
-        # N = count_dict_sum(Ns)
-        # if N["total"]:
-        #     el.logger.info(
-        #         f"Run completed. Overall combinatorial barcode assignment "
-        #         f"rate was {100.0 * N['called']/N['total']}"
-        #     )
-        # else:
-        #     el.logger.error("No reads were processed!")
-
-        # if args.update_cache:
-        #     qcount1 = count_dict_sum(qcounts1)
-        #     qcount2 = count_dict_sum(qcounts2)
-        #     cache1 = dict_merge(qcaches1)
-        #     cache2 = dict_merge(qcaches2)
-        #     store_cache(args.bc1_cache, cache1, qcount1)
-        #     store_cache(args.bc2_cache, cache2, qcount2)
-
-        # if args.save_stats:
-        #     bccount1 = count_dict_sum(bccounts1)
-        #     bccount2 = count_dict_sum(bccounts2)
-        #     with open(args.save_stats, "w") as f:
-        #         for k, v in sorted(N.items()):
-        #             f.write(f"freq\t{k}\t{v}\t{100.0 * v/max(N['total'], 1):.2f}\n")
-
-        #         for k, v in sorted(bccount1.items()):
-        #             f.write(
-        #                 f"BC1\t{k}\t{v}\t{100.0 * v/max(bccount1['total'], 1):.2f}\n"
-        #             )
-
-        #         for k, v in sorted(bccount2.items()):
-        #             f.write(
-        #                 f"BC2\t{k}\t{v}\t{100.0 * v/max(bccount2['total'], 1):.2f}\n"
-        #             )
     if el.exception:
         return -1
 
