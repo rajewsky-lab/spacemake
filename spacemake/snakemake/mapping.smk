@@ -362,18 +362,25 @@ def get_map_inputs(wc, mapper="STAR"):
     return d
 
 def get_map_params(wc, output, mapper="STAR"):
+    # we are expecting an input stream of - possibly uncompressed - BAM
+    # this stream will get directed to either compressed BAM directly, or first
+    # annotated and then written to compressed BAM
+
     # print("get_map_params()")
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
-    annotation_cmd = f"| samtools view --threads=4 -bh /dev/stdin > {output}"
+    annotation_cmd = f"| samtools view --threads=4 -bh /dev/stdin > {output.bam}"
     # this is a stub for "no annotation tagging"
     if hasattr(mr, "ann_final"):
         ann = mr.ann_final
         if ann and ann.lower().endswith(".gtf"):
             # tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={mr.out_path} ANNOTATIONS_FILE={mr.ann_final}"
-            tagging_cmd =  "| python {spacemake_dir}/annotator.py tag --bam-in=/dev/stdin --bam-out={mr.out_path} --compiled={mr.ann_final_compiled}"
-            annotation_cmd = tagging_cmd.format(mr=mr, spacemake_dir=spacemake_dir)
+            annotation_cmd = (
+                f"| python {spacemake_dir}/annotator.py tag --bam-in=/dev/stdin --bam-out={mr.out_path} --compiled={mr.ann_final_compiled} "
+                f"| samtools view --threads=4 -bh --no-PG > {output.bam} "
+            )
+            # annotation_cmd = tagging_cmd.format(mr=mr, spacemake_dir=spacemake_dir)
 
     d = {
         'annotation_cmd' : annotation_cmd,
@@ -441,8 +448,8 @@ rule map_reads_bowtie2:
         "| python {repo_dir}/scripts/splice_bam_header.py"
         "  --in-ubam {input.bam}"
         " "
-        "| tee >( samtools view -F 4 --threads=2 -buh /dev/stdin {params.auto[annotation_cmd]} ) "
-        "| samtools view -f 4 --threads=4 -bh /dev/stdin > {output.ubam}"
+        "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) "
+        "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
 
@@ -507,8 +514,8 @@ rule map_reads_STAR:
         "| python {repo_dir}/scripts/splice_bam_header.py"
         " --in-ubam {input.bam}"
         " "
-        "| tee >( samtools view -F 4 --threads=2 -buh /dev/stdin {params.auto[annotation_cmd]} ) "
-        "| samtools view -f 4 --threads=4 -bh /dev/stdin > {output.ubam}"
+        "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) "
+        "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
         " "
         "; rm -rf {params.tmp_dir}"
 
