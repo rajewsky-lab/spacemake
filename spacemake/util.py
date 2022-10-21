@@ -373,3 +373,21 @@ def timed_loop(
                 rate = i / dT / 1000.0
                 logger.debug(template.format(**locals()))
                 t_last = t
+
+
+def setup_logging(args, name="spacemake.main"):
+    FORMAT = f"%(asctime)-20s\t%(levelname)s\t{args.sample}\t%(name)s\t%(message)s"
+
+    lvl = getattr(logging, args.log_level, logging.INFO)
+    logging.basicConfig(level=lvl, format=FORMAT)
+
+    fh = logging.FileHandler(filename=args.log_file, mode="a")
+    fh.setFormatter(logging.Formatter(FORMAT))
+    root = logging.getLogger("")
+    root.addHandler(fh)
+
+    logger = logging.getLogger(name)
+    logger.info("started logging")
+    for k, v in sorted(vars(args).items()):
+        logger.info(f"cmdline arg\t{k}={v}")
+
