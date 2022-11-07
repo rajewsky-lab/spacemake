@@ -261,7 +261,7 @@ rule tag_reads_bc_umi:
         # bc_counts = barcode_readcounts
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 16
+    threads: 32
     shell:
         "python {spacemake_dir}/preprocess/cmdline.py "
         "  --sample={wildcards.sample_id} "
