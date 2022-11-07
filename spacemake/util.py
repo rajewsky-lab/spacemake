@@ -4,7 +4,7 @@ import logging
 
 from contextlib import ContextDecorator, contextmanager
 from spacemake.errors import SpacemakeError, FileWrongExtensionError
-
+from spacemake.contrib import __version__, __license__, __author__, __email__
 LINE_SEPARATOR = "-" * 50 + "\n"
 
 bool_in_str = ["True", "true", "False", "false"]
