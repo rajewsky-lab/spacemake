@@ -303,7 +303,9 @@ def query(nc, x0, x1):
     TODO: directly hook into NCLSIterator functionality to get rid of this overhead
     """
     # return frozenset((o[2] for o in nc.find_overlap(x0, x1)))
-    return [o[2] for o in nc.find_overlap(x0, x1)]
+    res = [o[2] for o in nc.find_overlap(x0, x1)]
+    # print(f"query ({x0} - {x1}) -> {res}")
+    return res
 
 
 def decompose(nc):
@@ -397,6 +399,8 @@ class GenomeAnnotation:
 
             d = df.query(f"chrom == '{chrom}' and strand == '{strand}'")
             nested_list = ncls.NCLS(d["start"], d["end"], d.index)
+            self.logger.debug(f"constructed nested_list for {strand_key} with {len(d)} features")
+
             self.strand_map[strand_key] = nested_list
             self.strand_keys.append(strand_key)
 
@@ -416,7 +420,7 @@ class GenomeAnnotation:
         classifications = np.load(cclass_path, allow_pickle=True)
         dt = time() - t0
         cls.logger.info(
-            f"loaded compiled annotation index with {len(cdf)} original GTF feature combinations and {len(classifications)} in {dt:.3f} seconds"
+            f"loaded compiled annotation index with {len(cdf)} original GTF feature combinations and {len(classifications)} pre-compiled classifications in {dt:.3f} seconds"
         )
         ## Create a classifier which uses the pre-compiled, non-overlapping combinations
         ## and corresponding pre-computed annotation tags
@@ -465,6 +469,7 @@ class GenomeAnnotation:
     def query_idx(self, chrom, start, end, strand):
         strand_key = chrom + strand
         nested_list = self.strand_map.get(strand_key, [])
+        # print(f"nested list for {chrom} {strand} -> {nested_list}")
         if nested_list:
             return query(nested_list, start, end)
         else:
@@ -867,6 +872,25 @@ def build_compiled_annotation(args):
     ga = ga.compile(args.compiled)
 
 
+def query_regions(args):
+    logger = logging.getLogger("spacemake.annotator.query")
+    if args.compiled:
+        ga = GenomeAnnotation.from_compiled_index(args.compiled)
+    else:
+        ga = GenomeAnnotation.from_GTF(args.gtf)
+
+    for region in args.region:
+        logger.info(f"querying region '{region}'")
+        chrom, coords, strand = region.split(':')
+        start, end = coords.split('-')
+
+        gn, gf, gt = ga.get_annotation_tags(chrom, strand, [(int(start), int(end)),] )
+        gn_val = ",".join(gn)
+        gf_val = ",".join(gf)
+        gt_val = ",".join(gt)
+
+        print(f"gn={gn_val}\tgf={gf_val}\tgt={gt_val}")
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -936,6 +960,25 @@ def parse_args():
         help="enable annotating against the opposite strand (antisense to the alignment) as well",
     )
 
+    query_parser = subparsers.add_parser("query")
+    query_parser.set_defaults(func=query_regions)
+    query_parser.add_argument(
+        "--compiled",
+        default=None,
+        help="path to a directoy in which a compiled version of the GTF is stored",
+    )
+    query_parser.add_argument(
+        "--gtf",
+        default=None,
+        help="path to the original annotation (e.g. gencodev38.gtf.gz)",
+    )
+    query_parser.add_argument("region", default=[], help="region to query", nargs='+')
+    query_parser.add_argument(
+        "--antisense",
+        default=False,
+        action="store_true",
+        help="enable annotating against the opposite strand (antisense to the alignment) as well",
+    )
     return parser.parse_args()
 
 
