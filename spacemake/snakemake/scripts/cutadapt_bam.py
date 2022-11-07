@@ -218,7 +218,7 @@ def process_reads(read_source, args, stats={}, total={}, lhist={}):
         # read_seq = read.query_sequence
         # read_qual = read.query_qualities
         # we got a string
-        cols = read.split('\t')
+        cols = read.split("\t")
         read_seq = cols[9]
         qual_str = cols[10]
         read_qual = np.array(bytearray(qual_str.encode("ASCII"))) - args.phred_base
@@ -256,24 +256,6 @@ def process_reads(read_source, args, stats={}, total={}, lhist={}):
         if check_discard(start, end, "N_too_short_after_Q"):
             continue
 
-        if adapters_right:
-            # right end adapter trimming
-            for adap_name, adap_seq, adap in adapters_right:
-                match = adap.match_to(read_seq[start:end])
-                if match:
-                    new_end = min(end, match.rstart)
-                    n_trimmed = end - new_end
-                    end = new_end
-                    trimmed_bases_right.append(n_trimmed)
-                    trimmed_names_right.append(adap_name)
-
-                    stats["N_" + adap_name] += 1
-                    total["bp_" + adap_name] += n_trimmed
-                    total["bp_trimmed"] += n_trimmed
-
-            if check_discard(start, end, f"N_too_short_after_right_{adap_name}"):
-                continue
-
         if adapters_left:
             # left end adapter trimming
             for adap_name, adap_seq, adap in adapters_left:
@@ -293,6 +275,24 @@ def process_reads(read_source, args, stats={}, total={}, lhist={}):
             if check_discard(start, end, f"N_too_short_after_left_{adap_name}"):
                 continue
 
+        if adapters_right:
+            # right end adapter trimming
+            for adap_name, adap_seq, adap in adapters_right:
+                match = adap.match_to(read_seq[start:end])
+                if match:
+                    new_end = min(end, match.rstart)
+                    n_trimmed = end - new_end
+                    end = new_end
+                    trimmed_bases_right.append(n_trimmed)
+                    trimmed_names_right.append(adap_name)
+
+                    stats["N_" + adap_name] += 1
+                    total["bp_" + adap_name] += n_trimmed
+                    total["bp_trimmed"] += n_trimmed
+
+            if check_discard(start, end, f"N_too_short_after_right_{adap_name}"):
+                continue
+
         # we've made it to the end!
         stats["N_kept"] += 1
         total["bp_kept"] += end
@@ -302,18 +302,18 @@ def process_reads(read_source, args, stats={}, total={}, lhist={}):
         # read.query_qualities = read_qual[start:end]
         cols[9] = read_seq[start:end]
         cols[10] = qual_str[start:end]
-        
+
         if trimmed_names_right:
             tags.append(f"A3:Z:{','.join(trimmed_names_right)}")
             tags.append(f"T3:Z:{','.join([str(s) for s in trimmed_bases_right])}")
 
         if trimmed_names_left:
-            tags.append("A5:Z:{join(trimmed_names_left)}")
-            tags.append("T5:Z:{join([str(s) for s in trimmed_bases_left])}")
+            tags.append(f"A5:Z:{','.join(trimmed_names_left)}")
+            tags.append(f"T5:Z:{','.join([str(s) for s in trimmed_bases_left])}")
 
         if tags:
             cols[-1] = cols[-1] + " " + " ".join(tags)
-        
+
         yield "\t".join(cols)
         # bam_out.write(read)
         # print(read)
@@ -389,7 +389,9 @@ def parallel_read(Qsam, args, Qerr, abort_flag, stat_list):
     reads from BAM file, converts to string, groups the records into chunks for
     faster parallel processing, and puts these on a mp.Queue()
     """
-    with ExceptionLogging("spacemake.cutadapt_bam.parallel_read", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging(
+        "spacemake.cutadapt_bam.parallel_read", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
         bam_in = pysam.AlignmentFile(
             args.bam_in, "rb", check_sq=False, threads=args.threads_read
         )
@@ -414,10 +416,10 @@ def parallel_read(Qsam, args, Qerr, abort_flag, stat_list):
 
 
 def parallel_trim(Qsam, Qres, args, Qerr, abort_flag, stat_list):
-    with ExceptionLogging("spacemake.cutadapt_bam.parallel_trim", Qerr=Qerr, exc_flag=abort_flag) as el:
-        el.logger.debug(
-            f"parallel_trim() starting up with args={args}"
-        )
+    with ExceptionLogging(
+        "spacemake.cutadapt_bam.parallel_trim", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
+        el.logger.debug(f"parallel_trim() starting up with args={args}")
 
         _stats = defaultdict(int)
         _total = defaultdict(int)
@@ -443,7 +445,9 @@ def parallel_trim(Qsam, Qres, args, Qerr, abort_flag, stat_list):
 
 
 def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeout=10):
-    with ExceptionLogging("spacemake.cutadapt_bam.process_ordered_results", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging(
+        "spacemake.cutadapt_bam.process_ordered_results", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
         import heapq
         import time
 
@@ -552,7 +556,9 @@ def main_parallel(args):
     bam_header = manager.list()
     stat_lists = [stats, total, lhist, bam_header]
     print(stat_lists[-1])
-    with ExceptionLogging("spacemake.cutadapt_bam.main_parallel", exc_flag=abort_flag) as el:
+    with ExceptionLogging(
+        "spacemake.cutadapt_bam.main_parallel", exc_flag=abort_flag
+    ) as el:
 
         # read BAM in chunks and put them in Qsam
         dispatcher = mp.Process(
