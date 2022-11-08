@@ -30,14 +30,15 @@ class DGE:
             DGE.logger.debug("all barcodes allowed")
 
     def add_read(self, gene, cell, channels=["count"]):
-        if self.allowed_bcs and not cell in self.allowed_bcs:
-            return
+        if channels:
+            if self.allowed_bcs and not cell in self.allowed_bcs:
+                return
 
-        self.DGE_cells.add(cell)
-        self.DGE_genes.add(gene)
+            self.DGE_cells.add(cell)
+            self.DGE_genes.add(gene)
 
-        for channel in channels:
-            self.counts[(gene, cell)][channel] += 1
+            for channel in channels:
+                self.counts[(gene, cell)][channel] += 1
 
     def make_sparse_arrays(self):
         """_summary_
@@ -74,9 +75,13 @@ class DGE:
         sparse_channels = OrderedDict()
         for channel in self.channels:
             counts = counts_by_channel[channel]
-            sparse_channels[channel] = scipy.sparse.csr_matrix(
+            self.logger.debug(f"making channel {channel} from counts len={len(counts)} sum={np.array(counts).sum()}")
+            m = scipy.sparse.csr_matrix(
                 (counts, (row_ind, col_ind))
             )
+            self.logger.debug(f"resulting sparse matrix shape={m.shape} len(obs)={len(obs)} len(var)={len(var)}")
+            sparse_channels[channel] = m
+
         return sparse_channels, obs, var
 
     @staticmethod
@@ -114,13 +119,14 @@ class DefaultCounter:
 
     channels = ["exonic_UMI", "exonic_read", "intronic_UMI", "intronic_read"]
     rank_cells_by = "n_reads"
+    logger = logging.getLogger("spacemake.quant.DefaultCounter")
+    uniq = set()
 
     def __init__(self, bam, **kw):
         self.kw = kw
         self.bam = bam
         self.exonic_set = set(["C", "U", "CU", "N"])
         self.intronic_set = set(["I"])
-        self.uniq = set()
 
     def parse_bam_record(self, aln, tags):
         channels = set()
@@ -158,6 +164,11 @@ class DefaultCounter:
                 channels -= set(["intronic_read", "intronic_UMI"])
 
         return gene, cell, umi, channels
+
+
+    def set_reference(self, ref):
+        self.logger.info(f"switching to new reference '{ref}'")
+
 
     @staticmethod
     def postprocess_adata(adata, sparse_d):
@@ -277,16 +288,19 @@ def main(args):
     # prepare counter instance
     count_kw = util.load_yaml(args.count_class_params)
     count_class = get_counter_class(args.count_class)
+
+    # prepare the sparse-matrix data collection (for multiple channels in parallel)
     dge = DGE(channels=count_class.channels, cell_bc_allowlist=args.cell_bc_allowlist)
 
     # iterate over all annotated BAMs from the input
     gene_source = {}
     for bam_name in args.bam_in:
-        reference_name = os.path.basename(bam_name).split(".")[0]
         bam = pysam.AlignmentFile(bam_name, "rb", check_sq=False, threads=4)
+        
+        reference_name = os.path.basename(bam_name).split(".")[0]
         counter = count_class(bam, **count_kw)
+        # counter.set_reference(reference_name)
 
-        # prepare the sparse-matrix data collection (for multiple channels in parallel)
         # iterate over BAM and count
         for aln in util.timed_loop(bam.fetch(until_eof=True), logger, skim=args.skim):
             if aln.is_unmapped:
