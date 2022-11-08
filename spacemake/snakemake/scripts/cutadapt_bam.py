@@ -262,7 +262,7 @@ def process_reads(read_source, args, stats={}, total={}, lhist={}):
                 match = adap.match_to(read_seq[start:end])
                 if match:
                     # print(adap_name, adap, match)
-                    new_start = max(start, match.rstop)
+                    new_start = max(start, match.rstop + start)
                     n_trimmed = new_start - start
                     start = new_start
                     trimmed_bases_left.append(n_trimmed)
@@ -279,8 +279,11 @@ def process_reads(read_source, args, stats={}, total={}, lhist={}):
             # right end adapter trimming
             for adap_name, adap_seq, adap in adapters_right:
                 match = adap.match_to(read_seq[start:end])
+                # _s = read_seq[start:end]
+                # print(f"match against {adap_name} in remaining read={_s}: {match} {_s[match.rstart:match.rstop]}")
                 if match:
-                    new_end = min(end, match.rstart)
+                    new_end = min(end, match.rstart + start)
+
                     n_trimmed = end - new_end
                     end = new_end
                     trimmed_bases_right.append(n_trimmed)
