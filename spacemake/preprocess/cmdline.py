@@ -28,12 +28,15 @@ def cmdline():
             )
 
         if args.bc1_ref or args.bc2_ref:
-            main_combinatorial(args)
+            res = main_combinatorial(args)
         else:
-            main_dropseq(args)
+            res = main_dropseq(args)
 
     if el.exception:
         return -1
+    else:
+        el.logger.info(f"exit code={res}")
+        return res
 
 
 if __name__ == "__main__":
