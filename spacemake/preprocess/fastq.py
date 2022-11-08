@@ -647,8 +647,8 @@ def main_combinatorial(args):
 def quality_trim_read2(reads, min_qual=20, phred_base=33, min_len=18):
     for (name1, seq1, name2, seq2, qual2) in reads:
         end = len(seq2)
-        qual = np.array(bytearray(qual2.encode("ASCII"))) - phred_base
-        qtrim = qual >= min_qual
+        q2 = np.array(bytearray(qual2.encode("ASCII"))) - phred_base
+        qtrim = q2 >= min_qual
         new_end = end - (qtrim[::-1]).argmax()
 
         # TODO: yield A3,T3 adapter-trimming tags
@@ -738,7 +738,8 @@ def main_dropseq(args):
     Ns = manager.list()
     cb_counts = manager.list()
     stat_lists = [Ns, cb_counts]
-
+    
+    res = 0
     with ExceptionLogging("main_dropseq", exc_flag=abort_flag) as el:
 
         # read FASTQ in chunks and put them in Qfq
@@ -773,6 +774,7 @@ def main_dropseq(args):
         qfq, qerr = join_with_empty_queues(dispatcher, [Qfq, Qerr], abort_flag)
         el.logger.info("The dispatcher exited")
         if qfq or qerr:
+            res = -1
             el.logger.info(f"{len(qfq)} chunks were drained from Qfq upon abort.")
             log_qerr(qerr)
 
@@ -786,6 +788,7 @@ def main_dropseq(args):
             # workers to exit. Or, empty queues if aborting.
             qres, qerr = join_with_empty_queues(w, [Qres, Qerr], abort_flag)
             if qres or qerr:
+                res = -1
                 el.logger.info(f"{len(qres)} chunks were drained from Qres upon abort.")
                 log_qerr(qerr)
 
@@ -822,10 +825,15 @@ def main_dropseq(args):
                 for k, v in sorted(N.items()):
                     f.write(f"freq\t{k}\t{v}\t{100.0 * v/max(N['total'], 1):.2f}\n")
 
-    return N
+        if el.exception:
+            res = -1
+
+    return res
 
 
 class Output:
+    logger = logging.getLogger("preprocess.fastq.Output")
+
     def __init__(self, args, open_files=True):
         assert Output.safety_check_eval(args.cell_raw)
         assert Output.safety_check_eval(args.cell)
