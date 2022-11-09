@@ -359,12 +359,14 @@ def main_single(args):
     lhist = defaultdict(int)
 
     t0 = time()
-    for read in process_reads(
-        skim_reads(bam_in.fetch(until_eof=True), args.skim),
-        args,
-        stats=stats,
-        total=total,
-        lhist=lhist,
+    for read in string_to_BAM(
+        process_reads(
+            BAM_to_string(skim_reads(bam_in.fetch(until_eof=True), args.skim)),
+            args,
+            stats=stats,
+            total=total,
+            lhist=lhist,
+        )
     ):
         bam_out.write(read)
 
