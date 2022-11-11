@@ -60,6 +60,8 @@ from collections import defaultdict
 ANNOTATED_BAMS = defaultdict(set)
 ALL_BAMS = defaultdict(set)
 
+SAMPLE_MAP_STRATEGY = {}
+
 # used for symlink name to source mapping
 BAM_SYMLINKS = {}
 
@@ -96,21 +98,6 @@ default_STAR_MAP_FLAGS = (
 ######################################################
 ##### Utility functions specific for this module #####
 ######################################################
-
-def wc_fill(x, wc):
-    """
-    Versatile helper function that can render any string template used in the mapping module,
-    either filling in from a Wildcards object, or from a dotdict.
-    """
-    return x.format(
-        sample_id=getattr(wc, "sample_id", "NO_sample_id"),
-        project_id=getattr(wc, "project_id", "NO_project_id"),
-        species=getattr(wc, "species", "NO_species"),
-        ref_name=getattr(wc, "ref_name", "NO_ref_name"),
-        mapper=getattr(wc, "mapper", "NO_mapper"),
-        link_name=getattr(wc, "link_name", "NO_link_name"),
-        polyA_adapter_trimmed=getattr(wc, "polyA_adapter_trimmed", "")
-    )
 
 def mapstr_to_targets(mapstr, left="uBAM", final="final"):
     """
@@ -242,6 +229,8 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
         # project_id/sample_id from the project_df
 
         map_strategy = getattr(row, "map_strategy", default_strategy)
+        SAMPLE_MAP_STRATEGY[index] = map_strategy
+
         map_rules, link_rules = mapstr_to_targets(map_strategy, left=ubam_input, final=final_target)
 
         species_d = project_df.config.get_variable("species", name=row.species)
@@ -322,9 +311,18 @@ def get_annotated_bams(wc):
     # print(wc)
     return {'annotated_bams' : sorted(ANNOTATED_BAMS[(wc.project_id, wc.sample_id)])}
 
-def get_all_bams(wc):
+def get_all_mapped_bams(wc):
     # print(wc)
-    return {'bams' : sorted(ALL_BAMS[(wc.project_id, wc.sample_id)])}
+    return {'mapped_bams' : sorted(ALL_BAMS[(wc.project_id, wc.sample_id)])}
+
+# def get_all_not_mapped_bams(wc):
+#     # print(wc)
+#     nm = []
+#     for bampath in sorted(ALL_BAMS[(wc.project_id, wc.sample_id)]):
+#         dirname, basename = os.path.split(bampath)
+#         nm.append(os.path.join(dirname, f"not_{basename}"))
+
+#     return {'not_mapped_bams' : nm}
 
 register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
 

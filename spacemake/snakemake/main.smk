@@ -87,6 +87,7 @@ def get_module_outputs():
 #########################
 include: 'downsample.smk'
 include: 'mapping.smk'
+include: 'reports.smk'
 include: 'dropseq.smk'
 include: 'longread.smk'
 
@@ -261,7 +262,7 @@ rule tag_reads_bc_umi:
         # bc_counts = barcode_readcounts
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 32
+    threads: 8
     shell:
         "python {spacemake_dir}/preprocess/cmdline.py "
         "  --sample={wildcards.sample_id} "
@@ -310,7 +311,7 @@ rule run_fastqc:
 rule get_barcode_readcounts:
     # this rule takes the final.bam file (output of the dropseq pipeline) and creates a barcode read count file
     input:
-        unpack(get_all_bams)
+        unpack(get_all_mapped_bams)
     output:
         barcode_readcounts
     params:
@@ -324,9 +325,8 @@ rule get_barcode_readcounts:
         " --tag={params.cell_barcode_tag} "
         " --unique "
         " --unmapped "
-        " {input.bams} "
+        " {input.mapped_bams} "
         "| gzip -c > {output} "
-        
 
 
 rule create_top_barcode_whitelist:
