@@ -1,8 +1,4 @@
-__version__ = "0.9.6"
-__author__ = ["Marvin Jens"]
-__license__ = "GPL"
-__email__ = ["marvin.jens@mdc-berlin.de"]
-
+from spacemake.contrib import __license__, __author__, __email__, __version__
 import os
 import sys
 import logging
@@ -19,16 +15,22 @@ import spacemake.reporting as rep
 #   (MUSCLE?)
 
 
-def gf_prio(gf, hierarchy=["CODING", "UTR", "INTRONIC", "INTERGENIC"]):
+def gf_prio(gf, hierarchy=["C", "CU", "U", "I", "NA"]):
     parts = gf.split(",")
     if len(parts) == 1:
         # fast path if only one gf is given
         return gf
 
+    expand = {
+        'C': 'CODING',
+        'CU': 'CODING',
+        'U' : 'UTR',
+        'I' : 'INTRONIC'
+    }
     parts = set(parts)
     for h in hierarchy:
         if h in parts:
-            return h
+            return expand.get(h, h)
 
     # could not resolve??
     return gf
@@ -143,7 +145,7 @@ def scan_bam(fname, skim=0, intact_signature="", parse_oligos=False):
         if r.has_tag("gf"):
             tag = gf_prio(r.get_tag("gf"))
         else:
-            tag = "INTERGENIC"
+            tag = "NA"
 
         res.tag_types[tag] += 1
 
