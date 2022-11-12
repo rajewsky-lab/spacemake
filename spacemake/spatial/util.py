@@ -273,7 +273,7 @@ def create_meshed_adata(adata,
         bead_diameter_um = 10,
         mesh_type = 'circle',
         start_at_minimum=False,
-        optimized_hex_mesh=False
+        optimized_binning=True
     ):
     import pandas as pd
     import scanpy as sc
@@ -350,7 +350,7 @@ def create_meshed_adata(adata,
         # original_ilocs contains the column location of the original adata.X (csr_matrix)
         new_ilocs, original_ilocs = np.nonzero(distance_M < max_distance_px)
     elif mesh_type == 'hexagon':
-        if optimized_hex_mesh:
+        if optimized_binning:
             grid_x = len(mesh_px[mesh_px[:, 1] == mesh_px[0, 1]])
             grid_y = int((len(mesh_px)/grid_x)/2)
 
