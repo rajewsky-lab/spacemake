@@ -296,6 +296,28 @@ cluster_clrs <- unname(glasbey())
 
 #top10_marker_table <- read_table2(snakemake@input$cluster_markers)
 
+# calculate breaks and limits for the puck
+puck_file <- read_csv(snakemake@input$puck_file)
+x_limits <- puck_file$x_pos %>% {c(min(.), max(.))}
+y_limits <- puck_file$y_pos %>% {c(min(.), max(.))}
+
+px_by_um <- snakemake@params$pbf_metrics$px_by_um
+puck_width_um <- (x_limits[2] - x_limits[1]) / px_by_um
+
+ratio <- (x_limits[2] - x_limits[1] ) / (y_limits[2] - y_limits[1])
+
+scale_factor <- ifelse(puck_width_um < 3000, 2, 3)
+mm_dist <- max(10^scale_factor, round(puck_width_um/3, digits =-scale_factor))
+mm_diff <- mm_dist / 1000
+
+x_mm_breaks <- seq(0, puck_width_um, mm_dist)
+x_mm_breaks <- paste0(x_mm_breaks * mm_diff / mm_dist, 'mm')
+y_mm_breaks <- seq(0, puck_width_um / ratio, mm_dist)
+y_mm_breaks <- paste0(y_mm_breaks * mm_diff / mm_dist, 'mm')
+
+x_breaks <- seq(x_limits[1], x_limits[2], px_by_um * mm_dist)
+y_breaks <- seq(y_limits[1], y_limits[2], px_by_um * mm_dist)
+
 if(is_spatial){
     nhood_dat <- read_csv(snakemake@input$nhood_enrichment)
 }
