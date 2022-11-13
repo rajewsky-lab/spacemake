@@ -162,7 +162,7 @@ def create_mesh(
     
     return xy
 
-def binning_hexagon(x, y, gridsize, extent=None):
+def binning_hexagon(x, y, gridsize, extent=None, last_row=False):
     ''' Bins x,y points into a mesh of gridsize (across x axis, or xy axes). 
     Points are assigned to the closest hexagon, without explicitly calculating
     pairwise distances.
@@ -179,6 +179,7 @@ def binning_hexagon(x, y, gridsize, extent=None):
                   y direction is automatically computed; or specified if gridsize is
                   a tuple.
         extent: tuple, of (x_min, x_max, y_min, y_max)
+        last_row: bool, whether a last row is created in mesh or not
     Returns:
         coordinates: numpy.ndarray, a (x_mesh x y_mesh) x 2 matrix, with the coordinates
                      (centres) of each hexagon in the binned mesh
@@ -211,7 +212,10 @@ def binning_hexagon(x, y, gridsize, extent=None):
         ymin, ymax = nonsingular(ymin, ymax, expander=0.1)
 
     nx1 = nx + 1
-    ny1 = ny + 1
+    if last_row:
+        ny1 = ny + 1
+    else:
+        ny1 = ny
     nx2 = nx
     ny2 = ny
     n = nx1 * ny1 + nx2 * ny2
@@ -338,31 +342,48 @@ def create_meshed_adata(adata,
     # visium spot center and other beads
     max_distance_px = (spot_diameter_um - bead_diameter_um)/um_by_px/2
 
+    def _create_optimized_hex_mesh_properties(mesh):
+        _y_values = np.unique(mesh_px[:, 1])
+        _x_values = np.unique(mesh_px[:, 0])
+        grid_x = len(mesh_px[mesh_px[:, 1] == _y_values[1]])
+        grid_y = len(mesh_px[mesh_px[:, 0] == _x_values[1]])
+
+        # Calculating the extent
+        if len(mesh_px[mesh_px[:, 0] == _x_values[0]]) == grid_y:
+            _offset = (np.diff(_y_values[0:2]))
+            _last_row = False
+        else:
+            _offset = 0
+            _last_row = True
+
+        _extent = (mesh_px[:, 0].min(), mesh_px[:, 0].max(),
+                    mesh_px[:, 1].min(), mesh_px[:, 1].max()+_offset)
+
+        return grid_x, grid_y, _extent, _last_row
+
     if mesh_type == 'circle':
-        distance_M = euclidean_distances(mesh_px, coords)
-        # circle mesh type: we create spots in a hexagonal mesh
-        # example: the diameter of one visium spot is 55um. if we take any bead, which center
-        # falls into that, assuming that a bead is 10um, we would in fact take all beads
-        # within 65um diameter. for this reason, the max distance should be 45um/2 between
-        # visium spot center and other beads
-        max_distance_px = (spot_diameter_um - bead_diameter_um)/um_by_px/2
-        # new_ilocs contains the indices of the columns of the sparse matrix to be created
-        # original_ilocs contains the column location of the original adata.X (csr_matrix)
-        new_ilocs, original_ilocs = np.nonzero(distance_M < max_distance_px)
+        if optimized_binning:
+            grid_x, grid_y, _extent, _last_row = _create_optimized_hex_mesh_properties(mesh_px)
+            mesh_px, accum = binning_hexagon(coords[:, 0], coords[:, 1], gridsize=(grid_x, grid_y), extent=_extent, last_row=_last_row)
+
+            new_ilocs = [[i]*len(accum[i]) for i in range(len(accum))]
+            new_ilocs = np.array([n for new_iloc in new_ilocs for n in new_iloc])
+            original_ilocs = np.array([a for acc in accum for a in acc])
+
+            distance_filter = np.linalg.norm(np.array(coords[original_ilocs])-np.array(mesh_px[new_ilocs]), axis=1) < max_distance_px
+            
+            new_ilocs = new_ilocs[distance_filter]
+            original_ilocs = original_ilocs[distance_filter]
+        else:
+            distance_M = euclidean_distances(mesh_px, coords)
+            # circle mesh type: we create spots in a hexagonal mesh
+            # new_ilocs contains the indices of the columns of the sparse matrix to be created
+            # original_ilocs contains the column location of the original adata.X (csr_matrix)
+            new_ilocs, original_ilocs = np.nonzero(distance_M < max_distance_px)
     elif mesh_type == 'hexagon':
         if optimized_binning:
-            grid_x = len(mesh_px[mesh_px[:, 1] == mesh_px[0, 1]])
-            grid_y = int((len(mesh_px)/grid_x)/2)
-
-            x_max, y_max = bottom_right_corner
-            if start_at_minimum:
-                x_min, y_min = top_left_corner
-            else:
-                x_min, y_min = (0, 0)
-
-            _extent = (x_min, x_max, y_min, y_max)
-            
-            mesh_px, accum = binning_hexagon(coords[:, 0], coords[:, 1], gridsize=(grid_x, grid_y), extent=_extent)
+            grid_x, grid_y, _extent, _last_row = _create_optimized_hex_mesh_properties(mesh_px)
+            mesh_px, accum = binning_hexagon(coords[:, 0], coords[:, 1], gridsize=(grid_x, grid_y), extent=_extent, last_row=_last_row)
 
             new_ilocs = np.zeros(len(coords), dtype=int)
             for i in range(len(accum)):
