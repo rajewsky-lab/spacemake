@@ -104,7 +104,8 @@ class DGE:
         """
         import anndata
 
-        adata = anndata.AnnData(channel_d[main_channel])
+        X = channel_d[main_channel]
+        adata = anndata.AnnData(X, dtype=X.dtype)
         adata.obs_names = obs
         adata.var_names = var
 
@@ -275,7 +276,7 @@ def sparse_summation(X, axis=0):
 
 
 def main(args):
-    logger = logging.getLogger("spacemake.quant.main")
+    logger = util.setup_logging(args, "spacemake.quant.main")
     util.ensure_path(args.output + "/")
 
     # prepare counter instance
@@ -360,6 +361,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
     args = parse_cmdline()
     main(args)
