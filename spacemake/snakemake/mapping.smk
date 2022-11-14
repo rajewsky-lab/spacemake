@@ -456,7 +456,8 @@ def get_ribo_log(wc):
     "used in params: which allows to make this purely optional w/o creating fake output"
     ribo_bam = bt2_mapped_bam.format(project_id=wc.project_id, sample_id=wc.sample_id, ref_name='rRNA')
     if ribo_bam in MAP_RULES_LKUP or ribo_bam in BAM_SYMLINKS:
-        return bt2_rRNA_log.format(project_id=wc.project_id, sample_id=wc.sample_id)
+        log = bt2_mapped_log.format(sample_id=wc.sample_id, project_id=wc.project_id, ref_name="rRNA")
+        return log
     else:
         return "no_rRNA_index"
 
@@ -464,7 +465,7 @@ def get_ribo_log_input(wc):
     rrna_bam = bt2_mapped_bam.format(sample_id=wc.sample_id, project_id=wc.project_id, ref_name="rRNA")
     if rrna_bam in MAP_RULES_LKUP:
         # we plan to map against rRNA. This is the correct dependency:
-        log = rrna_bam + '.log'
+        log = bt2_mapped_log.format(sample_id=wc.sample_id, project_id=wc.project_id, ref_name="rRNA")
     
     else:
         # no rRNA reference available. Default to the stub
