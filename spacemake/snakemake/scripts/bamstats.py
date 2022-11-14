@@ -25,7 +25,7 @@ def scan(fname, skim=0):
     read_len_hist = defaultdict(int)
 
     # print(fname)
-    sam = pysam.AlignmentFile(fname, "rb", check_sq=False, threads=2)
+    sam = util.quiet_bam_open(fname, "rb", check_sq=False, threads=2)
     last_qname = ""
     for read in util.timed_loop(sam.fetch(until_eof=True), logger, skim=skim):
         # count each read only once regardless of how many times it aligns

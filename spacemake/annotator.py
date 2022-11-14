@@ -289,7 +289,9 @@ class CompiledClassifier:
         if len(cidx) == 1:
             # fast path
             idx = tuple(cidx)[0]
-            return self.classifications[self.cid_table[idx]]
+            ann = self.classifications[self.cid_table[idx]]
+            # print(f"fast path: ann={ann}")
+            return ann
 
         return self.joiner(cidx)
 
@@ -326,7 +328,7 @@ def decompose(nc):
     :yield: (start, end, frozenset(target_ids) )
     :rtype: None
     """
-    logger = logging.getLogger("compile")
+    logger = logging.getLogger("spacemake.annotator.compile")
     logger.info(f"compiling strand into non-overlapping and pre-classified annotations")
 
     starts, ends, ids = np.array(nc.intervals()).T
@@ -371,7 +373,7 @@ class GenomeAnnotation:
     functional GenomeAnnotation instance for the most common scenarios (from GTF, from compiled data, ...).
     """
 
-    logger = logging.getLogger("GenomeAnnotation")
+    logger = logging.getLogger("spacemake.annotator.GenomeAnnotation")
 
     def __init__(self, df, processor, is_compiled=False):
         """
@@ -602,7 +604,7 @@ def read_BAM_to_queue(
     with ExceptionLogging(
         "spacemake.annotator.read_BAM_to_queue", Qerr=Qerr, exc_flag=abort_flag
     ) as el:
-        bam_in = pysam.AlignmentFile(
+        bam_in = util.quiet_bam_open(
             bam_in, "rb", check_sq=False, threads=reader_threads
         )
         shared["bam_header"] = util.make_header(
@@ -684,9 +686,9 @@ def annotate_chunks_from_queue(compiled_annotation, Qsam, Qres, Qerr, abort_flag
         chunk_size (int): number of consecutive BAM records to process
     """
     with ExceptionLogging(
-        f"annotate_chunks_from_queue", Qerr=Qerr, exc_flag=abort_flag
+        "spacemake.annotator.annotate_chunks_from_queue", Qerr=Qerr, exc_flag=abort_flag
     ) as el:
-        logger = logging.getLogger("annotate_chunks_from_queue")
+        logger = logging.getLogger("spacemake.annotator.annotate_chunks_from_queue")
         ga = GenomeAnnotation.from_compiled_index(compiled_annotation)
 
         for n_chunk, data in queue_iter(Qsam, abort_flag):
@@ -733,7 +735,7 @@ def annotate_BAM_parallel(args):
     abort_flag = mp.Value("b")
     abort_flag.value = False
 
-    with ExceptionLogging("annotate_BAM_parallel", exc_flag=abort_flag) as el:
+    with ExceptionLogging("spacemake.annotator.annotate_BAM_parallel", exc_flag=abort_flag) as el:
 
         # bam_in, Qsam, Qerr, abort_flag, shared, chunk_size=20000, reader_threads=4
         reader = mp.Process(
@@ -808,7 +810,7 @@ def annotate_BAM_linear(bam, ga, out, repeat=1, interval=5):
     # import pysam
 
     # as_strand = {"+": "-", "-": "+"}
-    logger = logging.getLogger("chunks_from_BAM")
+    logger = logging.getLogger("spacemake.annotator.chunks_from_BAM")
 
     t0 = time()
     T = interval
@@ -893,7 +895,7 @@ def query_regions(args):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = util.make_minimal_parser("annotator.py") #argparse.ArgumentParser()
 
     def usage(args):
         parser.print_help()
@@ -984,11 +986,11 @@ def parse_args():
 
 def cmdline():
     args = parse_args()
+    util.setup_logging(args, "spacemake.annotator.cmdline")
     return args.func(args)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
     ret_code = cmdline()
     sys.exit(ret_code)
 

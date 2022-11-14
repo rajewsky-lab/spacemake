@@ -2,21 +2,20 @@
 from spacemake.contrib import __version__, __license__, __author__, __email__
 from spacemake.preprocess.fastq import (
     parse_args,
-    setup_logging,
     main_combinatorial,
     main_dropseq,
     # main_bulk
 )
-
+from spacemake.util import setup_logging
 from spacemake.parallel import ExceptionLogging
 
 
 def cmdline():
-    with ExceptionLogging("main") as el:
-        args = parse_args()
-        NO_CALL = args.na
-        setup_logging(args)
+    args = parse_args()
+    NO_CALL = args.na
+    setup_logging(args, name="spacemake.preprocess")
 
+    with ExceptionLogging("spacemake.preprocess.main") as el:
         if args.out_format == "bam" and not args.read2:
             raise ValueError("bam output format requires --read2 parameter")
 

@@ -257,7 +257,7 @@ rule tag_reads_bc_umi:
         read2 = lambda wc: get_linked_reads(wc).get("R2", None)
     output:
         assigned = tagged_bam,
-        unassigned = unassigned,
+        # unassigned = unassigned,
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv"),
         # bc_counts = barcode_readcounts
     log:
@@ -272,22 +272,11 @@ rule tag_reads_bc_umi:
         "  --save-stats={output.bc_stats} "
         # "  --save-cell-barcodes={output.bc_counts} "
         "  --out-format=bam "
-        "  --out-unassigned={output.unassigned} "
+        "  --out-unassigned=/dev/null "
         "  --out-assigned=/dev/stdout "
         "  --log-file={log} "
         "  {params.bc_params} "
         " | samtools view -bh --threads=4 /dev/stdin > {output.assigned} "
-
-        # "--bc1-ref={params.bc.bc1_ref} "
-        # "--bc2-ref={params.bc.bc2_ref} "
-        # "--bc1-cache={params.bc.bc1_cache} "
-        # "--bc2-cache={params.bc.bc2_cache} "
-        # "--score-threshold={params.bc.score_threshold} "
-        # "--cell='{params.bc.cell}' "
-        # "--cell-raw='{params.bc.cell_raw}' "
-        # "--UMI='{params.bc.UMI}' "
-        # "--bam-tags='{params.bc.bam_tags}' "
-        # "--min-opseq-score={params.bc.min_opseq_score} "
 
 
 rule run_fastqc:
@@ -320,6 +309,7 @@ rule get_barcode_readcounts:
             sample_id = wildcards.sample_id)['{cell}'],
     shell:
         "python {spacemake_dir}/cell_counter.py "
+        " --sample={wildcards.sample_id} "
         " --out=/dev/stdout "
         " --top=0 "
         " --tag={params.cell_barcode_tag} "
@@ -393,6 +383,7 @@ rule create_dge:
     output:
         dge=dge_out,
         dge_summary=dge_out_summary
+    log: dge_out.replace(".h5ad", ".log")
     params:
         dge_root = dge_root,
         dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
@@ -406,11 +397,12 @@ rule create_dge:
     # threads: max(workflow.cores * 0.125, 1)
     shell:
         "python {spacemake_dir}/quant.py "
-        " --sample-name={wildcards.sample_id} "
+        " --sample={wildcards.sample_id} "
         " --output={params.dge_root}/ "
         " --out-dge={output.dge} "
         " --out-summary={output.dge_summary} "
         " --cell-bc-allowlist={input.top_barcodes} "
+        " --log-file={log}"
         "{input.annotated_bams}"
 
 

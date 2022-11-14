@@ -22,6 +22,7 @@ rule remove_polyA:
     threads: 10
     shell:
         "python {repo_dir}/scripts/cutadapt_bam.py {input} "
+        " --sample={wildcards.sample_id} "
         " --bam-out={output.trimmed} --bam-out-mode=b "
         " --stats-out={output.stats} "
         " --adapters-right={params.adap3} "

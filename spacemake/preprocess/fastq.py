@@ -59,7 +59,7 @@ def hamming(seqA, seqB, costs, match=2):
 
 class BarcodeMatcher:
     def __init__(self, fname, length_specific=True, place="left"):
-        self.logger = logging.getLogger("BarcodeMatcher")
+        self.logger = logging.getLogger("spacemake.preprocess.fastq.BarcodeMatcher")
         self.length_specific = length_specific
         self.names, self.seqs = self.load_targets(fname)
         self.slen = np.array([len(s) for s in self.seqs])
@@ -153,7 +153,7 @@ class BarcodeMatcher:
 
 class TieBreaker:
     def __init__(self, fname, place="left"):
-        self.logger = logging.getLogger("TieBreaker")
+        self.logger = logging.getLogger("spacemake.preprocess.fastq.TieBreaker")
         self.matcher = BarcodeMatcher(fname, place=place)
         self.query_count = defaultdict(float)
         self.bc_count = defaultdict(float)
@@ -338,7 +338,7 @@ def opseq_local_align(
 
 
 def process_ordered_results(res_queue, args, Qerr, abort_flag):
-    with ExceptionLogging("collector", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging("spacemake.preprocess.fastq.collector", Qerr=Qerr, exc_flag=abort_flag) as el:
         import heapq
         import time
 
@@ -400,7 +400,7 @@ def process_fastq(Qfq, args, Qerr, abort_flag):
     reads from two fastq files, groups the input into chunks for
     faster parallel processing, and puts these on a mp.Queue()
     """
-    with ExceptionLogging("dispatcher", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging("spacemake.preprocess.fastq.dispatcher", Qerr=Qerr, exc_flag=abort_flag) as el:
         for chunk in chunkify(read_source(args)):
             logging.debug(f"placing {chunk[0]} {len(chunk[1])} in queue")
             if put_or_abort(Qfq, chunk, abort_flag):
@@ -425,7 +425,7 @@ def dict_merge(sources):
 
 
 def process_combinatorial(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
-    with ExceptionLogging("worker", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging("spacemake.preprocess.fastq.worker", Qerr=Qerr, exc_flag=abort_flag) as el:
         el.logger.debug(
             f"process_combinatorial starting up with Qfq={Qfq}, Qres={Qres} and args={args}"
         )
@@ -549,7 +549,7 @@ def main_combinatorial(args):
     Ns = manager.list()
     stat_lists = [Ns, qcaches1, qcaches2, qcounts1, qcounts2, bccounts1, bccounts2]
 
-    with ExceptionLogging("main_combinatorial", exc_flag=abort_flag) as el:
+    with ExceptionLogging("spacemake.preprocess.fastq.main_combinatorial", exc_flag=abort_flag) as el:
 
         # read FASTQ in chunks and put them in Qfq
         dispatcher = mp.Process(
@@ -661,7 +661,7 @@ def quality_trim_read2(reads, min_qual=20, phred_base=33, min_len=18):
 
 
 def process_dropseq(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
-    with ExceptionLogging("worker", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging("spacemake.preprocess.fastq.worker", Qerr=Qerr, exc_flag=abort_flag) as el:
         el.logger.debug(
             f"process_dropseq starting up with Qfq={Qfq}, Qres={Qres} and args={args}"
         )
@@ -740,7 +740,7 @@ def main_dropseq(args):
     stat_lists = [Ns, cb_counts]
     
     res = 0
-    with ExceptionLogging("main_dropseq", exc_flag=abort_flag) as el:
+    with ExceptionLogging("spacemake.preprocess.fastq.main_dropseq", exc_flag=abort_flag) as el:
 
         # read FASTQ in chunks and put them in Qfq
         dispatcher = mp.Process(
@@ -832,7 +832,7 @@ def main_dropseq(args):
 
 
 class Output:
-    logger = logging.getLogger("preprocess.fastq.Output")
+    logger = logging.getLogger("spacemake.preprocess.fastq.Output")
 
     def __init__(self, args, open_files=True):
         assert Output.safety_check_eval(args.cell_raw)
@@ -999,36 +999,10 @@ class Output:
 #     def run(self):
 
 
-def setup_logging(args):
-    FORMAT = f"%(asctime)-20s\t%(levelname)s\t{args.sample}\t%(name)s\t%(message)s"
-    # formatter = logging.Formatter(FORMAT)
-    lvl = getattr(logging, args.log_level, logging.INFO)
-    logging.basicConfig(level=lvl, format=FORMAT)
-
-    fh = logging.FileHandler(filename=args.log_file, mode="a")
-    fh.setFormatter(logging.Formatter(FORMAT))
-    root = logging.getLogger("")
-    root.addHandler(fh)
-
-    logger = logging.getLogger("main")
-    logger.info(f"starting raw read preprocessing run")
-    for k, v in sorted(vars(args).items()):
-        logger.info(f"cmdline arg\t{k}={v}")
-
-    # TODO: store options in YAML for quick
-    # re-run with same options
-    # {sorted(vars(args).items())}
-
-
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Convert raw reads1 and reads2 FASTQ into a single BAM file with cell barcode and UMI as BAM-tags"
-    )
-    parser.add_argument(
-        "--sample",
-        default="NA",
-        help="source from where to get read1 (FASTQ format)",
-    )
+    import spacemake.util as util
+    parser = util.make_minimal_parser("fastq.py", description="Convert raw reads1 and reads2 FASTQ into a single BAM file with cell barcode and UMI as BAM-tags") #argparse.ArgumentParser()
+
     parser.add_argument(
         "--read1",
         default=None,

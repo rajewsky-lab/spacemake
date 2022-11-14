@@ -10,8 +10,10 @@ def wc_fill(x, wc):
         ref_name=getattr(wc, "ref_name", "NO_ref_name"),
         mapper=getattr(wc, "mapper", "NO_mapper"),
         link_name=getattr(wc, "link_name", "NO_link_name"),
-        polyA_adapter_trimmed=getattr(wc, "polyA_adapter_trimmed", "")
+        polyA_adapter_trimmed=getattr(wc, "polyA_adapter_trimmed", ""),
+        data_root_type=getattr(wc, "data_root_type", "complete_data"),
     )
+
 
 ################################
 # Final output file generation #

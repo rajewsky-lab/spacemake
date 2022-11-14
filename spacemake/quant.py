@@ -185,20 +185,13 @@ class DefaultCounter:
 
 
 def parse_cmdline():
-    parser = argparse.ArgumentParser(
-        description="quantify per-cell gene expression from BAM files by counting into a (sparse) DGE matrix"
-    )
+    parser = util.make_minimal_parser(prog="quant.py", description="quantify per-cell gene expression from BAM files by counting into a (sparse) DGE matrix")
 
     parser.add_argument(
         "bam_in",
         help="bam input (default=stdin)",
         default=["/dev/stdin"],
         nargs="+",
-    )
-    parser.add_argument(
-        "--sample-name",
-        help="sample identifier (default='NA')",
-        default="NA",
     )
     parser.add_argument(
         "--skim",
@@ -242,17 +235,17 @@ def parse_cmdline():
     parser.add_argument(
         "--out-dge",
         help="filename for the output h5ad",
-        default="{args.output}/{args.sample_name}.h5ad",
+        default="{args.output}/{args.sample}.h5ad",
     )
     parser.add_argument(
         "--out-summary",
         help="filename for the output summary (sum over all vars/genes)",
-        default="{args.output}/{args.sample_name}.summary.tsv",
+        default="{args.output}/{args.sample}.summary.tsv",
     )
     parser.add_argument(
         "--out-bulk",
         help="filename for the output summary (sum over all vars/genes)",
-        default="{args.output}/{args.sample_name}.pseudo_bulk.tsv",
+        default="{args.output}/{args.sample}.pseudo_bulk.tsv",
     )
 
     return parser.parse_args()
@@ -295,7 +288,7 @@ def main(args):
     # iterate over all annotated BAMs from the input
     gene_source = {}
     for bam_name in args.bam_in:
-        bam = pysam.AlignmentFile(bam_name, "rb", check_sq=False, threads=4)
+        bam = util.quiet_bam_open(bam_name, "rb", check_sq=False, threads=4)
         
         reference_name = os.path.basename(bam_name).split(".")[0]
         counter = count_class(bam, **count_kw)
@@ -325,7 +318,7 @@ def main(args):
     #     adata = adata[keep, :]
 
     adata.var["reference"] = [gene_source[gene] for gene in var]
-    adata.uns["sample_name"] = args.sample_name
+    adata.uns["sample_name"] = args.sample
     adata.uns[
         "DGE_info"
     ] = f"created with spacemake.quant version={__version__} on {datetime.datetime.today().isoformat()}"
@@ -339,7 +332,7 @@ def main(args):
 
     data = OrderedDict()
 
-    data["sample_name"] = args.sample_name
+    data["sample_name"] = args.sample
     data["reference"] = [gene_source[gene] for gene in var]
     data["gene"] = var
     for channel, M in sparse_d.items():
@@ -355,7 +348,7 @@ def main(args):
     data = OrderedDict()
 
     # TODO: add back in once we dropped the Rmd QC sheet scripts
-    # data["sample_name"] = args.sample_name
+    # data["sample_name"] = args.sample
     data["cell_bc"] = obs
     for channel, M in sparse_d.items():
         data[channel] = sparse_summation(M, axis=1)

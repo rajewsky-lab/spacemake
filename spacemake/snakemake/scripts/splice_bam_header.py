@@ -1,19 +1,11 @@
 #!/usr/bin/env python3
-__version__ = "0.9"
-__author__ = [
-    "Marvin Jens",
-]
-__license__ = "GPL"
-__email__ = [
-    "marvin.jens@mdc-berlin.de",
-]
-
+from spacemake.contrib import __license__, __author__, __version__, __email__
 import pysam
 import argparse
 import os
 import sys
 import logging
-
+import spacemake.util as util
 
 def print_header(header):
     for k, v in sorted(header.items()):
@@ -80,7 +72,7 @@ def merge_headers(orig, other, enforce_RG=True):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
+    parser = util.make_minimal_parser(prog="splice_bam_header.py",
         description=(
             "STAR and bowtie2 create a new header from scratch and ignore everything upstream. "
             "This script fixes the .bam headers of such mapped output by splicing it together with "
@@ -102,9 +94,10 @@ if __name__ == "__main__":
     parser.add_argument("--out-mode", help="mode for output (default=b0)", default="b0")
 
     args = parser.parse_args()
+    util.setup_logging(args)
 
-    mbam = pysam.AlignmentFile(args.in_bam, "rb")
-    ubam = pysam.AlignmentFile(args.in_ubam, "rb", check_sq=False)
+    mbam = util.quiet_bam_open(args.in_bam, "rb")
+    ubam = util.quiet_bam_open(args.in_ubam, "rb", check_sq=False)
 
     mapped_header = mbam.header.to_dict()
     ubam_header = ubam.header.to_dict()

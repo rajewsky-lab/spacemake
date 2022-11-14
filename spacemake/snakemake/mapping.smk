@@ -33,8 +33,10 @@ star_unmapped_bam = complete_data_root + "/not_{ref_name}.STAR.bam"
 bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.bam"
 bt2_unmapped_bam = complete_data_root + "/not_{ref_name}.bowtie2.bam"
 
+bt2_mapped_log = complete_data_root + "/reports/{ref_name}.bowtie2.log"
+
 # special log file used for rRNA "ribo depletion" stats
-bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
+bt2_rRNA_log = complete_data_root + "/reports/rRNA.bowtie2.bam.log"
 
 # default places for mapping indices, unless specified differently in the config.yaml
 star_index = 'species_data/{species}/{ref_name}/star_index'
@@ -373,12 +375,10 @@ def get_map_params(wc, output, mapper="STAR"):
     if hasattr(mr, "ann_final"):
         ann = mr.ann_final
         if ann and ann.lower().endswith(".gtf"):
-            # tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={mr.out_path} ANNOTATIONS_FILE={mr.ann_final}"
             annotation_cmd = (
-                f"| python {spacemake_dir}/annotator.py tag --bam-in=/dev/stdin --bam-out={mr.out_path} --compiled={mr.ann_final_compiled} "
+                f"| python {spacemake_dir}/annotator.py --sample={wc.sample_id} tag --bam-in=/dev/stdin --bam-out={mr.out_path} --compiled={mr.ann_final_compiled} "
                 f"| samtools view --threads=4 -bh --no-PG > {output.bam} "
             )
-            # annotation_cmd = tagging_cmd.format(mr=mr, spacemake_dir=spacemake_dir)
 
     d = {
         'annotation_cmd' : annotation_cmd,
@@ -424,7 +424,7 @@ rule map_reads_bowtie2:
     output:
         bam=bt2_mapped_bam,
         ubam=bt2_unmapped_bam
-    log: bt2_mapped_bam + ".log"
+    log: bt2_mapped_log
     params:
         auto = lambda wc, output: get_map_params(wc, output, mapper='bowtie2'),
     threads: 32 

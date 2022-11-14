@@ -21,11 +21,11 @@ import os
 
 
 def parse_cmdline():
-    import argparse
-
-    parser = argparse.ArgumentParser(
+    parser = util.make_minimal_parser(
+        prog="cutadapt_bam.py", 
         description="trim adapters from a BAM file using cutadapt"
     )
+
     parser.add_argument(
         "bam_in",
         help="bam input (default=stdin)",
@@ -341,12 +341,12 @@ def string_to_BAM(src, header=None):
 
 
 def main_single(args):
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger("spacemake.cutadapt_bam.main_single")
+    logger = util.setup_logging(args, name="spacemake.cutadapt_bam.main_single")
 
-    bam_in = pysam.AlignmentFile(
+    bam_in = util.quiet_bam_open(
         args.bam_in, "rb", check_sq=False, threads=args.threads_read
     )
+
     bam_out = pysam.AlignmentFile(
         args.bam_out,
         f"w{args.bam_out_mode}",
@@ -397,7 +397,7 @@ def parallel_read(Qsam, args, Qerr, abort_flag, stat_list):
     with ExceptionLogging(
         "spacemake.cutadapt_bam.parallel_read", Qerr=Qerr, exc_flag=abort_flag
     ) as el:
-        bam_in = pysam.AlignmentFile(
+        bam_in = util.quiet_bam_open(
             args.bam_in, "rb", check_sq=False, threads=args.threads_read
         )
         bam_header = stat_list[-1]
@@ -543,7 +543,7 @@ def count_dict_sum(sources):
 
 
 def main_parallel(args):
-    logging.basicConfig(level=logging.DEBUG)
+    logger = util.setup_logging(args, name="spacemake.cutadapt_bam.main_parallel")
 
     # queues for communication between processes
     Qsam = mp.Queue(args.threads_work * 10)  # reads from parallel_read->parallel_trim
