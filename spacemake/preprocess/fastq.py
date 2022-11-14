@@ -1047,16 +1047,16 @@ def parse_args():
         default="",
         help="store (raw) cell barcode counts in this file. Numbers add up to number of total raw reads.",
     )
-    parser.add_argument(
-        "--log-file",
-        default="preprocessing_run.log",
-        help="store all log messages in this file (default=None)",
-    )
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        help="set sensitivity of the python logging facility (default=INFO)",
-    )
+    # parser.add_argument(
+    #     "--log-file",
+    #     default="preprocessing_run.log",
+    #     help="store all log messages in this file (default=None)",
+    # )
+    # parser.add_argument(
+    #     "--log-level",
+    #     default="INFO",
+    #     help="set sensitivity of the python logging facility (default=INFO)",
+    # )
     parser.add_argument(
         "--na", default="NNNNNNNN", help="code for ambiguous or unaligned barcode"
     )
