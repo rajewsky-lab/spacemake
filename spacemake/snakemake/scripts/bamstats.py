@@ -8,9 +8,8 @@ import spacemake.util as util
 import logging
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = util.make_minimal_parser(prog="bamstats.py")
     parser.add_argument("bamfile", help="input bam file")
-    parser.add_argument("--sample", default="{bamname}", help="sample name (default=bamname)")
     parser.add_argument("--out-stats", default="{bampath}/{bamname}.bc_stats.tsv", help="barcode and UMI statistics output")
     parser.add_argument("--out-length", default="{bampath}/{bamname}.readlen.tsv", help="read-length distribution output file")
     args = parser.parse_args()
@@ -72,6 +71,7 @@ def scan(fname, skim=0):
 
 
 def main(args):
+    logger = util.setup_logging(args, "spacemake.scripts.bamstats")
     bamname = os.path.basename(args.bamfile).split('.bam')[0]
     bampath = os.path.dirname(args.bamfile)
     sample = args.sample.format(bamname=bamname)
@@ -87,6 +87,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
     args = parse_args()
     main(args)
