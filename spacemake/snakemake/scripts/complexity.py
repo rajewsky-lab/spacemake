@@ -28,16 +28,14 @@ def get_raw_reads(sample):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
+    parser = util.make_minimal_parser(
+        prog="complexity.py",
         description="assess complexity of library vs sequencing depth by sub-sampling mapped BAM files"
     )
 
     parser.add_argument(
         "bam",
         help="BAM file to analyze",
-    )
-    parser.add_argument(
-        "--sample", help="sample name to use in the statistics output", default="sample"
     )
     parser.add_argument(
         "--skim",
@@ -64,7 +62,7 @@ def parse_args():
 
 
 def main(args):
-    logger = logging.getLogger("spacemake.scripts.complexity")
+    logger = util.setup_logging(args, "spacemake.scripts.complexity")
 
     reads = defaultdict(list)
 
@@ -109,6 +107,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
     args = parse_args()
     main(args)
