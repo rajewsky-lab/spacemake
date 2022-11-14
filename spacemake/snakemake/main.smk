@@ -402,7 +402,7 @@ rule create_dge:
         " --out-dge={output.dge} "
         " --out-summary={output.dge_summary} "
         " --cell-bc-allowlist={input.top_barcodes} "
-        " --log-file={log}"
+        " --log-file={log} "
         "{input.annotated_bams}"
 
 
