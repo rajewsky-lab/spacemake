@@ -121,7 +121,7 @@ def main(args):
     )
     for ref, ref_counts in read_counts_by_ref.items():
         data[ref + "_reads"] = [ref_counts[cb] for cb in all_cbs]
-        data[ref + "_umis"] = [umi_counts_by_ref[ref][cb] for cb in all_cbs]
+        data[ref + "_umis"] = [umi_counts_by_ref[ref].get(cb,0) for cb in all_cbs]
 
     df = pd.DataFrame(data).set_index("cell_bc").sort_values("umis", ascending=False)
     if args.top > 0:
