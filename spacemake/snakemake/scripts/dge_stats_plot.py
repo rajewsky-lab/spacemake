@@ -52,9 +52,12 @@ def cell_hist_plot(ax, df, key="n_reads", n_bins=100, xlog=True, ylog=True, **kw
 def loglog_knee_plot(ax, df, key="n_UMI"):
     # UMI = np.sort(np.array(df[key].values, dtype=int))[::-1]
     UMI = np.array(df[key].values, dtype=int)
+    if not len(UMI):
+        return
+
     UMIsum = UMI.sum()
     # ax.plot(UMI.values.cumsum()[:n_rank], label=f"{key} (total={UMIsum/1e6:.1f} M)")
-    upper_q = np.percentile(UMI, 95)
+    # upper_q = np.percentile(UMI, 95)
     # if idx == "miRNA":
     # axh.hist(UMI, bins=100, label=idx, histtype="step", range=(0, upper_q))
     ax.loglog(
