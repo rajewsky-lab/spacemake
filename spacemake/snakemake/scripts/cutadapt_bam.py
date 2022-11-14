@@ -299,7 +299,7 @@ def process_reads(read_source, args, stats={}, total={}, lhist={}):
         # we've made it to the end!
         stats["N_kept"] += 1
         total["bp_kept"] += end
-        lhist[end] += 1
+        lhist[end - start] += 1
         # print(f"keeping read up to {end}")
         # read.query_sequence = read_seq[start:end]
         # read.query_qualities = read_qual[start:end]
