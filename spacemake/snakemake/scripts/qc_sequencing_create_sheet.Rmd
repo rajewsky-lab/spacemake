@@ -667,7 +667,11 @@ for (run_mode_name in run_mode_names){
                        ttl = .$ttl,
                        cut_dist = .$cut_dist,
                        min_value = .$min_value,
-                       is_hexagonal=snakemake@params$run_modes[[run_mode_name]]$mesh_type == 'hexagon')
+                       is_hexagonal = FALSE
+                       # Comment this out for now until ggplot fixes the geom_hex or
+                       # until we migrate to python-only reports.
+                       # is_hexagonal=snakemake@params$run_modes[[run_mode_name]]$mesh_type == 'hexagon'
+                       )
                 } %>%
                 print()
         }
