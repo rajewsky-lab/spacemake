@@ -1044,7 +1044,11 @@ class ProjectDF:
 
         df = pd.read_csv(summary_file)
 
-        df = df.loc[(df.n_matching > 500) & (df.matching_ratio > 0.1)]
+        # Comment the following line that restricts the analysis of some tiles.
+        # All tiles provided will now be processed -- it's up to the user to
+        # provide a meaningful list of tiles.
+        #
+        # df = df.loc[(df.n_matching > 500) & (df.matching_ratio > 0.1)]
 
         pdf_ids = df.puck_barcode_file_id.to_list()
 
