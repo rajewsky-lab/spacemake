@@ -192,7 +192,10 @@ def_plot_bead_size <- ifelse(n_cells > 25000, 0.05, def_plot_bead_size)
 obs_colnames <- colnames(obs_df)
 
 # barcode file attached at the python level
-is_hexagonal <- snakemake@params$run_mode_variables$mesh_type == 'hexagon' & snakemake@params$run_mode_variables$mesh_data
+# is_hexagonal <- snakemake@params$run_mode_variables$mesh_type == 'hexagon' & snakemake@params$run_mode_variables$mesh_data
+is_hexagonal <- FALSE
+# commented out for now until ggplot corrects the geom_hex or until
+# we migrate to python-only reports.
 
 plot_umi_2d <- function(top_cutoff = FALSE){
     if(top_cutoff){
