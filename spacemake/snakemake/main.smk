@@ -343,8 +343,7 @@ rule create_spatial_barcode_file:
         parsed_spatial_barcodes
     run:
         # load all readcounts
-        bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
-            names=['read_n', 'cell_bc']) for bc_rc in input['bc_readcounts']]
+        bc_readcounts=[pd.read_table(bc_rc) for bc_rc in input['bc_readcounts']]
 
         # join them together
         bc_readcounts = pd.concat(bc_readcounts)

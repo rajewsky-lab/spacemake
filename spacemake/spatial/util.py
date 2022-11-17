@@ -434,6 +434,11 @@ def create_meshed_adata(adata,
         return vals_joined
     print(adata)
 
+    # Aggregate and attach individual columns
+    for column in ['n_UMI', 'n_exonic_UMI', 'n_intronic_UMI',
+                   'n_reads', 'n_intronic_read', 'n_exonic_read']:
+        adata_out.obs[column] = summarise_adata_obs_column(adata, column, sum)
+
     # summarise and attach n_reads, calculate metrics (incl. pcr)
     calculate_adata_metrics(adata_out,
         # provide the n_reads as a parameter
