@@ -1,3 +1,6 @@
+logging:
+  level: INFO
+
 puck_data:
     barcode_file: 'predictions_ml.csv'
     root: 'puck_data'
@@ -64,12 +67,11 @@ run_modes:
         - 100
         - 300
 
-adapters:
-    smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'
-    optical_primer: 'GAATCACGATACGTACACCA'
-
 barcode_flavors:
     default:
+        cell: "r1[0:12]"
+        UMI: "r1[12:20]"
+    dropseq:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
     slide_seq_14bc:
@@ -94,3 +96,45 @@ barcode_flavors:
         UMI: "r2[:4] + r2[-4:]"
         seq: "r2[4:-4]"
         qual: "r2_qual[4:-4]"
+
+adapters:
+  optical_primer: GAATCACGATACGTACACCA
+  SMART: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+  polyA: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  polyG: GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+
+adapter_flavors:
+  dropseq:
+    cut_left:
+      SMART:
+        min_overlap: 10
+        max_error: 0.1
+    cut_right:
+      Q:
+        min_base_quality: 30
+      polyG:
+        min_overlap: 3
+        max_error: 0.1
+      polyA:
+        min_overlap: 3
+        max_error: 0.25
+    paired_end: 'single-end'
+  SMARTER:
+    cut_right:
+      Q:
+        min_base_quality: 30
+      polyA:
+        min_overlap: 3
+        max_error: 0.25
+    paired_end: 'replace_N'
+  chromium:
+    cut_right:
+      Q:
+        min_base_quality: 32
+      polyG:
+        min_overlap: 3
+        max_error: 0.1
+      polyA:
+        min_overlap: 3
+        max_error: 0.25
+

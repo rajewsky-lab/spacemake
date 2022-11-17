@@ -5,86 +5,14 @@ import anndata
 from spacemake.util import message_aggregation
 from numpy import ndarray
 
-logger_name = 'spacemake.spatial.novosparc_integration'
+logger_name = "spacemake.spatial.novosparc_integration"
 logger = logging.getLogger(logger_name)
 
-def get_parser():
-    """get_parser."""
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        allow_abbrev=False,
-        description='reconstruct 2-d tissue with novosparc',
-    )
-
-    parser.add_argument(
-        '--single_cell_dataset', type=str, help='path to single_cell.h5ad file',
-        required = True,
-    )
-
-    parser.add_argument(
-        '--spatial_dataset', type=str, help='path to spatial.h5ad file',
-        required=False,
-    )
-
-    parser.add_argument(
-        '--output', type=str, help='path to output.h5ad file',
-        required=True,
-    )
-
-    return parser
-
-def get_spacemake_parser(parent_parser_subparsers):
-    parser_novosparc = parent_parser_subparsers.add_parser(
-        'novosparc',
-        help='reconstruct the 2-d tissue with novosparc',
-        parents=[
-            get_run_parser(),
-            get_project_sample_parser(
-                    allow_multiple = False,
-                    help_extra = ' of sample to reconstruct',
-                 ),
-        ],
-    )
-        
-    parser_novosparc.add_argument(
-        '--run_mode', type=str, help='the run_mode to be used for this sample ' +
-        'for reconstruction. If left empty, the first run_mode for this ' +
-        'sample will be used', required=False,
-    )
-
-    parser_novosparc.add_argument(
-        '--umi_cutoff', type=int, help='umi_cutoff to be used for this sample ' +
-        'for reconstruction. If left empty, the smallest umi_cutoff of a given ' +
-        'run_mode will be used', required=False,
-    )
-
-    parser_novosparc.add_argument(
-        '--reference_project_id', type=str, help='project_id of the reference atlas.' +
-        'Has to be spatial, otherwise error will be raised', required=False,
-    )
-
-    parser_novosparc.add_argument(
-        '--reference_sample_id', type=str, help='sample_id of the reference atlas.' +
-        'Has to be spatial, otherwise error will be raised', required=False,
-    )
-
-    parser_novosparc.add_argument(
-        '--reference_run_mode', type=str, help='the run_mode to be used for the ' +
-        'reference sample. If empty, the first run_mode for the reference will be used',
-        required=False,
-    )
-
-    parser_novosparc.add_argument(
-        '--reference_umi_cutoff', type=str, help='the umi_cutoff to be used for this ' +
-        'reference sample. If empty, the smallest umi_cutoff of the given run_mode ' +
-        'will be used.', required=False,
-    )
-
-    return parser_novosparc
 
 # copy of a yet-to-be-pushed novosparc function
-def quantify_clusters_spatially(tissue: novosparc.cm.Tissue, cluster_key: str='clusters') -> ndarray:
+def quantify_clusters_spatially(
+    tissue: novosparc.cm.Tissue, cluster_key: str = "clusters"
+) -> ndarray:
     """Maps the annotated clusters obtained from the scRNA-seq analysis onto
     the tissue space.
 
@@ -102,24 +30,36 @@ def quantify_clusters_spatially(tissue: novosparc.cm.Tissue, cluster_key: str='c
     clusters = tissue.dataset.obs[cluster_key].to_numpy().flatten()
     cluster_names = np.unique(clusters)
     ixs = np.array(
-            [np.argmax(
+        [
+            np.argmax(
                 np.array(
-                    [np.median(
-                        np.array(
-                            tissue.gw[:, location][np.argwhere(clusters == cluster).flatten()]))
-                                         for cluster in cluster_names]))
-                    for location in range(len(tissue.locations))])
+                    [
+                        np.median(
+                            np.array(
+                                tissue.gw[:, location][
+                                    np.argwhere(clusters == cluster).flatten()
+                                ]
+                            )
+                        )
+                        for cluster in cluster_names
+                    ]
+                )
+            )
+            for location in range(len(tissue.locations))
+        ]
+    )
     return [cluster_names[ix] for ix in ixs]
-    
+
+
 def novosparc_denovo(
-        adata: anndata.AnnData,
-        num_spatial_locations: int=5000,
-        num_input_cells: int=30000,
-        locations=None,
-    ) -> novosparc.cm.Tissue:
+    adata: anndata.AnnData,
+    num_spatial_locations: int = 5000,
+    num_input_cells: int = 30000,
+    locations=None,
+) -> novosparc.cm.Tissue:
     """
     Given an AnnData object containing single-cell data, this function
-    will try to reconstruct a 2D tissue de-novo. By default it will use 
+    will try to reconstruct a 2D tissue de-novo. By default it will use
     the 500 most variable genes as markers to do this reconstruction.
 
     :param adata: A spacemake processed sample.
@@ -135,8 +75,8 @@ def novosparc_denovo(
         are used. Default: 30000
     :type num_input_cells: int
     :param locations: Numpy array of (x,y) coordinates (optional).
-        Novosparc will try to reconstruct the tissue using these 
-        locations. If none provided, a circular tissue will be 
+        Novosparc will try to reconstruct the tissue using these
+        locations. If none provided, a circular tissue will be
         automatically created with num_spatial_locations number of
         locations.
     :type locations: numpy.ndarray
@@ -152,8 +92,8 @@ def novosparc_denovo(
 
     from scipy.sparse import issparse, csc_matrix
 
-    logger.info('Reconstructing the tissue de-novo with novosparc') 
-    
+    logger.info("Reconstructing the tissue de-novo with novosparc")
+
     gene_names = adata.var.index.tolist()
 
     num_cells, num_genes = adata.shape
@@ -165,13 +105,13 @@ def novosparc_denovo(
         num_spatial_locations = num_cells
 
     if num_cells > num_input_cells:
-        sc.pp.subsample(adata, n_obs = num_input_cells)
+        sc.pp.subsample(adata, n_obs=num_input_cells)
 
     if num_cells < num_spatial_locations:
         num_spatial_locations = num_cells
 
-    sc.pp.highly_variable_genes(adata, n_top_genes = 100)
-    is_var_gene = adata.var['highly_variable']
+    sc.pp.highly_variable_genes(adata, n_top_genes=100)
+    is_var_gene = adata.var["highly_variable"]
     # select only 100 genes
     var_genes = list(is_var_gene.index[is_var_gene])
 
@@ -180,29 +120,33 @@ def novosparc_denovo(
     # if you uncomment this, adata.X will be stored not as sparse matrix, rather
     # as a regular numpy array. uncommenting this doesnt throw an error
     if issparse(adata.X):
-        dense_adata = anndata.AnnData(
-            adata.X.toarray(),
-            obs = adata.obs,
-            var = adata.var)
+        dense_adata = anndata.AnnData(adata.X.toarray(), obs=adata.obs, var=adata.var)
         adata = dense_adata
         del dense_adata
 
     if locations is None:
         # create circle locations
-        locations = novosparc.gm.construct_circle(num_locations = num_spatial_locations)
+        locations = novosparc.gm.construct_circle(num_locations=num_spatial_locations)
 
     tissue = novosparc.cm.Tissue(dataset=adata, locations=locations)
 
     num_neighbors_s = num_neighbors_t = 5
 
-    logger.info('Novosparc setup')
-    tissue.setup_smooth_costs(dge_rep=dge_rep, num_neighbors_s=num_neighbors_s, num_neighbors_t=num_neighbors_t)
+    logger.info("Novosparc setup")
+    tissue.setup_smooth_costs(
+        dge_rep=dge_rep,
+        num_neighbors_s=num_neighbors_s,
+        num_neighbors_t=num_neighbors_t,
+    )
 
     tissue.reconstruct(alpha_linear=0, epsilon=5e-3)
 
     return tissue
 
-def novosparc_mapping(sc_adata: anndata.AnnData, st_adata: anndata.AnnData) -> novosparc.cm.Tissue:
+
+def novosparc_mapping(
+    sc_adata: anndata.AnnData, st_adata: anndata.AnnData
+) -> novosparc.cm.Tissue:
     """
     Given two AnnData objects, one single-cell and one spatial, this function
     will map the expression of the single-cell data onto the spatial data using
@@ -213,7 +157,7 @@ def novosparc_mapping(sc_adata: anndata.AnnData, st_adata: anndata.AnnData) -> n
     :param st_adata: A spacemake processed spatial sample.
     :type st_adata: anndata.AnnData
     :returns: A novosparc.cm.Tissue object with 2D expression information.
-        The locations of the Tissue will be identical to the locations of 
+        The locations of the Tissue will be identical to the locations of
         the spatial sample.
     :rtype: novosparc.cm.Tissue
     """
@@ -224,14 +168,14 @@ def novosparc_mapping(sc_adata: anndata.AnnData, st_adata: anndata.AnnData) -> n
     from scanpy._utils import check_nonnegative_integers
     from scipy.sparse import csc_matrix
 
-    logger.info('Mapping single-cell data onto spatial data with novosparc')
+    logger.info("Mapping single-cell data onto spatial data with novosparc")
 
-    if (check_nonnegative_integers(sc_adata.X)
-        or check_nonnegative_integers(st_adata.X)
-    ):
+    if check_nonnegative_integers(sc_adata.X) or check_nonnegative_integers(st_adata.X):
         # if any of the inputs is count-data, raise error
-        raise SpacemakeError(f'External dge seems to contain raw counts. '+
-            'Normalised values are expected for both sc_adata and st_adata.')
+        raise SpacemakeError(
+            f"External dge seems to contain raw counts. "
+            + "Normalised values are expected for both sc_adata and st_adata."
+        )
 
     # calculate top 500 variable genes for both
     sc.pp.highly_variable_genes(sc_adata, n_top_genes=500)
@@ -242,50 +186,57 @@ def novosparc_mapping(sc_adata: anndata.AnnData, st_adata: anndata.AnnData) -> n
 
     markers = list(set(sc_adata_hv).intersection(st_adata_hv))
 
-    logger.info(f'{len(markers)} number of common markers found. Using them' +
-        ' for reconstruction')
+    logger.info(
+        f"{len(markers)} number of common markers found. Using them"
+        + " for reconstruction"
+    )
 
     # save sc dge as a pandas dataframe
     dge_rep = sc_adata.to_df()[sc_adata_hv]
 
-    if not 'spatial' in st_adata.obsm:
-        raise SpacemakeError(f'The object provided to st_adata is not spatial')
+    if not "spatial" in st_adata.obsm:
+        raise SpacemakeError(f"The object provided to st_adata is not spatial")
 
-    locations = st_adata.obsm['spatial']
+    locations = st_adata.obsm["spatial"]
     atlas_matrix = st_adata.to_df()[markers].values
 
     # make dense dataset
     dense_dataset = anndata.AnnData(
-        sc_adata.X.toarray(),
-        obs = sc_adata.obs,
-        var = sc_adata.var)
+        sc_adata.X.toarray(), obs=sc_adata.obs, var=sc_adata.var
+    )
 
     marker_ix = [dense_dataset.var.index.get_loc(marker) for marker in markers]
 
     tissue = novosparc.cm.Tissue(dataset=dense_dataset, locations=locations)
     num_neighbors_s = num_neighbors_t = 5
 
-    tissue.setup_linear_cost(markers_to_use=marker_ix, atlas_matrix=atlas_matrix,
-                             markers_metric='minkowski', markers_metric_p=2)
-    tissue.setup_smooth_costs(dge_rep = dge_rep,
-                              num_neighbors_s=num_neighbors_s,
-                              num_neighbors_t=num_neighbors_t)
+    tissue.setup_linear_cost(
+        markers_to_use=marker_ix,
+        atlas_matrix=atlas_matrix,
+        markers_metric="minkowski",
+        markers_metric_p=2,
+    )
+    tissue.setup_smooth_costs(
+        dge_rep=dge_rep,
+        num_neighbors_s=num_neighbors_s,
+        num_neighbors_t=num_neighbors_t,
+    )
 
     tissue.reconstruct(alpha_linear=0.5, epsilon=5e-3)
 
     return tissue
 
+
 def save_novosparc_res(
-        tissue : novosparc.cm.Tissue,
-        adata_original : anndata.AnnData
-    ) -> anndata.AnnData:
+    tissue: novosparc.cm.Tissue, adata_original: anndata.AnnData
+) -> anndata.AnnData:
     """Save the result of novosparc spatial mapping.
 
     :param tissue: A Tissue object, result of the novosparc mapping.
     :type tissue: novosparc.cm.Tissue
     :param adata_original: The original AnnData which was mapped with novosparc,
-        to reconstruct the Tissue. For the de-novo reconstruction, use the 
-        original AnnData object, when a single-cell dataset was mapped onto a 
+        to reconstruct the Tissue. For the de-novo reconstruction, use the
+        original AnnData object, when a single-cell dataset was mapped onto a
         spatial dataset, use the AnnData of the single-cell dataset.
     :type adata_original: anndata.AnnData
     :returns: An AnnData object containing the spatial information in
@@ -300,28 +251,37 @@ def save_novosparc_res(
     from scipy.sparse import csc_matrix
 
     adata_reconst = anndata.AnnData(
-        csc_matrix(tissue.sdge.T),
-        var = pd.DataFrame(index=tissue.dataset.var_names))
+        csc_matrix(tissue.sdge.T), var=pd.DataFrame(index=tissue.dataset.var_names)
+    )
 
-    logger.info('Scaling mapped data to original data...')
+    logger.info("Scaling mapped data to original data...")
 
-    adata_reconst.X = np.sum(adata_original.X) * adata_reconst.X / np.sum(adata_reconst.X)
+    adata_reconst.X = (
+        np.sum(adata_original.X) * adata_reconst.X / np.sum(adata_reconst.X)
+    )
 
-    adata_reconst.obsm['spatial'] = tissue.locations
+    adata_reconst.obsm["spatial"] = tissue.locations
 
-    logger.info('Transferring original cluster labels...')
+    logger.info("Transferring original cluster labels...")
 
-    for res_key in adata_original.obs.columns[adata_original.obs.columns.str.startswith('leiden_')]:
-        adata_reconst.obs[f'novosparc_{res_key}'] = quantify_clusters_spatially(tissue, res_key)
+    for res_key in adata_original.obs.columns[
+        adata_original.obs.columns.str.startswith("leiden_")
+    ]:
+        adata_reconst.obs[f"novosparc_{res_key}"] = quantify_clusters_spatially(
+            tissue, res_key
+        )
 
     return adata_reconst
+
 
 @message_aggregation(logger_name)
 def cmdline():
     """cmdline."""
     import scanpy as sc
 
-    parser = get_parser()
+    from spacemake.cmdline import get_novosparc_parser
+
+    parser = get_novosparc_parser()
 
     args = parser.parse_args()
 
@@ -334,10 +294,11 @@ def cmdline():
         tissue_reconst = novosparc_mapping(sc_adata, st_adata)
         adata = save_novosparc_res(tissue_reconst, sc_adata)
     else:
-        tissue_reconst = novosparc_denovo(sc_adata)  
+        tissue_reconst = novosparc_denovo(sc_adata)
         adata = save_novosparc_res(tissue_reconst, sc_adata)
 
     adata.write(args.output)
+
 
 if __name__ == "__main__":
     cmdline()

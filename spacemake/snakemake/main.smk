@@ -18,7 +18,7 @@ import scanpy as sc
 
 from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
     parse_barcode_file, load_external_dge, attach_puck_variables
-from spacemake.spatial import create_meshed_adata
+from spacemake.spatial.util import create_meshed_adata
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
 from spacemake.errors import SpacemakeError
@@ -55,7 +55,7 @@ include: 'variables.py'
 # UNIQUE PIPELINE VARS #
 ########################
 reports_dir = complete_data_root + '/reports'
-smart_adapter = config['adapters']['smart']
+# smart_adapter = config['adapters']['SMART']
 
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed

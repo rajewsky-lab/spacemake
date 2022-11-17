@@ -1,14 +1,14 @@
-import pandas as pd
+# import pandas as pd
 import os
-import yaml
 import math
-import argparse
-import datetime
-import re
+
+# import argparse
+# import datetime
 import logging
 import time
 
 from spacemake.errors import *
+
 from spacemake.config import ConfigFile
 from spacemake.util import message_aggregation, assert_file, str_to_list
 from spacemake.snakemake.variables import puck_barcode_files_summary
@@ -16,571 +16,6 @@ from typing import List, Dict
 
 logger_name = "spacemake.project_df"
 logger = logging.getLogger(logger_name)
-# logging.basicConfig(level=logging.INFO)
-
-
-def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
-    """
-    Return a parser for project_id's and sample_id's
-
-    :param allow_multiple: if true, we allow multiple projects and samples,
-        and the parser will have a `--project_id_list` and a `--sample_id_list`
-        parameter
-    :param prepend: a string that will be prepended before the arguments
-    :param help_extra: extra help message
-    :return: a parser object
-    :rtype: argparse.ArgumentParser
-    """
-    logger.info(f"get_project_sample_parser(prepend={prepend}) called")
-
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-    project_argument = "project_id"
-    sample_argument = "sample_id"
-    required = True
-    nargs = None
-    default = None
-
-    if allow_multiple:
-        project_argument = f"{project_argument}_list"
-        sample_argument = f"{sample_argument}_list"
-        required = False
-        nargs = "*"
-        default = []
-
-    parser.add_argument(
-        f"--{prepend}{project_argument}",
-        type=str,
-        required=required,
-        nargs=nargs,
-        default=default,
-        help=f"{project_argument} {help_extra}",
-    )
-
-    parser.add_argument(
-        f"--{prepend}{sample_argument}",
-        type=str,
-        required=required,
-        nargs=nargs,
-        default=default,
-        help=f"{sample_argument} {help_extra}",
-    )
-
-    return parser
-
-
-def get_add_sample_sheet_parser():
-    """
-    Returns parser for sample sheet addition
-
-    :return: parser
-    :rtype: argparse.ArgumentParser
-    """
-    logger.info("get_add_sample_sheet_parser() called")
-    parser = argparse.ArgumentParser(
-        allow_abbrev=False,
-        description="add a new sample sheet to the samples",
-        add_help=False,
-    )
-
-    parser.add_argument(
-        "--sample_sheet",
-        type=str,
-        help="the path to the Illumina sample sheet",
-        required=True,
-    )
-    parser.add_argument(
-        "--basecalls_dir",
-        type=str,
-        help="path to the basecalls directory",
-        required=True,
-    )
-
-    return parser
-
-
-def get_sample_main_variables_parser(
-    species_required=False,
-    main_variables=["barcode_flavor", "species", "puck", "run_mode", "map_strategy"],
-):
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-    logger.info(
-        f"get_sample_main_variables_parser called with main_variables={main_variables}"
-    )
-
-    if "barcode_flavor" in main_variables:
-        parser.add_argument(
-            "--barcode_flavor", type=str, help="barcode flavor for this sample"
-        )
-
-    if "species" in main_variables:
-        parser.add_argument(
-            "--species",
-            type=str,
-            help="add the name of the species for this sample",
-            required=species_required,
-        )
-
-    if "map_strategy" in main_variables:
-        parser.add_argument(
-            "--map_strategy",
-            type=str,
-            help="string constant definining mapping strategy. Can be multi-stage and use bowtie2 or STAR (see documentation)",
-            required=False,
-            default=None,
-        )
-
-    if "puck" in main_variables:
-        parser.add_argument(
-            "--puck",
-            type=str,
-            help="name of the puck for this sample. if puck_type contains a \n"
-            + "`barcodes` path to a coordinate file, those coordinates\n"
-            + " will be used when processing this sample. if \n"
-            + " not provided, a default puck will be used with \n"
-            + "width_um=3000, spot_diameter_um=10",
-        )
-
-        parser.add_argument(
-            "--puck_barcode_file_id",
-            type=str,
-            help="puck_barcode_file_id of the sample to be added/update",
-            nargs="+",
-        )
-
-    parser.add_argument(
-        "--puck_barcode_file",
-        type=str,
-        nargs="+",
-        help="the path to the file contining (x,y) positions of the barcodes",
-    )
-
-    if "run_mode" in main_variables:
-        parser.add_argument(
-            "--run_mode",
-            type=str,
-            nargs="+",
-            help="run_mode names for this sample.\n"
-            + "the sample will be processed using the provided run_modes.\n"
-            + "for merged samples, if left empty, the run_modes of the \n"
-            + "merged (input) samples will be intersected.\n",
-        )
-
-    return parser
-
-
-def get_sample_extra_info_parser():
-    logger.info("get_sample_extra_info_parser() called")
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-
-    parser.add_argument(
-        "--investigator",
-        type=str,
-        help="add the name of the investigator(s) responsible for this sample",
-    )
-
-    parser.add_argument("--experiment", type=str, help="description of the experiment")
-
-    parser.add_argument(
-        "--sequencing_date",
-        type=datetime.date.fromisoformat,
-        help="sequencing date of the sample. format: YYYY-MM-DD",
-    )
-
-    return parser
-
-
-def get_data_parser(reads_required=False):
-    """
-    Returns a parser which contain extra arguments for a given sample.
-    The returned parser will contain the --R1, --R2, --longreads,
-    --longread-signature, --barcode_flavor, --species, --puck,  --puck_barcode_file_id,
-    --puck_barcode_file, --investigator, --experiment, --sequencing_date,
-    --run_mode arguments.
-
-    :param species_required: if true, the --species argument will be required
-        during parsing.
-    :param reads_required: if true, --R1, --R2, and --longreads arguments will be
-        required during parsing.
-    """
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-    logger.info("get_data_parser() called")
-    parser.add_argument(
-        "--R1",
-        type=str,
-        help=".fastq.gz file path to R1 reads",
-        nargs="+",
-        required=reads_required,
-    )
-
-    parser.add_argument(
-        "--R2",
-        type=str,
-        help=".fastq.gz file path to R2 reads",
-        nargs="+",
-        required=reads_required,
-    )
-
-    parser.add_argument(
-        "--dge",
-        type=str,
-        help="Path to dge matrix. spacemake can also handle already processed"
-        + " digital expression data",
-        required=reads_required,
-    )
-
-    parser.add_argument(
-        "--longreads",
-        type=str,
-        help="fastq(.gz)|fq(.gz)|bam file path to pacbio long reads for library debugging",
-        required=reads_required,
-    )
-
-    parser.add_argument(
-        "--longread-signature",
-        type=str,
-        help="identify the expected longread signature (see longread.yaml)",
-    )
-
-    return parser
-
-
-def get_set_remove_variable_subparsers(
-    parent_parser, variable_name, func, prepend="", allow_multiple=False
-):
-    """get_set_remove_variable_subparsers.
-
-    :param parent_parser:
-    :param variable_name:
-    :param func:
-    :param prepend:
-    :param allow_multiple:
-    """
-    if allow_multiple:
-        nargs = "+"
-    else:
-        nargs = None
-
-    logger.info(f"get_set_remove_variable_subparsers(varname={variable_name}) called")
-
-    def get_action_parser(action):
-        """get_action_parser.
-
-        :param action:
-        """
-        action_parser = parent_parser.add_parser(
-            f"{action}_{variable_name}",
-            parents=[get_project_sample_parser(allow_multiple=True)],
-            description=f"{action} {variable_name} for several projects/samples",
-            help=f"{action} {variable_name} for several projects/samples",
-        )
-        action_parser.add_argument(
-            f"--{variable_name}", type=str, required=True, nargs=nargs
-        )
-        action_parser.set_defaults(func=func, variable=variable_name, action=action)
-
-        return action_parser
-
-    set_parser = get_action_parser("set")
-
-    if allow_multiple:
-        set_parser.add_argument("--keep_old", action="store_true")
-
-        remove_parser = get_action_parser("remove")
-
-
-def get_action_sample_parser(parent_parser, action, func):
-    """get_action_sample_parser.
-
-    :param parent_parser:
-    :param action:
-    :param func:
-    """
-    logger.info(f"get_action_sample_parser(action={action}) called")
-    if action not in ["add", "update", "delete", "merge"]:
-        raise ValueError(f"Invalid action: {action}")
-
-    if action == "merge":
-        parser_name = "merge_samples"
-        msg = "merge samples"
-        parents = [
-            get_project_sample_parser(
-                prepend="merged_", help_extra="of the newly created merged sample"
-            ),
-            get_project_sample_parser(
-                allow_multiple=True, help_extra="of the samples to be merged"
-            ),
-        ]
-    else:
-        parser_name = f"{action}_sample"
-        msg = f"{action} a sample"
-        parents = [get_project_sample_parser()]
-
-    if action == "add":
-        # add arguments for species, run_mode, barcode_flavor and puck
-        parents.append(
-            get_sample_main_variables_parser(
-                species_required=True,
-            )
-        )
-        # add arguments for R1/R1, dge, longread
-        parents.append(get_data_parser())
-        # add arguments for extra sample info
-        parents.append(get_sample_extra_info_parser())
-    elif action == "update":
-        # add main variables parser
-        parents.append(get_sample_main_variables_parser())
-
-        # add possibility to add extra info
-        parents.append(get_sample_extra_info_parser())
-    elif action == "merge":
-        # add main variables parser
-        # when merging, only let the user overwrite puck and run_mode
-        parents.append(
-            get_sample_main_variables_parser(
-                main_variables=["run_mode", "puck"],
-            )
-        )
-
-        # add possibility to add extra info
-        parents.append(get_sample_extra_info_parser())
-
-    sample_parser = parent_parser.add_parser(
-        parser_name, description=msg, help=msg, parents=parents
-    )
-    sample_parser.set_defaults(func=func, action=action)
-
-
-def setup_project_parser(pdf, parent_parser_subparsers):
-    """setup_project_parser.
-
-    :param pdf:
-    :param attach_to:
-    """
-    parser = parent_parser_subparsers.add_parser(
-        "projects",
-        help="manage projects and samples",
-        description="Using one of the subcommands specified below, it is possible to"
-        + " add/update/remove projects and their settings",
-    )
-    subparsers = parser.add_subparsers()
-
-    help_desc = {
-        "add_sample_sheet": "add projects and samples from Illumina sample sheet",
-        "add_samples_from_yaml": "add several samples at once from a .yaml file",
-        "merge_samples": "merge several samples into one. "
-        + "samples need to have the same species",
-        "list": "list several project(s) and sample(s) and their settings",
-    }
-
-    # ADD/UPDATE/DELETE/MERGE sample(s)
-    # get parsers for adding, deleting and updating a sample
-    for action in ["add", "update", "delete"]:
-        get_action_sample_parser(
-            subparsers,
-            action,
-            # attach the function to the parser
-            func=lambda args: add_update_delete_sample_cmdline(pdf, args),
-        )
-
-    # get parser for merging
-    get_action_sample_parser(
-        subparsers, "merge", func=lambda args: merge_samples_cmdline(pdf, args)
-    )
-
-    # LIST PROJECTS
-    # always show these variables
-    always_show = [
-        "puck_barcode_file_id",
-        "species",
-        "investigator",
-        "sequencing_date",
-        "experiment",
-        "run_mode",
-        "barcode_flavor",
-        "map_strategy",
-    ]
-    remaining_options = [
-        x for x in pdf.project_df_default_values.keys() if x not in always_show
-    ]
-    list_projects = subparsers.add_parser(
-        "list",
-        description=help_desc["list"],
-        help=help_desc["list"],
-        parents=[
-            get_project_sample_parser(
-                allow_multiple=True,
-                help_extra="subset the data. If none provided, all will be displayed",
-            )
-        ],
-    )
-    list_projects.add_argument(
-        "--variables",
-        help="which extra variables to display per sample? "
-        + f"{always_show} will always be shown.",
-        choices=remaining_options,
-        default=[],
-        nargs="*",
-    )
-    list_projects.set_defaults(
-        func=lambda args: list_projects_cmdline(pdf, args), always_show=always_show
-    )
-
-    # ADD SAMPLE SHEET
-    sample_add_sample_sheet = subparsers.add_parser(
-        "add_sample_sheet",
-        description=help_desc["add_sample_sheet"],
-        help=help_desc["add_sample_sheet"],
-        parents=[get_add_sample_sheet_parser()],
-    )
-    sample_add_sample_sheet.set_defaults(
-        func=lambda args: add_sample_sheet_cmdline(pdf, args)
-    )
-
-    # ADD SAMPLES FROM YAML
-    sample_add_samples_yaml = subparsers.add_parser(
-        "add_samples_from_yaml",
-        description=help_desc["add_samples_from_yaml"],
-        help=help_desc["add_samples_from_yaml"],
-    )
-    sample_add_samples_yaml.add_argument(
-        "--samples_yaml",
-        type=str,
-        required=True,
-        help="path to the .yaml file containing sample info",
-    )
-    sample_add_samples_yaml.set_defaults(
-        func=lambda args: add_samples_from_yaml_cmdline(pdf, args)
-    )
-
-    # get set/remove parser for each main variable
-    # this will add parser for:
-    # setting/removing run_mode
-    # setting species
-    # setting puck
-    # setting barcode_flavor
-    # NOTE: the ConfigFile.main_variable_sg2type keys determine
-    # which commandline args will be defined for the parser.
-    # this is a little un-intuitive...
-    # TODO: cleaner factory functions for the commandline-parsers
-    for main_var_sg, main_var_type in ConfigFile.main_variable_sg2type.items():
-        allow_multiple = False
-        if isinstance(main_var_type, str) and main_var_type.endswith("_list"):
-            allow_multiple = True
-
-        get_set_remove_variable_subparsers(
-            subparsers,
-            variable_name=main_var_sg,
-            func=lambda args: set_remove_variable_cmdline(pdf, args),
-            allow_multiple=allow_multiple,
-        )
-    return parser
-
-
-@message_aggregation(logger_name)
-def add_update_delete_sample_cmdline(pdf, args):
-    """add_update_delete_sample_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    action = args["action"]
-
-    # remove the action from args
-    del args["action"]
-
-    if action == "add" or action == "update":
-        func = lambda **kwargs: pdf.add_update_sample(action=action, **kwargs)
-    elif action == "delete":
-        func = pdf.delete_sample
-
-    sample = func(**args)
-    pdf.dump()
-
-
-@message_aggregation(logger_name)
-def add_sample_sheet_cmdline(pdf, args):
-    """add_sample_sheet_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    pdf.add_sample_sheet(args["sample_sheet"], args["basecalls_dir"])
-
-    pdf.dump()
-
-
-@message_aggregation(logger_name)
-def add_samples_from_yaml_cmdline(pdf, args):
-    """add_samples_from_yaml_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    pdf.add_samples_from_yaml(args["samples_yaml"])
-
-    pdf.dump()
-
-
-@message_aggregation(logger_name)
-def set_remove_variable_cmdline(pdf, args):
-    """set_remove_variable_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    variable_name = args["variable"]
-    action = args["action"]
-
-    variable_key = args[variable_name]
-
-    pdf.set_remove_variable(
-        variable_name=variable_name,
-        variable_key=variable_key,
-        action=action,
-        project_id_list=args["project_id_list"],
-        sample_id_list=args["sample_id_list"],
-        keep_old=args.get("keep_old", False),
-    )
-
-    pdf.dump()
-
-
-@message_aggregation(logger_name)
-def merge_samples_cmdline(pdf, args):
-    """merge_samples_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    pdf.merge_samples(**args)
-
-    pdf.dump()
-
-
-@message_aggregation(logger_name)
-def list_projects_cmdline(pdf, args):
-    """list_projects_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    projects = args["project_id_list"]
-    samples = args["sample_id_list"]
-    variables = args["always_show"] + args["variables"]
-
-    df = pdf.df
-    logger = logging.getLogger(logger_name)
-
-    if projects != [] or samples != []:
-        df = df.query("project_id in @projects or sample_id in @samples")
-        logger.inof(f"listing projects: {projects} and samples: {samples}")
-    else:
-        logger.info("listing all projects and samples")
-
-    logger.info(f"variables used: {variables}")
-
-    # print the table
-    logger.info(df.loc[:, variables].__str__())
 
 
 class ProjectDF:
@@ -654,6 +89,7 @@ class ProjectDF:
         """
         self.file_path = file_path
         self.config = config
+        import pandas as pd
 
         if os.path.isfile(file_path):
             attempts = 0
@@ -689,6 +125,8 @@ class ProjectDF:
         self.logger = logging.getLogger(logger_name)
 
     def create_empty_df(self):
+        import pandas as pd
+
         index = pd.MultiIndex(
             names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
         )
@@ -906,6 +344,7 @@ class ProjectDF:
 
     def fix(self):
         import numpy as np
+        import pandas as pd
 
         # convert types
         self.df = self.df.where(pd.notnull(self.df), None)
@@ -1035,6 +474,8 @@ class ProjectDF:
         project_id: str,
         sample_id: str,
     ):
+        import pandas as pd
+
         summary_file = puck_barcode_files_summary.format(
             project_id=project_id, sample_id=sample_id
         )
@@ -1068,6 +509,7 @@ class ProjectDF:
 
         if not os.path.isfile(summary_file):
             return None
+        import pandas as pd
 
         df = pd.read_csv(summary_file)
 
@@ -1131,6 +573,8 @@ class ProjectDF:
         :param sample_sheet_path:
         :param basecalls_dir:
         """
+        import pandas as pd
+
         with open(sample_sheet_path) as sample_sheet:
             ix = 0
             investigator = None
@@ -1258,6 +702,8 @@ class ProjectDF:
         :param map_strategy:
         :param kwargs:
         """
+        import pandas as pd
+
         ix = (project_id, sample_id)
         sample_exists = self.sample_exists(*ix)
 
@@ -1285,7 +731,7 @@ class ProjectDF:
         #   (only used by add_sample_sheet command)
         # If those area also not provided, we try to add a simple dge
 
-        if R1 == ['None']:
+        if R1 == ["None"]:
             R1 = None
 
         if action == "add" and (R2 is None) and not is_merged:
@@ -1353,6 +799,7 @@ class ProjectDF:
         config_variables_to_check = {
             "pucks": "puck",
             "barcode_flavors": "barcode_flavor",
+            "adapter_flavors": "adapter_flavor",
             "species": "species",
         }
 
@@ -1499,6 +946,8 @@ class ProjectDF:
 
         :param projects_yaml_file:
         """
+        import yaml
+
         config = yaml.load(open(projects_yaml_file), Loader=yaml.FullLoader)
         demux_projects = config.get("projects", None)
 
@@ -1763,3 +1212,18 @@ class ProjectDF:
         )
 
         return (sample_added, ix)
+
+
+__global_ProjectDF = None
+
+
+def get_global_ProjectDF(root="."):
+    global __global_ProjectDF
+    if __global_ProjectDF is None:
+        from spacemake.config import get_global_config
+
+        __global_ProjectDF = ProjectDF(
+            f"{root}/project_df.csv", config=get_global_config()
+        )
+
+    return __global_ProjectDF
