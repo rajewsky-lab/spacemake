@@ -445,7 +445,7 @@ class ConfigFile:
         self.logger = logging.getLogger(logger_name)
 
     @classmethod
-    def from_yaml(cls, file_path):
+    def from_yaml(cls, file_path="config.yaml"):
         cf = cls()
 
         config_yaml_variables = None
@@ -799,3 +799,24 @@ class ConfigFile:
                 raise
             else:
                 return Puck(name)
+
+    def get_barcode_flavor(self, flavor):
+        return self.get_variable("barcode_flavors", flavor)
+
+    def get_adapter_flavor(
+        self, flavor, add_adapter_sequences=["cut_left", "cut_right"]
+    ):
+        adapter_sequences = self.variables["adapters"]
+        af = self.get_variable("adapter_flavors", flavor)
+        # populate each adapter clip definition in this flavor with the full sequence of the adapter
+        for section, entries in af.items():
+            if section in add_adapter_sequences:
+                for (name, d_adap) in entries.items():
+                    if name == "Q":
+                        continue
+                    d_adap["seq"] = adapter_sequences.get(
+                        name,
+                        f"'{name}' NOT FOUND in 'adapters:' section of config.yaml",
+                    )
+
+        return af
