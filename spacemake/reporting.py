@@ -3,6 +3,9 @@ import sys
 import logging
 import pandas as pd
 import numpy as np
+import matplotlib as mpl
+
+mpl.use("Agg")
 
 
 def count_dict_collapse_misc(
