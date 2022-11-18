@@ -98,6 +98,7 @@ class ConfigFile:
     main_variables_pl2sg = {
         "pucks": "puck",
         "barcode_flavors": "barcode_flavor",
+        "adapter_flavors": "adapter_flavor",
         "run_modes": "run_mode",
         "species": "species",
     }
@@ -312,12 +313,14 @@ class ConfigFile:
 
         return kwargs
 
-    def process_barcode_flavor_args(self, cell_barcode=None, umi=None):
+    def process_barcode_flavor_args(self, **kw):
         bam_tags = "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
 
         # r(1|2) and then string slice
         to_match = r"r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$"
 
+        umi = kw.get("umi", None)
+        cell_barcode = kw.get("cell_barcode", None)
         if umi is not None and re.match(to_match, umi) is None:
             raise InvalidBarcodeStructure("umi", to_match)
 
@@ -331,6 +334,10 @@ class ConfigFile:
 
         if cell_barcode is not None:
             barcode_flavor["cell"] = cell_barcode
+
+        for key, value in kw.items():
+            if value is not None:
+                barcode_flavor[key] = value
 
         return barcode_flavor
 
@@ -391,6 +398,8 @@ class ConfigFile:
     def process_variable_args(self, variable, **kwargs):
         if variable == "barcode_flavors":
             return self.process_barcode_flavor_args(**kwargs)
+        elif variable == "adapter_flavors":
+            return self.process_adapter_flavor_args(**kwargs)
         elif variable == "run_modes":
             return self.process_run_mode_args(**kwargs)
         elif variable == "pucks":
@@ -711,6 +720,13 @@ def get_barcode_flavor_parser(required=True):
         required=required,
     )
     parser.add_argument(
+        "--read1",
+        help="can be used to modify or replace 'read1' sequence",
+        type=str,
+        required=required,
+    )
+
+    parser.add_argument(
         "--cell_barcode",
         help="structure of CELL BARCODE, using python's list syntax. Example: to set"
         + " the cell_barcode to 1-12 nt of Read1, use --cell_barcode r1[0:12]. It is also possible "
@@ -718,6 +734,100 @@ def get_barcode_flavor_parser(required=True):
         + " Read1, and assigning them as CELL BARCODE).",
         type=str,
         required=required,
+    )
+    parser.add_argument(
+        "--seq",
+        help=(
+            "if set, allows to modify the sequence, e.g. "
+            "--seq='r2[4:]' will trim the first 4 bases. "
+            "NOTE: has to be matched with --qual='r2_qual[4:]' !"
+        ),
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--qual",
+        help=(
+            "if set, allows to modify the base qualities, e.g. "
+            "--qual='r2_qual[4:]' will trim the first 4 quality values"
+            "NOTE: has to be matched with --seq='r2[4:]' !"
+        ),
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--min_qual_trim",
+        help=(
+            "Especially if you need access to bases 'at the end' of the read, "
+            "that may require trimming bases that bcl2fastq already "
+            "marked as non-existent (i.e. sequencing adapter). "
+            "a good option for that is to clip bases from the 3' end if they "
+            "have very low quality scores (default=disabled)"
+        ),
+        type=int,
+        default=None,
+    )
+
+    return parser
+
+
+def get_adapter_flavor_parser(required=True):
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False, description="add/update adapter_flavor", add_help=False
+    )
+    parser.add_argument(
+        "--name", help="name of the adapter flavor", type=str, required=True
+    )
+    parser.add_argument(
+        "--cut_left",
+        help=(
+            "list the adapter sequences that should "
+            "be trimmed from the left side of the read,"
+            "e.g. --cut_left TSO_SMART SMART"
+        ),
+        type=str,
+        nargs="+",
+    )
+    parser.add_argument(
+        "--cut_right",
+        help=(
+            "list the adapter sequences that should "
+            "be trimmed from the right side of the read,"
+            "e.g. --cut_right Q polyG polyA "
+            "NOTE: 'Q' means quality-score trimming"
+        ),
+        type=str,
+        nargs="+",
+    )
+    parser.add_argument(
+        "--paired_end",
+        help=(
+            "if consecutive reads are mates of a paired-end read,"
+            "and trimming leads to a read that is shorter than "
+            "min_read_length, we need to discard either both reads,"
+            "or, instead of discarding, the short read can be replaced"
+            " with a single 'N' [EXPERIMENTAL]"
+        ),
+        type=str,
+        choices=["single_end", "replace_N", "discard_both"],
+    )
+    parser.add_argument(
+        "--append",
+        help=(
+            "rather than replacing existing definitions for "
+            "cut_left and cut_right, extend them instead."
+        ),
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--min_read_legth",
+        help=(
+            "if triming reduces the length of the read below this"
+            " threshold, the read should be discarded (default=18)"
+        ),
+        type=int,
+        default=18,
     )
 
     return parser
@@ -728,6 +838,9 @@ def get_variable_action_subparsers(parent_parser, variable):
     if variable == "barcode_flavors":
         variable_singular = variable[:-1]
         variable_add_update_parser = get_barcode_flavor_parser
+    elif variable == "adapter_flavors":
+        variable_singular = variable[:-1]
+        variable_add_update_parser = get_adapter_flavor_parser
     elif variable == "pucks":
         variable_singular = variable[:-1]
         variable_add_update_parser = get_puck_parser
