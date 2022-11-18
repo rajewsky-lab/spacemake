@@ -98,6 +98,7 @@ class ConfigFile:
     main_variables_pl2sg = {
         "pucks": "puck",
         "barcode_flavors": "barcode_flavor",
+        "adapters": "adapter",
         "adapter_flavors": "adapter_flavor",
         "run_modes": "run_mode",
         "species": "species",
@@ -108,6 +109,8 @@ class ConfigFile:
     main_variable_sg2type = {
         "puck": str,
         "barcode_flavor": str,
+        "adapter": str,
+        "adapter_flavor": str,
         "run_mode": "str_list",
         "species": str,
         "map_strategy": str,
@@ -119,6 +122,8 @@ class ConfigFile:
             "temp_dir": "/tmp",
             "species": {},
             "barcode_flavors": {},
+            "adapter_flavors": {},
+            "adapters": {},
             "run_modes": {},
             "pucks": {},
         }
@@ -341,6 +346,56 @@ class ConfigFile:
 
         return barcode_flavor
 
+    def process_adapter_args(self, name=None, seq=None):
+        # print(f"processing {name} {seq}")
+        if (name is None) or (seq is None):
+            raise ValueError(f"need a name and a sequence: name={name} seq={seq}")
+
+        return {name: seq}
+
+    def process_adapter_flavor_args(self, cut_left=[], cut_right=[], name=None, **kw):
+        def parse_adapters(cut):
+            type_d = {
+                "max_error": float,
+                "min_overlap": int,
+                "min_base_qual": float,
+            }
+            from collections import OrderedDict
+
+            out = []
+            for c in cut:
+                parts = c.split(":")
+                adap_name = parts[0]
+                if adap_name != "Q" and not adap_name in self.variables["adapters"]:
+                    raise KeyError(
+                        (
+                            f"unknown adapter {adap_name}! We have "
+                            f"{','.join(self.variables['adapters'])} "
+                            " you can add new adapter with --add_adapter "
+                        )
+                    )
+                d = {}
+                if len(parts) > 1:
+                    for param_str in parts[1:]:
+                        key, value = param_str.split("=")
+                        d[key] = type_d.get(key, str)(value)
+
+                out.append({adap_name: d})
+
+            return out
+
+        adapter_flavor = {
+            "cut_left": parse_adapters(cut_left),
+            "cut_right": parse_adapters(cut_right),
+        }
+
+        for key, value in kw.items():
+            if value is not None:
+                adapter_flavor[key] = value
+
+        print(f"processed adapter_flavors {adapter_flavor}")
+        return {name: adapter_flavor}
+
     def process_species_args(
         self,
         name=None,
@@ -398,6 +453,8 @@ class ConfigFile:
     def process_variable_args(self, variable, **kwargs):
         if variable == "barcode_flavors":
             return self.process_barcode_flavor_args(**kwargs)
+        elif variable == "adapters":
+            return self.process_adapter_args(**kwargs)
         elif variable == "adapter_flavors":
             return self.process_adapter_flavor_args(**kwargs)
         elif variable == "run_modes":
@@ -415,7 +472,7 @@ class ConfigFile:
         # --name is absolutely REQUIRED and its value has to map somehow onto
         # an internal function name
         # @TAMAS: can you help?
-        print(f"add_variable() called with variable={variable} name={name} kw={kwargs}")
+        # print(f"add_variable() called with variable={variable} name={name} kw={kwargs}")
 
         if variable == "species":
             # for the species command, collision check is on the reference name, not the species name
@@ -431,7 +488,9 @@ class ConfigFile:
             else:
                 values = self.process_variable_args(variable, **kwargs)
                 self.variables[variable][name] = values
-
+        elif variable == "adapters":
+            values = self.process_variable_args(variable, **kwargs)
+            self.variables[variable].update(values)
         else:
             if not self.variable_exists(variable, name):
                 values = self.process_variable_args(variable, **kwargs)
@@ -447,9 +506,19 @@ class ConfigFile:
 
     def update_variable(self, variable, name, **kwargs):
         if self.variable_exists(variable, name):
-            values = self.process_variable_args(variable, **kwargs)
-            self.variables[variable][name].update(values)
-
+            # print(f"updating {variable} {name} {kwargs}")
+            values = self.process_variable_args(variable, name=name, **kwargs)
+            if variable == "adapters":
+                self.variables[variable].update(values)
+            if variable == "adapter_flavors":
+                raise NotImplementedError(
+                    (
+                        "Updating ofadapter flavors is not implemented! "
+                        "please delete the flavor and then add aggain."
+                    )
+                )
+            else:
+                self.variables[variable][name].update(values)
             variable_data = self.variables[variable][name]
         else:
             if variable in ["run_modes", "pucks", "barcode_flavors"]:
@@ -771,12 +840,46 @@ def get_barcode_flavor_parser(required=True):
     return parser
 
 
+def get_adapter_parser(required=True):
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False,
+        add_help=False,
+        description=("add/update adapter sequences"),
+    )
+    parser.add_argument("--name", help="name of the adapter", type=str, required=True)
+    parser.add_argument(
+        "--seq",
+        help="sequence of the adapter",
+        type=str,
+        required=required,
+    )
+    return parser
+
+
 def get_adapter_flavor_parser(required=True):
     parser = argparse.ArgumentParser(
-        allow_abbrev=False, description="add/update adapter_flavor", add_help=False
+        allow_abbrev=False,
+        add_help=False,
+        description="add/update adapter_flavor",
     )
     parser.add_argument(
-        "--name", help="name of the adapter flavor", type=str, required=True
+        "--name",
+        help=(
+            "name of the adapter flavor."
+            "an 'adapter_flavor' describes a recipe for trimming raw reads. "
+            "this can entail clipping sequences from either end (such as TSO "
+            "and/or polyA tails) as well as quality-score based trimming "
+            "of bases on the reads 3' end. \n"
+            "NOTE: adapters need to be first added via \n"
+            "   add_adapter --name <name> --seq <sequence>\n"
+            "before they can be used in an adapter_flavor. To customize the "
+            "parameters for determining a match, key-value pairs can be passed "
+            "to --cut_left and --cut_right, for example:\n\n"
+            "   --cut_left SMART:min_overlap=10:max_error=0.1 "
+            "   --cut_right Q:min_base_qual=30 polyA:min_overlap=3:max_error=0.25 "
+        ),
+        type=str,
+        required=True,
     )
     parser.add_argument(
         "--cut_left",
@@ -812,22 +915,13 @@ def get_adapter_flavor_parser(required=True):
         choices=["single_end", "replace_N", "discard_both"],
     )
     parser.add_argument(
-        "--append",
-        help=(
-            "rather than replacing existing definitions for "
-            "cut_left and cut_right, extend them instead."
-        ),
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--min_read_legth",
+        "--min_read_length",
         help=(
             "if triming reduces the length of the read below this"
             " threshold, the read should be discarded (default=18)"
         ),
         type=int,
-        default=18,
+        default=None,
     )
 
     return parser
@@ -838,6 +932,9 @@ def get_variable_action_subparsers(parent_parser, variable):
     if variable == "barcode_flavors":
         variable_singular = variable[:-1]
         variable_add_update_parser = get_barcode_flavor_parser
+    elif variable == "adapters":
+        variable_singular = variable[:-1]
+        variable_add_update_parser = get_adapter_parser
     elif variable == "adapter_flavors":
         variable_singular = variable[:-1]
         variable_add_update_parser = get_adapter_flavor_parser
