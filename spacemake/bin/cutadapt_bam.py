@@ -1,9 +1,8 @@
+from spacemake.contrib import __version__, __license__, __author__, __email__
 import numpy as np
 
-# import cutadapt.align
 from collections import defaultdict
 
-from spacemake.contrib import __version__, __license__, __author__, __email__
 import multiprocessing as mp
 from spacemake.parallel import (
     put_or_abort,
@@ -22,9 +21,10 @@ import os
 
 def parse_cmdline():
     parser = util.make_minimal_parser(
-        prog="cutadapt_bam.py", 
-        description="trim adapters from a BAM file using cutadapt"
+        prog="cutadapt_bam.py",
+        description="trim adapters from a BAM file using cutadapt",
     )
+    parser.add_argument("--config", default="config.yaml", help="path to config-file")
 
     parser.add_argument(
         "bam_in",
@@ -43,32 +43,26 @@ def parse_cmdline():
         default="b0",
     )
     parser.add_argument(
-        "--adapters-right",
-        help="FASTA file with adapter sequences to trim from the right (3') end of the reads",
-        default="",
+        "--adapter-flavor",
+        help="name of the adapter flavor used to retrieve sequences and parameters from the config.yaml",
+        default="default",
     )
-    parser.add_argument(
-        "--adapters-left",
-        help="FASTA file with adapter sequences to trim from the left (5') end of the reads",
-        default="",
-    )
+
+    # parser.add_argument(
+    #     "--adapters-right",
+    #     help="FASTA file with adapter sequences to trim from the right (3') end of the reads",
+    #     default="",
+    # )
+    # parser.add_argument(
+    #     "--adapters-left",
+    #     help="FASTA file with adapter sequences to trim from the left (5') end of the reads",
+    #     default="",
+    # )
     parser.add_argument(
         "--skim",
         help="skim through the BAM by investigating only every <skim>-th record (default=1 off)",
         default=1,
         type=int,
-    )
-    parser.add_argument(
-        "--min-length",
-        help="minimal allowed read-length left after trimming (default=18)",
-        type=int,
-        default=18,
-    )
-    parser.add_argument(
-        "--min-qual",
-        help="minimal quality score for quality trimming (default=20)",
-        type=int,
-        default=20,
     )
     parser.add_argument(
         "--phred-base",
@@ -107,59 +101,174 @@ def parse_cmdline():
         help="write tab-separated table with trimming results here",
         default="",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    return util.load_config_with_fallbacks(args)
 
 
-def load_adapters(right, left, max_errors=0.1, min_overlap=3):
-    import cutadapt.adapters
-    from spacemake.util import fasta_chunks
-    import re
+class QualityTrim:
+    def __init__(self, min_base_qual=20):
+        self.min_base_qual = min_base_qual
+        self.name = "Q"
 
-    def parse_seq_id(seq_id):
-        err = max_errors
-        ov = min_overlap
-        name = seq_id.split()[0]
-        m = re.search(r"max_errors=(\S+)", seq_id)
-        if m:
-            # overload max_errors default value
-            err = float(m.groups()[0])
+    def match_to(self, seq, qual):
+        qtrim = np.array(qual) >= self.min_base_qual
+        n_trimmed = (qtrim[::-1]).argmax()
+        return n_trimmed
 
-        m = re.search(r"min_overlap=(\S+)", seq_id)
-        if m:
-            # overload min_overlap default value
-            ov = int(m.groups()[0])
 
-        return name, err, ov
+class AdapterTrim:
+    def __init__(self, name="na", where="right", seq=None, **kw):
+        import cutadapt.adapters
 
-    adapters_right = []
-    if args.adapters_right:
-        for seq_id, seq in fasta_chunks(open(right)):
-            name, err, ov = parse_seq_id(seq_id)
-            adapters_right.append(
-                (
-                    name,
-                    seq,
-                    cutadapt.adapters.BackAdapter(
-                        seq, name=name, max_errors=err, min_overlap=ov
-                    ),
-                )
+        self.name = name
+        self.where = where
+        if where == "left":
+            self.adapter = cutadapt.adapters.NonInternalFrontAdapter(
+                seq, name=name, **kw
+            )
+        else:
+            self.adapter = cutadapt.adapters.BackAdapter(seq, name=name, **kw)
+
+    def match_to(self, seq, qual):
+        match = self.adapter.match_to(seq)
+        n_trimmed = 0
+        if match:
+            if self.where == "left":
+                n_trimmed = match.rstop
+            else:
+                n_trimmed = len(seq) - match.rstart
+
+        return n_trimmed
+
+
+class AdapterFlavor:
+    def __init__(
+        self,
+        args,
+        default_max_errors=0.1,
+        default_min_overlap=3,
+        default_min_base_qual=20,
+        default_min_read_length=18,
+        default_paired_end="single_end",
+        stats={},
+        total={},
+    ):
+        # import cutadapt.adapters
+
+        self.stats = stats
+        self.total = total
+        self.flavor = args.adapter_flavor
+        if not args.adapter_flavor in args.config["adapter_flavors"]:
+            raise KeyError(
+                f"adapter_flavor '{args.adapter_flavor}' not found in config.yaml! Need valid --adapter-flavor=... "
             )
 
-    adapters_left = []
-    if args.adapters_left:
-        for seq_id, seq in fasta_chunks(open(left)):
-            name, err, ov = parse_seq_id(seq_id)
-            adapters_left.append(
-                (
-                    name,
-                    seq,
-                    cutadapt.adapters.NonInternalFrontAdapter(
-                        seq, name=name, max_errors=err, min_overlap=ov
-                    ),
-                )
-            )
+        flavor_d = args.config["adapter_flavors"][self.flavor]
+        # from pprint import pprint
 
-    return adapters_right, adapters_left
+        # pprint(flavor_d)
+        self.adapter_sequences = args.config["adapters"]
+
+        self.trimmers_right = []
+        for adap_d in flavor_d.get("cut_right"):
+            for name, param_d in adap_d.items():
+                if name == "Q":
+                    adapter = QualityTrim(
+                        min_base_qual=param_d.get(
+                            "min_base_qual", default_min_base_qual
+                        )
+                    )
+                else:
+                    adapter = AdapterTrim(
+                        name=name,
+                        seq=self.adapter_sequences[name],
+                        where="right",
+                        max_errors=param_d.get("max_errors", default_max_errors),
+                        min_overlap=param_d.get("min_overlap", default_min_overlap),
+                    )
+
+                self.trimmers_right.append(adapter)
+
+        self.trimmers_left = []
+        for adap_d in flavor_d.get("cut_left"):
+            for name, param_d in adap_d.items():
+                adapter = AdapterTrim(
+                    name=name,
+                    seq=self.adapter_sequences[name],
+                    where="left",
+                    max_errors=param_d.get("max_errors", default_max_errors),
+                    min_overlap=param_d.get("min_overlap", default_min_overlap),
+                )
+                self.trimmers_left.append(adapter)
+
+        self.min_read_length = flavor_d.get("min_read_length", default_min_read_length)
+        self.paired_end = flavor_d.get("paired_end", default_paired_end)
+
+    def process_read(self, read_seq, read_qual):
+        # print(read_qual)
+        start = 0
+        end = len(read_seq)
+
+        self.stats["N_input"] += 1
+        self.total["bp_input"] += end
+        trimmed_names_right = []
+        trimmed_bases_right = []
+
+        trimmed_names_left = []
+        trimmed_bases_left = []
+
+        def check_discard(start, end, reason):
+            if (end - start) < self.min_read_length:
+                self.stats[reason] += 1
+                self.stats["N_discarded"] += 1
+                self.total["bp_discarded"] += end - start
+
+                return True
+            else:
+                return False
+
+        for trimmer in self.trimmers_right:
+            n_trimmed = trimmer.match_to(read_seq[start:end], read_qual[start:end])
+            if n_trimmed:
+                end -= n_trimmed
+                trimmed_bases_right.append(n_trimmed)
+                trimmed_names_right.append(trimmer.name)
+
+                self.stats[f"N_{trimmer.name}_trimmed"] += 1
+                self.total[f"bp_{trimmer.name}_trimmed"] += n_trimmed
+                self.total[f"bp_trimmed"] += n_trimmed
+
+            if check_discard(start, end, f"N_too_short_after_{trimmer.name}"):
+                return
+
+        for trimmer in self.trimmers_left:
+            n_trimmed = trimmer.match_to(read_seq[start:end], read_qual[start:end])
+            if n_trimmed:
+                start += n_trimmed
+                trimmed_bases_left.append(n_trimmed)
+                trimmed_names_left.append(trimmer.name)
+
+                self.stats[f"N_{trimmer.name}_trimmed"] += 1
+                self.total[f"bp_{trimmer.name}_trimmed"] += n_trimmed
+                self.total[f"bp_trimmed"] += n_trimmed
+
+            if check_discard(start, end, f"N_too_short_after_{trimmer.name}"):
+                return
+
+        # we've made it to the end!
+        self.stats["N_kept"] += 1
+        self.total["bp_kept"] += end
+
+        tags = []
+        if trimmed_names_right:
+            tags.append(f"A3:Z:{','.join(trimmed_names_right)}")
+            tags.append(f"T3:Z:{','.join([str(s) for s in trimmed_bases_right])}")
+
+        if trimmed_names_left:
+            tags.append(f"A5:Z:{','.join(trimmed_names_left)}")
+            tags.append(f"T5:Z:{','.join([str(s) for s in trimmed_bases_left])}")
+
+        return start, end, "\t".join(tags)
 
 
 class SimpleRead:
@@ -200,20 +309,8 @@ class SimpleRead:
 
 
 def process_reads(read_source, args, stats={}, total={}, lhist={}):
-    adapters_right, adapters_left = load_adapters(
-        args.adapters_right, args.adapters_left
-    )
-
-    def check_discard(start, end, reason):
-        if (end - start) < args.min_length:
-            stats[reason] += 1
-            stats["N_discarded"] += 1
-            total["bp_discarded"] += end - start
-
-            return True
-        else:
-            return False
-
+    flavor = AdapterFlavor(args, stats=stats, total=total)
+    # TODO: paired-end processing
     for read in read_source:
         # read_seq = read.query_sequence
         # read_qual = read.query_qualities
@@ -223,103 +320,17 @@ def process_reads(read_source, args, stats={}, total={}, lhist={}):
         qual_str = cols[10]
         read_qual = np.array(bytearray(qual_str.encode("ASCII"))) - args.phred_base
 
-        # print(read_qual)
-        start = 0
-        end = len(read_seq)
-        tags = []
+        result = flavor.process_read(read_seq, read_qual)
+        if result:
+            start, end, tags = result
+            lhist[end - start] += 1
+            cols[9] = read_seq[start:end]
+            cols[10] = qual_str[start:end]
 
-        stats["N_input"] += 1
-        total["bp_input"] += end
-        trimmed_names_right = []
-        trimmed_bases_right = []
+            if tags:
+                cols[-1] = f"{cols[-1]} {tags}"
 
-        trimmed_names_left = []
-        trimmed_bases_left = []
-
-        # quality trimming
-        qtrim = np.array(read_qual) >= args.min_qual
-        # print(qtrim)
-        # print(
-        #     f"qtrim.argmax()={qtrim.argmax()} L={end} new_end=qtrim[::-1].argmax() ={qtrim[::-1].argmax()}"
-        # )
-        # the first position where q >= min_q (from the 3' end) should be the new end.
-        n_trimmed = (qtrim[::-1]).argmax()
-        if n_trimmed:
-            end -= n_trimmed
-            trimmed_bases_right.append(n_trimmed)
-            trimmed_names_right.append("Q")
-
-            stats["N_Qtrimmed"] += 1
-            total["bp_Qtrimmed"] += n_trimmed
-            total["bp_trimmed"] += n_trimmed
-
-        if check_discard(start, end, "N_too_short_after_Q"):
-            continue
-
-        if adapters_left:
-            # left end adapter trimming
-            for adap_name, adap_seq, adap in adapters_left:
-                match = adap.match_to(read_seq[start:end])
-                if match:
-                    # print(adap_name, adap, match)
-                    new_start = max(start, match.rstop + start)
-                    n_trimmed = new_start - start
-                    start = new_start
-                    trimmed_bases_left.append(n_trimmed)
-                    trimmed_names_left.append(adap_name)
-
-                    stats["N_" + adap_name] += 1
-                    total["bp_" + adap_name] += n_trimmed
-                    total["bp_trimmed"] += n_trimmed
-
-            if check_discard(start, end, f"N_too_short_after_left_{adap_name}"):
-                continue
-
-        if adapters_right:
-            # right end adapter trimming
-            for adap_name, adap_seq, adap in adapters_right:
-                match = adap.match_to(read_seq[start:end])
-                # _s = read_seq[start:end]
-                # print(f"match against {adap_name} in remaining read={_s}: {match} {_s[match.rstart:match.rstop]}")
-                if match:
-                    new_end = min(end, match.rstart + start)
-
-                    n_trimmed = end - new_end
-                    end = new_end
-                    trimmed_bases_right.append(n_trimmed)
-                    trimmed_names_right.append(adap_name)
-
-                    stats["N_" + adap_name] += 1
-                    total["bp_" + adap_name] += n_trimmed
-                    total["bp_trimmed"] += n_trimmed
-
-            if check_discard(start, end, f"N_too_short_after_right_{adap_name}"):
-                continue
-
-        # we've made it to the end!
-        stats["N_kept"] += 1
-        total["bp_kept"] += end
-        lhist[end - start] += 1
-        # print(f"keeping read up to {end}")
-        # read.query_sequence = read_seq[start:end]
-        # read.query_qualities = read_qual[start:end]
-        cols[9] = read_seq[start:end]
-        cols[10] = qual_str[start:end]
-
-        if trimmed_names_right:
-            tags.append(f"A3:Z:{','.join(trimmed_names_right)}")
-            tags.append(f"T3:Z:{','.join([str(s) for s in trimmed_bases_right])}")
-
-        if trimmed_names_left:
-            tags.append(f"A5:Z:{','.join(trimmed_names_left)}")
-            tags.append(f"T5:Z:{','.join([str(s) for s in trimmed_bases_left])}")
-
-        if tags:
-            cols[-1] = cols[-1] + " " + " ".join(tags)
-
-        yield "\t".join(cols)
-        # bam_out.write(read)
-        # print(read)
+            yield "\t".join(cols)
 
 
 def skim_reads(read_source, skim):
@@ -648,6 +659,7 @@ def main_parallel(args):
 
 if __name__ == "__main__":
     args = parse_cmdline()
+
     if args.threads_work == 1:
         ret_code = main_single(args)
     else:
