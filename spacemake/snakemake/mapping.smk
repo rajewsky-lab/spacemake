@@ -33,20 +33,22 @@ star_unmapped_bam = complete_data_root + "/not_{ref_name}.STAR.bam"
 bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.bam"
 bt2_unmapped_bam = complete_data_root + "/not_{ref_name}.bowtie2.bam"
 
-bt2_mapped_log = complete_data_root + "/reports/{ref_name}.bowtie2.log"
+bt2_mapped_log = log_dir + "/{ref_name}.bowtie2.log"
 
 # special log file used for rRNA "ribo depletion" stats
-bt2_rRNA_log = complete_data_root + "/reports/rRNA.bowtie2.bam.log"
+bt2_rRNA_log = log_dir + "/rRNA.bowtie2.bam.log"
 
 # default places for mapping indices, unless specified differently in the config.yaml
 star_index = 'species_data/{species}/{ref_name}/star_index'
+star_index_log = star_index + '.log'
+
 star_index_param = star_index
 star_index_file = star_index + '/SAindex'
 
 bt2_index = 'species_data/{species}/{ref_name}/bt2_index'
 bt2_index_param = bt2_index + '/{ref_name}'
 bt2_index_file = bt2_index_param + '.1.bt2'
-
+bt2_index_log = bt2_index_param + '.log'
 species_reference_sequence = 'species_data/{species}/{ref_name}/sequence.fa'
 species_reference_annotation = 'species_data/{species}/{ref_name}/annotation.gtf'
 species_reference_annotation_compiled = 'species_data/{species}/{ref_name}/compiled_annotation'
@@ -492,6 +494,7 @@ rule map_reads_STAR:
         bam=star_mapped_bam,
         ubam=star_unmapped_bam,
         log=star_target_log_file,
+        tmp=temp(directory(star_prefix + "_STARgenome"))
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
     params:
         auto=get_map_params,
@@ -554,16 +557,17 @@ rule create_bowtie2_index:
         species_reference_sequence
     output:
         bt2_index_file
+    log:
+        bt2_index_log
     params:
         auto = lambda wc: INDEX_FASTA_LKUP[wc_fill(bt2_index_file, wc)]
     shell:
-        """
-        mkdir -p {params.auto[map_index]}
-        bowtie2-build --ftabchars 12 \
-                      --offrate 1 \
-                      {params.auto[ref_path]} \
-                      {params.auto[map_index_param]}
-        """
+        "mkdir -p {params.auto[map_index]} \n"
+        "bowtie2-build --ftabchars 12 "
+        "  --offrate 1 "
+        "  {params.auto[ref_path]} "
+        "  {params.auto[map_index_param]} "
+        " &> {log} "
 
 rule create_star_index:
     input:

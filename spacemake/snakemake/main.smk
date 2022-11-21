@@ -2,10 +2,6 @@
 # about #
 #########
 from spacemake import __version__, __author__, __license__, __email__
-# __version__ = '0.1.1'
-# __author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
-# __license__ = 'GPL'
-# __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
 
 ###########
 # imports #
@@ -45,6 +41,13 @@ config['projects'] = config.get('projects', [])
 global_tmp = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
 spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
+bin_dir = os.path.join(spacemake_dir, "bin")
+spacemake_config = project_root + '/config.yaml'
+log_level = config["logging"]["level"]
+
+# print(f"spacemake_config={spacemake_config}")
+# print(f"repo_dir={repo_dir}")
+
 
 #######################
 # DIRECTORY STRUCTURE #
@@ -55,8 +58,16 @@ include: 'variables.py'
 # UNIQUE PIPELINE VARS #
 ########################
 reports_dir = complete_data_root + '/reports'
-# smart_adapter = config['adapters']['SMART']
+log_dir = complete_data_root + '/logs'
+stats_dir = complete_data_root + '/stats'
+plots_dir = complete_data_root + '/plots'
 
+# print(f"bin_dir={bin_dir}")
+# print(f"log_dir={log_dir}")
+# print(f"stats_dir={stats_dir}")
+
+
+# smart_adapter = config['adapters']['SMART']
 
 # moved barcode_flavor assignment here so that additional samples/projects are equally processed
 project_df = ProjectDF(config['project_df'], ConfigFile.from_yaml('config.yaml'))
@@ -86,9 +97,9 @@ def get_module_outputs():
 # INCLUDE OTHER MODULES #
 #########################
 include: 'downsample.smk'
+include: 'preprocess.smk'
 include: 'mapping.smk'
 include: 'reports.smk'
-include: 'dropseq.smk'
 include: 'longread.smk'
 
 #####################
@@ -178,124 +189,6 @@ include: 'merge_samples.smk'
 #########
 # RULES #
 #########
-ruleorder: link_raw_reads > link_demultiplexed_reads 
-
-rule demultiplex_data:
-    params:
-        demux_barcode_mismatch=lambda wildcards: int(project_df.get_metadata('demux_barcode_mismatch', demux_dir = wildcards.demux_dir)),
-        sample_sheet=lambda wildcards: project_df.get_metadata('sample_sheet', demux_dir = wildcards.demux_dir),
-        output_dir= lambda wildcards: expand(demux_dir_pattern, demux_dir=wildcards.demux_dir)
-    input:
-        lambda wildcards: project_df.get_metadata('basecalls_dir', demux_dir = wildcards.demux_dir)
-    output:
-        demux_indicator
-    threads: 8
-    shell:
-        """
-        retVal=$(bcl2fastq \
-            --no-lane-splitting --fastq-compression-level=9 \
-            --mask-short-adapter-reads 15 \
-            --barcode-mismatch {params.demux_barcode_mismatch} \
-            --output-dir {params.output_dir} \
-            --sample-sheet {params.sample_sheet} \
-            --runfolder-dir {input} \
-            -p {threads})
-        
-        if [ $retVAL==0 ]; then
-            echo "demux finished: $(date)" > {output}
-        fi
-        exit $retVal
-        """
-
-rule link_demultiplexed_reads:
-    input:
-        ancient(unpack(get_demux_indicator))
-    output:
-        raw_reads_pattern
-    params:
-        demux_dir = lambda wildcards: expand(demux_dir_pattern,
-            demux_dir = project_df.get_metadata('demux_dir', sample_id = wildcards.sample_id,
-                                     project_id = wildcards.project_id)),
-        reads_folder = raw_data_illumina_reads
-    shell:
-        """
-        mkdir -p {params.reads_folder}
-
-        find {params.demux_dir} -type f -wholename '*/{wildcards.sample_id}/*R{wildcards.mate}*.fastq.gz' -exec ln -sr {{}} {output} \; 
-        """
-
-rule link_raw_reads:
-    input:
-        unpack(get_reads)
-    output:
-        raw_reads_pattern
-    run:
-        if len(input) == 1:
-            # either link raw reads
-            shell("ln -rs {input} {output}")
-        else:
-            # or append reads together
-            shell("cat {input} > {output}")
-            
-
-rule zcat_pipe:
-    input: "{name}.fastq.gz"
-    output: temp("{name}.fastq")
-    threads: 2
-    shell: "unpigz --keep --processes {threads} --stdout $(readlink {input}) >> {output}"
-
-rule tag_reads_bc_umi:
-    input:
-        # these implicitly depend on the raw reads via zcat_pipes
-        ## TODO: make R1 optional for bulk samples
-        # R1 = raw_reads_mate_1,
-        # R2 = raw_reads_mate_2
-        unpack(get_linked_reads)
-    params:
-        bc_params = get_bc_preprocess_settings,
-        read1 = lambda wc: get_linked_reads(wc).get("R1", None),
-        read2 = lambda wc: get_linked_reads(wc).get("R2", None)
-    output:
-        assigned = tagged_bam,
-        # unassigned = unassigned,
-        bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv"),
-        # bc_counts = barcode_readcounts
-    log:
-        reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 8
-    shell:
-        "python {spacemake_dir}/preprocess/cmdline.py "
-        "  --sample={wildcards.sample_id} "
-        "  --read1={params.read1} "
-        "  --read2={params.read2} "
-        "  --parallel={threads} "
-        "  --save-stats={output.bc_stats} "
-        # "  --save-cell-barcodes={output.bc_counts} "
-        "  --out-format=bam "
-        "  --out-unassigned=/dev/null "
-        "  --out-assigned=/dev/stdout "
-        "  --log-file={log} "
-        "  {params.bc_params} "
-        " | samtools view -bh --threads=4 /dev/stdin > {output.assigned} "
-
-
-rule run_fastqc:
-    input:
-        # we need to use raw reads here, as later during "reversing" we do the umi
-        # extraction, and barcode identification (for the combinatorial barcoding)
-        # in order for R1 to have the same pattern
-        raw_reads_pattern
-    output:
-        fastqc_pattern
-    params:
-        output_dir = fastqc_root 
-    threads: 4
-    shell:
-        """
-        mkdir -p {params.output_dir}
-
-        fastqc -t {threads} -o {params.output_dir} {input}
-        """
 
 rule get_barcode_readcounts:
     # this rule takes the final.bam file (output of the dropseq pipeline) and creates a barcode read count file

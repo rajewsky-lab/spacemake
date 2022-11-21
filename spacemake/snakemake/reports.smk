@@ -9,10 +9,16 @@ rule bamstats:
     """
     input: complete_data_root + "/{bamname}.bam"
     output:
-        stats=reports_dir + "/{bamname}.bc_stats.tsv",
-        rlen=reports_dir + "/{bamname}.readlen.tsv"
+        stats=stats_dir + "/{bamname}.bc_stats.tsv",
+        rlen=stats_dir + "/{bamname}.readlen.tsv"
+    log: log_dir + "/{bamname}.bamstats.log"
     shell:
-        "python {repo_dir}/scripts/bamstats.py {input} --sample={wildcards.sample_id} --out-stats={output.stats} --out-length={output.rlen}"
+        "python {bin_dir}/bamstats.py {input} "
+        " --sample={wildcards.sample_id} "
+        " --log-level={log_level} "
+        " --log-file={log} "
+        " --out-stats={output.stats} "
+        " --out-length={output.rlen} "
 
 
 rule complexity_sampling:
@@ -20,28 +26,28 @@ rule complexity_sampling:
     Sub-sample mapped bam files to get UMI counts as function of sequencing read number
     """
     input: complete_data_root + "/{bamname}.bam"
-    output: reports_dir + "/{bamname}.complexity.tsv"
+    output: stats_dir + "/{bamname}.complexity.tsv"
     shell:
-        "python {repo_dir}/scripts/complexity.py {input} --sample={wildcards.sample_id} --out-tsv={output}"
+        "python {bin_dir}/complexity.py {input} --sample={wildcards.sample_id} --out-tsv={output}"
 
 
 def get_all_bamstats_for_sample(wildcards):
-    raw = wc_fill(reports_dir  + "/unaligned_bc_tagged.readlen.tsv", wildcards),
-    trimmed = wc_fill(reports_dir + "/cutadapt.csv", wildcards),
+    raw = wc_fill(stats_dir  + "/unaligned_bc_tagged.readlen.tsv", wildcards),
+    trimmed = wc_fill(stats_dir + "/cutadapt.csv", wildcards),
     mapped = []
     not_mapped = []
     complexity = []
     for bampath in get_all_mapped_bams(wildcards)['mapped_bams']:
         dirname, basename = os.path.split(bampath)
-        mapped.append(f"{dirname}/reports/{basename.replace('.bam', '.readlen.tsv')}")
-        not_mapped.append(f"{dirname}/reports/not_{basename.replace('.bam', '.readlen.tsv')}")
-        complexity.append(f"{dirname}/reports/{basename.replace('.bam', '.complexity.tsv')}")
+        mapped.append(f"{dirname}/stats/{basename.replace('.bam', '.readlen.tsv')}")
+        not_mapped.append(f"{dirname}/stats/not_{basename.replace('.bam', '.readlen.tsv')}")
+        complexity.append(f"{dirname}/stats/{basename.replace('.bam', '.complexity.tsv')}")
 
     return { 'raw': raw, 'trimmed':trimmed, 'mapped': mapped, 'not_mapped': not_mapped, 'complexity' : complexity}
 
 
-overview_tsv = reports_dir + "/{sample_id}.overview.tsv"
-overview_pdf = reports_dir + "/{sample_id}.overview.pdf"
+overview_tsv = stats_dir + "/{sample_id}.overview.tsv"
+overview_pdf = plots_dir + "/{sample_id}.overview.pdf"
 
 rule overview:
     """
@@ -52,14 +58,17 @@ rule overview:
     output:
         tsv = overview_tsv,
         pdf = overview_pdf,
+    log: log_dir + '/overview_plot.log'
     params:
         mapped_list = lambda wildcards, input: " ".join(input.mapped),
         not_mapped_list = lambda wildcards, input: " ".join(input.not_mapped),
         map_strategy = lambda wildcards: SAMPLE_MAP_STRATEGY[(wildcards.project_id, wildcards.sample_id)],
     shell:
-        "python {repo_dir}/scripts/overview_plot.py "
-        " --raw={input.raw} "
+        "python {bin_dir}/overview_plot.py "
         " --sample={wildcards.sample_id} "
+        " --log-level={log_level} "
+        " --log-file={log} "
+        " --raw={input.raw} "
         " --trimmed={input.trimmed} "
         " --map-strategy='{params.map_strategy}' "
         " --mapped {params.mapped_list} "
