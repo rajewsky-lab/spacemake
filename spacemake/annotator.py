@@ -329,7 +329,9 @@ def decompose(nc):
     :rtype: None
     """
     logger = logging.getLogger("spacemake.annotator.compile")
-    logger.info(f"compiling strand into non-overlapping and pre-classified annotations")
+    logger.debug(
+        f"compiling strand into non-overlapping and pre-classified annotations"
+    )
 
     starts, ends, ids = np.array(nc.intervals()).T
     logger.debug(f"retrieved {len(starts)} intervals from ncls")
@@ -401,13 +403,15 @@ class GenomeAnnotation:
 
             d = df.query(f"chrom == '{chrom}' and strand == '{strand}'")
             nested_list = ncls.NCLS(d["start"], d["end"], d.index)
-            self.logger.debug(f"constructed nested_list for {strand_key} with {len(d)} features")
+            self.logger.debug(
+                f"constructed nested_list for {strand_key} with {len(d)} features"
+            )
 
             self.strand_map[strand_key] = nested_list
             self.strand_keys.append(strand_key)
 
         dt = time() - t0
-        self.logger.info(
+        self.logger.debug(
             f"constructed nested lists of {len(df)} features on {len(self.strand_keys)} strands in {dt:.3f}s"
         )
         self.is_compiled = is_compiled
@@ -421,7 +425,7 @@ class GenomeAnnotation:
         cdf = pd.read_csv(cdf_path, sep="\t")
         classifications = np.load(cclass_path, allow_pickle=True)
         dt = time() - t0
-        cls.logger.info(
+        cls.logger.debug(
             f"loaded compiled annotation index with {len(cdf)} original GTF feature combinations and {len(classifications)} pre-compiled classifications in {dt:.3f} seconds"
         )
         ## Create a classifier which uses the pre-compiled, non-overlapping combinations
@@ -437,7 +441,7 @@ class GenomeAnnotation:
         t0 = time()
         df = load_GTF(gtf)
         dt = time() - t0
-        cls.logger.info(f"loaded {len(df)} GTF records in {dt:.3f} seconds")
+        cls.logger.debug(f"loaded {len(df)} GTF records in {dt:.3f} seconds")
         if df_cache:
             df.to_csv(df_cache, sep="\t")
 
@@ -452,7 +456,7 @@ class GenomeAnnotation:
         t0 = time()
         df = pd.read_csv(path, sep="\t")
         dt = time() - t0
-        cls.logger.info(f"loaded {len(df)} tabular records in {dt:.3f} seconds")
+        cls.logger.debug(f"loaded {len(df)} tabular records in {dt:.3f} seconds")
 
         ## Build NCLS with original GTF features
         cl = GTFClassifier(df)
@@ -514,7 +518,7 @@ class GenomeAnnotation:
         for strand_key, nc in self.strand_map.items():
             chrom = strand_key[:-1]
             strand = strand_key[-1]
-            self.logger.info(f"decomposing {chrom} {strand}")
+            self.logger.debug(f"decomposing {chrom} {strand}")
             for start, end, idx in decompose(nc):
                 # print(f"start={start} end={end} idx={idx}")
                 chroms.append(chrom)
@@ -735,7 +739,9 @@ def annotate_BAM_parallel(args):
     abort_flag = mp.Value("b")
     abort_flag.value = False
 
-    with ExceptionLogging("spacemake.annotator.annotate_BAM_parallel", exc_flag=abort_flag) as el:
+    with ExceptionLogging(
+        "spacemake.annotator.annotate_BAM_parallel", exc_flag=abort_flag
+    ) as el:
 
         # bam_in, Qsam, Qerr, abort_flag, shared, chunk_size=20000, reader_threads=4
         reader = mp.Process(
@@ -772,7 +778,7 @@ def annotate_BAM_parallel(args):
         qsam, qerr = join_with_empty_queues(reader, [Qsam, Qerr], abort_flag)
         el.logger.info("The reader exited")
         if qsam or qerr:
-            el.logger.info(f"{len(qsam)} chunks were drained from Qsam upon abort.")
+            el.logger.error(f"{len(qsam)} chunks were drained from Qsam upon abort.")
             log_qerr(qerr)
 
         # signal all workers to finish
@@ -785,10 +791,12 @@ def annotate_BAM_parallel(args):
             # workers to exit. Or, empty queues if aborting.
             qres, qerr = join_with_empty_queues(w, [Qres, Qerr], abort_flag)
             if qres or qerr:
-                el.logger.info(f"{len(qres)} chunks were drained from Qres upon abort.")
+                el.logger.error(
+                    f"{len(qres)} chunks were drained from Qres upon abort."
+                )
                 log_qerr(qerr)
 
-        el.logger.info(
+        el.logger.debug(
             "All worker processes have joined. Signalling collector to finish."
         )
         # signal the collector to stop
@@ -796,7 +804,7 @@ def annotate_BAM_parallel(args):
 
         # and wait until all output has been generated
         collector.join()
-        el.logger.info("Collector has joined. Merging worker statistics.")
+        el.logger.debug("Collector has joined. Merging worker statistics.")
 
     if el.exception:
         ret_code = -1
@@ -846,7 +854,7 @@ def annotate_BAM_linear(bam, ga, out, repeat=1, interval=5):
 
         dt = time() - t0
         if dt > T:
-            logger.info(
+            logger.debug(
                 f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
             )
             T += interval
@@ -882,11 +890,17 @@ def query_regions(args):
         ga = GenomeAnnotation.from_GTF(args.gtf)
 
     for region in args.region:
-        logger.info(f"querying region '{region}'")
-        chrom, coords, strand = region.split(':')
-        start, end = coords.split('-')
+        logger.debug(f"querying region '{region}'")
+        chrom, coords, strand = region.split(":")
+        start, end = coords.split("-")
 
-        gn, gf, gt = ga.get_annotation_tags(chrom, strand, [(int(start), int(end)),] )
+        gn, gf, gt = ga.get_annotation_tags(
+            chrom,
+            strand,
+            [
+                (int(start), int(end)),
+            ],
+        )
         gn_val = ",".join(gn)
         gf_val = ",".join(gf)
         gt_val = ",".join(gt)
@@ -895,7 +909,7 @@ def query_regions(args):
 
 
 def parse_args():
-    parser = util.make_minimal_parser("annotator.py") #argparse.ArgumentParser()
+    parser = util.make_minimal_parser("annotator.py")  # argparse.ArgumentParser()
 
     def usage(args):
         parser.print_help()
@@ -974,7 +988,7 @@ def parse_args():
         default=None,
         help="path to the original annotation (e.g. gencodev38.gtf.gz)",
     )
-    query_parser.add_argument("region", default=[], help="region to query", nargs='+')
+    query_parser.add_argument("region", default=[], help="region to query", nargs="+")
     query_parser.add_argument(
         "--antisense",
         default=False,
