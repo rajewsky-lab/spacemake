@@ -5,25 +5,29 @@ import logging
 from contextlib import ContextDecorator, contextmanager
 from spacemake.errors import SpacemakeError, FileWrongExtensionError
 from spacemake.contrib import __version__, __license__, __author__, __email__
+
 LINE_SEPARATOR = "-" * 50 + "\n"
 
 bool_in_str = ["True", "true", "False", "false"]
+
 
 def quiet_bam_open(*argc, **kw):
     """_summary_
 
     This wrapper around pysam.AlignmentFile() simply silences warnings about missing BAM index etc.
     We don't care about the index and therefore these error messages are just spam.
-    
+
     Returns:
         pysam.AlignmentFile: the sam/bam object as returned by pysam.
     """
     import pysam
+
     save = pysam.set_verbosity(0)
     bam = pysam.AlignmentFile(*argc, **kw)
-    pysam.set_verbosity(save)    
+    pysam.set_verbosity(save)
     return bam
-    
+
+
 def assert_file(file_path, default_value=None, extension=["all"]):
     if file_path == default_value:
         # file doesn't exist but has the default value,
@@ -97,6 +101,7 @@ def read_fq(fname, skim=0):
     if "*" in fname:
         logger.warning("EXPERIMENTAL: fname contains wildcards")
         from glob import glob
+
         for match in sorted(glob(fname)):
             for rec in read_fq(match, skim=skim):
                 yield rec
@@ -390,9 +395,14 @@ def timed_loop(
                 t_last = t
 
 
-def setup_logging(args, name="spacemake.main", log_file="", FORMAT="%(asctime)-20s\t{sample:30s}\t%(name)-50s\t%(levelname)s\t%(message)s"):
+def setup_logging(
+    args,
+    name="spacemake.main",
+    log_file="",
+    FORMAT="%(asctime)-20s\t{sample:30s}\t%(name)-50s\t%(levelname)s\t%(message)s",
+):
     sample = getattr(args, "sample", "na")
-    FORMAT = FORMAT.format(sample = sample)
+    FORMAT = FORMAT.format(sample=sample)
 
     log_level = getattr(args, "log_level", "INFO")
     lvl = getattr(logging, log_level)
@@ -408,10 +418,12 @@ def setup_logging(args, name="spacemake.main", log_file="", FORMAT="%(asctime)-2
 
     if hasattr(args, "debug"):
         # cmdline requested debug output for specific domains (comma-separated)
-        for logger_name in args.debug.split(','):
+        for logger_name in args.debug.split(","):
             if logger_name:
                 print(f"setting domain {logger_name} to DEBUG")
-                logging.getLogger(logger_name.replace("root", "")).setLevel(logging.DEBUG)
+                logging.getLogger(logger_name.replace("root", "")).setLevel(
+                    logging.DEBUG
+                )
 
     logger = logging.getLogger(name)
     logger.debug("started logging")
@@ -420,15 +432,63 @@ def setup_logging(args, name="spacemake.main", log_file="", FORMAT="%(asctime)-2
 
     return logger
 
-default_log_level="INFO"
+
+default_log_level = "INFO"
+
 
 def make_minimal_parser(prog="", usage="", **kw):
     import argparse
+
     parser = argparse.ArgumentParser(prog=prog, usage=usage, **kw)
-    parser.add_argument("--log-file", default=f"{prog}.log", help=f"place log entries in this file (default={prog}.log)")
-    parser.add_argument("--log-level", default=default_log_level, help=f"change threshold of python logging facility (default={default_log_level})")
-    parser.add_argument("--debug", default="", help=f"comma-separated list of logging-domains for which you want DEBUG output")
-    parser.add_argument("--sample", default="sample_NA", help="sample_id (where applicable)")
+    parser.add_argument(
+        "--log-file",
+        default=f"{prog}.log",
+        help=f"place log entries in this file (default={prog}.log)",
+    )
+    parser.add_argument(
+        "--log-level",
+        default=default_log_level,
+        help=f"change threshold of python logging facility (default={default_log_level})",
+    )
+    parser.add_argument(
+        "--debug",
+        default="",
+        help=f"comma-separated list of logging-domains for which you want DEBUG output",
+    )
+    parser.add_argument(
+        "--sample", default="sample_NA", help="sample_id (where applicable)"
+    )
     return parser
 
 
+def load_config_with_fallbacks(args, try_yaml="config.yaml"):
+    """
+    Tries to load spacemake configuration from
+        1) args.config
+        2) try_yaml
+        3) builtin default from spacamake package
+
+    The entire configuration is attached to the args namespace such that
+    args.config["barcode_flavors"]["dropseq] can work.
+    """
+    from spacemake.config import ConfigFile
+
+    config = None
+    if hasattr(args, "config") and os.access(args.config, os.R_OK):
+        config = ConfigFile.from_yaml(args.config)
+    elif os.access(try_yaml, os.R_OK):
+        config = ConfigFile.from_yaml(try_yaml)
+    else:
+        builtin = os.path.join(os.path.dirname(__file__), "data/config/config.yaml")
+        config = ConfigFile.from_yaml(builtin)
+
+    args_kw = vars(args)
+    # try:
+    #     args_kw["log_level"] = config.variables["logging"]["level"]
+    # except KeyError:
+    #     pass
+
+    args_kw["config"] = config.variables
+    import argparse
+
+    return argparse.Namespace(**args_kw)
