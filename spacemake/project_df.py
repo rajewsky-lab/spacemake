@@ -29,6 +29,8 @@ class ProjectDF:
     :type df: pd.DataFrame
     """
 
+    logger = logging.getLogger("spacemake.project_df.ProjectDF")
+
     # default values of the project dataframe columns
     project_df_default_values = {
         "puck_barcode_file_id": ["no_spatial_data"],
@@ -55,6 +57,7 @@ class ProjectDF:
             True: "bowtie2:rRNA,STAR:genome:final",  # map in parallel to rRNA and genome (default so far)
             False: "STAR:genome:final",  # w/o rRNA, map to genome directly
         },
+        "adapter_flavor": "default",
     }
 
     project_df_dtypes = {
@@ -337,15 +340,16 @@ class ProjectDF:
     def get_default_map_strategy_for_species(self, species):
         have_rRNA = "rRNA" in self.config.variables["species"][species]
         map_strategy = self.project_df_default_values["map_strategy"][have_rRNA]
-        print(
-            f"getting default for '{species}' have_rRNA={have_rRNA} -> {map_strategy}"
-        )
+        # print(
+        #     f"getting default for '{species}' have_rRNA={have_rRNA} -> {map_strategy}"
+        # )
         return map_strategy
 
     def fix(self):
         import numpy as np
         import pandas as pd
 
+        modified = False
         # convert types
         self.df = self.df.where(pd.notnull(self.df), None)
         self.df = self.df.replace({np.nan: None})
@@ -372,16 +376,24 @@ class ProjectDF:
         project_list = []
         # required if upgrading from pre-longread tree
         if not "longreads" in self.df.columns:
+            modified = True
             self.df["longreads"] = None
 
         if not "longread_signature" in self.df.columns:
+            modified = True
             self.df["longread_signature"] = None
 
         # required if upgrading from pre-bowtie2/map-strategy tree
         if not "map_strategy" in self.df.columns:
+            modified = True
             self.df["map_strategy"] = self.df["species"].apply(
                 self.get_default_map_strategy_for_species
             )
+
+        if not "adapter_flavor" in self.df.columns:
+            self.df["adapter_flavor"] = self.project_df_default_values["adapter_flavor"]
+            # print("added adapter-flavor!")
+            modified = True
 
         # per row updates
         # first create a series of a
@@ -410,6 +422,8 @@ class ProjectDF:
 
                     row["puck_barcode_file"] = [puck.variables["barcodes"]]
 
+                modified = True
+
             s.update(row)
             s.name = row.name
             project_list.append(s)
@@ -417,6 +431,15 @@ class ProjectDF:
         self.df = pd.concat(project_list, axis=1).T
         self.df.is_merged = self.df.is_merged.astype(bool)
         self.df.index.names = ["project_id", "sample_id"]
+
+        if modified:
+            # self.logger.warning(
+            #     f".fix() reported changes! Saving migrated project_df.csv to '{self.file_path}'"
+            # )
+            # self.logger.warning(self.df)
+            # self.logger.warning(self.df.columns)
+            # self.logger.warning(self.df["adapter_flavor"])
+            self.dump()
 
     def get_puck_barcode_file(
         self, project_id: str, sample_id: str, puck_barcode_file_id: str
@@ -481,6 +504,7 @@ class ProjectDF:
         )
 
         if not os.path.isfile(summary_file):
+            # print(f"looking for summary file: '{summary_file}'")
             return self.project_df_default_values["puck_barcode_file_id"]
 
         df = pd.read_csv(summary_file)
