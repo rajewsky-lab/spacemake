@@ -263,7 +263,9 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
 
     def test_3_run(self):
         self.run_spacemake(
-            f"{spacemake_cmd} run --cores=8", check_returncode=False, check_stderr=False
+            f"{spacemake_cmd} run -p --cores=8",
+            check_returncode=False,
+            check_stderr=False,
         )
 
     # def test_4_bamcheck(self):
