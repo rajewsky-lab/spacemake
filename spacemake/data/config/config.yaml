@@ -104,37 +104,52 @@ adapters:
   polyG: GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 
 adapter_flavors:
-  dropseq:
-    cut_left:
-      SMART:
-        min_overlap: 10
-        max_error: 0.1
-    cut_right:
-      Q:
-        min_base_quality: 30
-      polyG:
-        min_overlap: 3
-        max_error: 0.1
-      polyA:
-        min_overlap: 3
-        max_error: 0.25
-    paired_end: 'single-end'
   SMARTER:
     cut_right:
-      Q:
+    - Q:
         min_base_quality: 30
-      polyA:
-        min_overlap: 3
+    - polyA:
         max_error: 0.25
-    paired_end: 'replace_N'
+        min_overlap: 3
+    paired_end: replace_N
   chromium:
     cut_right:
-      Q:
+    - Q:
         min_base_quality: 32
-      polyG:
-        min_overlap: 3
-        max_error: 0.1
-      polyA:
-        min_overlap: 3
+    - polyA:
         max_error: 0.25
-
+        min_overlap: 3
+    - polyG:
+        max_error: 0.1
+        min_overlap: 3
+  dropseq:
+    cut_left:
+    - SMART:
+        max_error: 0.1
+        min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 30
+    - polyA:
+        max_error: 0.25
+        min_overlap: 3
+    - polyG:
+        max_error: 0.1
+        min_overlap: 3
+    paired_end: single-end
+  default:
+    cut_left:
+    - SMART:
+          max_error: 0.1
+          min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 30
+    - polyA:
+        max_error: 0.25
+        min_overlap: 3
+    - polyG:
+        max_error: 0.1
+        min_overlap: 3
+    paired_end: single-end
+        
