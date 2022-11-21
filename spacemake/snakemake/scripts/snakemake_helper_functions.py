@@ -1,3 +1,6 @@
+import pandas as pd
+
+
 def wc_fill(x, wc):
     """
     Versatile helper function that can render any string template used in the mapping and reports modules,
