@@ -356,7 +356,7 @@ class ConfigFile:
     def process_adapter_flavor_args(self, cut_left=[], cut_right=[], name=None, **kw):
         def parse_adapters(cut):
             type_d = {
-                "max_error": float,
+                "max_errors": float,
                 "min_overlap": int,
                 "min_base_qual": float,
             }
@@ -393,7 +393,7 @@ class ConfigFile:
             if value is not None:
                 adapter_flavor[key] = value
 
-        print(f"processed adapter_flavors {adapter_flavor}")
+        # print(f"processed adapter_flavors {adapter_flavor}")
         return {name: adapter_flavor}
 
     def process_species_args(
@@ -875,8 +875,8 @@ def get_adapter_flavor_parser(required=True):
             "before they can be used in an adapter_flavor. To customize the "
             "parameters for determining a match, key-value pairs can be passed "
             "to --cut_left and --cut_right, for example:\n\n"
-            "   --cut_left SMART:min_overlap=10:max_error=0.1 "
-            "   --cut_right Q:min_base_qual=30 polyA:min_overlap=3:max_error=0.25 "
+            "   --cut_left SMART:min_overlap=10:max_errors=0.1 "
+            "   --cut_right Q:min_base_qual=30 polyA:min_overlap=3:max_errors=0.25 "
         ),
         type=str,
         required=True,
