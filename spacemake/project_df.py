@@ -395,6 +395,15 @@ class ProjectDF:
             # print("added adapter-flavor!")
             modified = True
 
+        if modified:
+            self.logger.warning(
+                f".fix() reported changes! Saving migrated project_df.csv to '{self.file_path}'"
+            )
+            # self.logger.warning(self.df)
+            # self.logger.warning(self.df.columns)
+            # self.logger.warning(self.df["adapter_flavor"])
+            self.dump()
+
         # per row updates
         # first create a series of a
         for ix, row in self.df.iterrows():
@@ -422,8 +431,6 @@ class ProjectDF:
 
                     row["puck_barcode_file"] = [puck.variables["barcodes"]]
 
-                modified = True
-
             s.update(row)
             s.name = row.name
             project_list.append(s)
@@ -432,14 +439,6 @@ class ProjectDF:
         self.df.is_merged = self.df.is_merged.astype(bool)
         self.df.index.names = ["project_id", "sample_id"]
 
-        if modified:
-            # self.logger.warning(
-            #     f".fix() reported changes! Saving migrated project_df.csv to '{self.file_path}'"
-            # )
-            # self.logger.warning(self.df)
-            # self.logger.warning(self.df.columns)
-            # self.logger.warning(self.df["adapter_flavor"])
-            self.dump()
 
     def get_puck_barcode_file(
         self, project_id: str, sample_id: str, puck_barcode_file_id: str
