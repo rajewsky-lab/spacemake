@@ -1,5 +1,20 @@
 import pandas as pd
 
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+    def __str__(self):
+        buf = ["dotdict"]
+        for k, v in self.items():
+            if not k.startswith("__"):
+                buf.append(f"  {k} = {v}")
+
+        return "\n".join(buf)
+
 
 def wc_fill(x, wc):
     """
@@ -170,10 +185,11 @@ def get_reads(wildcards):
         project_id=wildcards.project_id,
     )
     if reads is None or reads == []:
-        return ["none"]
-    else:
-        # reads already
-        return reads
+        # we have only long-reads or some other reason for not having R1,R2
+        reads = ["none"]
+
+    # print(f"returning reads: '{reads}'")
+    return reads
 
 
 def get_linked_reads(wildcards):
@@ -183,42 +199,39 @@ def get_linked_reads(wildcards):
     """
     # print(f"get_linked_reads({wildcards})")
     reads = {}
-    reads1 = project_df.get_metadata(
-        "R1",
+
+    demux_dir = project_df.get_metadata(
+        "demux_dir",
         sample_id=wildcards.sample_id,
         project_id=wildcards.project_id,
     )
-    if str(reads1).lower() != "none":
-        reads["R1"] = raw_reads_mate_1.format(**dict(wildcards.items()))
+    if demux_dir:
+        kw = dict(wildcards.items())
+        reads["R1"] = raw_reads_pattern.format(mate="1", **kw)
+        reads["R2"] = raw_reads_pattern.format(mate="2", **kw)
 
-    reads2 = project_df.get_metadata(
-        "R2",
-        sample_id=wildcards.sample_id,
-        project_id=wildcards.project_id,
-    )
-    if str(reads2).lower() != "none":
-        reads["R2"] = raw_reads_mate_2.format(**dict(wildcards.items()))
+    else:
+        reads1 = project_df.get_metadata(
+            "R1",
+            sample_id=wildcards.sample_id,
+            project_id=wildcards.project_id,
+        )
+        if str(reads1).lower() != "none":
+            reads["R1"] = raw_reads_mate_1.format(**dict(wildcards.items()))
 
-    # print(f"resulting reads: {reads}")
+        reads2 = project_df.get_metadata(
+            "R2",
+            sample_id=wildcards.sample_id,
+            project_id=wildcards.project_id,
+        )
+        if str(reads2).lower() != "none":
+            reads["R2"] = raw_reads_mate_2.format(**dict(wildcards.items()))
+
+    # print(f"resulting reads: '{reads}'")
     return reads
 
 
 # barcode flavor parsing and query functions
-class dotdict(dict):
-    """dot.notation access to dictionary attributes"""
-
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
-
-    def __str__(self):
-        buf = ["dotdict"]
-        for k, v in self.items():
-            if not k.startswith("__"):
-                buf.append(f"  {k} = {v}")
-
-        return "\n".join(buf)
-
 
 def parse_barcode_flavors(
     config,
