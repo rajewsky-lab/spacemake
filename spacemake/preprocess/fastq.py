@@ -847,12 +847,12 @@ class Output:
     logger = logging.getLogger("spacemake.preprocess.fastq.Output")
 
     def __init__(self, args, open_files=True):
-        assert Output.safety_check_eval(args.cell_raw)
+        # assert Output.safety_check_eval(args.cell_raw)
         assert Output.safety_check_eval(args.cell)
         assert Output.safety_check_eval(args.UMI)
         assert Output.safety_check_eval(args.seq)
         assert Output.safety_check_eval(args.qual)
-        self.cell_raw = args.cell_raw
+        # self.cell_raw = args.cell_raw
         self.cell = args.cell
         self.UMI = args.UMI
         self.seq = args.seq
@@ -983,6 +983,7 @@ class Output:
 
         cell = eval(self.f_cell)
         # raw = eval(self.f_cell_raw)
+        raw = cell
         UMI = eval(self.f_UMI)
         seq = eval(self.f_seq)
         qual = eval(self.f_qual)
