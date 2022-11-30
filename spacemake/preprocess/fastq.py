@@ -338,7 +338,9 @@ def opseq_local_align(
 
 
 def process_ordered_results(res_queue, args, Qerr, abort_flag):
-    with ExceptionLogging("spacemake.preprocess.fastq.collector", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging(
+        "spacemake.preprocess.fastq.collector", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
         import heapq
         import time
 
@@ -400,7 +402,9 @@ def process_fastq(Qfq, args, Qerr, abort_flag):
     reads from two fastq files, groups the input into chunks for
     faster parallel processing, and puts these on a mp.Queue()
     """
-    with ExceptionLogging("spacemake.preprocess.fastq.dispatcher", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging(
+        "spacemake.preprocess.fastq.dispatcher", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
         for chunk in chunkify(read_source(args)):
             logging.debug(f"placing {chunk[0]} {len(chunk[1])} in queue")
             if put_or_abort(Qfq, chunk, abort_flag):
@@ -425,7 +429,9 @@ def dict_merge(sources):
 
 
 def process_combinatorial(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
-    with ExceptionLogging("spacemake.preprocess.fastq.worker", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging(
+        "spacemake.preprocess.fastq.worker", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
         el.logger.debug(
             f"process_combinatorial starting up with Qfq={Qfq}, Qres={Qres} and args={args}"
         )
@@ -549,7 +555,9 @@ def main_combinatorial(args):
     Ns = manager.list()
     stat_lists = [Ns, qcaches1, qcaches2, qcounts1, qcounts2, bccounts1, bccounts2]
 
-    with ExceptionLogging("spacemake.preprocess.fastq.main_combinatorial", exc_flag=abort_flag) as el:
+    with ExceptionLogging(
+        "spacemake.preprocess.fastq.main_combinatorial", exc_flag=abort_flag
+    ) as el:
 
         # read FASTQ in chunks and put them in Qfq
         dispatcher = mp.Process(
@@ -661,7 +669,9 @@ def quality_trim_read2(reads, min_qual=20, phred_base=33, min_len=18):
 
 
 def process_dropseq(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
-    with ExceptionLogging("spacemake.preprocess.fastq.worker", Qerr=Qerr, exc_flag=abort_flag) as el:
+    with ExceptionLogging(
+        "spacemake.preprocess.fastq.worker", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
         el.logger.debug(
             f"process_dropseq starting up with Qfq={Qfq}, Qres={Qres} and args={args}"
         )
@@ -684,7 +694,7 @@ def process_dropseq(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
                         r2=r1,
                         r2_qual=qual2,
                         r2_qname=fqid2,
-                        flag=69 # unmapped, paired, first in pair
+                        flag=69,  # unmapped, paired, first in pair
                     )
                     rec2 = out.make_record(
                         assigned=True,
@@ -693,7 +703,7 @@ def process_dropseq(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
                         r2=r2,
                         r2_qual=qual2,
                         r2_qname=fqid2,
-                        flag=133 # unmapped, paired, second in pair
+                        flag=133,  # unmapped, paired, second in pair
                     )
                     results.append((True, rec1))
                     results.append((True, rec2))
@@ -738,9 +748,11 @@ def main_dropseq(args):
     Ns = manager.list()
     cb_counts = manager.list()
     stat_lists = [Ns, cb_counts]
-    
+
     res = 0
-    with ExceptionLogging("spacemake.preprocess.fastq.main_dropseq", exc_flag=abort_flag) as el:
+    with ExceptionLogging(
+        "spacemake.preprocess.fastq.main_dropseq", exc_flag=abort_flag
+    ) as el:
 
         # read FASTQ in chunks and put them in Qfq
         dispatcher = mp.Process(
@@ -848,7 +860,7 @@ class Output:
         self.na = args.na
 
         # precompile functions for speed-up
-        self.f_cell_raw = compile(self.cell_raw, "<string cell_raw>", "eval")
+        # self.f_cell_raw = compile(self.cell_raw, "<string cell_raw>", "eval")
         self.f_cell = compile(self.cell, "<string cell>", "eval")
         self.f_UMI = compile(self.UMI, "<string UMI>", "eval")
         self.f_seq = compile(self.seq, "<string seq>", "eval")
@@ -967,10 +979,10 @@ class Output:
         # slightly concerned about security here...
         # at least all () and ; raise an assertion in __init__
         # print(qname, r2_qname)
-        i5i7 = r2_qname.split(":N:0:")[1].replace('+', '')
+        i5i7 = r2_qname.split(":N:0:")[1].replace("+", "")
 
         cell = eval(self.f_cell)
-        raw = eval(self.f_cell_raw)
+        # raw = eval(self.f_cell_raw)
         UMI = eval(self.f_UMI)
         seq = eval(self.f_seq)
         qual = eval(self.f_qual)
@@ -1001,7 +1013,11 @@ class Output:
 
 def parse_args():
     import spacemake.util as util
-    parser = util.make_minimal_parser("fastq.py", description="Convert raw reads1 and reads2 FASTQ into a single BAM file with cell barcode and UMI as BAM-tags") #argparse.ArgumentParser()
+
+    parser = util.make_minimal_parser(
+        "fastq.py",
+        description="Convert raw reads1 and reads2 FASTQ into a single BAM file with cell barcode and UMI as BAM-tags",
+    )  # argparse.ArgumentParser()
 
     parser.add_argument(
         "--read1",
@@ -1015,11 +1031,16 @@ def parse_args():
         required=True,
     )
     parser.add_argument("--cell", default="r1[8:20][::-1]")
-    parser.add_argument("--cell-raw", default="None")
+    # parser.add_argument("--cell-raw", default="None")
     parser.add_argument("--UMI", default="r1[0:8]")
     parser.add_argument("--seq", default="r2")
     parser.add_argument("--qual", default="r2_qual")
-    parser.add_argument("--paired-end", default=False, action="store_true", help="read1 and read2 are paired end mates and store both in the BAM")
+    parser.add_argument(
+        "--paired-end",
+        default=False,
+        action="store_true",
+        help="read1 and read2 are paired end mates and store both in the BAM",
+    )
 
     parser.add_argument(
         "--out-format",
