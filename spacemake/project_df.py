@@ -54,7 +54,7 @@ class ProjectDF:
         "puck": "default",
         "dge": None,
         "map_strategy": {  # default mapping strategy changes depending on if we have rRNA or not
-            True: "bowtie2:rRNA,STAR:genome:final",  # map in parallel to rRNA and genome (default so far)
+            True: "bowtie2:rRNA->STAR:genome:final",  # map in parallel to rRNA and genome (default so far)
             False: "STAR:genome:final",  # w/o rRNA, map to genome directly
         },
         "adapter_flavor": "default",
@@ -438,7 +438,6 @@ class ProjectDF:
         self.df = pd.concat(project_list, axis=1).T
         self.df.is_merged = self.df.is_merged.astype(bool)
         self.df.index.names = ["project_id", "sample_id"]
-
 
     def get_puck_barcode_file(
         self, project_id: str, sample_id: str, puck_barcode_file_id: str
