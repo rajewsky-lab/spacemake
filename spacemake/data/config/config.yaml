@@ -99,7 +99,11 @@ barcode_flavors:
 
 adapters:
   optical_primer: GAATCACGATACGTACACCA
-  SMART: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+  TSO_SMART: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+  SMART: AAGCAGTGGTATCAACGCAGAGTG
+  TSO_10x: AAGCAGTGGTATCAACGCAGAGTACATGGG
+  chromium_bead: CTACACGACGCTCTTCCGATCT
+  dropseq_bead: AAGCAGTGGTATCAACGCAGAGTAC
   polyA: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
   polyG: GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 
@@ -124,7 +128,7 @@ adapter_flavors:
         min_overlap: 3
   dropseq:
     cut_left:
-    - SMART:
+    - TSO_SMART:
         max_error: 0.1
         min_overlap: 10
     cut_right:
@@ -139,7 +143,7 @@ adapter_flavors:
     paired_end: single-end
   default:
     cut_left:
-    - SMART:
+    - TSO_SMART:
           max_error: 0.1
           min_overlap: 10
     cut_right:
