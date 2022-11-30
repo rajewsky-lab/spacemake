@@ -489,8 +489,11 @@ class ConfigFile:
                 values = self.process_variable_args(variable, **kwargs)
                 self.variables[variable][name] = values
         elif variable == "adapters":
-            values = self.process_variable_args(variable, **kwargs)
-            self.variables[variable].update(values)
+            if not self.variable_exists(variable, name):
+                values = self.process_variable_args(variable, **kwargs)
+                self.variables[variable].update(values)
+            else:
+                raise DuplicateConfigVariableError(variable, name)
         else:
             if not self.variable_exists(variable, name):
                 values = self.process_variable_args(variable, **kwargs)
@@ -510,7 +513,7 @@ class ConfigFile:
             values = self.process_variable_args(variable, name=name, **kwargs)
             if variable == "adapters":
                 self.variables[variable].update(values)
-            if variable == "adapter_flavors":
+            elif variable == "adapter_flavors":
                 raise NotImplementedError(
                     (
                         "Updating ofadapter flavors is not implemented! "
@@ -782,21 +785,22 @@ def get_barcode_flavor_parser(required=True):
     )
     parser.add_argument(
         "--umi",
+        dest="UMI",
         help="structure of UMI, using python's list syntax. Example: to set UMI to "
-        + "13-20 NT of Read1, use --umi r1[12:20]. It is also possible to use the first 8nt of "
-        + "Read2 as UMI: --umi r2[0:8]",
+        + "13-20 NT of Read1, use --UMI r1[12:20]. It is also possible to use the first 8nt of "
+        + "Read2 as UMI: --UMI r2[0:8]",
         type=str,
         required=required,
     )
-    parser.add_argument(
-        "--read1",
-        help="can be used to modify or replace 'read1' sequence",
-        type=str,
-        required=required,
-    )
+    # parser.add_argument(
+    #     "--read1",
+    #     help="can be used to modify or replace 'read1' sequence",
+    #     type=str,
+    # )
 
     parser.add_argument(
         "--cell_barcode",
+        dest="cell",
         help="structure of CELL BARCODE, using python's list syntax. Example: to set"
         + " the cell_barcode to 1-12 nt of Read1, use --cell_barcode r1[0:12]. It is also possible "
         + " to reverse the CELL BARCODE, for instance with r1[0:12][::-1] (reversing the first 12nt of"
