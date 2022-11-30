@@ -306,7 +306,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             y2_str = yaml.dump(y2)
             self.assertEqual(y1_str, y2_str)
 
-    def test_5_add_project(self):
+    def test_5_add_samples(self):
         for species, pid, sid, r1, r2, options in test_project_data:
             df = self.add_sample(species, pid, sid, r1, r2, options)
             self.assertTrue(os.access("project_df.csv", os.R_OK))
@@ -324,6 +324,18 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             df2 = self.add_sample(species, pid, sid, r1, r2, options, expect_fail=True)
             # expect unchanged project_df
             self.assertTrue(df.equals(df2))
+
+    def test_6_update_sample(self):
+        self.run_spacemake(
+            f"{spacemake_cmd} projects update_sample "
+            "--project_id=test --sample_id=test_01 "
+            "--map_strategy='bowtie2:rRNA->STAR:genome'"
+        )
+        self.run_spacemake(
+            f"{spacemake_cmd} projects update_sample "
+            "--project_id=test --sample_id=test_01 "
+            "--barcode_flavor=default"
+        )
 
     def test_99_run(self):
         self.run_spacemake(
