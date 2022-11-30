@@ -64,9 +64,9 @@ rule link_raw_reads:
 
 rule zcat_pipe:
     input: "{name}.fastq.gz"
-    output: temp("{name}.fastq")
-    threads: 2
-    shell: "unpigz --keep --processes {threads} --stdout $(readlink {input}) >> {output}"
+    output: pipe("{name}.fastq")
+    threads: 1
+    shell: "zcat {input} >> {output}"
 
 
 rule tag_reads_bc_umi:
@@ -82,13 +82,11 @@ rule tag_reads_bc_umi:
         read2 = lambda wc: get_linked_reads(wc).get("R2", None)
     output:
         ubam = tagged_bam,
-        # unassigned = unassigned,
-        bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv"),
+        bc_stats = stats_dir + "/{sample_id}.bc_stats.tsv"
         # bc_counts = barcode_readcounts
     log:
-        # reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
         log_dir + '/fastq_to_uBAM.log'
-    threads: 8
+    threads: min(workflow.cores - 2, 8) # reserve two cores for the input zcat pipes
     shell:
         "python {spacemake_dir}/preprocess/fastq_to_uBAM.py "
         "  --sample={wildcards.sample_id} "

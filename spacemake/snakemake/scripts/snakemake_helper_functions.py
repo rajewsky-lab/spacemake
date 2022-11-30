@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
 
@@ -217,7 +218,9 @@ def get_linked_reads(wildcards):
             project_id=wildcards.project_id,
         )
         if str(reads1).lower() != "none":
-            reads["R1"] = raw_reads_mate_1.format(**dict(wildcards.items()))
+            reads["R1"] = raw_reads_mate_1.format(**dict(wildcards.items())).replace(
+                "fastq.gz", "fastq"
+            )
 
         reads2 = project_df.get_metadata(
             "R2",
@@ -225,13 +228,16 @@ def get_linked_reads(wildcards):
             project_id=wildcards.project_id,
         )
         if str(reads2).lower() != "none":
-            reads["R2"] = raw_reads_mate_2.format(**dict(wildcards.items()))
+            reads["R2"] = raw_reads_mate_2.format(**dict(wildcards.items())).replace(
+                "fastq.gz", "fastq"
+            )
 
     # print(f"resulting reads: '{reads}'")
     return reads
 
 
 # barcode flavor parsing and query functions
+
 
 def parse_barcode_flavors(
     config,

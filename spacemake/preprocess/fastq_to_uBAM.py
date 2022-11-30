@@ -42,11 +42,24 @@ def dispatch_fastq_to_queue(Qfq, args, Qerr, abort_flag):
     with ExceptionLogging(
         "spacemake.preprocess.fastq.dispatcher", Qerr=Qerr, exc_flag=abort_flag
     ) as el:
-        for chunk in chunkify(read_source(args)):
+        for chunk in chunkify(read_source(args), n_chunk=args.chunk_size):
             logging.debug(f"placing {chunk[0]} {len(chunk[1])} in queue")
             if put_or_abort(Qfq, chunk, abort_flag):
                 el.logger.warning("shutdown flag was raised!")
                 break
+
+
+format_func_template = """
+def format_func(qname=None, r2_qname=None, r2_qual=None, r1=None, r2=None):
+    i5i7 = r2_qname.split(':N:0:')[1].replace('+', '')
+    cell = {args.cell}
+    raw = cell
+    UMI = {args.UMI}
+    seq = {args.seq}
+    qual = {args.qual}
+
+    return dict(cell=cell, raw=raw, UMI=UMI, seq=seq, qual=qual)
+"""
 
 
 class Output:
@@ -58,17 +71,15 @@ class Output:
         assert Output.safety_check_eval(args.UMI)
         assert Output.safety_check_eval(args.seq)
         assert Output.safety_check_eval(args.qual)
-        # self.cell_raw = args.cell_raw
-        self.cell = args.cell
-        self.UMI = args.UMI
-        self.seq = args.seq
-        self.qual = args.qual
 
-        # precompile functions for speed-up
-        self.f_cell = compile(self.cell, "<string cell>", "eval")
-        self.f_UMI = compile(self.UMI, "<string UMI>", "eval")
-        self.f_seq = compile(self.seq, "<string seq>", "eval")
-        self.f_qual = compile(self.qual, "<string qual>", "eval")
+        # This trickery here compiles a python function that
+        # embeds the user-specified code for cell, UMI
+        # we replace globals() with an empty dictionary d,
+        d = {}
+        exec(format_func_template.format(args=args), d)
+        # from said dict we can now retrieve the function object
+        # and store it as self.format
+        self.format = d["format_func"]
 
         self.fq_qual = args.fq_qual
         self.raw_cb_counts = defaultdict(int)
@@ -110,6 +121,10 @@ class Output:
 
     def make_bam_record(self, flag=4, **kw):
 
+        # pass what we already know about the read into format()
+        # which contains the cmdline-specified code for cell and UMI.
+        # since it returns a dictionary, lets just update kw and
+        # keep using that to construct the BAM record.
         kw.update(self.format(**kw))
 
         a = pysam.AlignedSegment(self.bam_header)
@@ -125,43 +140,8 @@ class Output:
 
         return a.to_string()
 
-    def make_record(self, **kw):
-        kw["raw"], kw["cell"], kw["UMI"], kw["seq"], kw["qual"] = self.format(**kw)
-        kw["assigned"] = "A"
-        return self.make_bam_record(**kw)
-
     def write_bam(self, rec):
         self.out_bam.write(pysam.AlignedSegment.fromstring(rec, self.bam_header))
-
-    def format(
-        self,
-        qname="qname1",
-        r2_qname="qname2",
-        r2_qual="",
-        r1="",
-        r2="",
-        **kw,
-    ):
-
-        # slightly concerned about security here...
-        # at least all () and ; raise an assertion in __init__
-        # print(qname, r2_qname)
-        i5i7 = r2_qname.split(":N:0:")[1].replace("+", "")
-
-        cell = eval(self.f_cell)
-        # raw = eval(self.f_cell_raw)
-        raw = cell
-        UMI = eval(self.f_UMI)
-        seq = eval(self.f_seq)
-        qual = eval(self.f_qual)
-
-        if (cell is None) or (UMI is None):
-            raise ValueError(
-                f"one of cell=eval('{self.cell}')='{cell}' "
-                f"UMI=eval('{self.UMI}')='{UMI}' evaluated to None"
-            )
-
-        return dict(raw=cell, cell=cell, UMI=UMI, seq=seq, qual=qual)
 
     def close(self):
         self.out_bam.close()
@@ -214,7 +194,7 @@ def parallel_worker(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
             if args.paired_end:
                 for fqid, r1, fqid2, r2, qual2 in reads:
                     N["total"] += 1
-                    rec1 = out.make_record(
+                    rec1 = out.make_bam_record(
                         qname=fqid,
                         r1=r1,
                         r2=r1,
@@ -222,7 +202,7 @@ def parallel_worker(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
                         r2_qname=fqid2,
                         flag=69,  # unmapped, paired, first in pair
                     )
-                    rec2 = out.make_record(
+                    rec2 = out.make_bam_record(
                         qname=fqid,
                         r1=r1,
                         r2=r2,
@@ -236,7 +216,7 @@ def parallel_worker(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
             else:
                 for fqid, r1, fqid2, r2, qual2 in reads:
                     N["total"] += 1
-                    rec = out.make_record(
+                    rec = out.make_bam_record(
                         qname=fqid,
                         r1=r1,
                         r2=r2,
@@ -276,7 +256,7 @@ def dict_merge(sources):
 def main_parallel(args):
     # queues for communication between processes
     Qfq = mp.Queue(args.parallel * 5)
-    Qres = mp.Queue()  # BAM records as string
+    Qres = mp.Queue(args.parallel * 5)  # BAM records as string
     Qerr = mp.Queue()  # child-processes can report errors back to the main process here
 
     # Proxy objects to allow workers to report statistics about the run
@@ -411,7 +391,6 @@ def parse_args():
         required=True,
     )
     parser.add_argument("--cell", default="r1[8:20][::-1]")
-    # parser.add_argument("--cell-raw", default="None")
     parser.add_argument("--UMI", default="r1[0:8]")
     parser.add_argument("--seq", default="r2")
     parser.add_argument("--qual", default="r2_qual")
@@ -435,9 +414,6 @@ def parse_args():
         "--save-cell-barcodes",
         default="",
         help="store (raw) cell barcode counts in this file. Numbers add up to number of total raw reads.",
-    )
-    parser.add_argument(
-        "--na", default="NNNNNNNN", help="code for ambiguous or unaligned barcode"
     )
     parser.add_argument(
         "--fq-qual",
@@ -464,6 +440,12 @@ def parse_args():
     )
     parser.add_argument(
         "--parallel", default=1, type=int, help="how many processes to spawn"
+    )
+    parser.add_argument(
+        "--chunk-size",
+        default=10000,
+        type=int,
+        help="how many reads (mate pairs) are grouped together for parallel processing (default=10000)",
     )
     # SAM standard now supports CB=corrected cell barcode, CR=original cell barcode, and MI=molecule identifier/UMI
     parser.add_argument(

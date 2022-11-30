@@ -21,7 +21,7 @@ def put_or_abort(Q, item, abort_flag, timeout=1):
         try:
             Q.put(item, timeout=timeout)
         except queue.Full:
-            pass
+            time.sleep(0.1)
         else:
             sent = True
 

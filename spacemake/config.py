@@ -319,7 +319,7 @@ class ConfigFile:
         return kwargs
 
     def process_barcode_flavor_args(self, **kw):
-        bam_tags = "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        bam_tags = "CR:{cell},CB:{cell},MI:{UMI},RG:A"
 
         # r(1|2) and then string slice
         to_match = r"r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$"
