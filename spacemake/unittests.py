@@ -220,7 +220,71 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
         self.run_spacemake(f"{spacemake_cmd} init")
         self.assertTrue(os.access("config.yaml", os.R_OK))
 
-    def test_1_add_species(self):
+    def test_1_config_barcodes(self):
+        self.run_spacemake(
+            f"{spacemake_cmd} config add_barcode_flavor "
+            "--name fc_sts_miniseq --umi r2[0:9] --cell_barcode r1[2:27]"
+        )
+        self.run_spacemake(
+            f"{spacemake_cmd} config add_barcode_flavor "
+            "--name fc_sts_miniseq --umi r2[0:9] --cell_barcode r1[2:27]",
+            expect_fail=True,
+        )
+        self.run_spacemake(
+            f"{spacemake_cmd} config delete_barcode_flavor " "--name fc_sts_miniseq"
+        )
+        self.run_spacemake(
+            f"{spacemake_cmd} config add_barcode_flavor "
+            "--name fc_sts_miniseq --umi r2[0:8] --cell_barcode r1[2:27]"
+        )
+        self.run_spacemake(
+            f"{spacemake_cmd} config update_barcode_flavor "
+            "--name fc_sts_miniseq --umi r2[0:9]"
+        )
+
+    def test_2_config_adapters(self):
+        self.run_spacemake(
+            f"{spacemake_cmd} config add_adapter " "--name testy --seq ACGTACGTACGTACGT"
+        )
+        self.run_spacemake(
+            f"{spacemake_cmd} config add_adapter "
+            "--name testy --seq ACGTACGTACGTACGT",
+            expect_fail=True,
+        )
+        self.run_spacemake(
+            f"{spacemake_cmd} config update_adapter "
+            "--name testy --seq ACGTACGTACGTACGTA"
+        )
+        self.run_spacemake(f"{spacemake_cmd} config delete_adapter " "--name testy")
+        self.run_spacemake(
+            f"{spacemake_cmd} config add_adapter "
+            "--name testy --seq AAAACGTACGTACGTACGT"
+        )
+
+    def test_3_config_adapter_flavors(self):
+        test_flavor = (
+            "--name=testy1 "
+            "--cut_left SMART:min_overlap=10:max_errors=0.1 "
+            "--cut_right Q:min_base_qual=30 "
+            "polyG:min_overlap=3:max_errors=0.2 "
+            "polyA:min_overlap=3:max_errors=0.25"
+        )
+
+        self.run_spacemake(f"{spacemake_cmd} config add_adapter_flavor " + test_flavor)
+        self.run_spacemake(
+            f"{spacemake_cmd} config add_adapter_flavor " + test_flavor,
+            expect_fail=True,
+        )
+        self.run_spacemake(
+            f"{spacemake_cmd} config update_adapter_flavor --name testy1",
+            expect_fail=True,
+        )
+        self.run_spacemake(
+            f"{spacemake_cmd} config delete_adapter_flavor " "--name testy1"
+        )
+        self.run_spacemake(f"{spacemake_cmd} config add_adapter_flavor " + test_flavor)
+
+    def test_4_add_species(self):
         for name, ref, seq, ann in test_species_data:
             if name == "genome":
                 # test backward-compatible --genome option
@@ -242,7 +306,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             y2_str = yaml.dump(y2)
             self.assertEqual(y1_str, y2_str)
 
-    def test_2_add_project(self):
+    def test_5_add_project(self):
         for species, pid, sid, r1, r2, options in test_project_data:
             df = self.add_sample(species, pid, sid, r1, r2, options)
             self.assertTrue(os.access("project_df.csv", os.R_OK))
@@ -261,7 +325,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             # expect unchanged project_df
             self.assertTrue(df.equals(df2))
 
-    def test_3_run(self):
+    def test_99_run(self):
         self.run_spacemake(
             f"{spacemake_cmd} run -p --cores=8",
             check_returncode=False,
