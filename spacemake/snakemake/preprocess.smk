@@ -81,7 +81,7 @@ rule tag_reads_bc_umi:
         read1 = lambda wc: get_linked_reads(wc).get("R1", None),
         read2 = lambda wc: get_linked_reads(wc).get("R2", None)
     output:
-        assigned = tagged_bam,
+        ubam = tagged_bam,
         # unassigned = unassigned,
         bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv"),
         # bc_counts = barcode_readcounts
@@ -90,7 +90,7 @@ rule tag_reads_bc_umi:
         log_dir + '/fastq_to_uBAM.log'
     threads: 8
     shell:
-        "python {spacemake_dir}/preprocess/cmdline.py "
+        "python {spacemake_dir}/preprocess/fastq_to_uBAM.py "
         "  --sample={wildcards.sample_id} "
         "  --log-level={log_level}"
         "  --log-file={log} "
@@ -99,11 +99,9 @@ rule tag_reads_bc_umi:
         "  --parallel={threads} "
         "  --save-stats={output.bc_stats} "
         # "  --save-cell-barcodes={output.bc_counts} "
-        "  --out-format=bam "
-        "  --out-unassigned=/dev/null "
-        "  --out-assigned=/dev/stdout "
+        "  --out-bam=/dev/stdout "
         "  {params.bc_params} "
-        " | samtools view -bh --threads=4 /dev/stdin > {output.assigned} "
+        " | samtools view -bh --threads=4 /dev/stdin > {output.ubam} "
 
 
 rule trim_adapters_polyA:

@@ -412,7 +412,7 @@ def setup_logging(
 
     log_file = getattr(args, "log_file", log_file)
     if log_file:
-        fh = logging.FileHandler(filename=args.log_file, mode="a")
+        fh = logging.FileHandler(filename=ensure_path(args.log_file), mode="a")
         fh.setFormatter(logging.Formatter(FORMAT))
         root.addHandler(fh)
 
