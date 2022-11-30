@@ -116,14 +116,19 @@ def read_fq(fname, skim=0):
     else:
         src = FASTQ_src(fname)  # assume its a stream or file-like object already
 
-    for i, (name, seq, qual) in enumerate(src):
-        if not skim:
-            yield name, seq, qual
-        else:
-            if (i % skim) == 0:
-                yield name, seq, qual
+    n = 0
+    if skim:
+        for record in src:
+            if (n % skim) == 0:
+                yield record
+        n += 1
+    else:
+        for record in src:
+            yield record
 
-    logger.info(f"processed {i} FASTQ records from '{fname}'")
+        n += 1
+
+    logger.info(f"processed {n} FASTQ records from '{fname}'")
 
 
 def make_header(bam, progname):
