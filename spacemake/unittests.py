@@ -240,7 +240,19 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             # expect unchanged project_df
             self.assertTrue(df.equals(df2))
 
-    def test_3_run(self):
+    def test_6_update_sample(self):
+        self.run_spacemake(
+            f"{spacemake_cmd} projects update_sample "
+            "--project_id=test --sample_id=test_01 "
+            "--map_strategy='bowtie2:rRNA->STAR:genome'"
+        )
+        self.run_spacemake(
+            f"{spacemake_cmd} projects update_sample "
+            "--project_id=test --sample_id=test_01 "
+            "--map_strategy='STAR:genome'"
+        )
+
+    def test_99_run(self):
         self.run_spacemake(
             f"{spacemake_cmd} run --cores=8", check_returncode=False, check_stderr=False
         )
