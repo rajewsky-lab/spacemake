@@ -15,7 +15,7 @@ import numpy as np
 import pysam
 import multiprocessing as mp
 from collections import defaultdict
-from Bio import pairwise2
+#from Bio import pairwise2
 from Bio import SeqIO
 
 from spacemake.parallel import (
