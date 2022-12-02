@@ -584,7 +584,7 @@ def main_parallel(args):
         )
 
         dispatcher.start()
-        el.logger.info("Started dispatch")
+        el.logger.debug("Started dispatch")
 
         # workers consume chunks of BAM from Qsam
         # process them, and put the results in Qres
@@ -598,7 +598,7 @@ def main_parallel(args):
             w.start()
             workers.append(w)
 
-        el.logger.info("Started workers")
+        el.logger.debug("Started workers")
 
         collector = mp.Process(
             target=process_ordered_results,
@@ -606,16 +606,16 @@ def main_parallel(args):
             args=(Qres, args, Qerr, abort_flag, stat_lists),
         )
         collector.start()
-        el.logger.info("Started collector")
+        el.logger.debug("Started collector")
         # wait until all sequences have been thrown onto Qfq
         qfq, qerr = join_with_empty_queues(dispatcher, [Qsam, Qerr], abort_flag)
-        el.logger.info("The dispatcher exited")
+        el.logger.debug("The dispatcher exited")
         if qfq or qerr:
             el.logger.info(f"{len(qfq)} chunks were drained from Qfq upon abort.")
             log_qerr(qerr)
 
         # signal all workers to finish
-        el.logger.info("Signalling all workers to finish")
+        el.logger.debug("Signalling all workers to finish")
         for n in range(args.threads_work):
             Qsam.put(None)  # each worker consumes exactly one None
 
@@ -624,10 +624,10 @@ def main_parallel(args):
             # workers to exit. Or, empty queues if aborting.
             qres, qerr = join_with_empty_queues(w, [Qres, Qerr], abort_flag)
             if qres or qerr:
-                el.logger.info(f"{len(qres)} chunks were drained from Qres upon abort.")
+                el.logger.warning(f"{len(qres)} chunks were drained from Qres upon abort.")
                 log_qerr(qerr)
 
-        el.logger.info(
+        el.logger.debug(
             "All worker processes have joined. Signalling collector to finish."
         )
         # signal the collector to stop
@@ -635,7 +635,7 @@ def main_parallel(args):
 
         # and wait until all output has been generated
         collector.join()
-        el.logger.info("Collector has joined. Merging worker statistics.")
+        el.logger.debug("Collector has joined. Merging worker statistics.")
 
     if args.stats_out:
         stats = count_dict_sum(stats)
