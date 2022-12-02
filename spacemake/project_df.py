@@ -841,7 +841,7 @@ class ProjectDF:
         kwargs["basecalls_dir"] = basecalls_dir
         kwargs["is_merged"] = is_merged
 
-        if action is "add" and map_strategy is None:
+        if action == "add" and map_strategy is None:
             # was not specified! Let's evaluate the default for this species
             # (depends on having rRNA reference or not)
             map_strategy = self.get_default_map_strategy_for_species(kwargs["species"])
@@ -854,6 +854,7 @@ class ProjectDF:
                     " interpretes the chevron in '->' as a redirect."
                 )
             )
+
         kwargs["map_strategy"] = map_strategy
 
         # populate puck_barcode_file

@@ -28,9 +28,9 @@ a new species has to be added::
 
    spacemake config add_species \
       --name \         # name of the species
-      --genome \       # path to .fa file
+      --reference \    # short-hand name of the sequence (default='genome')
+      --sequence \     # path to .fa file
       --annotation \   # path to .gtf file
-      --rRNA_genome \  # (optional) path to ribosomal-RNA genome
       --STAR_index_dir # (optional) path to an existing STAR index directory
       
 More info :ref:`here <configure-species>`.

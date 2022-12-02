@@ -288,9 +288,9 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
         for name, ref, seq, ann in test_species_data:
             if name == "genome":
                 # test backward-compatible --genome option
-                y = self.add_genome_old(name, seq, ann)
+                y = self.add_genome_old(name, seq, ann, check_stderr=False)
             else:
-                y = self.add_species(name, ref, seq, ann)
+                y = self.add_species(name, ref, seq, ann, check_stderr=False)
 
             self.assertTrue("species" in y)
             self.assertTrue(name in y["species"])
@@ -299,7 +299,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             self.assertEqual(y["species"][name][ref]["annotation"], ann)
 
             # expect failure if trying to add same species, reference combination again
-            y2 = self.add_species(name, ref, seq, ann, expect_fail=True)
+            y2 = self.add_species(name, ref, seq, ann, expect_fail=True, check_stderr=False)
 
             # expect unchanged config.yaml
             y1_str = yaml.dump(y)
@@ -335,6 +335,17 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             f"{spacemake_cmd} projects update_sample "
             "--project_id=test --sample_id=test_01 "
             "--barcode_flavor=default"
+        self.run_spacemake(
+            f"{spacemake_cmd} projects update_sample "
+            "--project_id=test --sample_id=test_01 "
+            "--map_strategy='bowtie2:rRNA->STAR:genome'",
+            check_stderr=False
+        )
+        self.run_spacemake(
+            f"{spacemake_cmd} projects update_sample "
+            "--project_id=test --sample_id=test_01 "
+            "--map_strategy='STAR:genome'",
+            check_stderr=False
         )
 
     def test_99_run(self):

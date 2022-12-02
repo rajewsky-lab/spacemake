@@ -45,6 +45,71 @@ In spacemake each sample can have the folloing variables:
 ``species``
    ``species`` of the sample
 
+``map_strategy``
+    As of version ``0.7`` you can provide a mapping strategy as a string which gets converted into a 
+    series of map rules. These rules translate into BAM names and their dependencies. 
+
+    *Example:*
+
+        `bowtie2:rRNA->STAR:genome:final`
+
+    The input to the first mappings are always the pre-processed
+    but unmapped reads.
+    map-rules are composed of two or three paramters, separated by ':'.
+    The first two parameters for the mapping are <mapper>:<reference>. The target BAM will have 
+    the name <reference>.<mapper>.bam. Supported mappers are currently `bowtie2` and `STAR`
+    The reference names must be defined for the species you assign to the sample.
+
+    Optionally, a triplet can be used <mapper>:<reference>:<symlink> where the presence of <symlink> 
+    indicates that the BAM file should additionally be made accessible under the name <symlink>.bam, a useful 
+    shorthand or common hook expected by other stages of SPACEMAKE. A special symlink name is "final"
+    which is required by downstream stages of SPACEMAKE. If no "final" is specified, the last map-rule
+    automatically is selected and symlinked as "final".
+    Note, due to the special importance of "final", it may get modified to contain other flags of the run-mode
+    that are presently essential for SPACEMAKE to have in the file name ("final.bam" may in fact be 
+    "final.polyA_adapter_trimmed.bam")
+
+    The example above is going to create
+        
+        (1) rRNA.bowtie2.bam
+        
+            using bowtie2 and the index associated with the "rRNA" reference
+
+
+        (2) genome.STAR.bam 
+        
+            using STAR on the *unmapped* reads from BAM (1)
+
+
+        (3) final.bam
+        
+            a symlink pointing to the actual BAM created in (2).
+
+    Note that one BAM must be designated 'final.bam', or the last BAM file created will be selected as final.
+    (used as input to downstream processing rules for DGE creation, etc.)
+
+    .. note:: 
+      
+        Parallel mappings can be implemented by using commata:
+
+        `bowtie2:rRNA:rRNA,STAR:genome:final`
+
+        This rule differs from the first example because it will align the unmapped reads from the uBAM
+        in parallel to the rRNA reference and to the genome. In this way the same reads can match to both
+        indices.
+
+    .. note:: 
+      
+      Gene tagging will be applied automatically if annotation data were provided for the associated 
+      reference index (by using 'spacemake config add_species --annotation=... ')
+
+    .. warning::
+      
+       Please be sure to escape your `map_strategy` with double-quotes to prevent bash from
+       interpreting the '>' as a redirect instruction.
+
+
+
 ``puck`` (optional)
    name of the ``puck`` for this sample. if puck contains a ``barcodes`` variable, with a path
    to a coordinate file, those coordinates will be used when processing this sample.

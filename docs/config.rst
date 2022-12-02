@@ -1,7 +1,7 @@
 Configuration
 =============
 
-Once installed, spacemake configured before running.
+Once installed, spacemake needs to be configured.
 
 .. include:: shared/spacemake_init.rst
 
@@ -20,16 +20,21 @@ To add species, the following command can be used::
 
    spacemake config add_species \
        --name NAME \         # name of the species to be added
-       --genome GENOME \     # path to the genome (.fa) file for the species to
-                             # be added
+       --reference REF \     # name of the reference sequence 
+                             # ('genome', 'rRNA', 'spike_in', ...)
+                             # if omitted defaults to 'genome'
+       --sequence SEQUENCE \ # path to the reference sequence file 
+                             # (.fa) to be added
+       --genome SEQUENCE \   # DEPRECATED! Please use --sequence instead.
        --annotation ANNOTATION \
                              # path to the annotation (.gtf) file for the species
                              # to be added
-       --rRNA_genome RRNA_GENOME
-                             # (optional) path to the ribosomal-RNA genome (.fa)
-                             # file for the species to be added
 
 The ``spacemake config update_species`` takes the same arguments as above, while ``spacemake config delete_species`` takes only ``--name``.
+
+As of version ``0.7`` you can add multiple reference sequences per species. For that, 
+simply execute ``add_species`` multiple times, varying ``--reference ...`` but keeping ``--name`` constant.
+
 
 To list the currently available ``species``, type::
    
@@ -41,7 +46,7 @@ Configure barcode\_flavors
 .. _configure-barcode_flavor:
 
 This sample-variable describes how the cell-barcode and the UMI should be extracted from Read1 and Read2.
-The ``default`` value for barcode\_flavor will be dropseq: ``cell_barcode = r1[0:12]`` (cell-barcode comes from first 12nt of Read1) and
+The ``default`` value for barcode\_flavor will be dropseq: ``cell = r1[0:12]`` (cell-barcode comes from first 12nt of Read1) and
 ``UMI = r1[12:20]`` (UMI comes from the 13-20 nt of Read1). 
 
 **If a sample has no barcode\_flavor provided, the default run\_mode will be used**
@@ -299,4 +304,30 @@ Add a new puck
       --width_um WIDTH_UM \
       --spot_diameter_um SPOT_DIAMETER_UM \
       --barcodes BARCODES # path to the barcode file, optional 
+
+
+Custom snakemake rules
+^^^^^^^^^^^^^^^^^^^^^^
+
+As of version ``0.7`` it is now add custom snakemake rules to your spacemake workflow. Simply 
+add the following line to the ``config.yaml`` in your spacemake root folder:
+
+.. code-block:: yaml
+
+   custom_rules: /path/to/my_own_custom_snakefile.smk
+
+Within your custom code you can import spacemake modules and have access to internal variables.
+If you need to make spacemake aware of new top-level targets that have to be made, you can register a
+callback
+
+.. code-block:: python
+
+   register_module_output_hook(get_my_custom_targets, "my_own_custom_snakefile.smk")
+
+The function `get_my_custom_targets()` will be called once all other, internal spacemake code has been executed
+and is expected to return a list of files that will be appended to the ``input:`` dependencies of the top-level 
+rule. Providing rules to make these files is up to your custom rules.
+
+The second parameter is more for logging purposes and allows to track which module or part of the 
+code injected which dependencies. By default, it is good practive to use the filename.
 
