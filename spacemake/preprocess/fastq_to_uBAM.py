@@ -53,7 +53,7 @@ format_func_template = """
 def format_func(qname=None, r2_qname=None, r2_qual=None, r1=None, r2=None):
     qparts = r2_qname.split(':N:0:')
     if len(qparts) > 1:
-        i5i7 = [1].replace('+', '')
+        i5i7 = qparts[1].replace('+', '')
     else:
         i5i7 = None
 
@@ -294,7 +294,7 @@ def main_parallel(args):
         )
 
         dispatcher.start()
-        el.logger.info("Started dispatch")
+        el.logger.debug("Started dispatch")
 
         # workers consume chunks of FASTQ from Qfq,
         # process them, and put the results in Qres
@@ -307,21 +307,21 @@ def main_parallel(args):
             w.start()
             workers.append(w)
 
-        el.logger.info("Started workers")
+        el.logger.debug("Started workers")
         collector = mp.Process(
             target=collect_from_queue,
             name="output",
             args=(Qres, args, Qerr, abort_flag),
         )
         collector.start()
-        el.logger.info("Started collector")
+        el.logger.debug("Started collector")
         # wait until all sequences have been thrown onto Qfq
         qfq, qerr = join_with_empty_queues(dispatcher, [Qfq, Qerr], abort_flag)
-        el.logger.info("The dispatcher exited")
+        el.logger.debug("The dispatcher exited")
         if qfq or qerr:
             el.logger.error("Some exception occurred! Tearing it all down")
             res = 1
-            el.logger.info(f"{len(qfq)} chunks were drained from Qfq upon abort.")
+            el.logger.warning(f"{len(qfq)} chunks were drained from Qfq upon abort.")
             log_qerr(qerr)
             dispatcher.terminate()
             collector.terminate()
@@ -329,7 +329,7 @@ def main_parallel(args):
                 w.terminate()
         else:
             # signal all workers to finish
-            el.logger.info("Signalling all workers to finish")
+            el.logger.debug("Signalling all workers to finish")
             for n in range(args.parallel):
                 Qfq.put(None)  # each worker consumes exactly one None
 
@@ -342,7 +342,7 @@ def main_parallel(args):
                 el.logger.info(f"{len(qres)} chunks were drained from Qres upon abort.")
                 log_qerr(qerr)
 
-        el.logger.info(
+        el.logger.debug(
             "All worker processes have joined. Signalling collector to finish."
         )
         # signal the collector to stop
@@ -350,7 +350,7 @@ def main_parallel(args):
 
         # and wait until all output has been generated
         collector.join()
-        el.logger.info("Collector has joined. Merging worker statistics.")
+        el.logger.debug("Collector has joined. Merging worker statistics.")
 
         N = count_dict_sum(Ns)
         if N["total"]:
@@ -483,7 +483,7 @@ def cmdline():
     if el.exception:
         res = 1
 
-    el.logger.info(f"exit code={res}")
+    el.logger.debug(f"exit code={res}")
     return res
 
 
