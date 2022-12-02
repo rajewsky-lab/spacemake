@@ -200,7 +200,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
         return self.load_project_df()
 
     def test_0_init(self):
-        self.run_spacemake(f"{spacemake_cmd} init --dropseq_tools={dropseq_tools}")
+        self.run_spacemake(f"{spacemake_cmd} init --dropseq_tools={dropseq_tools}", check_stderr=False)
         self.assertTrue(os.access("config.yaml", os.R_OK))
 
     def test_1_add_species(self):
@@ -244,12 +244,14 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
         self.run_spacemake(
             f"{spacemake_cmd} projects update_sample "
             "--project_id=test --sample_id=test_01 "
-            "--map_strategy='bowtie2:rRNA->STAR:genome'"
+            "--map_strategy='bowtie2:rRNA->STAR:genome'",
+            check_stderr=False
         )
         self.run_spacemake(
             f"{spacemake_cmd} projects update_sample "
             "--project_id=test --sample_id=test_01 "
-            "--map_strategy='STAR:genome'"
+            "--map_strategy='STAR:genome'",
+            check_stderr=False
         )
 
     def test_99_run(self):
