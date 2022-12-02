@@ -1,4 +1,5 @@
-__version__ = "0.5.6"
+import importlib.metadata
+__version__ = importlib.metadata.version("spacemake")
 __author__ = ["Nikos Karaiskos", "Tamas Ryszard Sztanka-Toth", "Marvin Jens"]
 __license__ = "GPL"
 __email__ = [
@@ -30,7 +31,7 @@ release/paper in the near future.
 
 roadmap = [
     ("0.5.5", "universal ST support and utility, novosparc integration. Sztanka-Toth et al. 2022"),
-    ("0.5.6", "support multiple mapping indices, bulk samples, custom user-defined snakemake rules"),
+    ("0.7", "support multiple mapping indices, bulk samples, custom user-defined snakemake rules"),
     ("1.x", "replace dropseq tools. Own annotator and towards entirely scanpy workflow"),
     ("1.x", "efficient handling of 1E8+ spatial barcodes (seq-scope etc.)"),
     ("1.x", "add interactive data exploration support (shiny?)"),
