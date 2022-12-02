@@ -412,7 +412,7 @@ def setup_logging(
     log_level = getattr(args, "log_level", "INFO")
     lvl = getattr(logging, log_level)
     logging.basicConfig(level=lvl, format=FORMAT)
-    root = logging.getLogger("")
+    root = logging.getLogger("spacemake")
     root.setLevel(lvl)
 
     log_file = getattr(args, "log_file", log_file)
@@ -437,6 +437,10 @@ def setup_logging(
 
     return logger
 
+def setup_smk_logging(name="spacemake.smk", **kw):
+    import argparse
+    args = argparse.Namespace(**kw)
+    return setup_logging(args, name=name)
 
 default_log_level = "INFO"
 

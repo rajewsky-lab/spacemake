@@ -19,6 +19,8 @@ from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
 from spacemake.errors import SpacemakeError
 
+from spacemake.util import setup_smk_logging
+
 # load root dir_variable
 project_root = config['root_dir']
 
@@ -36,7 +38,7 @@ config['samples'] = config.get('samples', [])
 config['projects'] = config.get('projects', [])
 
 ###############
-# Global vars #
+# Global vars 
 ###############
 global_tmp = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
@@ -44,6 +46,9 @@ spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
 bin_dir = os.path.join(spacemake_dir, "bin")
 spacemake_config = project_root + '/config.yaml'
 log_level = config["logging"]["level"]
+
+# Logging facility now 
+main_logger = setup_smk_logging(log_level=log_level, log_file="spacemake_run.log", name="spacemake.main.smk")
 
 # print(f"spacemake_config={spacemake_config}")
 # print(f"repo_dir={repo_dir}")
@@ -88,7 +93,7 @@ def get_module_outputs():
     outputs = []
     for hook, module in _module_output_hooks:
         for out in hook():
-            print(f"output provided by '{module}' module (via '{hook.__name__}'): '{out}'")
+            main_logger.debug(f"output provided by '{module}' module (via '{hook.__name__}'): '{out}'")
             outputs.append(out)
     
     return outputs
