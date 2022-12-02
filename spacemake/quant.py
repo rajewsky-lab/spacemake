@@ -275,6 +275,60 @@ def sparse_summation(X, axis=0):
         return np.array(X.sum(axis=1))[:, 0]
 
 
+# def read_bundles(src):
+#     last_qname = None
+#     batch = []
+#     for rec in src:
+#         if rec.query_name != last_qname:
+#             if batch:
+#                 yield batch
+#             batch = [rec,]
+#             last_qname = rec.query_name
+#         else:
+#             batch.append(rec)
+    
+#     if batch:
+#         yield batch
+    
+
+# def select_alignment(alignments):
+
+#     if len(alignments) == 1:
+#         return alignments[0]
+
+
+#     exonic_alignments = [aln for aln in alignments if is_exonic(aln)]
+#     if len(exonic_alignments) == 1:
+#         return exonic_alignments[0]
+#     else:
+#         return None
+        
+
+def select_alignment(src, countable_regions=set(['N', 'C', 'U', 'CU'])):
+    
+    def is_countable(aln):
+        return set(aln.get_tag('gf').split(',')) & countable_regions
+
+    last_qname = None
+    batch = []
+    for rec in src:
+        if rec.is_unmapped:
+            continue
+
+        if rec.query_name != last_qname:
+            if len(batch) == 1:
+                yield batch[0]
+
+            last_qname = rec.query_name
+            batch = []
+
+        if is_countable(rec):
+            batch.append(rec)
+    
+    if len(batch) == 1:
+        yield batch[0]
+
+
 def main(args):
     logger = util.setup_logging(args, "spacemake.quant.main")
     util.ensure_path(args.output + "/")
@@ -296,9 +350,7 @@ def main(args):
         # counter.set_reference(reference_name)
 
         # iterate over BAM and count
-        for aln in util.timed_loop(bam.fetch(until_eof=True), logger, skim=args.skim):
-            if aln.is_unmapped:
-                continue
+        for aln in select_alignment(util.timed_loop(bam.fetch(until_eof=True), logger, skim=args.skim)):
 
             tags = dict(aln.get_tags())
             # count the alignment every way that the counter prescribes
