@@ -335,6 +335,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             f"{spacemake_cmd} projects update_sample "
             "--project_id=test --sample_id=test_01 "
             "--barcode_flavor=default"
+        )
         self.run_spacemake(
             f"{spacemake_cmd} projects update_sample "
             "--project_id=test --sample_id=test_01 "
