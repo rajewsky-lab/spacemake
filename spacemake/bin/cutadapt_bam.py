@@ -170,7 +170,7 @@ class AdapterFlavor:
         self.adapter_sequences = args.config["adapters"]
 
         self.trimmers_right = []
-        for adap_d in flavor_d.get("cut_right"):
+        for adap_d in flavor_d.get("cut_right", []):
             for name, param_d in adap_d.items():
                 if name == "Q":
                     adapter = QualityTrim(
@@ -190,7 +190,7 @@ class AdapterFlavor:
                 self.trimmers_right.append(adapter)
 
         self.trimmers_left = []
-        for adap_d in flavor_d.get("cut_left"):
+        for adap_d in flavor_d.get("cut_left", []):
             for name, param_d in adap_d.items():
                 adapter = AdapterTrim(
                     name=name,
