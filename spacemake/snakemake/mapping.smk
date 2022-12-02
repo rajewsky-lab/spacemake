@@ -576,6 +576,7 @@ rule create_star_index:
     output:
         index_dir=directory(star_index),
         index_file=star_index_file
+    log: star_index_log
     threads: max(workflow.cores * 0.25, 8)
     shell:
         """
@@ -584,7 +585,7 @@ rule create_star_index:
              --runThreadN {threads} \
              --genomeDir {output.index_dir} \
              --genomeFastaFiles {input.sequence} \
-             --sjdbGTFfile {input.annotation}
+             --sjdbGTFfile {input.annotation} &> {log}
         """
 
 rule compile_annotation:
