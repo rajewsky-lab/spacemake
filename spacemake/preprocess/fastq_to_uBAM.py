@@ -51,7 +51,12 @@ def dispatch_fastq_to_queue(Qfq, args, Qerr, abort_flag):
 
 format_func_template = """
 def format_func(qname=None, r2_qname=None, r2_qual=None, r1=None, r2=None):
-    i5i7 = r2_qname.split(':N:0:')[1].replace('+', '')
+    qparts = r2_qname.split(':N:0:')
+    if len(qparts) > 1:
+        i5i7 = [1].replace('+', '')
+    else:
+        i5i7 = None
+
     cell = {args.cell}
     raw = cell
     UMI = {args.UMI}
@@ -125,7 +130,15 @@ class Output:
         # which contains the cmdline-specified code for cell and UMI.
         # since it returns a dictionary, lets just update kw and
         # keep using that to construct the BAM record.
-        kw.update(self.format(**kw))
+        try:
+            kw.update(self.format(**kw))
+        except Exception as E:
+            self.logger.error(
+                "Unhandled exception inside user-defined read handler.\n"
+                f"Input: {kw}\n"
+                f"Error: {E}"
+            )
+            raise E
 
         a = pysam.AlignedSegment(self.bam_header)
 
@@ -154,7 +167,7 @@ def collect_from_queue(res_queue, args, Qerr, abort_flag):
         out = Output(args)
 
         for record in order_results(res_queue, abort_flag, el.logger):
-            el.logger.debug(f"got record: {record}")
+            # el.logger.debug(f"got record: {record}")
             out.write_bam(record)
 
         out.close()
