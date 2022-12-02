@@ -117,7 +117,7 @@ def order_results(res_queue, abort_flag, logger):
         if t2 - t1 > 30:
             dT = t2 - t0
             rate = n_rec / dT
-            logger.info(
+            logger.debug(
                 "processed {0} records in {1:.0f} seconds (average {2:.0f} reads/second).".format(
                     n_rec, dT, rate
                 )
@@ -189,7 +189,7 @@ class ExceptionLogging:
     def __exit__(self, exc_type, exc_value, exc_traceback):
         # print('__exit__ called')
         self.t1 = time.time()
-        self.logger.info(f"CPU time: {self.t1 - self.t0:.3f} seconds.")
+        self.logger.debug(f"CPU time: {self.t1 - self.t0:.3f} seconds.")
         if exc_type and (exc_type != SystemExit):
             import traceback
 
