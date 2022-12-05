@@ -112,6 +112,7 @@ class Output:
         }
         self.bam_header = pysam.AlignmentHeader.from_dict(header)
         fopen = lambda x: pysam.AlignmentFile(x, "wbu", header=header, threads=4)
+        # fopen = lambda x: pysam.AlignmentFile(x, "w", header=header, threads=4)
 
         if open_files:
             self.out_bam = fopen(args.out_bam)
@@ -357,7 +358,7 @@ def main_parallel(args):
             el.logger.info(f"Run completed, {N['total']} reads processed.")
         else:
             el.logger.error("No reads were processed!")
-        # el.logger.debug(print(str(N.keys())[:200]))
+
         cb_count = count_dict_sum(cb_counts)
         if args.save_cell_barcodes:
             el.logger.info(
