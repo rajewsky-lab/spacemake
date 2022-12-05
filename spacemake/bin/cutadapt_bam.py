@@ -47,17 +47,6 @@ def parse_cmdline():
         help="name of the adapter flavor used to retrieve sequences and parameters from the config.yaml",
         default="default",
     )
-
-    # parser.add_argument(
-    #     "--adapters-right",
-    #     help="FASTA file with adapter sequences to trim from the right (3') end of the reads",
-    #     default="",
-    # )
-    # parser.add_argument(
-    #     "--adapters-left",
-    #     help="FASTA file with adapter sequences to trim from the left (5') end of the reads",
-    #     default="",
-    # )
     parser.add_argument(
         "--skim",
         help="skim through the BAM by investigating only every <skim>-th record (default=1 off)",
@@ -271,42 +260,6 @@ class AdapterFlavor:
         return start, end, "\t".join(tags)
 
 
-class SimpleRead:
-    def __init__(self, name, seq, qual, tags):
-        self.query_name = name
-        self.query_sequence = seq
-        self.query_qualities = qual
-        self.tags = tags
-
-    @classmethod
-    def from_BAM(cls, read):
-        return cls(
-            read.query_name,
-            read.query_sequence,
-            read.query_qualities,
-            dict(read.get_tags()),
-        )
-
-    def set_tag(self, tag, value):
-        self.tags[tag] = value
-
-    @staticmethod
-    def iter_BAM(bam_src):
-        for read in bam_src:
-            yield SimpleRead.from_BAM(read)
-
-    @staticmethod
-    def iter_to_BAM(sr_src, header=None):
-        for read in sr_src:
-            aln = pysam.AlignedSegment(header)
-            aln.query_name = read.query_name
-            aln.query_sequence = read.query_sequence
-            aln.query_qualities = read.query_qualities
-            aln.flag = 4
-            aln.tags = list(read.tags.items())
-
-            yield aln
-
 
 def process_reads(read_source, args, stats={}, total={}, lhist={}):
     flavor = AdapterFlavor(args, stats=stats, total=total)
@@ -496,32 +449,26 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeou
             threads=args.threads_write,
         )
 
-        for n_chunk, results in queue_iter(res_queue, abort_flag):
+        for n_chunk, results in util.timed_loop(
+            queue_iter(res_queue, abort_flag),
+            logger,
+            T=30,
+            chunk_size=1,
+            template="processed {i} reads in {dT:.1f} seconds (average {rate:.1f} k reads/second)."
+            ):
+
             heapq.heappush(heap, (n_chunk, results))
 
             # as long as the root of the heap is the next needed chunk
             # pass results on to storage
             while heap and (heap[0][0] == n_chunk_needed):
                 n_chunk, results = heapq.heappop(heap)  # retrieves heap[0]
-                # for aln in SimpleRead.iter_to_BAM(results, header=bam_out.header):
                 for aln in string_to_BAM(results, header=bam_out.header):
                     #     # print("record in process_ordered_results", record)
                     bam_out.write(aln)
                     n_rec += 1
 
                 n_chunk_needed += 1
-
-            # debug output on average throughput
-            t2 = time.time()
-            if t2 - t1 > 30:
-                dT = t2 - t0
-                rate = n_rec / dT
-                logger.info(
-                    "processed {0} reads in {1:.0f} seconds (average {2:.0f} reads/second).".format(
-                        n_rec, dT, rate
-                    )
-                )
-                t1 = t2
 
         # out.close()
         # by the time None pops from the queue, all chunks
@@ -533,12 +480,12 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeou
                 f"{len(heap)} chunks remained on the heap due to missing data upon abort."
             )
 
-        dT = time.time() - t0
-        logger.info(
-            "finished processing {0} reads in {1:.0f} seconds (average {2:.0f} reads/second)".format(
-                n_rec, dT, n_rec / dT
-            )
-        )
+        # dT = time.time() - t0
+        # logger.info(
+        #     "finished processing {0} reads in {1:.0f} seconds (average {2:.0f} reads/second)".format(
+        #         n_rec, dT, n_rec / dT
+        #     )
+        # )
 
 
 ## TODO: push these two into parallel/util modules
