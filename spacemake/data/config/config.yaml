@@ -1,5 +1,6 @@
 logging:
   level: INFO
+  debug: "spacemake.util.read_fq"
 
 puck_data:
     barcode_file: 'predictions_ml.csv'
