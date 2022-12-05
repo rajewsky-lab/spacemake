@@ -377,8 +377,16 @@ def get_map_params(wc, output, mapper="STAR"):
     if hasattr(mr, "ann_final"):
         ann = mr.ann_final
         if ann and ann.lower().endswith(".gtf"):
+            ann_log = wc_fill(log_dir, wc) + f"/{mapper}.{mr.ref_name}.annotator.log"
             annotation_cmd = (
-                f"| python {spacemake_dir}/annotator.py --sample={wc.sample_id} tag --bam-in=/dev/stdin --bam-out={mr.out_path} --compiled={mr.ann_final_compiled} "
+                f"| python {spacemake_dir}/annotator.py "
+                f"  --sample={wc.sample_id} "
+                f"  --log-level={log_level} "
+                f"  --log-file={ann_log} "
+                f"  tag "
+                f"  --bam-in=/dev/stdin "
+                f"  --bam-out={mr.out_path} "
+                f"  --compiled={mr.ann_final_compiled} "
                 f"| samtools view --threads=4 -bh --no-PG > {output.bam} "
             )
 
@@ -426,7 +434,9 @@ rule map_reads_bowtie2:
     output:
         bam=bt2_mapped_bam,
         ubam=bt2_unmapped_bam
-    log: bt2_mapped_log
+    log: 
+        bt2 = bt2_mapped_log,
+        hdr = bt2_mapped_log.replace('.log', '.splice_bam_header.log')
     params:
         auto = lambda wc, output: get_map_params(wc, output, mapper='bowtie2'),
     threads: 32 
@@ -442,15 +452,16 @@ rule map_reads_bowtie2:
         # 3) align reads with bowtie2, *preserving the original BAM tags*
         "| bowtie2 -p {threads} --reorder --mm"
         "  -x {params.auto[index]} -b /dev/stdin --preserve-tags"
-        "  {params.auto[flags]} 2> {log}"
+        "  {params.auto[flags]} 2> {log.bt2}"
         " "
         # fix the BAM header to accurately reflect the entire history of processing via PG records.
         "| python {repo_dir}/scripts/splice_bam_header.py"
-        "  --in-ubam {input.bam}"
+        "  --in-ubam {input.bam} "
+        "  --log-level={log_level} "
+        "  --log-file={log.hdr} "
         " "
         "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) "
         "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
-        # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
 
 # TODO: unify these two functions and get rid of the params in parse_ribo_log rule below.
@@ -493,9 +504,11 @@ rule map_reads_STAR:
     output:
         bam=star_mapped_bam,
         ubam=star_unmapped_bam,
-        log=star_target_log_file,
         tmp=temp(directory(star_prefix + "_STARgenome"))
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
+    log:
+        star=star_target_log_file,
+        hdr=star_target_log_file.replace(".log", "splice_bam_header.log")
     params:
         auto=get_map_params,
         # annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
@@ -505,16 +518,19 @@ rule map_reads_STAR:
         star_prefix = star_prefix
     shell:
         "STAR {params.auto[flags]}"
-        " --genomeDir {params.auto[index]}"
-        " --readFilesIn {input.bam}"
-        " --readFilesCommand samtools view -f 4"
-        " --readFilesType SAM SE"
-        " --sjdbGTFfile {params.auto[annotation]}"
-        " --outFileNamePrefix {params.star_prefix}"
-        " --runThreadN {threads}"
+        "  --genomeDir {params.auto[index]}"
+        "  --readFilesIn {input.bam}"
+        "  --readFilesCommand samtools view -f 4"
+        "  --readFilesType SAM SE"
+        "  --sjdbGTFfile {params.auto[annotation]}"
+        "  --outFileNamePrefix {params.star_prefix}"
+        "  --runThreadN {threads}"
         " "
         "| python {repo_dir}/scripts/splice_bam_header.py"
-        " --in-ubam {input.bam}"
+
+        "  --in-ubam {input.bam}"
+        "  --log-level={log_level} "
+        "  --log-file={log.hdr} "
         " "
         "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) "
         "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
