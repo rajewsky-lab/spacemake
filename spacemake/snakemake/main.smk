@@ -46,13 +46,13 @@ spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
 bin_dir = os.path.join(spacemake_dir, "bin")
 spacemake_config = project_root + '/config.yaml'
 log_level = config["logging"]["level"]
+log_debug = config["logging"].get("debug", "")
 
-# Logging facility now 
-main_logger = setup_smk_logging(log_level=log_level, log_file="spacemake_run.log", name="spacemake.main.smk")
-
-# print(f"spacemake_config={spacemake_config}")
-# print(f"repo_dir={repo_dir}")
-
+# # Logging facility now 
+# main_logger = setup_smk_logging(log_level=log_level, log_file="spacemake_run.log", name="spacemake.main.smk")
+# smk_logger = config["smk_logger"]
+import logging
+smk_logger = logging.getLogger("spacemake.main.smk")
 
 #######################
 # DIRECTORY STRUCTURE #
@@ -93,7 +93,7 @@ def get_module_outputs():
     outputs = []
     for hook, module in _module_output_hooks:
         for out in hook():
-            main_logger.debug(f"output provided by '{module}' module (via '{hook.__name__}'): '{out}'")
+            smk_logger.debug(f"output provided by '{module}' module (via '{hook.__name__}'): '{out}'")
             outputs.append(out)
     
     return outputs
@@ -201,19 +201,23 @@ rule get_barcode_readcounts:
         unpack(get_all_mapped_bams)
     output:
         barcode_readcounts
+    log:
+        log_dir + '/{polyA_adapter_trimmed}.cell_counter.log'
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{cell}'],
     shell:
         "python {spacemake_dir}/cell_counter.py "
-        " --sample={wildcards.sample_id} "
-        " --out=/dev/stdout "
-        " --top=0 "
-        " --tag={params.cell_barcode_tag} "
-        " --unique "
-        " --unmapped "
-        " {input.mapped_bams} "
+        "  --sample={wildcards.sample_id} "
+        "  --log-level={log_level} "
+        "  --log-file={log} "
+        "  --out=/dev/stdout "
+        "  --top=0 "
+        "  --tag={params.cell_barcode_tag} "
+        "  --unique "
+        "  --unmapped "
+        "  {input.mapped_bams} "
         "| gzip -c > {output} "
 
 
