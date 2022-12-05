@@ -319,20 +319,18 @@ class ConfigFile:
         return kwargs
 
     def process_barcode_flavor_args(self, **kw):
-        bam_tags = "CR:{cell},CB:{cell},MI:{UMI},RG:A"
-
         # r(1|2) and then string slice
         to_match = r"r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$"
 
         umi = kw.get("umi", None)
-        cell_barcode = kw.get("cell_barcode", None)
         if umi is not None and re.match(to_match, umi) is None:
             raise InvalidBarcodeStructure("umi", to_match)
 
+        cell_barcode = kw.get("cell", None)
         if cell_barcode is not None and re.match(to_match, cell_barcode) is None:
-            raise InvalidBarcodeStructure("umi", to_match)
+            raise InvalidBarcodeStructure("cell", to_match)
 
-        barcode_flavor = {"bam_tags": bam_tags}
+        barcode_flavor = {}
 
         if umi is not None:
             barcode_flavor["UMI"] = umi
