@@ -73,6 +73,39 @@ def ensure_path(path):
         os.makedirs(dirname, exist_ok=True)
     return path
 
+def timed_loop(
+    src,
+    logger,
+    T=5,
+    chunk_size=10000,
+    template="processed {i} BAM records in {dT:.1f}sec. ({rate:.3f} k rec/sec)",
+    skim=0,
+):
+    from time import time
+
+    t0 = time()
+    t_last = t0
+    i = 0
+    for i, x in enumerate(src):
+        if skim:
+            if i % skim == 0:
+                yield x
+        else:
+            yield x
+
+        if i % chunk_size == 0:
+            t = time()
+            if t - t_last > T:
+                dT = t - t0
+                rate = i / dT / 1000.0
+                logger.debug(template.format(**locals()))
+                t_last = t
+
+    t = time()
+    dT = t - t0
+    rate = i / dT / 1000.0
+    logger.info("Finished! " + template.format(**locals()))
+
 
 def FASTQ_src(src):
     from more_itertools import grouper
@@ -117,15 +150,8 @@ def read_fq(fname, skim=0):
         src = FASTQ_src(fname)  # assume its a stream or file-like object already
 
     n = 0
-    if skim:
-        for record in src:
-            if (n % skim) == 0:
-                yield record
-        n += 1
-    else:
-        for record in src:
-            yield record
-
+    for record in timed_loop(src, logger, T=15, template="processed {i} reads in {dT:.1f}sec. ({rate:.3f} k rec/sec)", skim=skim):
+        yield record
         n += 1
 
     logger.info(f"processed {n} FASTQ records from '{fname}'")
@@ -372,34 +398,6 @@ def load_yaml(path, mode="rt"):
         return yaml.load(path, mode)
 
 
-def timed_loop(
-    src,
-    logger,
-    T=5,
-    chunk_size=10000,
-    template="processed {i} BAM records in {dT:.1f}sec. ({rate:.3f} k rec/sec)",
-    skim=0,
-):
-    from time import time
-
-    t0 = time()
-    t_last = t0
-    for i, x in enumerate(src):
-        if skim:
-            if i % skim == 0:
-                yield x
-        else:
-            yield x
-
-        if i % chunk_size == 0:
-            t = time()
-            if t - t_last > T:
-                dT = t - t0
-                rate = i / dT / 1000.0
-                logger.debug(template.format(**locals()))
-                t_last = t
-
-
 def setup_logging(
     args,
     name="spacemake.main",
@@ -417,15 +415,16 @@ def setup_logging(
 
     log_file = getattr(args, "log_file", log_file)
     if log_file:
-        fh = logging.FileHandler(filename=ensure_path(args.log_file), mode="a")
+        fh = logging.FileHandler(filename=ensure_path(log_file), mode="a")
         fh.setFormatter(logging.Formatter(FORMAT))
+        root.info(f"adding log-file handler '{log_file}'")
         root.addHandler(fh)
 
     if hasattr(args, "debug"):
         # cmdline requested debug output for specific domains (comma-separated)
         for logger_name in args.debug.split(","):
             if logger_name:
-                print(f"setting domain {logger_name} to DEBUG")
+                root.info(f"setting domain {logger_name} to DEBUG")
                 logging.getLogger(logger_name.replace("root", "")).setLevel(
                     logging.DEBUG
                 )
