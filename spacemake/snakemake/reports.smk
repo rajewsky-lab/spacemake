@@ -14,11 +14,11 @@ rule bamstats:
     log: log_dir + "/{bamname}.bamstats.log"
     shell:
         "python {bin_dir}/bamstats.py {input} "
-        " --sample={wildcards.sample_id} "
-        " --log-level={log_level} "
-        " --log-file={log} "
-        " --out-stats={output.stats} "
-        " --out-length={output.rlen} "
+        "  --sample={wildcards.sample_id} "
+        "  --log-level={log_level} "
+        "  --log-file={log} "
+        "  --out-stats={output.stats} "
+        "  --out-length={output.rlen} "
 
 
 rule complexity_sampling:
@@ -28,7 +28,11 @@ rule complexity_sampling:
     input: complete_data_root + "/{bamname}.bam"
     output: stats_dir + "/{bamname}.complexity.tsv"
     shell:
-        "python {bin_dir}/complexity.py {input} --sample={wildcards.sample_id} --out-tsv={output}"
+        "python {bin_dir}/complexity.py {input} "
+        "  --sample={wildcards.sample_id} "
+        "  --log-level={log_level} "
+        "  --log-file={log} "
+        "  --out-tsv={output} "
 
 
 def get_all_bamstats_for_sample(wildcards):
@@ -65,16 +69,22 @@ rule overview:
         map_strategy = lambda wildcards: SAMPLE_MAP_STRATEGY[(wildcards.project_id, wildcards.sample_id)],
     shell:
         "python {bin_dir}/overview_plot.py "
-        " --sample={wildcards.sample_id} "
-        " --log-level={log_level} "
-        " --log-file={log} "
-        " --raw={input.raw} "
-        " --trimmed={input.trimmed} "
-        " --map-strategy='{params.map_strategy}' "
-        " --mapped {params.mapped_list} "
-        " --not-mapped {params.not_mapped_list} "
-        " --out-tsv {output.tsv} "
-        " --out-pdf {output.pdf}"
+        "  --sample={wildcards.sample_id} "
+        "  --log-level={log_level} "
+        "  --log-file={log} "
+        "  --raw={input.raw} "
+        "  --trimmed={input.trimmed} "
+        "  --map-strategy='{params.map_strategy}' "
+        "  --mapped {params.mapped_list} "
+        "  --not-mapped {params.not_mapped_list} "
+        "  --out-tsv {output.tsv} "
+        "  --out-pdf {output.pdf}"
+
+
+rule dge_stats:
+    input: dge_out_h5ad
+    output:
+
 
 
 def get_overview_reports():
