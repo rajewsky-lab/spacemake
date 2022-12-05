@@ -92,6 +92,7 @@ rule tag_reads_bc_umi:
         "  --sample={wildcards.sample_id} "
         "  --log-level={log_level}"
         "  --log-file={log} "
+        "  --debug={log_debug} "
         "  --read1={params.read1} "
         "  --read2={params.read2} "
         "  --parallel={threads} "
@@ -118,15 +119,16 @@ rule trim_adapters_polyA:
     threads: 10
     shell:
         "python {bin_dir}/cutadapt_bam.py {input} "
-        " --sample={wildcards.sample_id} "
-        " --log-level={log_level} "
-        " --log-file={log} "
-        " --config={spacemake_config} "
-        " --bam-out={output.trimmed} --bam-out-mode=b "
-        " --stats-out={output.stats} "
-        " --adapter-flavor={params.adapter_flavor} "
-        " --threads-write=4 " # scales up to 4 bc we use compression
-        " --threads-work={threads} "
+        "  --sample={wildcards.sample_id} "
+        "  --log-level={log_level} "
+        "  --log-file={log} "
+        "  --debug={log_debug} "
+        "  --config={spacemake_config} "
+        "  --bam-out={output.trimmed} --bam-out-mode=b "
+        "  --stats-out={output.stats} "
+        "  --adapter-flavor={params.adapter_flavor} "
+        "  --threads-write=4 " # scales up to 4 bc we use compression
+        "  --threads-work={threads} "
 
 rule run_fastqc:
     input:
