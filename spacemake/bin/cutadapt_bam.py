@@ -367,14 +367,7 @@ def parallel_read(Qsam, args, Qerr, abort_flag, stat_list):
         bam_header = stat_list[-1]
         bam_header.append(util.make_header(bam_in, progname=os.path.basename(__file__)))
 
-        # read_source = BAM_to_string(skim_reads(bam_in.fetch(until_eof=True), args.skim))
-        if args.skim:
-            read_source = BAM_to_string(
-                skim_reads(bam_in.fetch(until_eof=True), args.skim)
-            )
-        else:
-            read_source = BAM_to_string(bam_in.fetch(until_eof=True))
-
+        read_source = util.timed_loop(BAM_to_string(bam_in.fetch(until_eof=True)), el.logger, T=15, skim=args.skim)
         for chunk in chunkify(read_source, n_chunk=args.chunk_size):
             el.logger.debug(
                 f"placing {chunk[0]} {len(chunk[1])} in queue of depth {Qsam.qsize()}"
@@ -422,9 +415,6 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeou
 
         heap = []
         n_chunk_needed = 0
-        t0 = time.time()
-        t1 = t0
-        n_rec = 0
 
         logger = el.logger
         # out = Output(args)
@@ -449,14 +439,9 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeou
             threads=args.threads_write,
         )
 
-        for n_chunk, results in util.timed_loop(
-            queue_iter(res_queue, abort_flag),
-            logger,
-            T=30,
-            chunk_size=1,
-            template="processed {i} reads in {dT:.1f} seconds (average {rate:.1f} k reads/second)."
-            ):
-
+        t0 = time.time()
+        n_rec = 0
+        for n_chunk, results in queue_iter(res_queue, abort_flag):
             heapq.heappush(heap, (n_chunk, results))
 
             # as long as the root of the heap is the next needed chunk
@@ -480,12 +465,12 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeou
                 f"{len(heap)} chunks remained on the heap due to missing data upon abort."
             )
 
-        # dT = time.time() - t0
-        # logger.info(
-        #     "finished processing {0} reads in {1:.0f} seconds (average {2:.0f} reads/second)".format(
-        #         n_rec, dT, n_rec / dT
-        #     )
-        # )
+        dT = time.time() - t0
+        logger.info(
+            "finished processing {0} reads in {1:.0f} seconds (average {2:.0f} reads/second)".format(
+                n_rec, dT, n_rec / dT
+            )
+        )
 
 
 ## TODO: push these two into parallel/util modules
