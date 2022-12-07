@@ -88,7 +88,7 @@ rule tag_reads_bc_umi:
         log_dir + '/fastq_to_uBAM.log'
     threads: min(workflow.cores - 2, 8) # reserve two cores for the input zcat pipes
     shell:
-        "python {spacemake_dir}/preprocess/fastq_to_uBAM.py "
+        "python {bin_dir}/fastq_to_uBAM.py "
         "  --sample={wildcards.sample_id} "
         "  --log-level={log_level}"
         "  --log-file={log} "

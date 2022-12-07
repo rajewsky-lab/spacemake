@@ -611,11 +611,13 @@ rule compile_annotation:
     output: 
         target = species_reference_annotation_compiled_target,
         path = directory(species_reference_annotation_compiled)
+    log: species_reference_annotation_compiled + '/annotator_build.log'
     shell:
-        "python {bin_dir}/annotator.py build "
-        "  --log_file={log} "
+        "python {bin_dir}/annotator.py "
+        "  --log-file={log} "
         "  --log-level={log_level} "
         "  --debug={log_debug} "
+        "  build "
         "  --gtf={input} "
         "  --compiled={output.path}"
 
