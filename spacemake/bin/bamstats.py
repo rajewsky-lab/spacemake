@@ -16,9 +16,7 @@ def parse_args():
 
     return args
 
-logger = logging.getLogger("spacemake.bamstats")
-
-def scan(fname, skim=0):
+def scan(fname, logger, skim=0):
     UMI_counter = defaultdict(set)
     read_counter = defaultdict(int)
     read_len_hist = defaultdict(int)
@@ -71,12 +69,12 @@ def scan(fname, skim=0):
 
 
 def main(args):
-    logger = util.setup_logging(args, "spacemake.scripts.bamstats")
+    logger = util.setup_logging(args, "spacemake.bamstats")
     bamname = os.path.basename(args.bamfile).split('.bam')[0]
     bampath = os.path.dirname(args.bamfile)
     sample = args.sample.format(bamname=bamname)
 
-    CBs, UMI_counts, read_counts, Lhist = scan(args.bamfile)
+    CBs, UMI_counts, read_counts, Lhist = scan(args.bamfile, logger=logger)
     fname = util.ensure_path(args.out_stats.format(bamname=bamname, bampath=bampath))
     df = pd.DataFrame(dict(sample=sample, bam=bamname, CB=CBs, UMI=UMI_counts, reads=read_counts))
     df.to_csv(fname, sep="\t", index=None)

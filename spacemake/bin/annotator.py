@@ -531,7 +531,7 @@ class GenomeAnnotation:
 
                 cids.append(cid_lkup[idx])
 
-        self.logger.info("done")
+        self.logger.debug("done")
         cdf = pd.DataFrame(
             dict(chrom=chroms, strand=strands, start=cstarts, end=cends, cid=cids)
         )
@@ -654,7 +654,7 @@ def write_BAM_from_queue(
 
         header = pysam.AlignmentHeader.from_dict(shared["bam_header"])
         logger = el.logger
-        logger.info(f"writing to new BAM '{bam_out}'")
+        logger.debug(f"writing to new BAM '{bam_out}'")
         bam = pysam.AlignmentFile(
             bam_out, f"w{bam_mode}", header=header, threads=writer_threads
         )

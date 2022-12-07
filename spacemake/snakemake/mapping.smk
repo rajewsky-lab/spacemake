@@ -383,6 +383,7 @@ def get_map_params(wc, output, mapper="STAR"):
                 f"  --sample={wc.sample_id} "
                 f"  --log-level={log_level} "
                 f"  --log-file={ann_log} "
+                f"  --debug={log_debug} "
                 f"  tag "
                 f"  --bam-in=/dev/stdin "
                 f"  --bam-out={mr.out_path} "
@@ -531,6 +532,7 @@ rule map_reads_STAR:
         "  --in-ubam {input.bam}"
         "  --log-level={log_level} "
         "  --log-file={log.hdr} "
+        "  --debug={log_debug} "
         " "
         "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) "
         "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
@@ -610,5 +612,10 @@ rule compile_annotation:
         target = species_reference_annotation_compiled_target,
         path = directory(species_reference_annotation_compiled)
     shell:
-        "python {bin_dir}/annotator.py build --gtf={input} --compiled={output.path}"
+        "python {bin_dir}/annotator.py build "
+        "  --log_file={log} "
+        "  --log-level={log_level} "
+        "  --debug={log_debug} "
+        "  --gtf={input} "
+        "  --compiled={output.path}"
 

@@ -46,7 +46,9 @@ spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
 bin_dir = os.path.join(spacemake_dir, "bin")
 spacemake_config = project_root + '/config.yaml'
 log_level = config["logging"]["level"]
-log_debug = config["logging"].get("debug", "")
+log_debug = config["log_debug"]
+if not log_debug:
+    log_debug = config["logging"].get("debug", "")
 
 # # Logging facility now 
 # main_logger = setup_smk_logging(log_level=log_level, log_file="spacemake_run.log", name="spacemake.main.smk")
@@ -212,6 +214,7 @@ rule get_barcode_readcounts:
         "  --sample={wildcards.sample_id} "
         "  --log-level={log_level} "
         "  --log-file={log} "
+        "  --debug={log_debug} "
         "  --out=/dev/stdout "
         "  --top=0 "
         "  --tag={params.cell_barcode_tag} "

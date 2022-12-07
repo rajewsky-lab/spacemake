@@ -522,6 +522,7 @@ def get_run_parser():
         action="store_true",
         help="Run also fastqc as part of the spacemake run",
     )
+    parser.add_argument("--debug", dest="debug", default="", help=f"comma-separated list of logging-domains for which you want DEBUG output")
 
     return parser
 
@@ -734,6 +735,7 @@ def spacemake_run(args):
         "projects": projects,
         "with_fastqc": with_fastqc,
         "pwd": os.getcwd(),
+        "log_debug" : args['debug'],
     }
 
     # join config_variables and novosparc_variables

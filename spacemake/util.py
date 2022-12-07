@@ -417,7 +417,7 @@ def setup_logging(
     if log_file:
         fh = logging.FileHandler(filename=ensure_path(log_file), mode="a")
         fh.setFormatter(logging.Formatter(FORMAT))
-        root.info(f"adding log-file handler '{log_file}'")
+        root.debug(f"adding log-file handler '{log_file}'")
         root.addHandler(fh)
 
     if hasattr(args, "debug"):
