@@ -503,7 +503,7 @@ def main_parallel(args):
     lhist = manager.list()
     bam_header = manager.list()
     stat_lists = [stats, total, lhist, bam_header]
-    print(stat_lists[-1])
+    # print(stat_lists[-1])
     with ExceptionLogging(
         "spacemake.cutadapt_bam.main_parallel", exc_flag=abort_flag
     ) as el:
