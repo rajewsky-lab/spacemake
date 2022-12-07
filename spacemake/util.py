@@ -98,7 +98,7 @@ def timed_loop(
             if t - t_last > T:
                 dT = t - t0
                 rate = i / dT / 1000.0
-                logger.debug(template.format(**locals()))
+                logger.info(template.format(**locals()))
                 t_last = t
 
     t = time()
