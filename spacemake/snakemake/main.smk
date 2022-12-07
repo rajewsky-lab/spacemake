@@ -297,7 +297,7 @@ rule create_dge:
     # at most 8 dges will be created the same time
     # threads: max(workflow.cores * 0.125, 1)
     shell:
-        "python {spacemake_dir}/quant.py "
+        "python {bin_dir}/quant.py "
         " --sample={wildcards.sample_id} "
         " --output={params.dge_root}/ "
         " --out-dge={output.dge} "

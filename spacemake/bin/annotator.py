@@ -728,7 +728,7 @@ def annotate_BAM_parallel(args):
         args (namespace): the command-line arguments reported from the parser
     """
 
-    Qsam = mp.Queue()  # BAM records, converted to strings, are place here in chunks
+    Qsam = mp.Queue(10 * args.parallel)  # BAM records, converted to strings, are place here in chunks
     Qres = mp.Queue()  # chunks are passed onto this queue, together with tags
     Qerr = mp.Queue()  # child-processes can report errors back to the main process here
 
@@ -750,7 +750,7 @@ def annotate_BAM_parallel(args):
             args=(args.bam_in, Qsam, Qerr, abort_flag, shared, args.chunk_size),
         )
         reader.start()
-        el.logger.info("started BAM reader")
+        el.logger.debug("started BAM reader")
         # sleep(2)
         # print("main process shared=", shared)
         workers = []
@@ -764,7 +764,7 @@ def annotate_BAM_parallel(args):
             w.start()
             workers.append(w)
 
-        el.logger.info("Started workers")
+        el.logger.debug("Started workers")
         # bam_out, bam_mode, Qres, Qerr, abort_flag, shared, writer_threads=8
         collector = mp.Process(
             target=write_BAM_from_queue,
@@ -772,17 +772,17 @@ def annotate_BAM_parallel(args):
             args=(args.bam_out, args.bam_mode, Qres, Qerr, abort_flag, shared),
         )
         collector.start()
-        el.logger.info("Started collector")
+        el.logger.debug("Started collector")
 
         # wait until all sequences have been thrown onto Qfq
         qsam, qerr = join_with_empty_queues(reader, [Qsam, Qerr], abort_flag)
-        el.logger.info("The reader exited")
+        el.logger.debug("The reader exited")
         if qsam or qerr:
             el.logger.error(f"{len(qsam)} chunks were drained from Qsam upon abort.")
             log_qerr(qerr)
 
         # signal all workers to finish
-        el.logger.info("Signalling all workers to finish")
+        el.logger.debug("Signalling all workers to finish")
         for _ in range(args.parallel):
             Qsam.put(None)  # each worker consumes exactly one None
 

@@ -379,7 +379,7 @@ def get_map_params(wc, output, mapper="STAR"):
         if ann and ann.lower().endswith(".gtf"):
             ann_log = wc_fill(log_dir, wc) + f"/{mapper}.{mr.ref_name}.annotator.log"
             annotation_cmd = (
-                f"| python {spacemake_dir}/annotator.py "
+                f"| python {bin_dir}/annotator.py "
                 f"  --sample={wc.sample_id} "
                 f"  --log-level={log_level} "
                 f"  --log-file={ann_log} "
@@ -455,7 +455,7 @@ rule map_reads_bowtie2:
         "  {params.auto[flags]} 2> {log.bt2}"
         " "
         # fix the BAM header to accurately reflect the entire history of processing via PG records.
-        "| python {repo_dir}/scripts/splice_bam_header.py"
+        "| python {bin_dir}/splice_bam_header.py"
         "  --in-ubam {input.bam} "
         "  --log-level={log_level} "
         "  --log-file={log.hdr} "
@@ -526,7 +526,7 @@ rule map_reads_STAR:
         "  --outFileNamePrefix {params.star_prefix}"
         "  --runThreadN {threads}"
         " "
-        "| python {repo_dir}/scripts/splice_bam_header.py"
+        "| python {bin_dir}/splice_bam_header.py"
 
         "  --in-ubam {input.bam}"
         "  --log-level={log_level} "
@@ -610,5 +610,5 @@ rule compile_annotation:
         target = species_reference_annotation_compiled_target,
         path = directory(species_reference_annotation_compiled)
     shell:
-        "python {spacemake_dir}/annotator.py build --gtf={input} --compiled={output.path}"
+        "python {bin_dir}/annotator.py build --gtf={input} --compiled={output.path}"
 
