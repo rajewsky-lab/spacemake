@@ -1,4 +1,4 @@
-from .fastq_to_uBAM import cmdline
+# from .fastq_to_uBAM import cmdline
 from .dge import (
     calculate_adata_metrics,
     calculate_shannon_entropy_scompression,
