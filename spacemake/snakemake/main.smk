@@ -294,11 +294,13 @@ rule create_dge:
     shell:
         "python {bin_dir}/quant.py "
         " --sample={wildcards.sample_id} "
+        " --log-level={log_level} "
+        " --log-file={log} "
+        " --debug={log_debug} "
         " --output={params.dge_root}/ "
         " --out-dge={output.dge} "
         " --out-summary={output.dge_summary} "
         " --cell-bc-allowlist={input.top_barcodes} "
-        " --log-file={log} "
         "{input.annotated_bams}"
 
 
