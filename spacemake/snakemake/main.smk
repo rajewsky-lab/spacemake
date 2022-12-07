@@ -69,14 +69,6 @@ log_dir = complete_data_root + '/logs'
 stats_dir = complete_data_root + '/stats'
 plots_dir = complete_data_root + '/plots'
 
-# print(f"bin_dir={bin_dir}")
-# print(f"log_dir={log_dir}")
-# print(f"stats_dir={stats_dir}")
-
-
-# smart_adapter = config['adapters']['SMART']
-
-# moved barcode_flavor assignment here so that additional samples/projects are equally processed
 project_df = ProjectDF(config['project_df'], ConfigFile.from_yaml('config.yaml'))
 
 species_genome = 'species_data/{species}/genome.fa'
