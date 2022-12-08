@@ -118,16 +118,19 @@ class DGE:
 
 class DefaultCounter:
 
-    channels = ["exonic_UMI", "exonic_read", "intronic_UMI", "intronic_read"]
+    channels = ["counts", "exonic_counts", "exonic_reads", "intronic_counts", "intronic_reads"]
     rank_cells_by = "n_reads"
     logger = logging.getLogger("spacemake.quant.DefaultCounter")
     uniq = set()
 
-    def __init__(self, bam, **kw):
+    def __init__(self, bam, X_channels=["exonic_counts", "intronic_counts"], **kw):
         self.kw = kw
         self.bam = bam
         self.exonic_set = set(["C", "U", "CU", "N"])
         self.intronic_set = set(["I"])
+
+        # which channels shall contribute to the adata.X (main channel)
+        self.count_X_channels = set(X_channels)
 
     def parse_bam_record(self, aln, tags):
         channels = set()
@@ -149,20 +152,24 @@ class DefaultCounter:
             intron = False
             for f in gf:
                 if f in self.exonic_set:
-                    channels.add("exonic_read")
+                    channels.add("exonic_reads")
                     exon = True
                     if uniq:
-                        channels.add("exonic_UMI")
+                        channels.add("exonic_counts")
                 elif f in self.intronic_set:
-                    channels.add("intronic_read")
+                    channels.add("intronic_reads")
                     intron = True
                     if uniq:
-                        channels.add("intronic_UMI")
+                        channels.add("intronic_counts")
 
-            # post-process: if both exon & intron annotations are present
+            # post-process: if both exon & intron annotations 
+            # (but from different isoforms) are present
             # count the read as exonic
             if exon and intron:
-                channels -= set(["intronic_read", "intronic_UMI"])
+                channels -= set(["intronic_reads", "intronic_counts"])
+
+            if channels & self.count_X_channels:
+                channels.add("counts")
 
         return gene, cell, umi, channels
 
@@ -180,8 +187,8 @@ class DefaultCounter:
         for c in DefaultCounter.channels:
             adata.obs[f"n_{c}"] = sparse_summation(sparse_d[c], axis=1)
 
-        adata.obs["n_reads"] = adata.obs["n_exonic_read"] + adata.obs["n_intronic_read"]
-        adata.obs["n_UMI"] = adata.obs["n_exonic_UMI"] + adata.obs["n_intronic_UMI"]
+        adata.obs["n_reads"] = adata.obs["n_exonic_reads"] + adata.obs["n_intronic_reads"]
+        adata.obs["n_counts"] = adata.obs["n_exonic_counts"] + adata.obs["n_intronic_counts"]
         return adata
 
 
@@ -214,7 +221,13 @@ def parse_cmdline():
     parser.add_argument(
         "--main-channel",
         help="name of the channel to be stored as AnnData.X (default='exonic_UMI')",
-        default="exonic_UMI",
+        default="counts",
+    )
+    parser.add_argument(
+        "--count-X",
+        help="names of the channels to be stored as AnnData.X (default='exonic_UMI')",
+        default=["exonic_UMI"],
+        nargs="+"
     )
     parser.add_argument(
         "--cell-bc-allowlist",
@@ -334,7 +347,9 @@ def main(args):
     util.ensure_path(args.output + "/")
 
     # prepare counter instance
-    count_kw = util.load_yaml(args.count_class_params)
+    count_kw = vars(args)
+    from_yaml = util.load_yaml(args.count_class_params)
+    count_kw.update(from_yaml)
     count_class = get_counter_class(args.count_class)
 
     # prepare the sparse-matrix data collection (for multiple channels in parallel)
