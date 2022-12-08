@@ -30,7 +30,7 @@ downsampled_data_root = downsampled_data_prefix + "{downsampling_percentage}"
 ##############
 # Undetermined files pattern
 # they are the output of bcl2fastq, and serve as an indicator to see if the demultiplexing has finished
-demux_dir_pattern = "raw_data/demultiplex_data/{demux_dir}"
+demux_dir_pattern = "raw/demultiplex_data/{demux_dir}"
 demux_indicator = demux_dir_pattern + "/indicator.log"
 
 ####################################
@@ -79,7 +79,7 @@ split_reads_read_type = split_reads_root + "read_type_num.txt"
 # post dropseq and QC #
 #######################
 
-qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id}.html"
+qc_sheet = data_root + "/reports/qc_sheet_{sample_id}_{puck_barcode_file_id}.html"
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = "{polyA_adapter_trimmed}.txt.gz"
 barcode_readcounts = complete_data_root + "/out_readcounts" + barcode_readcounts_suffix
