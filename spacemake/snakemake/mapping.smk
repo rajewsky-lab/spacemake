@@ -68,7 +68,7 @@ SAMPLE_MAP_STRATEGY = {}
 
 # used for symlink name to source mapping
 BAM_SYMLINKS = {}
-
+BAM_UNMAPPED_KEEP = set()
 # used for automated mapping index generation
 INDEX_FASTA_LKUP = {}
 #   key: bt2_index_file or star_index_file
@@ -250,6 +250,7 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             mr.species = row.species
             
             mr.out_path = wc_fill(mapped_bam, mr)
+            mr.out_unmapped_path = wc_fill(unmapped_bam, mr)
             
             mr.link_name = mr.input_name
             mr.input_path = wc_fill(linked_bam, mr)
@@ -286,6 +287,10 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             INDEX_FASTA_LKUP[mr.map_index_file] = mr
             #out_files.append(mr.out_path)
 
+        # by convention we keep the last unmapped BAM file in a chain,
+        # the others are temporary
+        BAM_UNMAPPED_KEEP.add(mr.out_unmapped_path)
+
         # process all symlink rules
         for lr in link_rules:
             lr.link_path = linked_bam.format(project_id=index[0], sample_id=index[1], link_name=lr.link_name)
@@ -295,7 +300,7 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             if lr.link_name == final_target:
                 final_log_name = star_log_file.format(project_id=index[0], sample_id=index[1])
                 final_log = star_target_log_file.format(ref_name=lr.ref_name, project_id=index[0], sample_id=index[1])
-                # print("STAR_FINAL_LOG_SYMLINKS preparation", target, src, final_log_name, "->", final_log)
+                # print("STAR_FINAL_LOG_SYMLINKS preparation", final_target, final_log_name, "->", final_log)
                 STAR_FINAL_LOG_SYMLINKS[final_log_name] = final_log
                 
                 out_files.append(lr.link_path)
@@ -427,7 +432,7 @@ rule symlink_final_log:
     params:
         rel_input=lambda wildcards, input: os.path.basename(input[0])
     shell:
-        "ln -s {params.rel_input} {output}"
+        "ln -s logs/{params.rel_input} {output}"
 
 rule map_reads_bowtie2:
     input:
@@ -540,6 +545,11 @@ rule map_reads_STAR:
         "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
         " "
         "; rm -rf {params.tmp_dir}"
+        "; rm {params.star_prefix}Log.out"
+        "; rm {params.star_prefix}Log.std.out"
+        "; rm {params.star_prefix}Log.progress.out"
+        "; mv {params.star_prefix}Log.final.out {log.star}"
+
 
 
 ## Automatic index generation requires

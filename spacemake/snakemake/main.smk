@@ -64,10 +64,6 @@ include: 'variables.py'
 ########################
 # UNIQUE PIPELINE VARS #
 ########################
-reports_dir = complete_data_root + '/reports'
-log_dir = complete_data_root + '/logs'
-stats_dir = complete_data_root + '/stats'
-plots_dir = complete_data_root + '/plots'
 
 project_df = ProjectDF(config['project_df'], ConfigFile.from_yaml('config.yaml'))
 
@@ -125,8 +121,8 @@ wildcard_constraints:
     is_external = '|\.external',
     spot_diameter_um = '[0-9]+',
     spot_distance_um = '[0-9]+|hexagon',
-    data_root_type = 'complete_data|downsampled_data',
-    downsampling_percentage = '\/[0-9]+|',
+    # data_root_type = 'complete_data|downsampled_data',
+    # downsampling_percentage = '\/[0-9]+|',
     puck_barcode_file_id = '[^.]+'
 
 #############
@@ -138,15 +134,15 @@ rule run_analysis:
         unpack(
             lambda wildcards: get_output_files(
                     fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
-                    data_root_type = 'complete_data', downsampling_percentage = '',
+                    # data_root_type = 'complete_data', downsampling_percentage = '',
                     filter_merged=True) 
                 if config['with_fastqc'] else []
         ),
         unpack(get_all_dges),
         # this will also create the clean dge
-        get_output_files(automated_report, data_root_type = 'complete_data',
+        get_output_files(automated_report, # data_root_type = 'complete_data',
             downsampling_percentage='', puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet, data_root_type = 'complete_data',
+        get_output_files(qc_sheet, # data_root_type = 'complete_data',
             downsampling_percentage='', run_on_external=False,
             puck_barcode_file_matching_type='spatial_matching'),
         # finally, everything registered via register_module_output_hook()

@@ -143,8 +143,8 @@ def get_all_dges(wildcards):
                             project_id=project_id,
                             sample_id=sample_id,
                             run_mode=run_mode,
-                            data_root_type="complete_data",
-                            downsampling_percentage="",
+                            # data_root_type="complete_data",
+                            # downsampling_percentage="",
                             puck_barcode_file_id=pbf_id,
                         )["dge"],
                     )
@@ -557,8 +557,8 @@ def get_dge_from_run_mode(
     project_id,
     sample_id,
     run_mode,
-    data_root_type,
-    downsampling_percentage,
+    # data_root_type,
+    # downsampling_percentage,
     puck_barcode_file_id,
 ):
     has_dge = project_df.has_dge(project_id=project_id, sample_id=sample_id)
@@ -648,8 +648,8 @@ def get_dge_from_run_mode(
             spot_distance_um=spot_distance_um,
             n_beads=n_beads,
             is_external=external_wildcard,
-            data_root_type=data_root_type,
-            downsampling_percentage=downsampling_percentage,
+            # data_root_type=data_root_type,
+            # downsampling_percentage=downsampling_percentage,
             puck_barcode_file_id=puck_barcode_file_id,
         )
         for key, pattern in out_files_pattern.items()
@@ -737,8 +737,8 @@ def get_qc_sheet_input_files(wildcards):
             project_id,
             sample_id,
             run_mode,
-            data_root_type=wildcards.data_root_type,
-            downsampling_percentage=wildcards.downsampling_percentage,
+            # data_root_type=wildcards.data_root_type,
+            # downsampling_percentage=wildcards.downsampling_percentage,
             puck_barcode_file_id=wildcards.puck_barcode_file_id,
         )
 
@@ -791,8 +791,8 @@ def get_automated_analysis_dge_input(wildcards):
             project_id=wildcards.project_id,
             sample_id=wildcards.sample_id,
             run_mode=wildcards.run_mode,
-            data_root_type=wildcards.data_root_type,
-            downsampling_percentage=wildcards.downsampling_percentage,
+            # data_root_type=wildcards.data_root_type,
+            # downsampling_percentage=wildcards.downsampling_percentage,
             puck_barcode_file_id=wildcards.puck_barcode_file_id,
         )["dge"]
     ]

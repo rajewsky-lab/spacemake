@@ -6,17 +6,23 @@ project_df = "project_df.csv"
 #################
 # DIRECTORY STR #
 #################
-raw_data_root = project_dir + "/raw_data"
+raw_data_root = project_dir + "/{sample_id}/raw"
 raw_data_illumina = raw_data_root + "/illumina"
 raw_data_illumina_reads = raw_data_illumina + "/reads/raw"
 raw_data_illumina_reads_reversed = raw_data_illumina + "/reads/bc_umi_tagged"
 processed_data_root = project_dir + "/processed_data/{sample_id}"
 processed_data_illumina = processed_data_root + "/illumina"
 
-illumina_root = project_dir + "/processed_data/{sample_id}/illumina"
-complete_data_root = illumina_root + "/complete_data"
-data_root = illumina_root + "/{data_root_type}{downsampling_percentage}"
-downsampled_data_prefix = illumina_root + "/downsampled_data"
+# illumina_root = project_dir + "/processed_data/{sample_id}/illumina"
+illumina_root = project_dir + "/{sample_id}/illumina"
+complete_data_root = illumina_root # + "/complete_data"
+reports_dir = complete_data_root + '/reports'
+log_dir = complete_data_root + '/logs'
+stats_dir = complete_data_root + '/stats'
+plots_dir = complete_data_root + '/plots'
+
+data_root = illumina_root #+ "/{data_root_type}{downsampling_percentage}"
+downsampled_data_prefix = illumina_root #+ "/downsampled_data"
 downsampled_data_root = downsampled_data_prefix + "{downsampling_percentage}"
 
 ##############
@@ -228,7 +234,8 @@ tagged_bam_pattern = (
 # mapped reads
 star_prefix = complete_data_root + "/star.{ref_name}."
 star_log_file = complete_data_root + "/star.Log.final.out"
-star_target_log_file = star_prefix + "Log.final.out"
+star_target_log_file = log_dir + "/{ref_name}.STAR.log"
+# star_target_log_file = complete_data_root + "/log{ref_name}.STAR.log"
 star_tmp_dir = star_prefix + "tmp"
 
 # final bam file
