@@ -7,14 +7,14 @@ project_df = "project_df.csv"
 # DIRECTORY STR #
 #################
 raw_data_root = project_dir + "/{sample_id}/raw"
-raw_data_illumina = raw_data_root + "/illumina"
+raw_data_illumina = raw_data_root #+ "/illumina"
 raw_data_illumina_reads = raw_data_illumina + "/reads/raw"
 raw_data_illumina_reads_reversed = raw_data_illumina + "/reads/bc_umi_tagged"
 processed_data_root = project_dir + "/processed_data/{sample_id}"
 processed_data_illumina = processed_data_root + "/illumina"
 
 # illumina_root = project_dir + "/processed_data/{sample_id}/illumina"
-illumina_root = project_dir + "/{sample_id}/illumina"
+illumina_root = project_dir + "/{sample_id}" #"/illumina"
 complete_data_root = illumina_root # + "/complete_data"
 reports_dir = complete_data_root + '/reports'
 log_dir = complete_data_root + '/logs'
