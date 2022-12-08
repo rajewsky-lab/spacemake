@@ -468,7 +468,9 @@ def parse_args():
         help="a template of comma-separated BAM tags to generate. Variables are replaced with extracted cell barcode, UMI etc.",
     )
     args = parser.parse_args()
-
+    if args.parallel < 1:
+        raise ValueError(f"--parallel {args.parallel} is invalid. Must be >= 1")
+    
     return args
 
 
