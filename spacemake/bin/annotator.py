@@ -624,6 +624,54 @@ def read_BAM_to_queue(
                 break
 
 
+class AnnotationStats:
+    logger = logging.getLogger("spacemake.annotator.stats")
+    def __init__(self, mapq=defaultdict(int), flag=defaultdict(int), gn= defaultdict(int), gf= defaultdict(int), gt= defaultdict(int), **kw):
+        from collections import defaultdict
+        self.mapq = mapq
+        self.flag = flag
+        self.gn = gn
+        self.gf = gf
+        self.gt = gt
+
+        self.last_qname = None
+
+    def count(self, read, gn_val, gf_val, gt_val):
+        # count each read only once even if we have multiple alignments or mate pairs
+        if read.qname != self.last_qname:
+            self.flag[read.flag] += 1
+            self.mapq[read.mapping_quality] += 1
+            self.gf[gf_val] += 1
+            self.gt[gt_val] += 1
+            self.gn[gn_val] += 1
+
+        self.last_qname = read.qname
+
+    def as_dict(self):
+        return dict(
+            mapq=self.mapq,
+            flag=self.flag,
+            gn=self.gn,
+            gf=self.gf,
+            gt=self.gt,
+        )
+
+    def save_stats(self, fname, fields=["mapq", "flag", "gt", "gf", "gn"]):
+        import pandas as pd
+        fname = util.ensure_path(fname)
+
+        data = []
+        for name in fields:
+            d = getattr(self, name)
+            for obs, count in sorted(d.items(), key=lambda x: -x[1]):
+                data.append( (name, obs, count))
+        
+        self.logger.debug(f"writing annotation statistics to '{fname}'")
+        df = pd.DataFrame(data, columns=["field", "value", "count"])
+        df.to_csv(fname, sep='\t', index=None)
+        return df
+
+
 def write_BAM_from_queue(
     bam_out, bam_mode, Qres, Qerr, abort_flag, shared, writer_threads=8
 ):
@@ -640,6 +688,7 @@ def write_BAM_from_queue(
             extracted from the main process
         abort_flag (mp.Value): inter-process flag to indicate abort conditions (i.e sth went wrong elsewhere)
     """
+
     with ExceptionLogging(
         "spacemake.annotator.order_results", Qerr=Qerr, exc_flag=abort_flag
     ) as el:
@@ -652,6 +701,7 @@ def write_BAM_from_queue(
                     "abort_flag was raised before bam_header was received!"
                 )
 
+        stats = AnnotationStats()
         header = pysam.AlignmentHeader.from_dict(shared["bam_header"])
         logger = el.logger
         logger.debug(f"writing to new BAM '{bam_out}'")
@@ -671,6 +721,11 @@ def write_BAM_from_queue(
             read.set_tag("XF", None)
             read.set_tag("gs", None)
             bam.write(read)
+
+            # keep statistics
+            stats.count(read, gn_val, gf_val, gt_val)
+    # share the statistics with the parent process
+    shared.update(stats.as_dict())
 
 
 def annotate_chunks_from_queue(compiled_annotation, Qsam, Qres, Qerr, abort_flag):
@@ -805,6 +860,9 @@ def annotate_BAM_parallel(args):
         # and wait until all output has been generated
         collector.join()
         el.logger.debug("Collector has joined. Merging worker statistics.")
+        if args.stats_out:
+            stats = AnnotationStats(**shared)
+            stats.save_stats(args.stats_out)
 
     if el.exception:
         ret_code = -1
@@ -956,6 +1014,9 @@ def parse_args():
     )
     tag_parser.add_argument(
         "--bam-mode", default="b", help="mode of the output BAM file (default=b)"
+    )
+    tag_parser.add_argument(
+        "--stats-out", default="", help="path for statistics output"
     )
     tag_parser.add_argument(
         "--parallel",

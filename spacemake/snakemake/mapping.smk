@@ -377,7 +377,8 @@ def get_map_params(wc, output, mapper="STAR"):
     if hasattr(mr, "ann_final"):
         ann = mr.ann_final
         if ann and ann.lower().endswith(".gtf"):
-            ann_log = wc_fill(log_dir, wc) + f"/{mapper}.{mr.ref_name}.annotator.log"
+            ann_log = wc_fill(log_dir, wc) + f"/{mr.ref_name}.{mapper}.annotator.log"
+            stats_out = wc_fill(stats_dir, wc) + f"/{mr.ref_name}.{mapper}.annotator.tsv"
             annotation_cmd = (
                 f"| python {bin_dir}/annotator.py "
                 f"  --sample={wc.sample_id} "
@@ -387,6 +388,7 @@ def get_map_params(wc, output, mapper="STAR"):
                 f"  tag "
                 f"  --bam-in=/dev/stdin "
                 f"  --bam-out={mr.out_path} "
+                f"  --stats-out={stats_out} "
                 f"  --compiled={mr.ann_final_compiled} "
                 f"| samtools view --threads=4 -bh --no-PG > {output.bam} "
             )
