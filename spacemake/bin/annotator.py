@@ -37,6 +37,9 @@ def attr_to_dict(attr_str: str) -> dict:
         key, value = match.groups()
         d[key] = value
 
+    if not "gene_name" in d:
+        d["gene_name"] = d.get("gene_id", d.get("transcript_id", "na"))
+
     return d
 
 
@@ -66,6 +69,9 @@ def load_GTF(
     fset = set(features)
     data = []
     for line in src:
+        if line.startswith('#'):
+            continue
+
         parts = line.split("\t")
         if len(parts) != 9:
             # not a GTF/GFF formatted line
