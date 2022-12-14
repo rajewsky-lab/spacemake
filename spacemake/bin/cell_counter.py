@@ -83,7 +83,7 @@ def main(args):
         ref_read_counts = defaultdict(int)
         ref_umi_counts = defaultdict(set)
         logger.info(f"processing {bam_name}")
-        bam = util.quiet_bam_open(bam_name, check_sq=False)
+        bam = util.quiet_bam_open(bam_name, check_sq=False, threads=2)
 
         for aln in util.timed_loop(bam.fetch(until_eof=True), logger, skim=args.skim):
             n_aln += 1

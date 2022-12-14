@@ -37,6 +37,9 @@ def attr_to_dict(attr_str: str) -> dict:
         key, value = match.groups()
         d[key] = value
 
+    if not "gene_name" in d:
+        d["gene_name"] = d.get("gene_id", d.get("transcript_id", "na"))
+
     return d
 
 
@@ -66,6 +69,9 @@ def load_GTF(
     fset = set(features)
     data = []
     for line in src:
+        if line.startswith('#'):
+            continue
+
         parts = line.split("\t")
         if len(parts) != 9:
             # not a GTF/GFF formatted line
@@ -714,12 +720,15 @@ def write_BAM_from_queue(
             # set BAM tags and write
             # (n_read, qname, gn_val, gf_val, gt_val) = annotation
             # assert qname == read.query_name
-            read = pysam.AlignedSegment.fromstring(aln_str, header)
-            read.set_tag("gn", gn_val)
-            read.set_tag("gf", gf_val)
-            read.set_tag("gt", gt_val)
-            read.set_tag("XF", None)
-            read.set_tag("gs", None)
+            # TODO: add the tag values as a string operation, then call fromstring() 
+            # set_tag() is costly and causes congestion in Qres which baloons memory usage of the workers
+            tagged_str = f"{aln_str}\tgn:Z:{gn_val}\tgf:Z:{gf_val}\tgt:Z:{gt_val}"
+            read = pysam.AlignedSegment.fromstring(tagged_str, header)
+            # read.set_tag("gn", gn_val)
+            # read.set_tag("gf", gf_val)
+            # read.set_tag("gt", gt_val)
+            # read.set_tag("XF", None)
+            # read.set_tag("gs", None)
             bam.write(read)
 
             # keep statistics
@@ -784,7 +793,7 @@ def annotate_BAM_parallel(args):
     """
 
     Qsam = mp.Queue(10 * args.parallel)  # BAM records, converted to strings, are place here in chunks
-    Qres = mp.Queue()  # chunks are passed onto this queue, together with tags
+    Qres = mp.Queue(10 * args.parallel)  # chunks are passed onto this queue, together with tags
     Qerr = mp.Queue()  # child-processes can report errors back to the main process here
 
     manager = mp.Manager()

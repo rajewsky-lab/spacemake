@@ -80,19 +80,77 @@ rule overview:
         "  --out-tsv {output.tsv} "
         "  --out-pdf {output.pdf}"
 
+dge_legacy_params = "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads_{puck_barcode_file_id}{is_external}"
+# dge_type, cleaned -> out
+# polyA_adapter-trimmed -> out
+# mm_included -> stays
+# {n_beads}_beads_ -> name the subsetting strategy -> top10k, top100k, spatial
+# puck_barcode_file -> essential (tiles)
+
+dge_metrics_plot = plots_dir + '/{sample_id}' + dge_legacy_params + '.{ref}.metrics.pdf'
+dge_knee_plot = plots_dir + '/{sample_id}' + dge_legacy_params + '.{ref}.knee.pdf'
 
 rule dge_stats:
     input: dge_out_h5ad
-    output:
+    output: 
+        metrics=dge_metrics_plot,
+        knee=dge_knee_plot
+    log: log_dir + '/{sample_id}' + dge_legacy_params + '.{ref}.dge_stats_plot.log'
+    shell:
+        "python {bin_dir}/dge_stats_plot.py "
+        "  --log-level={log_level} "
+        "  --log-file={log} "
+        "  --debug={log_debug} "
+        "  --sample={wildcards.sample_id} "
+        "  --reference={wildcards.ref} "
+        "  --out-metrics={output.metrics} "
+        "  --out-knee={output.knee} "
+        "  {input}"
 
+barcode_ntfreq_plot = plots_dir + '/{sample_id}.barcode_nt_freq.pdf'
 
+rule barcode_nt_freq_profile:
+    input: tagged_bam
+    output: barcode_ntfreq_plot
+    shell:
+        "python {bin_dir}/read1_stats.py "
+        "  --log-level={log_level} "
+        "  --log-file={log} "
+        "  --debug={log_debug} "
+        "  --sample={wildcards.sample_id} "
+        "  --out-pdf={output} "
+        "  {input}"
 
-def get_overview_reports():
+def get_plots():
     out_files = []
     for (project_id, sample_id), row in project_df.df.iterrows():
+        # barcode & UMI freq stats
+        out_files.append(wc_fill(barcode_ntfreq_plot, dotdict(project_id=project_id, sample_id=sample_id)))
+
+        # pre-processing and mapping overview
         out_files.append(wc_fill(overview_tsv, dotdict(project_id=project_id, sample_id=sample_id)))
         out_files.append(wc_fill(overview_pdf, dotdict(project_id=project_id, sample_id=sample_id)))
 
+        # dge stats
+        context = dotdict(
+            project_id=project_id,
+            sample_id=sample_id,
+            dge_type='.all',
+            dge_cleaned='',
+            polyA_adapter_trimmed='.polyA_adapter_trimmed',
+            mm_included='',
+            n_beads=100000,
+            puck_barcode_file_id='no_spatial_data',
+            is_external='',
+            ref='{ref}'
+        )
+        out_files.append(
+            expand(dge_metrics_plot.format(**context), ref=REF_NAMES[(project_id, sample_id)])
+        )
+        out_files.append(
+            expand(dge_metrics_plot.format(**context), ref=REF_NAMES[(project_id, sample_id)])
+        )
     return out_files
 
-register_module_output_hook(get_overview_reports, "reports.smk")
+
+register_module_output_hook(get_plots, "reports.smk")

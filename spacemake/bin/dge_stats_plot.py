@@ -49,7 +49,7 @@ def cell_hist_plot(ax, df, key="n_reads", n_bins=100, xlog=True, ylog=True, **kw
         axis.set_major_formatter(formatter)
 
 
-def loglog_knee_plot(ax, df, key="n_UMI"):
+def loglog_knee_plot(ax, df, key="n_counts"):
     # UMI = np.sort(np.array(df[key].values, dtype=int))[::-1]
     UMI = np.array(df[key].values, dtype=int)
     if not len(UMI):
@@ -79,7 +79,7 @@ def loglog_knee_plot(ax, df, key="n_UMI"):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = util.make_minimal_parser("spacemake.bin.dge_stats_plot")
     parser.add_argument("dge", help="path to h5ad AnnData file")
     parser.add_argument(
         "--reference",
@@ -112,11 +112,11 @@ def main(args):
 
     sc.pp.filter_cells(adata, min_counts=1)
     # re-generating the metrics
-    adata.obs["n_exonic_read"] = adata.layers["exonic_read"].sum(axis=1)[:, 0]
-    adata.obs["n_exonic_UMI"] = adata.X.sum(axis=1)[:, 0]
+    adata.obs["n_exonic_reads"] = adata.layers["exonic_reads"].sum(axis=1)[:, 0]
+    adata.obs["n_exonic_counts"] = adata.X.sum(axis=1)[:, 0]
     adata.obs["n_genes"] = (adata.X > 0).sum(axis=1)[:, 0]
     adata.obs["reads_per_counts"] = (
-        adata.obs["n_exonic_read"] / adata.obs["n_exonic_UMI"]
+        adata.obs["n_exonic_reads"] / adata.obs["n_exonic_counts"]
     )
 
     # print(adata)
@@ -127,8 +127,8 @@ def main(args):
     # cell metrics plot
     fig, axes = plt.subplots(2, 2, figsize=(8, 5))
     axes = np.array(axes).ravel()
-    cell_hist_plot(axes[0], adata.obs, key="n_exonic_read")
-    cell_hist_plot(axes[1], adata.obs, key="n_exonic_UMI")
+    cell_hist_plot(axes[0], adata.obs, key="n_exonic_reads")
+    cell_hist_plot(axes[1], adata.obs, key="n_exonic_counts")
     cell_hist_plot(axes[2], adata.obs, key="n_genes")
     cell_hist_plot(axes[3], adata.obs, key="reads_per_counts", xlog=False)
     fig.tight_layout()
@@ -137,7 +137,7 @@ def main(args):
     # loglog version of knee plot
     fig, ax = plt.subplots(figsize=(6, 5))
     fig.suptitle(sample_name)
-    loglog_knee_plot(ax, adata.obs, key="n_exonic_UMI")
+    loglog_knee_plot(ax, adata.obs, key="n_exonic_counts")
     ax.grid(axis="y")
     fig.tight_layout()
     fig.savefig(util.ensure_path(args.out_knee))
@@ -146,6 +146,6 @@ def main(args):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     args = parse_args()
+    util.setup_logging(args)
     adata = main(args)

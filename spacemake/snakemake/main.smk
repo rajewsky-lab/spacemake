@@ -198,7 +198,7 @@ rule get_barcode_readcounts:
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{cell}'],
     shell:
-        "python {spacemake_dir}/cell_counter.py "
+        "python {bin_dir}/cell_counter.py "
         "  --sample={wildcards.sample_id} "
         "  --log-level={log_level} "
         "  --log-file={log} "

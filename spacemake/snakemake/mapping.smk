@@ -62,6 +62,7 @@ MAP_RULES_LKUP = {}
 from collections import defaultdict
 # these support lookup by (project_id, sample_id)
 ANNOTATED_BAMS = defaultdict(set)
+REF_NAMES = defaultdict(set)
 ALL_BAMS = defaultdict(set)
 
 SAMPLE_MAP_STRATEGY = {}
@@ -266,6 +267,7 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
                 # keep track of all annotated BAM files we are going to create
                 # for subsequent counting into DGE matrices/h5ad
                 ANNOTATED_BAMS[(index[0], index[1])].add(mr.out_path)
+                REF_NAMES[(index[0], index[1])].add(mr.ref_name)
             else:
                 mr.ann_final = []
 
