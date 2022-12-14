@@ -516,7 +516,7 @@ rule map_reads_STAR:
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
     log:
         star=star_target_log_file,
-        hdr=star_target_log_file.replace(".log", "splice_bam_header.log")
+        hdr=star_target_log_file.replace(".log", ".splice_bam_header.log")
     params:
         auto=get_map_params,
         # annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
