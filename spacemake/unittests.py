@@ -66,6 +66,43 @@ test_project_data = [
         f"{base_dir}/test_data/reads_chr22_R2.fastq.gz",
         "--map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final' --barcode_flavor=nextflex",
     ),
+    (
+        "test_hsa",
+        "tile",
+        "tile_1",
+        f"{base_dir}/test_data/reads_chr22_R1.fastq.gz",
+        f"{base_dir}/test_data/reads_chr22_R2.fastq.gz",
+        (
+            f" --map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final'"
+            f" --puck_barcode_file {base_dir}/test_data/tile_1.txt"
+            " --puck test_puck --run_mode spatial_rm"
+        )
+    ),
+    (
+        "test_hsa",
+        "tile",
+        "tile_2",
+        f"{base_dir}/test_data/reads_chr22_R1.fastq.gz",
+        f"{base_dir}/test_data/reads_chr22_R2.fastq.gz",
+        (
+            f" --map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final'"
+            f" --puck_barcode_file {base_dir}/test_data/tile_2.txt"
+            " --puck test_puck --run_mode spatial_rm"
+        )
+    ),
+    (
+        "test_hsa",
+        "tile",
+        "tile_both",
+        f"{base_dir}/test_data/reads_chr22_R1.fastq.gz",
+        f"{base_dir}/test_data/reads_chr22_R2.fastq.gz",
+        (
+            f" --map_strategy='bowtie2:rRNA->bowtie2:miRNA->STAR:genome:final'"
+            f" --puck_barcode_file {base_dir}/test_data/tile_1.txt {base_dir}/test_data/tile_2.txt "
+            " --puck test_puck --run_mode spatial_rm"
+        )
+    ),
+
 ]
 
 
@@ -306,7 +343,22 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             y2_str = yaml.dump(y2)
             self.assertEqual(y1_str, y2_str)
 
-    def test_5_add_samples(self):
+    def test_5_add_puck(self):
+        test_puck = (
+            "--name=test_puck "
+            "--width_um=2 "
+            "--spot_diameter_um=0.5 "
+        )
+        self.run_spacemake(f"{spacemake_cmd} config add_puck " + test_puck)
+
+    def test_6_add_runmode(self):
+        run_mode = (
+            "--name=spatial_rm "
+            "--umi_cutoff=1 "
+        )
+        self.run_spacemake(f"{spacemake_cmd} config add_run_mode " + run_mode)
+
+    def test_90_add_samples(self):
         for species, pid, sid, r1, r2, options in test_project_data:
             df = self.add_sample(species, pid, sid, r1, r2, options)
             self.assertTrue(os.access("project_df.csv", os.R_OK))
@@ -325,7 +377,7 @@ class SpaceMakeCmdlineTests(unittest.TestCase):
             # expect unchanged project_df
             self.assertTrue(df.equals(df2))
 
-    def test_6_update_sample(self):
+    def test_91_update_sample(self):
         self.run_spacemake(
             f"{spacemake_cmd} projects update_sample "
             "--project_id=test --sample_id=test_01 "
