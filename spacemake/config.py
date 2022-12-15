@@ -432,7 +432,7 @@ class ConfigFile:
         self.variables["species"][name] = species_refs
         return species_refs
 
-    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None):
+    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None, **kw):
         assert_file(barcodes, default_value=None, extension="all")
 
         puck = {}
