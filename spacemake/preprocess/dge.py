@@ -220,7 +220,6 @@ def parse_barcode_file(barcode_file):
     import pandas as pd
 
     bc = pd.read_csv(barcode_file, sep="[,|\t]", engine="python")
-
     # rename columns
     bc = (
         bc.rename(
