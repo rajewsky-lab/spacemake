@@ -40,3 +40,4 @@ dependencies:
         - opencv-python
         - cutadapt
         - ncls
+        - setproctitle

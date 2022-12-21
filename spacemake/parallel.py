@@ -173,13 +173,17 @@ class ExceptionLogging:
     Very handy for wrapping the main function in a sub-process!
     """
 
-    def __init__(self, name, Qerr=None, exc_flag=None):
+    def __init__(self, name, Qerr=None, exc_flag=None, set_proc_title=True):
         # print('__init__ called')
         self.Qerr = Qerr
         self.exc_flag = exc_flag
         self.name = name
-        self.logger = logging.getLogger(name)
+        self.logger = logging.getLogger(name.split()[0])
         self.exception = None
+
+        if set_proc_title:
+            import setproctitle
+            setproctitle.setproctitle(name)
 
     def __enter__(self):
         self.t0 = time.time()
