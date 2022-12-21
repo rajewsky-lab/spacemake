@@ -40,7 +40,7 @@ def dispatch_fastq_to_queue(Qfq, args, Qerr, abort_flag):
             yield id1, seq1, id2, seq2, qual2
 
     with ExceptionLogging(
-        "spacemake.fastq_to_uBAM.dispatcher", Qerr=Qerr, exc_flag=abort_flag
+        f"spacemake.fastq_to_uBAM.dispatcher {args.sample}", Qerr=Qerr, exc_flag=abort_flag
     ) as el:
         for chunk in chunkify(read_source(args), n_chunk=args.chunk_size):
             logging.debug(f"placing {chunk[0]} {len(chunk[1])} in queue")
@@ -163,7 +163,7 @@ class Output:
 
 def collect_from_queue(res_queue, args, Qerr, abort_flag):
     with ExceptionLogging(
-        "spacemake.fastq_to_uBAM.collector", Qerr=Qerr, exc_flag=abort_flag
+        f"spacemake.fastq_to_uBAM.collector {args.sample}", Qerr=Qerr, exc_flag=abort_flag
     ) as el:
         out = Output(args)
 
@@ -191,7 +191,7 @@ def parallel_worker(Qfq, Qres, args, Qerr, abort_flag, stat_lists):
                 yield (name1, seq1, name2, seq2, qual2)
 
     with ExceptionLogging(
-        "spacemake.fastq_to_uBAM.worker", Qerr=Qerr, exc_flag=abort_flag
+        f"spacemake.fastq_to_uBAM.worker {args.sample}", Qerr=Qerr, exc_flag=abort_flag
     ) as el:
         el.logger.debug(
             f"process_dropseq starting up with Qfq={Qfq}, Qres={Qres} and args={args}"
