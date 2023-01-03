@@ -88,21 +88,24 @@ def main(args):
     logger.info("sub-sampling and unique sequence counting")
 
     n_min = 10000
+    data = []
     if N_reads >= 5 * n_min:
         n_subsamples = np.linspace(n_min, N_reads, 20)
-        data = []
         for n in n_subsamples:
             n, n_UMI = subsample(keys, n)
             logger.debug(
                 f"sub-sampling {args.sample}\t{tagval}\t{100.0 * n/N_reads:.2f} %\t{n}\t{n_UMI}\t{n/n_UMI:.2f}"
             )
             data.append((tagval, n, n_UMI, n / n_UMI))
+    else:
+        n, n_UMI = subsample(keys, N_reads)
+        data.append((tagval, n, n_UMI, n / n_UMI))
 
-        df = pd.DataFrame(data, columns=["tagval", "n_reads", "n_umis", "pcr_factor"])
-        df["sample"] = args.sample
-        df["bamname"] = os.path.basename(args.bam).replace(".bam", "")
-        df.to_csv(util.ensure_path(args.out_tsv), sep="\t")
-        return df
+    df = pd.DataFrame(data, columns=["tagval", "n_reads", "n_umis", "pcr_factor"])
+    df["sample"] = args.sample
+    df["bamname"] = os.path.basename(args.bam).replace(".bam", "")
+    df.to_csv(util.ensure_path(args.out_tsv), sep="\t")
+    return df
 
 
 if __name__ == "__main__":
