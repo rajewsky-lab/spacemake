@@ -75,7 +75,7 @@ rule tag_reads_bc_umi:
         ## TODO: make R1 optional for bulk samples
         # R1 = raw_reads_mate_1,
         # R2 = raw_reads_mate_2
-        unpack(get_linked_reads)
+        ancient(unpack(get_linked_reads))
     params:
         bc_params = get_bc_preprocess_settings,
         read1 = lambda wc: get_linked_reads(wc).get("R1", None),
