@@ -27,6 +27,7 @@ rule complexity_sampling:
     """
     input: complete_data_root + "/{bamname}.bam"
     output: stats_dir + "/{bamname}.complexity.tsv"
+    log: log_dir + "/{bamname}.complexity.log"
     shell:
         "python {bin_dir}/complexity.py {input} "
         "  --sample={wildcards.sample_id} "
