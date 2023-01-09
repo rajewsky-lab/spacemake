@@ -118,9 +118,10 @@ def main(args):
     chunks.append(chunk[:chunk_size - chunk_free])
     print(f"concatenating {len(chunks)} chunks")
 
-    logger.debug("finished loading all reads. Concatenating {len(chunks)} chunks.")
+    logger.debug(f"finished loading all reads. Concatenating {len(chunks)} chunks.")
     keys = np.concatenate(chunks)
-    # keys = np.array(keys)
+    chunks = None # free some memory
+
     logger.debug("sorting...")
     keys.sort()
     N_reads = len(keys)
