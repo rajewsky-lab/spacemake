@@ -48,10 +48,15 @@ def subsample(reads, n):
     n_reads = 0
     last = None
 
-    rnd = np.random.random(size=len(reads))
-    mask = rnd <= f
+    # rnd = np.random.random(size=len(reads))
+    # mask = rnd <= f
+    import random
+    for r in reads:
+        rnd = random.random()
+        if rnd > f:
+            # skip the read
+            continue
 
-    for r in reads[mask]:
         n_reads += 1
         if r != last:
             n_uniq += 1
@@ -73,19 +78,29 @@ def main(args):
             continue
 
         last_qname = read.query_name
+        # tags = dict(read.get_tags())
+        # cb = tags['CB']
+        # umi = tags['MI']
+        # # Above code has less than half the reads/second! Use get_tag() instead
+        # gn = tags.get('gn', 'n/a') # this might lead to overestimates of complexity. Let's ignore gene, hoping that UMI space is large enough
         cb = read.get_tag("CB")
         umi = read.get_tag("MI")
+        key = cb + umi
+        keys.append(hash(key)) # substitute a 64bit hash for the real strings. 
+        # + saves huge amounts of RAM 
+        # + makes sorting faster. 
+        # - chance of hash collisions. But should be absolutely negligible as 
+        #   long as 2^64 is >> number of sequenced molecules 
+        #   (which should be true for the foreseeable future)
 
-        keys.append(cb + umi)
-
-    logger.info("finished loading all reads. Sorting")
+    logger.debug("finished loading all reads. Sorting")
     keys = np.array(keys)
     keys.sort()
     N_reads = len(keys)
 
     tagval = "all"
 
-    logger.info("sub-sampling and unique sequence counting")
+    logger.debug("sub-sampling and unique sequence counting")
 
     n_min = 10000
     data = []
@@ -93,7 +108,7 @@ def main(args):
         n_subsamples = np.linspace(n_min, N_reads, 20)
         for n in n_subsamples:
             n, n_UMI = subsample(keys, n)
-            logger.debug(
+            logger.info(
                 f"sub-sampling {args.sample}\t{tagval}\t{100.0 * n/N_reads:.2f} %\t{n}\t{n_UMI}\t{n/n_UMI:.2f}"
             )
             data.append((tagval, n, n_UMI, n / n_UMI))
