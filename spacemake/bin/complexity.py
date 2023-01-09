@@ -31,6 +31,12 @@ def parse_args():
         default="complexity.tsv",
     )
     parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=10000000,
+        help="number of reads to load at one time (default=10M). This saves a lot of RAM."
+    )
+    parser.add_argument(
         "--filter-reads",
         default="",
         help="name of a function to be used to further stratify reads (default=off)",
@@ -69,15 +75,27 @@ def main(args):
     logger = util.setup_logging(args, "spacemake.scripts.complexity")
 
     logger.info(f"processing '{args.bam}'")
-    sam = pysam.AlignmentFile(args.bam, "rb", check_sq=False, threads=2)
+    sam = util.quiet_bam_open(args.bam, "rb", check_sq=False, threads=2)
 
     last_qname = None
     keys = []
+
+    chunk_size = args.chunk_size
+
+    chunks = []
+    chunk = np.empty(chunk_size, dtype=np.uint64)
+    chunk_free = chunk_size
+
     for read in util.timed_loop(sam.fetch(until_eof=True), logger, skim=args.skim):
         if read.query_name == last_qname:
             continue
 
         last_qname = read.query_name
+        if chunk_free <= 0:
+            chunks.append(chunk)
+            chunk = np.empty(chunk_size, dtype=np.uint64)
+            chunk_free = chunk_size
+
         # tags = dict(read.get_tags())
         # cb = tags['CB']
         # umi = tags['MI']
@@ -86,15 +104,24 @@ def main(args):
         cb = read.get_tag("CB")
         umi = read.get_tag("MI")
         key = cb + umi
-        keys.append(hash(key)) # substitute a 64bit hash for the real strings. 
+
+        chunk[chunk_size - chunk_free] = hash(key)
+        chunk_free -= 1
+
+        # keys.append(hash(key)) # substitute a 64bit hash for the real strings. 
         # + saves huge amounts of RAM 
         # + makes sorting faster. 
         # - chance of hash collisions. But should be absolutely negligible as 
         #   long as 2^64 is >> number of sequenced molecules 
         #   (which should be true for the foreseeable future)
 
-    logger.debug("finished loading all reads. Sorting")
-    keys = np.array(keys)
+    chunks.append(chunk[:chunk_size - chunk_free])
+    print(f"concatenating {len(chunks)} chunks")
+
+    logger.debug("finished loading all reads. Concatenating {len(chunks)} chunks.")
+    keys = np.concatenate(chunks)
+    # keys = np.array(keys)
+    logger.debug("sorting...")
     keys.sort()
     N_reads = len(keys)
 
