@@ -405,6 +405,9 @@ def setup_logging(
     FORMAT="%(asctime)-20s\t{sample:30s}\t%(name)-50s\t%(levelname)s\t%(message)s",
 ):
     sample = getattr(args, "sample", "na")
+    import setproctitle
+    setproctitle.setproctitle(f"{name} {sample}")
+
     FORMAT = FORMAT.format(sample=sample)
 
     log_level = getattr(args, "log_level", "INFO")
