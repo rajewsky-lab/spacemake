@@ -348,7 +348,7 @@ def create_meshed_adata(
     # visium spot center and other beads
     max_distance_px = (spot_diameter_um - bead_diameter_um) / um_by_px / 2
 
-    def _create_optimized_hex_mesh_properties(mesh):
+    def _create_optimized_hex_mesh_properties(mesh_px):
         _y_values = np.unique(mesh_px[:, 1])
         _x_values = np.unique(mesh_px[:, 0])
         grid_x = len(mesh_px[mesh_px[:, 1] == _y_values[1]])
