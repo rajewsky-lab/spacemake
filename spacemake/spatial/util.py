@@ -280,7 +280,6 @@ def create_meshed_adata(adata,
         optimized_binning=True
     ):
     import pandas as pd
-    import scanpy as sc
     import numpy as np
     import anndata
 
