@@ -279,7 +279,7 @@ def aggregate_adata_by_indices(
     import numpy as np
     import anndata
 
-    from scipy.sparse import csr_matrix, csc_matrix, vstack
+    from scipy.sparse import csr_matrix, csc_matrix, vstack, dok_matrix
 
     joined_C = adata.X[idx_to_aggregate]
 
@@ -335,6 +335,19 @@ def aggregate_adata_by_indices(
     )
 
     aggregated_adata.obs["n_joined"] = [len(x) for x in ix_array]
+
+    joined_dict = {i: x for i, x in enumerate(ix_array)}
+
+    indices_joined_spatial_units = dok_matrix(
+        (len(joined_dict), len(adata.obs_names)), dtype=np.int8
+    )
+
+    for obs_name_aggregate, obs_name_to_aggregate in joined_dict.items():
+        indices_joined_spatial_units[obs_name_aggregate, obs_name_to_aggregate] = 1
+
+    indices_joined_spatial_units = indices_joined_spatial_units.tocsr()
+    aggregated_adata.uns["spatial_units_obs_names"] = np.array(adata.obs_names)
+    aggregated_adata.uns["indices_joined_spatial_units"] = indices_joined_spatial_units
 
     from statistics import mean
 
