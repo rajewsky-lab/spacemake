@@ -272,7 +272,9 @@ def binning_hexagon(x, y, gridsize, extent=None, last_row=False):
     return coordinates, accumulated
 
 
-def aggregate_adata_by_indices(adata, idx_to_aggregate, idx_aggregated, coordinates_aggregated):
+def aggregate_adata_by_indices(
+    adata, idx_to_aggregate, idx_aggregated, coordinates_aggregated
+):
     import pandas as pd
     import numpy as np
     import anndata
@@ -300,7 +302,10 @@ def aggregate_adata_by_indices(adata, idx_to_aggregate, idx_aggregated, coordina
     aggregated_adata = anndata.AnnData(
         csc_matrix(joined_C_sumed),
         obs=pd.DataFrame(
-            {"x_pos": coordinates_aggregated[:, 0], "y_pos": coordinates_aggregated[:, 1]}
+            {
+                "x_pos": coordinates_aggregated[:, 0],
+                "y_pos": coordinates_aggregated[:, 1],
+            }
         ),
         var=adata.var,
     )
@@ -506,6 +511,11 @@ def create_meshed_adata(
 
     joined_coordinates = mesh_px[np.unique(new_ilocs)]
 
-    meshed_adata = aggregate_adata_by_indices(adata, idx_to_aggregate=original_ilocs, idx_aggregated=new_ilocs, coordinates_aggregated=joined_coordinates)
+    meshed_adata = aggregate_adata_by_indices(
+        adata,
+        idx_to_aggregate=original_ilocs,
+        idx_aggregated=new_ilocs,
+        coordinates_aggregated=joined_coordinates,
+    )
 
     return meshed_adata
