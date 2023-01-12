@@ -406,7 +406,8 @@ def setup_logging(
 ):
     sample = getattr(args, "sample", "na")
     import setproctitle
-    setproctitle.setproctitle(f"{name} {sample}")
+    if name != "spacemake.main":
+        setproctitle.setproctitle(f"{name} {sample}")
 
     FORMAT = FORMAT.format(sample=sample)
 
