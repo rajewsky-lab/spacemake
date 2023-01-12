@@ -9,6 +9,7 @@ import logging
 from time import time, sleep
 from collections import defaultdict
 from dataclasses import dataclass
+from ctypes import c_int
 import typing
 import pysam
 import multiprocessing as mp
@@ -94,9 +95,9 @@ def load_GTF(
     def bitflags(columns):
         strand, feature = columns
         flag = feat2bit[feature]
-        # if strand == "-":
-        #     # features on minus strand use the high-nibble of the bit-flags
-        #     flag = flag << 4
+        if strand == "-":
+            # features on minus strand use the high-nibble of the bit-flags
+            flag = flag << 4
 
         return flag
 
@@ -121,7 +122,12 @@ feat2bit = {
 #   f_plus = mask & 0b1111
 #   f_minus = mask >> 4
 
-default_map = {
+def make_lookup(d):
+    return np.array(
+        [d.get(i, "?") for i in np.arange(256)], dtype=object
+    )
+
+default_lookup = make_lookup({
     # CDS UTR exon transcript-> gm, gf tag values
     0b1011: "C",  # CDS exon
     # This should not arise! Unless, isoforms-are merged
@@ -132,10 +138,17 @@ default_map = {
     0b0101: "I",
     0b0001: "I",
     0b0000: "-",  # intergenic
-}
-default_lookup = np.array(
-    [default_map.get(i, "?") for i in np.arange(256)], dtype=object
-)
+    0b10110000: "c",  # CDS exon
+    0b11110000: "cu",  # CDS and UTR exon
+    0b01110000: "u",  # UTR exon
+    0b00110000: "n",  # exon of a non-coding transcript
+    0b10010000: "i",  # intron
+    0b01010000: "i",
+    0b00010000: "i",
+    0b00000000: "-",  # intergenic
+})
+default_strand_translation = str.maketrans("CUNIcuni", "cuniCUNI", "")
+
 abbreviations = {
     "protein_coding": "c",
     "processed_transcript": "t",
@@ -154,7 +167,6 @@ class IsoformOverlap:
     transcript_type: str = "no_type"
     flags: int = 0
 
-
 def overlaps_to_tags(isoform_overlaps: dict, flags_lookup=default_lookup) -> tuple:
     """_summary_
     Take a dictionary of transcript_id -> IsoformOverlap as input and populate annotation tuples
@@ -164,11 +176,33 @@ def overlaps_to_tags(isoform_overlaps: dict, flags_lookup=default_lookup) -> tup
         flags_lookup (_type_, optional): _description_. Defaults to default_lookup.
 
     Returns:
-        tuple: gn, gf, gt (each is a list of strings n: gene names f: function t: transcript type)
+        
+        tuple: (gn, gf, gt), overlaps
+            (gn, gf, gt): 
+                a tuple with tag values encoding the overlapping
+                GTF features. Each is a list of strings :
+
+                    gn: gene names 
+                    gf: function
+                    gt: transcript type
+
+                    gf uses upper case letters for features on the '+' strand and
+                    lower case letters for features on the '-' strand.
+
+                    For a query against the minus strand, upper and lower case
+                    need to be swapped in order to get features that align in the 
+                    "sense" direction in upper case and "antisense" features in lower-case.
+
+                    For a strand-agnostic query, .upper() is called.
+            'overlaps':
+                A copy of the input to this function. Used to allow correct merging of different 
+                annotation combinations in compiled GenomeAnnotation instances.
+        
     """
     tags = set()
     for transcript_id, info in isoform_overlaps.items():
-        _gf = flags_lookup[info.flags]
+        _gf = default_lookup[info.flags]
+
         # print(f">> {transcript_id} => {info.flags:04b} => {_gm} {_gf}")
         tags.add((info.gene_name, _gf, info.transcript_type))
 
@@ -180,7 +214,7 @@ def overlaps_to_tags(isoform_overlaps: dict, flags_lookup=default_lookup) -> tup
         gf.append(f)
         gt.append(t)
 
-    return gn, gf, gt
+    return (gn, gf, gt)
 
 
 # First implementation: uses the GTF features directly. Not very optimized. Mainly used to
@@ -217,7 +251,7 @@ class GTFClassifier:
             ["transcript_id", "transcript_type", "gene_name", "feature_flag"]
         ].values
 
-    def process(self, ids: typing.Iterable[int]) -> tuple:
+    def process(self, ids: typing.Iterable[c_int]) -> dict:
         """
         Gather annotation records identified by DataFrame (array) indices
         by isoform: gene_name, gene_type and overlap-flags
@@ -226,22 +260,32 @@ class GTFClassifier:
             ids (Iterable of ints): indices into the array-converted DataFrame of GTF records
 
         Returns:
-            (gn, gm, gf, gt): a tuple with tag values encoding the overlapping GTF features
+            output of overlaps_to_tags
         """
         # print(f">>> process({ids})")
         isoform_overlaps = defaultdict(IsoformOverlap)
         # iterate over the overlapping GTF features group by transcript_id as we go
-        i: int
+        i: c_int
         for i in ids:
-            # print(f"df entry for id={i}: {self.df_core[i]}")
             (transcript_id, transcript_type, gene_name, flag) = self.df_core[i]
             info = isoform_overlaps[transcript_id]
             info.gene_name = gene_name
             info.transcript_type = transcript_type
-            info.flags |= flag
+            info.flags |= flag 
+            # print(f"df entry for id={i}: {self.df_core[i]} flags={info.flags:08b}")
 
         return overlaps_to_tags(isoform_overlaps)  # isoform_overlaps
 
+    # def preprocess(self, ids: typing.Iterable[c_int]) -> tuple:
+    #     """
+    #     pre-process a list of features into full annotation for either strand, 
+    #     as well as intermediate data objects that allow correct merging.
+    #     These results will be stored when annotation is "compiled" in order to offer
+    #     much faster lookups.
+
+    #     Args:
+    #         idx (_type_): _description_
+    #     """
 
 ## Second iteration. Here, we load already pre-compiled, unique combinations of original GTF
 # features as they occur in the genome. The beauty is that each of these "compiled" features now
@@ -275,44 +319,44 @@ class CompiledClassifier:
     def joiner(self, cidx):
         # we want to report each combination only once
         # Note: This code path is executed rarely
+
         seen = set()
-        gf = []
         gn = []
+        gf = []
         gt = []
-        for i in tuple(cidx):
-            cid = self.cid_table[i]
-            for ann in zip(*self.classifications[cid]):
+        for idx in tuple(cidx):
+            ann_tags = self.classifications[self.cid_table[idx]]
+            for ann in zip(*ann_tags):
                 if not ann in seen:
                     seen.add(ann)
-                    gf.append(ann[0])
-                    gn.append(ann[1])
+                    gn.append(ann[0])
+                    gf.append(ann[1])
                     gt.append(ann[2])
 
-        return gf, gn, gt
+        return (gn, gf, gt)
 
     def process(self, cidx):
         # fast path
         if len(cidx) == 1:
             # fast path
-            idx = tuple(cidx)[0]
+            idx = cidx.pop()
             ann = self.classifications[self.cid_table[idx]]
-            # print(f"fast path: ann={ann}")
             return ann
 
         return self.joiner(cidx)
 
 
 ## Helper functions for working with NCLS
-def query(nc, x0, x1):
+def query_ncls(nc, x0, x1):
     """
     report only the target_ids from the overlapping
     (start, end, id) tuples returned by NCLS.find_overlap().
     format is frozenset bc that can be hashed and used as a key.
     TODO: directly hook into NCLSIterator functionality to get rid of this overhead
     """
-    # return frozenset((o[2] for o in nc.find_overlap(x0, x1)))
     res = [o[2] for o in nc.find_overlap(x0, x1)]
-    # print(f"query ({x0} - {x1}) -> {res}")
+
+    # print(f"query ({x0} - {x1}) strand ={strand} -> {res}")
     return res
 
 
@@ -350,7 +394,7 @@ def decompose(nc):
 
     # since we sorted, the first must be a start position
     last_pos = breakpoints[0]
-    last_key = frozenset(query(nc, last_pos, last_pos + 1))
+    last_key = frozenset(query_ncls(nc, last_pos, last_pos + 1))
     for bp in breakpoints[1:]:
         # depending on wether this is another start or
         # end position, the transition point can be off by one nt
@@ -360,7 +404,7 @@ def decompose(nc):
             if bp + x <= last_pos:
                 continue
 
-            key = frozenset(query(nc, bp + x, bp + x + 1))
+            key = frozenset(query_ncls(nc, bp + x, bp + x + 1))
             if key != last_key:
                 if len(last_key):
                     # ensure we do not yield the empty set
@@ -383,7 +427,7 @@ class GenomeAnnotation:
 
     logger = logging.getLogger("spacemake.annotator.GenomeAnnotation")
 
-    def __init__(self, df, processor, is_compiled=False):
+    def __init__(self, df, classifier, is_compiled=False):
         """
         [summary]
 
@@ -395,30 +439,29 @@ class GenomeAnnotation:
         :type processor: function that takes frozenset(indices) as sole argument
         """
         # self.df = df
-        self.processor = processor
+        self.classifier = classifier
 
         # find all unique combinations of chrom + strand
-        strands = df[["chrom", "strand"]].drop_duplicates().values
-        self.strand_keys = []
-        self.strand_map = {}
-        self.empty = []  # frozenset([])
+        # strands = df["chrom"].drop_duplicates().values
+        self.chroms = []
+        self.chrom_ncls_map = {}
+        self.empty = []
+        # df['sign'] = df['strand'].apply(lambda x: -1 if x == '-' else +1)
 
         t0 = time()
-        for chrom, strand in df[["chrom", "strand"]].drop_duplicates().values:
-            strand_key = chrom + strand
-
-            d = df.query(f"chrom == '{chrom}' and strand == '{strand}'")
+        for chrom in df["chrom"].drop_duplicates().values:
+            d = df.query(f"chrom == '{chrom}'")
             nested_list = ncls.NCLS(d["start"], d["end"], d.index)
             self.logger.debug(
-                f"constructed nested_list for {strand_key} with {len(d)} features"
+                f"constructed nested_list for {chrom} with {len(d)} features"
             )
 
-            self.strand_map[strand_key] = nested_list
-            self.strand_keys.append(strand_key)
+            self.chrom_ncls_map[chrom] = nested_list
+            self.chroms.append(chrom)
 
         dt = time() - t0
         self.logger.debug(
-            f"constructed nested lists of {len(df)} features on {len(self.strand_keys)} strands in {dt:.3f}s"
+            f"constructed nested lists of {len(df)} features on {len(self.chroms)} strands in {dt:.3f}s"
         )
         self.is_compiled = is_compiled
 
@@ -436,8 +479,7 @@ class GenomeAnnotation:
         )
         ## Create a classifier which uses the pre-compiled, non-overlapping combinations
         ## and corresponding pre-computed annotation tags
-        cl = CompiledClassifier(cdf, classifications)
-        ga = cls(cdf, lambda idx: cl.process(idx), is_compiled=True)
+        ga = cls(cdf, CompiledClassifier(cdf, classifications), is_compiled=True)
         return ga
 
     @classmethod
@@ -452,8 +494,7 @@ class GenomeAnnotation:
             df.to_csv(df_cache, sep="\t")
 
         ## Build NCLS with original GTF features
-        cl = GTFClassifier(df)
-        ga = cls(df, lambda idx: cl.process(idx))
+        ga = cls(df, GTFClassifier(df))
         return ga
 
     @classmethod
@@ -465,47 +506,46 @@ class GenomeAnnotation:
         cls.logger.debug(f"loaded {len(df)} tabular records in {dt:.3f} seconds")
 
         ## Build NCLS with original GTF features
-        cl = GTFClassifier(df)
-        ga = cls(df, lambda idx: cl.process(idx))
+        ga = cls(df, GTFClassifier(df))
         return ga
 
     def sanity_check(self, df):
-        for strand, nc in self.strand_map.items():
+        for chrom, nc in self.chrom_ncls_map.items():
             starts, ends, idx = np.array(nc.intervals()).T
             self.logger.debug(
-                f"checking {strand} with starts from {starts.min()}-{starts.max()} and idx from {idx.min()}-{idx.max()}"
+                f"checking {chrom} with starts from {starts.min()}-{starts.max()} and idx from {idx.min()}-{idx.max()}"
             )
 
             assert idx.max() < len(df)
 
-    def query_idx(self, chrom, start, end, strand):
-        strand_key = chrom + strand
-        nested_list = self.strand_map.get(strand_key, [])
-        # print(f"nested list for {chrom} {strand} -> {nested_list}")
+    def query_idx(self, chrom, start, end):
+        nested_list = self.chrom_ncls_map.get(chrom, [])
+        # print(f"nested list for {chrom} -> {nested_list}")
         if nested_list:
-            return query(nested_list, start, end)
+            return query_ncls(nested_list, start, end)
         else:
             return self.empty
 
-    def query_idx_blocks(self, chrom, strand, blocks):
+    def query_idx_blocks(self, chrom, blocks):
         idx = []
         for start, end in blocks:
-            idx.extend(self.query_idx(chrom, start, end, strand))
+            idx.extend(self.query_idx(chrom, start, end))
 
         return idx
 
-    def query(self, chrom, start, end, strand):
-        idx = self.query_idx(chrom, start, end, strand)
-        return self.processor(idx)
+    # TODO: do we ever need query_idx_blocks separate from query?
+    def query(self, chrom, start, end):
+        idx = self.query_idx(chrom, start, end)
+        return self.classifier.process(idx)
 
-    def query_blocks(self, chrom, strand, blocks):
-        idx = self.query_idx_blocks(chrom, strand, blocks)
-        return self.processor(idx)
+    def query_blocks(self, chrom, blocks):
+        idx = self.query_idx_blocks(chrom, blocks)
+        return self.classifier.process(idx)
 
     def compile(self, path=""):
         if self.is_compiled:
             raise ValueError(
-                "attempting to compile an already compiled annotation. Why?? :-( "
+                "attempting to compile an already compiled annotation. Why?? %-/ "
             )
 
         self.logger.info(f"compiling to '{path}'...")
@@ -513,7 +553,7 @@ class GenomeAnnotation:
             path = util.ensure_path(path + "/")
 
         chroms = []
-        strands = []
+        # strands = []
         cstarts = []
         cends = []
         cids = []
@@ -521,14 +561,20 @@ class GenomeAnnotation:
         cid_lkup = {}
 
         t0 = time()
-        for strand_key, nc in self.strand_map.items():
-            chrom = strand_key[:-1]
-            strand = strand_key[-1]
-            self.logger.debug(f"decomposing {chrom} {strand}")
+        for chrom, nc in self.chrom_ncls_map.items():
+            # chrom = strand_key[:-1]
+            # strand = strand_key[-1]
+            self.logger.debug(f"decomposing {chrom}")
+            # decompose will report combinations of real indices into the df
+            # for both strands + and - . The task of properly assigning these is
+            # shifted to process(), merge() and later queries.
+            # In consequence a single compiled annotation element can include features 
+            # from both strands! This makes ignoring antisense more expensive than keeping it
+            # and I'd suggest we disable the --antisense flag and make it always on.
             for start, end, idx in decompose(nc):
                 # print(f"start={start} end={end} idx={idx}")
                 chroms.append(chrom)
-                strands.append(strand)
+                # strands.append(strand)
                 cstarts.append(start)
                 cends.append(end)
                 if idx not in cid_lkup:
@@ -539,7 +585,7 @@ class GenomeAnnotation:
 
         self.logger.debug("done")
         cdf = pd.DataFrame(
-            dict(chrom=chroms, strand=strands, start=cstarts, end=cends, cid=cids)
+            dict(chrom=chroms, start=cstarts, end=cends, cid=cids) # strand=strands, 
         )
         dt = time() - t0
         self.logger.debug(
@@ -550,7 +596,7 @@ class GenomeAnnotation:
         classifications = []
         t0 = time()
         for n, idx in enumerate(cidx):
-            res = self.processor(idx)
+            res = self.classifier.process(idx) # <- ((gn, gf, gt), isoform_overlaps dict)
             # classifications.append(to_tags(res))
             classifications.append(res)
 
@@ -572,12 +618,11 @@ class GenomeAnnotation:
 
         ## Create a secondary Annotator which uses the non-overlapping combinations
         ## and the pre-classified annotations for the actual tagging
-        cl = CompiledClassifier(cdf, classifications)
-        gc = GenomeAnnotation(cdf, lambda idx: cl.process(idx), is_compiled=True)
+        gc = GenomeAnnotation(cdf, CompiledClassifier(cdf, classifications), is_compiled=True)
 
         return gc
 
-    def get_annotation_tags(self, chrom: str, strand: str, blocks, antisense=False):
+    def get_annotation_tags(self, chrom: str, strand: str, blocks):
         def collapse_tag_values(values):
             if len(set(values)) == 1:
                 return [
@@ -586,16 +631,22 @@ class GenomeAnnotation:
             else:
                 return values
 
-        gn, gf, gt = self.query_blocks(chrom, strand, blocks)
-        if antisense:
-            gn_as, gf_as, gt_as = self.query_blocks(
-                chrom, as_strand[strand], read.get_blocks()
-            )
-            gn += gn_as
-            gf += gf_as
-            gt += gt_as
+        gn, gf, gt = self.query_blocks(chrom, blocks)
+        if len(gf):
+            gn = ",".join(collapse_tag_values(gn))
+            gf = ",".join(gf)
+            gt = ",".join(collapse_tag_values(gt))
+        else:
+            gn = None
+            gf = "-"
+            gt = None
 
-        return collapse_tag_values(gn), gf, collapse_tag_values(gt)
+        if strand == '-':
+            gf = gf.translate(default_strand_translation)
+        elif strand == '*':
+            gf = gf.upper()
+
+        return gn, gf, gt
 
 
 ## Here comes the BAM processing implementation ##
@@ -766,19 +817,15 @@ def annotate_chunks_from_queue(compiled_annotation, Qsam, Qres, Qerr, abort_flag
                 sam = aln_str.split("\t")
                 flags = int(sam[1])
                 is_unmapped = flags & 4
-                gn_val = None
-                gf_val = "-"
-                gt_val = None
+                gn = None
+                gf = "-"
+                gt = None
                 if not is_unmapped:
                     chrom = sam[2]
                     strand = "-" if (flags & 16) else "+"
                     gn, gf, gt = ga.get_annotation_tags(chrom, strand, blocks)
-                    if len(gf):
-                        gn_val = ",".join(gn)
-                        gf_val = ",".join(gf)
-                        gt_val = ",".join(gt)
 
-                out.append((aln_str, (gn_val, gf_val, gt_val)))
+                out.append((aln_str, (gn, gf, gt)))
 
             Qres.put((n_chunk, out))
 
@@ -900,21 +947,17 @@ def annotate_BAM_linear(bam, ga, out, repeat=1, interval=5):
 
     for read in bam.fetch(until_eof=True):
         n += 1
-        gn_val = None
-        gf_val = "-"
-        gt_val = None
+        gn = None
+        gf = "-"
+        gt = None
         if not read.is_unmapped:
             chrom = get_reference_name(read.tid)
             strand = "-" if read.is_reverse else "+"
             gn, gf, gt = ga.get_annotation_tags(chrom, strand, read.get_blocks())
-            if len(gf):
-                gn_val = ",".join(gn)
-                gf_val = ",".join(gf)
-                gt_val = ",".join(gt)
 
-        read.set_tag("gn", gn_val)
-        read.set_tag("gf", gf_val)
-        read.set_tag("gt", gt_val)
+        read.set_tag("gn", gn)
+        read.set_tag("gf", gf)
+        read.set_tag("gt", gt)
         read.set_tag("XF", None)
         read.set_tag("gs", None)
         out.write(read)
@@ -968,11 +1011,7 @@ def query_regions(args):
                 (int(start), int(end)),
             ],
         )
-        gn_val = ",".join(gn)
-        gf_val = ",".join(gf)
-        gt_val = ",".join(gt)
-
-        print(f"gn={gn_val}\tgf={gf_val}\tgt={gt_val}")
+        print(f"gn={gn}\tgf={gf}\tgt={gt}")
 
 
 def parse_args():
