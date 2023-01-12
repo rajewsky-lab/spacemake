@@ -397,13 +397,17 @@ def parallel_trim(Qsam, Qres, args, Qerr, abort_flag, stat_list):
                     lhist=_lhist,
                 )
             )
+            el.logger.debug(f"placing result chunk {n_chunk} onto Qres")
             Qres.put((n_chunk, result))
+            Qsam.task_done()
 
         el.logger.debug("synchronizing cache and counts")
         stats, total, lhist = stat_list[:3]
+        el.logger.debug("acquired. Appending...")
         stats.append(_stats)
         total.append(_total)
         lhist.append(_lhist)
+        el.logger.debug("done. exiting")
 
 
 def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeout=10):
@@ -442,12 +446,14 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeou
         t0 = time.time()
         n_rec = 0
         for n_chunk, results in queue_iter(res_queue, abort_flag):
+            el.logger.debug(f"received chunk {n_chunk}")
             heapq.heappush(heap, (n_chunk, results))
-
+            res_queue.task_done()
             # as long as the root of the heap is the next needed chunk
             # pass results on to storage
             while heap and (heap[0][0] == n_chunk_needed):
                 n_chunk, results = heapq.heappop(heap)  # retrieves heap[0]
+                el.logger.debug(f"picked {n_chunk} from heap")
                 for aln in string_to_BAM(results, header=bam_out.header):
                     #     # print("record in process_ordered_results", record)
                     bam_out.write(aln)
@@ -458,11 +464,9 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeou
         # out.close()
         # by the time None pops from the queue, all chunks
         # should have been processed!
-        if not abort_flag.value:
-            assert len(heap) == 0
-        else:
-            logger.warning(
-                f"{len(heap)} chunks remained on the heap due to missing data upon abort."
+        if not abort_flag.value and len(heap) > 0:
+            raise ValueError(
+                f"{len(heap)} chunks remained on the heap. n_chunk_needed={n_chunk_needed} chunks in heap={[n for n, chunk in heap]}"
             )
 
         dT = time.time() - t0
@@ -489,104 +493,116 @@ def main_parallel(args):
     logger = util.setup_logging(args, name="spacemake.cutadapt_bam.main_parallel")
 
     # queues for communication between processes
-    Qsam = mp.Queue(args.threads_work * 10)  # reads from parallel_read->parallel_trim
-    Qres = mp.Queue()  # extracted BCs from process_combinatorial->collector
+    Qsam = mp.JoinableQueue(args.threads_work * 10)  # reads from parallel_read->parallel_trim
+    Qres = mp.JoinableQueue()  # extracted BCs from process_combinatorial->collector
     Qerr = mp.Queue()  # child-processes can report errors back to the main process here
 
     # Proxy objects to allow workers to report statistics about the run
-    manager = mp.Manager()
-    abort_flag = mp.Value("b")
-    abort_flag.value = False
+    with mp.Manager() as manager:
+        abort_flag = mp.Value("b")
+        abort_flag.value = False
 
-    stats = manager.list()
-    total = manager.list()
-    lhist = manager.list()
-    bam_header = manager.list()
-    stat_lists = [stats, total, lhist, bam_header]
-    # print(stat_lists[-1])
-    with ExceptionLogging(
-        "spacemake.cutadapt_bam.main_parallel", exc_flag=abort_flag
-    ) as el:
+        stats = manager.list()
+        total = manager.list()
+        lhist = manager.list()
+        bam_header = manager.list()
+        stat_lists = [stats, total, lhist, bam_header]
+        # print(stat_lists[-1])
+        with ExceptionLogging(
+            "spacemake.cutadapt_bam.main_parallel", exc_flag=abort_flag
+        ) as el:
 
-        # read BAM in chunks and put them in Qsam
-        dispatcher = mp.Process(
-            target=parallel_read,
-            name="dispatcher",
-            args=(Qsam, args, Qerr, abort_flag, stat_lists),
-        )
-
-        dispatcher.start()
-        el.logger.debug("Started dispatch")
-
-        # workers consume chunks of BAM from Qsam
-        # process them, and put the results in Qres
-        workers = []
-        for i in range(args.threads_work):
-            w = mp.Process(
-                target=parallel_trim,
-                name=f"worker_{i}",
-                args=(Qsam, Qres, args, Qerr, abort_flag, stat_lists),
+            # read BAM in chunks and put them in Qsam
+            dispatcher = mp.Process(
+                target=parallel_read,
+                name="dispatcher",
+                args=(Qsam, args, Qerr, abort_flag, stat_lists),
             )
-            w.start()
-            workers.append(w)
 
-        el.logger.debug("Started workers")
+            dispatcher.start()
+            el.logger.debug("Started dispatch")
 
-        collector = mp.Process(
-            target=process_ordered_results,
-            name="output",
-            args=(Qres, args, Qerr, abort_flag, stat_lists),
-        )
-        collector.start()
-        el.logger.debug("Started collector")
-        # wait until all sequences have been thrown onto Qfq
-        qfq, qerr = join_with_empty_queues(dispatcher, [Qsam, Qerr], abort_flag)
-        el.logger.debug("The dispatcher exited")
-        if qfq or qerr:
-            el.logger.info(f"{len(qfq)} chunks were drained from Qfq upon abort.")
-            log_qerr(qerr)
+            # workers consume chunks of BAM from Qsam
+            # process them, and put the results in Qres
+            workers = []
+            for i in range(args.threads_work):
+                w = mp.Process(
+                    target=parallel_trim,
+                    name=f"worker_{i}",
+                    args=(Qsam, Qres, args, Qerr, abort_flag, stat_lists),
+                )
+                w.start()
+                workers.append(w)
 
-        # signal all workers to finish
-        el.logger.debug("Signalling all workers to finish")
-        for n in range(args.threads_work):
-            Qsam.put(None)  # each worker consumes exactly one None
+            el.logger.debug("Started workers")
 
-        for w in workers:
-            # make sure all results are on Qres by waiting for
-            # workers to exit. Or, empty queues if aborting.
-            qres, qerr = join_with_empty_queues(w, [Qres, Qerr], abort_flag)
-            if qres or qerr:
-                el.logger.warning(f"{len(qres)} chunks were drained from Qres upon abort.")
+            collector = mp.Process(
+                target=process_ordered_results,
+                name="output",
+                args=(Qres, args, Qerr, abort_flag, stat_lists),
+            )
+            collector.start()
+            el.logger.debug("Started collector")
+            # wait until all sequences have been thrown onto Qfq
+            qfq, qerr = join_with_empty_queues(dispatcher, [Qsam, Qerr], abort_flag, logger=el.logger)
+            el.logger.debug("The dispatcher exited")
+
+            if qfq or qerr:
+                el.logger.info(f"{len(qfq)} chunks were drained from Qfq upon abort.")
                 log_qerr(qerr)
 
-        el.logger.debug(
-            "All worker processes have joined. Signalling collector to finish."
-        )
-        # signal the collector to stop
-        Qres.put(None)
+            # wait until the workers have completed every task and placed
+            # every output chunk onto Qres.
+            el.logger.debug("Waiting for workers to finish processing all input data")
+            Qsam.join()
+            el.logger.debug("Done. Waiting for collector to finish processing")
+            Qres.join()
+            el.logger.debug("Pushing stop signal for the collector and joining.")
+            # signal the collector to stop
+            Qres.put(None)
+            # and wait until all output has been generated
+            collector.join()
+            el.logger.debug("Collector has joined.")
+            
+            # signal all workers to finish and let them join (now that all Queues are empty)
+            el.logger.debug("Signalling all workers to finish")
+            for n in range(args.threads_work):
+                Qsam.put(None)  # each worker consumes exactly one None
 
-        # and wait until all output has been generated
-        collector.join()
-        el.logger.debug("Collector has joined. Merging worker statistics.")
+            for i, w in enumerate(workers):
+                # make sure all results are on Qres by waiting for
+                # workers to exit. Or, empty queues if aborting.
+                qsam, qres, qerr = join_with_empty_queues(w, [Qsam, Qres, Qerr], abort_flag, logger=el.logger)
+                if qsam or qres or qerr:
+                    el.logger.warning(f"{(len(qsam), len(qres))} chunks were drained from Qsam, Qres upon abort.")
+                    log_qerr(qerr)
+                else:
+                    el.logger.debug(f"successfully joined worker {i}")
 
-    if args.stats_out:
-        stats = count_dict_sum(stats)
-        total = count_dict_sum(total)
-        lhist = count_dict_sum(lhist)
+            el.logger.debug(
+                "All worker processes have joined. Gathering statistics."
+            )
 
-        with open(util.ensure_path(args.stats_out), "wt") as f:
-            f.write("key\tcount\tpercent\n")
-            for k, v in sorted(stats.items(), key=lambda x: -x[1]):
-                f.write(f"reads\t{k}\t{v}\t{100.0 * v/stats['N_input']:.2f}\n")
+        if args.stats_out:
+            stats = count_dict_sum(stats)
+            total = count_dict_sum(total)
+            lhist = count_dict_sum(lhist)
 
-            for k, v in sorted(total.items(), key=lambda x: -x[1]):
-                f.write(f"bases\t{k}\t{v}\t{100.0 * v/total['bp_input']:.2f}\n")
+            with open(util.ensure_path(args.stats_out), "wt") as f:
+                f.write("key\tcount\tpercent\n")
+                for k, v in sorted(stats.items(), key=lambda x: -x[1]):
+                    f.write(f"reads\t{k}\t{v}\t{100.0 * v/stats['N_input']:.2f}\n")
 
-            for k, v in sorted(lhist.items()):
-                f.write(f"L_final\t{k}\t{v}\t{100.0 * v/stats['N_kept']:.2f}\n")
+                for k, v in sorted(total.items(), key=lambda x: -x[1]):
+                    f.write(f"bases\t{k}\t{v}\t{100.0 * v/total['bp_input']:.2f}\n")
 
-    if el.exception:
-        return -1
+                for k, v in sorted(lhist.items()):
+                    f.write(f"L_final\t{k}\t{v}\t{100.0 * v/stats['N_kept']:.2f}\n")
+
+        el.logger.debug("exiting.")
+
+        if el.exception:
+            return -1
 
 
 if __name__ == "__main__":
