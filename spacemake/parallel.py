@@ -114,7 +114,7 @@ def order_results(res_queue, abort_flag, logger=logging):
         # pass results on to storage
         while heap and (heap[0][0] == n_chunk_needed):
             n_chunk, results = heapq.heappop(heap)  # retrieves heap[0]
-            logger.info(f"picked {n_chunk} from heap")
+            logger.debug(f"picked {n_chunk} from heap")
             for record in results:
                 # print("record in process_ordered_results", record)
                 yield record
