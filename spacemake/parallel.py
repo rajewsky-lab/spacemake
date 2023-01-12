@@ -28,7 +28,7 @@ def put_or_abort(Q, item, abort_flag, timeout=1):
     return abort_flag.value
 
 
-def queue_iter(Q, abort_flag, stop_item=None, timeout=1):
+def queue_iter(Q, abort_flag, stop_item=None, timeout=1, logger=logging):
     """
     Small generator/wrapper around multiprocessing.Queue allowing simple
     for-loop semantics:
@@ -50,14 +50,21 @@ def queue_iter(Q, abort_flag, stop_item=None, timeout=1):
             pass
         else:
             if item == stop_item:
+                logger.debug("received stop_item")
                 # signals end->exit
+                try:
+                    queue.task_done()
+                except AttributeError:
+                    # We do not have a JoinableQueue. Fine, no problem.
+                    pass
+
                 break
             else:
                 # logging.debug(f"queue_iter->item {item}")
                 yield item
 
 
-def join_with_empty_queues(proc, Qs, abort_flag, timeout=1):
+def join_with_empty_queues(proc, Qs, abort_flag, timeout=1, logger=logging):
     """
     joins() a process that writes data to queues Qs w/o deadlock.
     In case of an abort, the subprocess normally would not join
@@ -81,6 +88,7 @@ def join_with_empty_queues(proc, Qs, abort_flag, timeout=1):
     contents = [list() for i in range(len(Qs))]
     while proc.exitcode is None:
         proc.join(timeout)
+        logger.debug(f"Q sizes: {[Q.qsize() for Q in Qs]}")
         if abort_flag.value:
             for Q, content in zip(Qs, contents):
                 content.extend(drain(Q))
@@ -88,7 +96,7 @@ def join_with_empty_queues(proc, Qs, abort_flag, timeout=1):
     return contents
 
 
-def order_results(res_queue, abort_flag, logger):
+def order_results(res_queue, abort_flag, logger=logging):
     import heapq
     import time
 
@@ -99,18 +107,20 @@ def order_results(res_queue, abort_flag, logger):
     n_rec = 0
 
     for n_chunk, results in queue_iter(res_queue, abort_flag):
+        logger.debug(f"received chunk {n_chunk}")
         heapq.heappush(heap, (n_chunk, results))
 
         # as long as the root of the heap is the next needed chunk
         # pass results on to storage
         while heap and (heap[0][0] == n_chunk_needed):
             n_chunk, results = heapq.heappop(heap)  # retrieves heap[0]
+            logger.debug(f"picked {n_chunk} from heap")
             for record in results:
                 # print("record in process_ordered_results", record)
                 yield record
                 n_rec += 1
 
-            n_chunk_needed += 1
+            n_chunk_needed = n_chunk + 1
 
         # debug output on average throughput
         t2 = time.time()
