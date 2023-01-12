@@ -424,7 +424,7 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag, stat_list, timeou
         # out = Output(args)
         bam_header = stat_list[-1]
         while (not len(bam_header)) and timeout > 0:
-            if abort_flag:
+            if abort_flag.value:
                 logger.info("aborting during startup...")
                 return
 
