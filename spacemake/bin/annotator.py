@@ -177,26 +177,23 @@ def overlaps_to_tags(isoform_overlaps: dict, flags_lookup=default_lookup) -> tup
 
     Returns:
         
-        tuple: (gn, gf, gt), overlaps
-            (gn, gf, gt): 
-                a tuple with tag values encoding the overlapping
-                GTF features. Each is a list of strings :
+        tuple: (gn, gf, gt)
+            a tuple with tag values encoding the overlapping
+            GTF features. Each is a list of strings :
 
-                    gn: gene names 
-                    gf: function
-                    gt: transcript type
+                gn: gene names 
+                gf: function
+                gt: transcript type
 
-                    gf uses upper case letters for features on the '+' strand and
-                    lower case letters for features on the '-' strand.
+                gf uses upper case letters for features on the '+' strand and
+                lower case letters for features on the '-' strand.
 
-                    For a query against the minus strand, upper and lower case
-                    need to be swapped in order to get features that align in the 
-                    "sense" direction in upper case and "antisense" features in lower-case.
+                For a query against the minus strand, upper and lower case
+                need to be swapped in order to get features that align in the 
+                "sense" direction in upper case and "antisense" features in lower-case.
 
-                    For a strand-agnostic query, .upper() is called.
-            'overlaps':
-                A copy of the input to this function. Used to allow correct merging of different 
-                annotation combinations in compiled GenomeAnnotation instances.
+                For a strand-agnostic query, .upper() is called. 
+                These case-mangling operations are carried out in get_annotation_tags()
         
     """
     tags = set()
@@ -569,8 +566,7 @@ class GenomeAnnotation:
             # for both strands + and - . The task of properly assigning these is
             # shifted to process(), merge() and later queries.
             # In consequence a single compiled annotation element can include features 
-            # from both strands! This makes ignoring antisense more expensive than keeping it
-            # and I'd suggest we disable the --antisense flag and make it always on.
+            # from both strands! 
             for start, end, idx in decompose(nc):
                 # print(f"start={start} end={end} idx={idx}")
                 chroms.append(chrom)
@@ -1078,13 +1074,6 @@ def parse_args():
         default=20000,
         help="how many BAM-records form a chunk for parallel processing (default=20000)",
     )
-    tag_parser.add_argument(
-        "--antisense",
-        default=False,
-        action="store_true",
-        help="enable annotating against the opposite strand (antisense to the alignment) as well",
-    )
-
     query_parser = subparsers.add_parser("query")
     query_parser.set_defaults(func=query_regions)
     query_parser.add_argument(
@@ -1098,12 +1087,6 @@ def parse_args():
         help="path to the original annotation (e.g. gencodev38.gtf.gz)",
     )
     query_parser.add_argument("region", default=[], help="region to query", nargs="+")
-    query_parser.add_argument(
-        "--antisense",
-        default=False,
-        action="store_true",
-        help="enable annotating against the opposite strand (antisense to the alignment) as well",
-    )
     return parser.parse_args()
 
 
