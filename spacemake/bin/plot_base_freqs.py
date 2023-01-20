@@ -90,7 +90,7 @@ def parse_args():
 
 def main(args):
     sample = os.path.basename(args.fname)
-    logger = logging.getLogger("spacemake.bin.read1_stats")
+    logger = logging.getLogger("spacemake.bin.plot_base_freqs")
 
     if sample.endswith("fastq.gz"):
         logger.debug("reading from FASTQ")
@@ -108,7 +108,7 @@ def main(args):
         logger.debug("reading from BAM")
         import pysam
 
-        bam = pysam.AlignmentFile(args.fname, check_sq=False)
+        bam = util.quiet_bam_open(args.fname, check_sq=False, threads=4)
         R2_counter = NTCounter("read2")
         CB_counter = NTCounter("CB")
         UMI_counter = NTCounter("UMI")
@@ -145,7 +145,7 @@ def main(args):
 
 def cmdline():
     args = parse_args()
-    util.setup_logging(args)
+    util.setup_logging(args, "spacemake.bin.plot_base_freqs")
     main(args)
 
 if __name__ == "__main__":

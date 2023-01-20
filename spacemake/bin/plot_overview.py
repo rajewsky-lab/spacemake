@@ -12,7 +12,7 @@ from collections import defaultdict, OrderedDict
 
 
 def parse_args():
-    parser = util.make_minimal_parser()
+    parser = util.make_minimal_parser(prog=__file__)
     # parser.add_argument("--sample", type=str, default="a_sample", help="sample_name")
     parser.add_argument(
         "--raw",
@@ -266,5 +266,5 @@ def main(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    util.setup_logging(args, "spacemake.overview_plot")
+    util.setup_logging(args, "spacemake.bin.plot_overview")
     df_mapped = main(args)

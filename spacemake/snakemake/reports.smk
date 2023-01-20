@@ -108,11 +108,11 @@ rule dge_stats:
         "  --out-knee={output.knee} "
         "  {input}"
 
-barcode_ntfreq_plot = plots_dir + '/{sample_id}.barcode_nt_freq.pdf'
+base_freqs_plot = plots_dir + '/{sample_id}.base_freqs.pdf'
 
-rule barcode_nt_freq_profile:
+rule make_base_freqs_plot:
     input: tagged_bam
-    output: barcode_ntfreq_plot
+    output: base_freqs_plot
     shell:
         "python {bin_dir}/plot_base_freqs.py "
         "  --log-level={log_level} "
@@ -122,11 +122,30 @@ rule barcode_nt_freq_profile:
         "  --out-pdf={output} "
         "  {input}"
 
+complexity_plot = plots_dir + '/{sample_id}.complexity.pdf'
+
+rule make_complexity_plot:
+    input:
+        unpack(get_all_bamstats_for_sample)
+    output: complexity_plot
+    shell:
+        "python {bin_dir}/plot_complexity.py "
+        "  --log-level={log_level} "
+        "  --log-file={log} "
+        "  --debug={log_debug} "
+        "  --sample={wildcards.sample_id} "
+        "  --out-plot={output} "
+        "  --cutadapt={input.trimmed} "
+        "  {input.complexity}"
+
 def get_plots():
     out_files = []
     for (project_id, sample_id), row in project_df.df.iterrows():
         # barcode & UMI freq stats
-        out_files.append(wc_fill(barcode_ntfreq_plot, dotdict(project_id=project_id, sample_id=sample_id)))
+        out_files.append(wc_fill(base_freqs_plot, dotdict(project_id=project_id, sample_id=sample_id)))
+
+        # complexity sub-sampling plot
+        out_files.append(wc_fill(complexity_plot, dotdict(project_id=project_id, sample_id=sample_id)))
 
         # pre-processing and mapping overview
         out_files.append(wc_fill(overview_tsv, dotdict(project_id=project_id, sample_id=sample_id)))

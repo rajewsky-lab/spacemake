@@ -72,7 +72,7 @@ def subsample(reads, n):
 
 
 def main(args):
-    logger = util.setup_logging(args, "spacemake.scripts.complexity")
+    logger = util.setup_logging(args, "spacemake.bin.complexity")
 
     logger.info(f"processing '{args.bam}'")
     sam = util.quiet_bam_open(args.bam, "rb", check_sq=False, threads=2)

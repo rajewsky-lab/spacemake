@@ -79,7 +79,7 @@ def loglog_knee_plot(ax, df, key="n_counts"):
 
 
 def parse_args():
-    parser = util.make_minimal_parser("spacemake.bin.dge_stats_plot")
+    parser = util.make_minimal_parser(prog="plot_dge_stats.py")
     parser.add_argument("dge", help="path to h5ad AnnData file")
     parser.add_argument(
         "--reference",
@@ -147,5 +147,5 @@ def main(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    util.setup_logging(args)
+    util.setup_logging(args, "spacemake.bin.plot_dge_stats")
     adata = main(args)
