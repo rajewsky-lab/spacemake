@@ -494,6 +494,11 @@ def get_run_parser():
         help="invokes a dry snakemake run, printing only commands",
     )
     parser.add_argument(
+        "--debug",
+        default="",
+        help=f"comma-separated list of logging-domains for which you want DEBUG output",
+    )    
+    parser.add_argument(
         "--rerun-incomplete",
         "--ri",
         action="store_true",
@@ -522,7 +527,6 @@ def get_run_parser():
         action="store_true",
         help="Run also fastqc as part of the spacemake run",
     )
-    parser.add_argument("--debug", dest="debug", default="", help=f"comma-separated list of logging-domains for which you want DEBUG output")
 
     return parser
 
@@ -707,6 +711,17 @@ def spacemake_run(args):
 
     from spacemake.project_df import get_global_ProjectDF
 
+    root = logging.getLogger("spacemake")
+    # TODO: Why is args a dictionary and not argparse.Namespace ?
+    if args['debug']:
+        # activate cmdline requested debug output for specific domains (comma-separated)
+        for logger_name in args['debug'].split(","):
+            if logger_name:
+                root.info(f"setting domain {logger_name} to DEBUG")
+                logging.getLogger(logger_name.replace("root", "")).setLevel(
+                    logging.DEBUG
+                )
+
     pdf = get_global_ProjectDF()
     samples = []
     projects = []
@@ -739,7 +754,7 @@ def spacemake_run(args):
     }
 
     # join config_variables and novosparc_variables
-    # to flatten the directory
+    # to flatten the dictionary
     config_variables = {**config_variables, **novosparc_variables}
 
     # get the snakefile
