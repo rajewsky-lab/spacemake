@@ -69,7 +69,7 @@ rule overview:
         not_mapped_list = lambda wildcards, input: " ".join(input.not_mapped),
         map_strategy = lambda wildcards: SAMPLE_MAP_STRATEGY[(wildcards.project_id, wildcards.sample_id)],
     shell:
-        "python {bin_dir}/overview_plot.py "
+        "python {bin_dir}/plot_overview.py "
         "  --sample={wildcards.sample_id} "
         "  --log-level={log_level} "
         "  --log-file={log} "
@@ -98,7 +98,7 @@ rule dge_stats:
         knee=dge_knee_plot
     log: log_dir + '/{sample_id}' + dge_legacy_params + '.{ref}.dge_stats_plot.log'
     shell:
-        "python {bin_dir}/dge_stats_plot.py "
+        "python {bin_dir}/plot_dge_stats.py "
         "  --log-level={log_level} "
         "  --log-file={log} "
         "  --debug={log_debug} "
@@ -114,7 +114,7 @@ rule barcode_nt_freq_profile:
     input: tagged_bam
     output: barcode_ntfreq_plot
     shell:
-        "python {bin_dir}/read1_stats.py "
+        "python {bin_dir}/plot_base_freqs.py "
         "  --log-level={log_level} "
         "  --log-file={log} "
         "  --debug={log_debug} "
