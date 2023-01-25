@@ -92,7 +92,7 @@ default_BT2_MAP_FLAGS = (
 default_STAR_MAP_FLAGS = (
     " --genomeLoad NoSharedMemory"
     " --outSAMprimaryFlag AllBestScore"
-    " --outSAMattributes All"
+    " --outSAMattributes Standard"
     " --outSAMunmapped Within"
     " --outStd BAM_Unsorted"
     " --outSAMtype BAM Unsorted"
