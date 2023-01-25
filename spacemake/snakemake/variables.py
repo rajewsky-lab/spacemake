@@ -8,8 +8,8 @@ project_df = "project_df.csv"
 #################
 raw_data_root = project_dir + "/{sample_id}/raw"
 raw_data_illumina = raw_data_root #+ "/illumina"
-raw_data_illumina_reads = raw_data_illumina + "/reads/raw"
-raw_data_illumina_reads_reversed = raw_data_illumina + "/reads/bc_umi_tagged"
+raw_data_illumina_reads = raw_data_illumina #+ "/reads/raw"
+#raw_data_illumina_reads_reversed = raw_data_illumina + "/reads/bc_umi_tagged"
 processed_data_root = project_dir + "/processed_data/{sample_id}"
 processed_data_illumina = processed_data_root + "/illumina"
 
@@ -43,8 +43,8 @@ raw_reads_pattern = raw_reads_prefix + "{mate}" + reads_suffix
 raw_reads_mate_1 = raw_reads_prefix + "1" + reads_suffix
 raw_reads_mate_2 = raw_reads_prefix + "2" + reads_suffix
 
-reverse_reads_prefix = raw_data_illumina_reads_reversed + "/{sample_id}_reversed_R"
-reverse_reads_mate_1 = reverse_reads_prefix + "1" + reads_suffix
+#reverse_reads_prefix = raw_data_illumina_reads_reversed + "/{sample_id}_reversed_R"
+#reverse_reads_mate_1 = reverse_reads_prefix + "1" + reads_suffix
 
 ###############
 # Fastqc vars #
