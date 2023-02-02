@@ -64,6 +64,48 @@ def queue_iter(Q, abort_flag, stop_item=None, timeout=1, logger=logging):
                 yield item
 
 
+def iter_queues_round_robin(Qs, abort_flag, stop_item=None, timeout=1, logger=logging):
+    """
+    Small generator/wrapper around multiprocessing.Queue allowing simple
+    for-loop semantics over a list of Queues that contain data in a round-robin
+    fashion:
+
+        for item in iter_queues_round_robin(queues, abort_flag):
+            ...
+    The abort_flag is handled analogous to put_or_abort, only
+    that it ends the iteration instead
+    """
+    import queue
+
+    # logging.debug(f"queue_iter({queue})")
+    n = 0
+    N = len(Qs)
+    while True:
+        # which queue do we need to poll
+        i = n % N
+        if abort_flag.value:
+            break
+        try:
+            item = Qs[i].get(timeout=timeout)
+        except queue.Empty:
+            pass
+        else:
+            if item == stop_item:
+                logger.debug("received stop_item")
+                # signals end->exit
+                try:
+                    queue.task_done()
+                except AttributeError:
+                    # We do not have a JoinableQueue. Fine, no problem.
+                    pass
+
+                break
+            else:
+                # logging.debug(f"queue_iter->item {type(item)}")
+                yield item
+                n += 1
+
+
 def join_with_empty_queues(proc, Qs, abort_flag, timeout=1, logger=logging):
     """
     joins() a process that writes data to queues Qs w/o deadlock.
@@ -193,6 +235,7 @@ class ExceptionLogging:
 
         if set_proc_title:
             import setproctitle
+
             setproctitle.setproctitle(name)
 
     def __enter__(self):
