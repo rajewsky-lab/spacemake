@@ -505,11 +505,11 @@ rule puck_collection_stitching:
             project_id=wildcards.project_id, sample_id=wildcards.sample_id
         ),
     run:
-        _pc = puck_collection.merge_pucks_to_single_adata(
+        _pc = puck_collection.merge_pucks_to_collection(
             input,
             params['puck_metadata'][0],
             params['puck_data']['coordinate_system'],
-            params['puck_data']['puck_id_regex'],
+            "",
             "puck_id",
             no_reset_index,
             no_transform,
