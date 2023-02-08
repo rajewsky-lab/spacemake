@@ -341,6 +341,10 @@ rule create_spatial_barcode_file:
         unpack(get_all_barcode_readcounts)
     output:
         parsed_spatial_barcodes
+    params:
+        run_mode_variables = lambda wildcards:
+            project_df.config.get_run_mode(list(get_run_modes_from_sample(
+            wildcards.project_id, wildcards.sample_id).keys())[0]).variables
     run:
         # load all readcounts
         bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
@@ -362,31 +366,13 @@ rule create_spatial_barcode_file:
 
         bc.to_csv(output[0], index=False)
 
-rule create_spatial_barcode_whitelist:
-    input: 
-        parsed_bc = parsed_spatial_barcodes,
-        bc_summary = puck_barcode_files_summary
-    output: temp(spatial_barcodes)
-    params:
-        run_mode_variables = lambda wildcards:
-            project_df.config.get_run_mode(list(get_run_modes_from_sample(
-            wildcards.project_id, wildcards.sample_id).keys())[0]).variables
-    run:
-        bc = pd.read_csv(input['parsed_bc'])
-        bc = bc[['cell_bc']]
-        bc = bc.append({'cell_bc': 'NNNNNNNNNNNN'}, ignore_index=True)
-
-        # save both the whitelist and the beads in a separate file
-        bc[['cell_bc']].to_csv(output[0], header=False, index=False)
-
         # update the project df (but do not dump) to only process some tiles above the threshold
-        barcodes_summary = pd.read_csv(input['bc_summary'])
-        barcodes_summary_filter = barcodes_summary[
-            barcodes_summary.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
+        bc_filter = bc[
+            bc.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
         ]
 
-        _puck_barcode_files = barcodes_summary_filter['puck_barcode_file'].values
-        _puck_barcode_files_id = barcodes_summary_filter['puck_barcode_file_id'].values
+        _puck_barcode_files = bc_filter['puck_barcode_file'].values
+        _puck_barcode_files_id = bc_filter['puck_barcode_file_id'].values
 
         project_df.add_update_sample(
             action='update',
@@ -395,6 +381,17 @@ rule create_spatial_barcode_whitelist:
             puck_barcode_file=_puck_barcode_files,
             puck_barcode_file_id=_puck_barcode_files_id,
         )
+
+rule create_spatial_barcode_whitelist:
+    input: parsed_spatial_barcodes
+    output: temp(spatial_barcodes)
+    run:
+        bc = pd.read_csv(input[0])
+        bc = bc[['cell_bc']]
+        bc = bc.append({'cell_bc': 'NNNNNNNNNNNN'}, ignore_index=True)
+
+        # save both the whitelist and the beads in a separate file
+        bc[['cell_bc']].to_csv(output[0], header=False, index=False)
         
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
