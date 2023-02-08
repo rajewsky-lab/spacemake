@@ -350,6 +350,15 @@ def spacemake_init(args):
         dest_visium_path,
     )
 
+    # copy novaseq_S4_coordinate_system
+    dest_puck_collection_path = "puck_data/novaseq_S4_coordinate_system.csv"
+    logger.info(f"Moving puck collection coordinate system to {dest_puck_collection_path}")
+    os.makedirs(os.path.dirname(dest_puck_collection_path), exist_ok=True)
+    copyfile(
+        os.path.join(os.path.dirname(__file__), "data/puck_collection/novaseq_S4_coordinate_system.csv"),
+        dest_puck_collection_path,
+    )
+
     # save
     cf.dump()
 
