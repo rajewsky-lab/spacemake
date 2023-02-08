@@ -362,7 +362,7 @@ rule create_spatial_barcode_file:
 
         bc.to_csv(output[0], index=False)
 
-rule create_barcode_files_matching_summary:
+rule filter_spatial_barcode_files_min_matches_threshold:
     input:
         parsed_bc = parsed_spatial_barcodes,
         bc_summary = puck_barcode_files_summary
@@ -377,10 +377,9 @@ rule create_barcode_files_matching_summary:
             barcodes_summary.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
         ]
 
-        if parsed_spatial_barcodes is in barcodes_summary_filter.puck_barcode_file:
-            _bc = pd.read_csv(parsed_spatial_barcodes).to_csv(output[0])
-
-        
+        print(parsed_bc)
+        #if parsed_bc is in barcodes_summary_filter.puck_barcode_file:
+        pd.read_csv(parsed_bc).to_csv(output[0])
 
 rule create_spatial_barcode_whitelist:
     input: all_spatial_barcodes
@@ -653,8 +652,6 @@ rule create_barcode_files_matching_summary:
         puck_variables = lambda wildcards:
             project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
                 return_empty=True)
-        run_mode_variables = lambda wildcards:
-            project_df.config.get_run_mode(wildcards.run_mode).variables
     run:
         out_df = pd.DataFrame(columns=[
             'puck_barcode_file_id',
