@@ -27,8 +27,15 @@ def get_puck_parser(required=True):
         "--barcodes",
         type=str,
         required=False,
-        help="path to barcode file. of not provided the --puck_barcode_file variable"
+        help="path to barcode file. if not provided, the --puck_barcode_file variable"
         + " of `spacemake projects add_sample` has to be set",
+    )
+    parser.add_argument(
+        "--coordinate_system",
+        type=str,
+        required=False,
+        help="path to coordinate system file. When specified, spacemake will 'stitch'"
+        + " pucks into a single file, with corresponding global coordinates",
     )
 
     return parser
@@ -408,7 +415,7 @@ class RunMode(ConfigMainVariable):
 
 
 class Puck(ConfigMainVariable):
-    variable_types = {"barcodes": str, "spot_diameter_um": float, "width_um": int, "coordinate_system": str, "puck_id_regex": str}
+    variable_types = {"barcodes": str, "spot_diameter_um": float, "width_um": int, "coordinate_system": str}
 
     @property
     def has_barcodes(self):
