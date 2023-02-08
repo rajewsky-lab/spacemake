@@ -702,7 +702,7 @@ def get_puck_collection(wildcards):
     coordinate_system = config["pucks"][puck_name]["coordinate_system"]
     puck_id_regex = config["pucks"][puck_name]["puck_id_regex"]
 
-    if coordinate_system == '':
+    if coordinate_system is None or coordinate_system == '' or coordinate_system == 'None':
         return [], []
     else:
         return coordinate_system, puck_id_regex
@@ -715,6 +715,7 @@ def get_puck_collection_stitching_input(wildcards):
     # 3) spatial dge with a mesh
     coordinate_system, _ = get_puck_collection(wildcards)
     run_mode = list(get_run_modes_from_sample(wildcards.project_id, wildcards.sample_id).keys())[0]
+    print(coordinate_system)
 
     puck_barcode_file_ids = project_df.get_puck_barcode_ids_and_files(
                 wildcards.project_id, wildcards.sample_id

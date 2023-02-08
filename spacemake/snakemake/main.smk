@@ -472,8 +472,8 @@ rule puck_collection_stitching:
     input:
         unpack(get_puck_collection_stitching_input)
     output:
-        dge_spatial_mesh_collection,
-        dge_spatial_mesh_obs_collection
+        dge_spatial_collection_mesh,
+        dge_spatial_collection_mesh_obs
     params:
         puck_data = lambda wildcards: project_df.get_puck_variables(
                                 project_id = wildcards.project_id,
