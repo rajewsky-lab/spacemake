@@ -141,6 +141,7 @@ def get_run_mode_parser(required=True):
         "--spatial_barcode_min_matches",
         type=float,
         required=False,
+        default=0.5,
         help="minimum ratio (0, 1] of spatial barcode matches to further consider a puck"
         + "across the rest of the pipeline",
     )

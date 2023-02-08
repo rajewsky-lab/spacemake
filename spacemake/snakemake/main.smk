@@ -362,8 +362,34 @@ rule create_spatial_barcode_file:
 
         bc.to_csv(output[0], index=False)
 
+rule create_barcode_files_matching_summary:
+    input:
+        parsed_bc = parsed_spatial_barcodes,
+        bc_summary = puck_barcode_files_summary
+    output:
+        temp(all_spatial_barcodes)
+    params:
+        pbf_ids = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id)[0],
+        puck_variables = lambda wildcards:
+            project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
+                return_empty=True)
+        run_mode_variables = lambda wildcards:
+            project_df.config.get_run_mode(wildcards.run_mode).variables
+    run:
+        barcodes_summary = pd.read_csv(bc_summary)
+        barcodes_summary_filter = barcodes_summary[
+            barcodes_summary.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
+        ]
+
+        if parsed_spatial_barcodes is in barcodes_summary_filter.puck_barcode_file:
+            _bc = pd.read_csv(parsed_spatial_barcodes).to_csv(output[0])
+
+        
+
 rule create_spatial_barcode_whitelist:
-    input: parsed_spatial_barcodes
+    input: all_spatial_barcodes
     output: temp(spatial_barcodes)
     run:
         bc = pd.read_csv(input[0])
@@ -643,6 +669,8 @@ rule create_barcode_files_matching_summary:
         puck_variables = lambda wildcards:
             project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
                 return_empty=True)
+        run_mode_variables = lambda wildcards:
+            project_df.config.get_run_mode(wildcards.run_mode).variables
     run:
         out_df = pd.DataFrame(columns=[
             'puck_barcode_file_id',
@@ -678,6 +706,7 @@ rule create_barcode_files_matching_summary:
                 
                 out_df = out_df.append({
                     'puck_barcode_file_id': pbf_id,
+                    'puck_barcode_file': parsed_barcode_file,
                     'n_barcodes': n_barcodes,
                     'n_matching': n_matching,
                     'matching_ratio': matching_ratio,

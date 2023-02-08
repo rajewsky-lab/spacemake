@@ -81,6 +81,10 @@ strand_info = split_reads_strand_type
 top_barcodes_suffix = "{polyA_adapter_trimmed}.{n_beads}_beads.txt"
 top_barcodes = complete_data_root + "/topBarcodes" + top_barcodes_suffix
 top_barcodes_clean = complete_data_root + "/topBarcodesClean" + top_barcodes_suffix
+all_spatial_barcodes = (
+    complete_data_root
+    + "/puck_barcode_files/allSpatialBarcodes_{puck_barcode_file_id}.txt"
+)
 spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/spatialBarcodes_{puck_barcode_file_id}.txt"
