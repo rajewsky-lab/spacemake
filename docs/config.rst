@@ -181,7 +181,7 @@ Provided run\_mode(s)
         mesh_type: 'circle'
         mesh_spot_diameter_um: 55
         mesh_spot_distance_um: 100
-        spatial_barcode_min_matches: 0.5
+        spatial_barcode_min_matches: 0
     visium:
         n_beads: 10000
         umi_cutoff: [1000]
