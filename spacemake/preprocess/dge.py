@@ -261,3 +261,10 @@ def attach_puck_variables(adata, puck_variables):
     adata.uns["puck_variables"]["coord_by_um"] = coord_by_um
 
     return adata
+
+
+def attach_puck(adata, puck):
+    attach_puck_variables(adata, puck.variables)
+    adata.uns["puck_name"] = puck.name
+
+    return adata

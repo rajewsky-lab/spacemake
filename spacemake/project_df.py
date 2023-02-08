@@ -8,6 +8,7 @@ import re
 import logging
 import time
 
+from spacemake.config import Puck
 from spacemake.errors import *
 from spacemake.config import ConfigFile
 from spacemake.util import message_aggregation, assert_file, str_to_list
@@ -1077,6 +1078,25 @@ class ProjectDF:
             return None
         else:
             return df.iloc[0].to_dict()
+        
+    def get_puck(
+            self, project_id: str, sample_id: str, return_empty=False
+    ) -> Puck:
+        """get_puck_variables.
+
+        :param project_id: project_id of a sample
+        :type project_id: str
+        :param sample_id: sample_id of a sample
+        :type sample_id: str
+        :param return_empty:
+        :return: A Puck object containing puck name and variables
+        :rtype: Puck
+        """
+        puck_name = self.get_metadata(
+            "puck", project_id=project_id, sample_id=sample_id
+        )
+
+        return self.config.get_puck(puck_name, return_empty=return_empty)
 
     def get_puck_variables(
         self, project_id: str, sample_id: str, return_empty=False

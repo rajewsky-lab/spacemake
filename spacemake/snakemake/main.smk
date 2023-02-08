@@ -448,9 +448,9 @@ rule create_h5ad_dge:
         # attach barcodes
         if 'barcode_file' in input.keys() and wildcards.n_beads == 'spatial':
             adata = attach_barcode_file(adata, input['barcode_file'])
-            adata = attach_puck_variables(
+            adata = attach_puck(
                 adata,
-                project_df.get_puck_variables(
+                project_df.get_puck(
                     project_id = wildcards.project_id,
                     sample_id = wildcards.sample_id,
                     return_empty=True
