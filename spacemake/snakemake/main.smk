@@ -341,10 +341,6 @@ rule create_spatial_barcode_file:
         unpack(get_all_barcode_readcounts)
     output:
         parsed_spatial_barcodes
-    params:
-        run_mode_variables = lambda wildcards:
-            project_df.config.get_run_mode(list(get_run_modes_from_sample(
-            wildcards.project_id, wildcards.sample_id).keys())[0]).variables
     run:
         # load all readcounts
         bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
@@ -636,7 +632,10 @@ rule create_barcode_files_matching_summary:
             sample_id = wildcards.sample_id)[0],
         puck_variables = lambda wildcards:
             project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
-                return_empty=True)
+                return_empty=True),
+        run_mode_variables = lambda wildcards:
+            project_df.config.get_run_mode(list(get_run_modes_from_sample(
+            wildcards.project_id, wildcards.sample_id).keys())[0]).variables
     run:
         out_df = pd.DataFrame(columns=[
             'puck_barcode_file_id',
