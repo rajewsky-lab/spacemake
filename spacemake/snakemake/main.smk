@@ -506,33 +506,23 @@ rule puck_collection_stitching:
                                 sample_id = wildcards.sample_id),
         puck_metadata = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
             project_id=wildcards.project_id, sample_id=wildcards.sample_id
-        )[0],
-        is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id),
-        run_modes = lambda wildcards: get_run_modes_from_sample(
-            wildcards.project_id, wildcards.sample_id)
+        ),
     run:
-        puck_transform = puck_collection.parse_puck_coordinate_system_file(params['puck_data']['coordinate_system'])
-        pucks_list = puck_collection.read_pucks_to_list(
-            input, params['puck_metadata'], params['puck_data']['puck_id_regex'], "puck_id"
-        )
-        puck_collection_list = []
-
-        for puck in pucks_list:
-            puck_collection_list += [
-                puck_collection.create_puck_collection(
-                    puck,
-                    puck_transform
-                )
-            ]
-
-        puck_collection = anndata.concat(
-            puck_collection_list, merge=args.merge_output, join=args.join_output
+        _pc = puck_collection.merge_pucks_to_single_adata(
+            input,
+            params['puck_metadata'][0],
+            params['puck_data']['coordinate_system'],
+            params['puck_data']['puck_id_regex'],
+            "puck_id",
+            no_reset_index,
+            no_transform,
+            merge_output,
+            join_output,
+            output,
         )
 
-        puck_collection.write_h5ad(output[0])
-        puck_collection.obs.to_csv(output[1])
+        _pc.write_h5ad(args.output)
+        _pc.obs.to_csv(output[1])
 
 rule create_qc_sheet:
     input:
