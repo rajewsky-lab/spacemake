@@ -207,7 +207,7 @@ def merge_pucks_to_collection(
     pucks: List[str],
     puck_id: List[str],
     puck_coordinates: str,
-    puck_id_regex: str,
+    puck_id_regex: str = None,
     puck_id_key: str = "puck_id",
     no_reset_index: bool = False,
     no_transform: bool = False,
