@@ -204,7 +204,7 @@ def load_external_dge(dge_path):
 def parse_barcode_file(barcode_file):
     import pandas as pd
 
-    bc = pd.read_csv(barcode_file, sep="[,|\t]")
+    bc = pd.read_csv(barcode_file, sep=None)
 
     # rename columns
     bc = (
