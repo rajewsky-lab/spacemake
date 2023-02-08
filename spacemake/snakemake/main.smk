@@ -369,12 +369,6 @@ rule create_barcode_files_matching_summary:
     output:
         temp(all_spatial_barcodes)
     params:
-        pbf_ids = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)[0],
-        puck_variables = lambda wildcards:
-            project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
-                return_empty=True)
         run_mode_variables = lambda wildcards:
             project_df.config.get_run_mode(wildcards.run_mode).variables
     run:
