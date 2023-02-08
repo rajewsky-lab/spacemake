@@ -16,7 +16,7 @@ import math
 import scanpy as sc
 
 from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
-    parse_barcode_file, load_external_dge, attach_puck_variables
+    parse_barcode_file, load_external_dge, attach_puck_variables, attach_puck
 from spacemake.spatial import create_meshed_adata
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
