@@ -686,7 +686,7 @@ rule create_barcode_files_matching_summary:
                 px_by_um = (x_pos_max_px - x_pos_min_px) 
                 px_by_um = px_by_um / params['puck_variables']['width_um']
                 
-                out_df = pd.concat([out_df, {
+                out_df = pd.concat([out_df, pd.DataFrame({
                     'puck_barcode_file_id': pbf_id,
                     'puck_barcode_file': parsed_barcode_file,
                     'n_barcodes': n_barcodes,
@@ -697,7 +697,7 @@ rule create_barcode_files_matching_summary:
                     'y_pos_min_px': y_pos_min_px,
                     'y_pos_max_px': y_pos_max_px,
                     'px_by_um': px_by_um,
-                }], ignore_index=True)
+                })], ignore_index=True)
 
             out_df.to_csv(output[0], index=False)
         else:
