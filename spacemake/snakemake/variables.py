@@ -134,6 +134,20 @@ dge_spatial_obs = (
     + h5ad_dge_obs_suffix
 )
 
+# spatial + collection dge
+dge_spatial_collection = (
+    dge_out_prefix
+    + dge_out_suffix
+    + ".spatial_beads.puck_collection"
+    + h5ad_dge_suffix
+)
+dge_spatial_collection_obs = (
+    dge_out_prefix
+    + dge_out_suffix
+    + ".spatial_beads.puck_collection"
+    + h5ad_dge_obs_suffix
+)
+
 # spatial + meshed dge
 dge_spatial_mesh_suffix = (
     ".spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}_{puck_barcode_file_id}"
@@ -141,6 +155,14 @@ dge_spatial_mesh_suffix = (
 dge_spatial_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_mesh_suffix
 dge_spatial_mesh = dge_spatial_mesh_prefix + h5ad_dge_suffix
 dge_spatial_mesh_obs = dge_spatial_mesh_prefix + h5ad_dge_obs_suffix
+
+# spatial + collection + meshed dge
+dge_spatial_collection_mesh_suffix = (
+    ".spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}.puck_collection"
+)
+dge_spatial_collection_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_collection_mesh_suffix
+dge_spatial_collection_mesh = dge_spatial_collection_mesh_prefix + h5ad_dge_suffix
+dge_spatial_collection_mesh_obs = dge_spatial_collection_mesh_prefix + h5ad_dge_obs_suffix
 
 dge_types = [
     ".exon",

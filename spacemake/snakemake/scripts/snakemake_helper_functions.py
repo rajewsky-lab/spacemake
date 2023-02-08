@@ -692,6 +692,47 @@ def get_puck_file(wildcards):
         return []
     else:
         return {"barcode_file": puck_barcode_file}
+    
+
+def get_puck_collection(wildcards):
+    puck_name = project_df.get_metadata(
+        "puck", project_id=wildcards.project_id, sample_id=wildcards.sample_id
+    )
+
+    coordinate_system = config["pucks"][puck_name]["coordinate_system"]
+    puck_id_regex = config["pucks"][puck_name]["puck_id_regex"]
+
+    if coordinate_system == '':
+        return [], []
+    else:
+        return coordinate_system, puck_id_regex
+    
+
+def get_puck_collection_stitching_input(wildcards):
+    # there are three options:
+    # 1) no spatial dge
+    # 2) spatial dge, no mesh
+    # 3) spatial dge with a mesh
+    coordinate_system, _ = get_puck_collection(wildcards)
+    run_mode = list(get_run_modes_from_sample(wildcards.project_id, wildcards.sample_id).keys())[0]
+
+    puck_barcode_file_ids = project_df.get_puck_barcode_ids_and_files(
+                wildcards.project_id, wildcards.sample_id
+            )[0]
+
+    if len(coordinate_system) == 0:
+        return []
+    
+    return [
+        get_dge_from_run_mode(
+            project_id=wildcards.project_id,
+            sample_id=wildcards.sample_id,
+            run_mode=run_mode,
+            data_root_type=wildcards.data_root_type,
+            downsampling_percentage=wildcards.downsampling_percentage,
+            puck_barcode_file_id=puck_barcode_file_ids,
+        )["dge"]
+    ]
 
 
 def get_barcode_files_matching_summary_input(wildcards):

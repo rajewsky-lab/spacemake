@@ -468,6 +468,46 @@ rule create_mesh_spatial_dge:
         adata.write(output[0])
         adata.obs.to_csv(output[1])
 
+rule puck_collection_stitching:
+    input:
+        unpack(get_puck_collection_stitching_input)
+    output:
+        dge_spatial_mesh_collection,
+        dge_spatial_mesh_obs_collection
+    params:
+        puck_data = lambda wildcards: project_df.get_puck_variables(
+                                project_id = wildcards.project_id,
+                                sample_id = wildcards.sample_id),
+        puck_metadata = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
+            project_id=wildcards.project_id, sample_id=wildcards.sample_id
+        )[0],
+        is_spatial = lambda wildcards:
+            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
+                puck_barcode_file_id=wildcards.puck_barcode_file_id),
+        run_modes = lambda wildcards: get_run_modes_from_sample(
+            wildcards.project_id, wildcards.sample_id)
+    run:
+        puck_transform = puck_collection.parse_puck_coordinate_system_file(params['puck_data']['coordinate_system'])
+        pucks_list = puck_collection.read_pucks_to_list(
+            input, params['puck_metadata'], params['puck_data']['puck_id_regex'], "puck_id"
+        )
+        puck_collection_list = []
+
+        for puck in pucks_list:
+            puck_collection_list += [
+                puck_collection.create_puck_collection(
+                    puck,
+                    puck_transform
+                )
+            ]
+
+        puck_collection = anndata.concat(
+            puck_collection_list, merge=args.merge_output, join=args.join_output
+        )
+
+        puck_collection.write_h5ad(output[0])
+        puck_collection.obs.to_csv(output[1])
+
 rule create_qc_sheet:
     input:
         unpack(get_qc_sheet_input_files),
