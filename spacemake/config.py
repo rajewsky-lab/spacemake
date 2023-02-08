@@ -137,6 +137,13 @@ def get_run_mode_parser(required=True):
         help="distance between mesh spots in um. to create a visium-style "
         + "mesh use 100um",
     )
+    parser.add_argument(
+        "--spatial_barcode_min_matches",
+        type=float,
+        required=False,
+        help="minimum ratio (0, 1] of spatial barcode matches to further consider a puck"
+        + "across the rest of the pipeline",
+    )
 
     return parser
 
@@ -382,6 +389,7 @@ class RunMode(ConfigMainVariable):
         "mesh_type": str,
         "mesh_spot_diameter_um": int,
         "mesh_spot_distance_um": int,
+        "spatial_barcode_min_matches": int,
     }
 
     def has_parent(self):
