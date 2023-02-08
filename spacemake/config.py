@@ -408,7 +408,7 @@ class RunMode(ConfigMainVariable):
 
 
 class Puck(ConfigMainVariable):
-    variable_types = {"barcodes": str, "spot_diameter_um": float, "width_um": int}
+    variable_types = {"barcodes": str, "spot_diameter_um": float, "width_um": int, "coordinate_system": str, "puck_id_regex": str}
 
     @property
     def has_barcodes(self):
