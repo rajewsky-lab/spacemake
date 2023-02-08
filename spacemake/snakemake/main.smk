@@ -366,22 +366,6 @@ rule create_spatial_barcode_file:
 
         bc.to_csv(output[0], index=False)
 
-        # update the project df (but do not dump) to only process some tiles above the threshold
-        bc_filter = bc[
-            bc.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
-        ]
-
-        _puck_barcode_files = bc_filter['puck_barcode_file'].values
-        _puck_barcode_files_id = bc_filter['puck_barcode_file_id'].values
-
-        project_df.add_update_sample(
-            action='update',
-            project_id=wildcards.project_id,
-            sample_id=wildcards.sample_id,
-            puck_barcode_file=_puck_barcode_files,
-            puck_barcode_file_id=_puck_barcode_files_id,
-        )
-
 rule create_spatial_barcode_whitelist:
     input: parsed_spatial_barcodes
     output: temp(spatial_barcodes)
@@ -686,9 +670,8 @@ rule create_barcode_files_matching_summary:
                 px_by_um = (x_pos_max_px - x_pos_min_px) 
                 px_by_um = px_by_um / params['puck_variables']['width_um']
                 
-                out_df = pd.concat([out_df, pd.DataFrame({
+                out_df = out_df.append({
                     'puck_barcode_file_id': pbf_id,
-                    'puck_barcode_file': parsed_barcode_file,
                     'n_barcodes': n_barcodes,
                     'n_matching': n_matching,
                     'matching_ratio': matching_ratio,
@@ -697,9 +680,25 @@ rule create_barcode_files_matching_summary:
                     'y_pos_min_px': y_pos_min_px,
                     'y_pos_max_px': y_pos_max_px,
                     'px_by_um': px_by_um,
-                })], ignore_index=True)
+                }, ignore_index=True)
 
             out_df.to_csv(output[0], index=False)
         else:
             # save empty file
             out_df.to_csv(output[0], index=False)
+
+        # update the project df (but do not dump) to only process some tiles above the threshold
+        bc_filter = out_df[
+            out_df.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
+        ]
+
+        _puck_barcode_files = bc_filter['puck_barcode_file'].values
+        _puck_barcode_files_id = bc_filter['puck_barcode_file_id'].values
+
+        project_df.add_update_sample(
+            action='update',
+            project_id=wildcards.project_id,
+            sample_id=wildcards.sample_id,
+            puck_barcode_file=_puck_barcode_files,
+            puck_barcode_file_id=_puck_barcode_files_id,
+        )
