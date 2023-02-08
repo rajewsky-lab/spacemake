@@ -362,35 +362,39 @@ rule create_spatial_barcode_file:
 
         bc.to_csv(output[0], index=False)
 
-rule filter_spatial_barcode_files_min_matches_threshold:
-    input:
+rule create_spatial_barcode_whitelist:
+    input: 
         parsed_bc = parsed_spatial_barcodes,
         bc_summary = puck_barcode_files_summary
-    output:
-        temp(all_spatial_barcodes)
+    output: temp(spatial_barcodes)
     params:
         run_mode_variables = lambda wildcards:
-            project_df.config.get_run_mode(wildcards.run_mode).variables
+            project_df.config.get_run_mode(list(get_run_modes_from_sample(
+            wildcards.project_id, wildcards.sample_id).keys())[0]).variables
     run:
-        barcodes_summary = pd.read_csv(bc_summary)
-        barcodes_summary_filter = barcodes_summary[
-            barcodes_summary.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
-        ]
-
-        print(parsed_bc)
-        #if parsed_bc is in barcodes_summary_filter.puck_barcode_file:
-        pd.read_csv(parsed_bc).to_csv(output[0])
-
-rule create_spatial_barcode_whitelist:
-    input: all_spatial_barcodes
-    output: temp(spatial_barcodes)
-    run:
-        bc = pd.read_csv(input[0])
+        bc = pd.read_csv(input['parsed_bc'])
         bc = bc[['cell_bc']]
         bc = bc.append({'cell_bc': 'NNNNNNNNNNNN'}, ignore_index=True)
 
         # save both the whitelist and the beads in a separate file
         bc[['cell_bc']].to_csv(output[0], header=False, index=False)
+
+        # update the project df (but do not dump) to only process some tiles above the threshold
+        barcodes_summary = pd.read_csv(input['bc_summary'])
+        barcodes_summary_filter = barcodes_summary[
+            barcodes_summary.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
+        ]
+
+        _puck_barcode_files = barcodes_summary_filter['puck_barcode_file'].values
+        _puck_barcode_files_id = barcodes_summary_filter['puck_barcode_file_id'].values
+
+        project_df.add_update_sample(
+            action='update',
+            project_id=wildcards.project_id,
+            sample_id=wildcards.sample_id,
+            puck_barcode_file=_puck_barcode_files,
+            puck_barcode_file_id=_puck_barcode_files_id,
+        )
         
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
@@ -514,7 +518,7 @@ rule puck_collection_stitching:
             output,
         )
 
-        _pc.write_h5ad(args.output)
+        _pc.write_h5ad(output[0])
         _pc.obs.to_csv(output[1])
 
 rule create_qc_sheet:
