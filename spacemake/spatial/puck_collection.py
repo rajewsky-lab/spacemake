@@ -132,8 +132,10 @@ def parse_puck_id_from_path(f: str, puck_id_regex: str = DEFAULT_REGEX_PUCK_ID):
     puck_id = re.findall(rf"{puck_id_regex}", bname)
 
     if len(puck_id) > 1:
-        logger.warn("Found more than one puck_id in the path. First one (index 0) will be used.")
-    
+        logger.warn(
+            "Found more than one puck_id in the path. First one (index 0) will be used."
+        )
+
     puck_id = puck_id[0]
 
     return puck_id
@@ -201,6 +203,39 @@ def parse_puck_coordinate_system_file(f: str):
     return cs.to_dict(orient="dict")
 
 
+def merge_pucks_to_collection(
+    pucks: List[str],
+    puck_id: List[str],
+    puck_coordinates: str,
+    puck_id_regex: str,
+    puck_id_key: str = "puck_id",
+    no_reset_index: bool = False,
+    no_transform: bool = False,
+    merge_output: str = "same",
+    join_output: str = "inner",
+):
+    puck_transform = parse_puck_coordinate_system_file(puck_coordinates)
+
+    pucks_list = read_pucks_to_list(pucks, puck_id, puck_id_regex, puck_id_key)
+
+    puck_collection_list = []
+
+    for puck in pucks_list:
+        puck_collection_list += [
+            create_puck_collection(
+                puck,
+                puck_transform,
+                ~no_reset_index,
+                ~no_transform,
+            )
+        ]
+
+    puck_collection = anndata.concat(
+        puck_collection_list, merge=merge_output, join=join_output
+    )
+
+    return puck_collection
+
 @message_aggregation(logger_name)
 def cmdline():
     """cmdline."""
@@ -213,27 +248,16 @@ def cmdline():
     parser = setup_parser(parser)
 
     args = parser.parse_args()
-
-    puck_transform = parse_puck_coordinate_system_file(args.puck_coordinates)
-
-    pucks_list = read_pucks_to_list(
-        args.pucks, args.puck_id, args.puck_id_regex, args.puck_id_key
-    )
-
-    puck_collection_list = []
-
-    for puck in pucks_list:
-        puck_collection_list += [
-            create_puck_collection(
-                puck,
-                puck_transform,
-                ~args.no_reset_index,
-                ~args.no_transform,
-            )
-        ]
-
-    puck_collection = anndata.concat(
-        puck_collection_list, merge=args.merge_output, join=args.join_output
+    puck_collection = merge_pucks_to_collection(
+        pucks=args.pucks,
+        puck_id=args.puck_id,
+        puck_coordinates=args.puck_coordinates,
+        puck_id_regex=args.puck_id_regex,
+        puck_id_key=args.puck_id_key,
+        no_reset_index=args.no_reset_index,
+        no_transform=args.no_transform,
+        merge_output=args.merge_output,
+        join_output=args.join_output,
     )
 
     puck_collection.write_h5ad(args.output)
