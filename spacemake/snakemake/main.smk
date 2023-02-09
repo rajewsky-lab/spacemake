@@ -125,7 +125,7 @@ wildcard_constraints:
 #############
 rule run_analysis:
     input:
-        # create fastq
+        # create fastqc
         unpack(
             lambda wildcards: get_output_files(
                     fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
