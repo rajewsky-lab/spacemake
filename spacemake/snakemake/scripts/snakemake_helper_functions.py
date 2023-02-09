@@ -612,6 +612,11 @@ def get_dge_from_run_mode(
             for key, pattern in out_files_pattern.items()
         }
 
+        out_files = {
+            key: out_files.get(key, []) + collection_out_files.get(key, [])
+            for key in set(list(out_files.keys()) + list(collection_out_files.keys()))
+        }
+
     return out_files
 
 
