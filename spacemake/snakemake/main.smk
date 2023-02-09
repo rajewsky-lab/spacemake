@@ -145,6 +145,16 @@ rule run_analysis:
         # finally, everything registered via register_module_output_hook()
         get_module_outputs(),
 
+rule get_stats_prealigned_barcodes:
+    input:
+        get_output_files(barcode_readcounts,
+            data_root_type='complete_data',
+            downsampling_percentage='',
+            run_on_external=False,
+        ),
+        get_output_files(puck_count_prealigned_barcode_matches_summary,
+            data_root_type = 'complete_data',
+            downsampling_percentage='', run_on_external=False)
 
 rule get_whitelist_barcodes:
     input:
@@ -319,7 +329,110 @@ rule get_barcode_readcounts:
         O= {output} \
         TAG={params.cell_barcode_tag} \
         READ_MQ=0
+        """tagged_bam
+
+rule get_barcode_readcounts_prealigned:
+    # we perform some preliminary counting on the prealigned reads
+    input:
+        tagged_bam
+    output:
+        barcode_readcounts_prealigned
+    params:
+        cell_barcode_tag = lambda wildcards: get_bam_tag_names(
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id)['{cell}'],
+    shell:
         """
+        {dropseq_tools}/BamTagHistogram -m 32g \
+        I= {input} \
+        O= {output} \
+        TAG={params.cell_barcode_tag} \
+        READ_MQ=0
+        """
+
+rule create_stats_prealigned_spatial_barcodes:
+    input:
+        unpack(get_puck_file),
+        unpack(lambda wildcards: get_all_barcode_readcounts(wildcards, prealigned=True))
+    output:
+        temp(stats_prealigned_spatial_barcodes)
+    run:
+        # load all readcounts
+        bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
+            names=['read_n', 'cell_bc']) for bc_rc in input['bc_readcounts']]
+
+        # join them together
+        bc_readcounts = pd.concat(bc_readcounts)
+
+        # remove duplicates
+        bc_readcounts.drop_duplicates(subset='cell_bc', keep='first',
+            inplace=True)
+
+        # load barcode file and parse it
+        bc = parse_barcode_file(input[0])
+        n_barcodes = bc.shape[0]
+
+        bc.reset_index(level=0, inplace=True)
+        # inner join to get rid of barcode without any data
+        bc = pd.merge(bc, bc_readcounts, how='inner', on='cell_bc')
+        bc = bc[['cell_bc', 'x_pos', 'y_pos']]
+        n_matching = bc.shape[0]
+
+        matching_ratio = n_matching / n_barcodes
+
+        bc.to_csv(output[0], index=False)
+
+        puck_stats = pd.DataFrame({
+            'puck_barcode_file': pbf,
+            'parsed_barcode_file': parsed_barcode_file,
+            'n_barcodes': n_barcodes,
+            'n_matching': n_matching,
+            'matching_ratio': matching_ratio,
+        }, ignore_index=True)
+        puck_stats.to_csv(output[0], index=False)
+
+rule merge_stats_prealigned_spatial_barcodes:
+    input:
+        unpack(get_stats_prealigned_spatial_barcodes)
+    output:
+        puck_count_prealigned_barcode_matches_summary
+    params:
+        pbf_ids = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id)[0],
+        run_mode_variables = lambda wildcards:
+            project_df.config.get_run_mode(list(get_run_modes_from_sample(
+            wildcards.project_id, wildcards.sample_id).keys())[0]).variables
+    run:
+        # TODO: the counting can be done while merging, saving to a temporary file, and
+        # here we just merge into a single file (temporary)
+        import os
+        out_df = pd.DataFrame(columns=[
+            'puck_barcode_file_id',
+            'puck_barcode_file',
+            'parsed_barcode_file',
+            'n_barcodes',
+            'n_matching',
+            'matching_ratio'
+            ])
+
+        if ('puck_barcode_files' in input.keys() and
+            'stats_prealigned_spatial_barcodes' in input.keys()):
+            for pbf_id, pbf, stats_pbf in zip(
+                    params['pbf_ids'],
+                    input['puck_barcode_files'],
+                    input['stats_prealigned_spatial_barcodes'],
+                ):
+                _puck_df = pd.read_csv(stats_pbf)
+                _puck_df['puck_barcode_file_id'] = pbf_id
+                
+                out_df = out_df.append(_puck_df, ignore_index=True)
+
+            above_threshold_mask = out_df.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
+            out_df['pass_threshold'] = 0
+            out_df['pass_threshold'][above_threshold_mask] = 1
+
+        out_df.to_csv(output[0], index=False)
 
 rule create_top_barcode_whitelist:
     input:

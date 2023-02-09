@@ -433,14 +433,19 @@ def get_novosparc_variables(pdf, args):
 
     return ret
 
-def update_project_df_barcode_matches():
-    from spacemake.snakemake.variables import puck_count_barcode_matches_summary
+def update_project_df_barcode_matches(prealigned=False):
+    from spacemake.snakemake.variables import puck_count_barcode_matches_summary, puck_count_prealigned_barcode_matches_summary
 
-    for index, row in pdf.df.iterrows():
+    if prealigned:
+        _bc_file = puck_count_prealigned_barcode_matches_summary
+    else:
+        _bc_file = puck_count_barcode_matches_summary
+
+    for index, _ in pdf.df.iterrows():
         project_id, sample_id = index
 
         # check if barcodes have been filtered
-        _f_barcodes_df = puck_count_barcode_matches_summary.format(project_id=project_id,
+        _f_barcodes_df = _bc_file.format(project_id=project_id,
                 sample_id=sample_id)
     
         if os.path.exists(_f_barcodes_df):
@@ -499,7 +504,30 @@ def spacemake_run(pdf, args):
 
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
-    # run snakemake
+    # run snakemake with prealignment filter
+    # this one runs preprocessing/alignment/counting of matching barcodes before alignment
+    preprocess_finished = snakemake.snakemake(
+        snakefile,
+        configfiles=[config_path],
+        cores=args["cores"],
+        dryrun=args["dryrun"],
+        targets=['get_stats_prealigned_barcodes'],
+        touch=args["touch"],
+        force_incomplete=args["rerun_incomplete"],
+        keepgoing=args["keep_going"],
+        printshellcmds=args["printshellcmds"],
+        config=config_variables,
+    )
+    
+    if preprocess_finished is False:
+        raise SpacemakeError("an error occurred while snakemake() ran")
+
+    # update valid pucks (above threshold) before continuing to downstream
+    # this performs counting of matching barcodes after alignment
+    update_project_df_barcode_matches(prealigned=True)
+    pdf.dump()
+
+    # run snakemake after prealignment filter
     preprocess_finished = snakemake.snakemake(
         snakefile,
         configfiles=[config_path],
@@ -521,6 +549,7 @@ def spacemake_run(pdf, args):
     pdf.dump()
 
     # run spacemake downstream
+    # this performs the DGE calculation, h5ad conversion, automated analysis and QC
     analysis_finished = snakemake.snakemake(
         snakefile,
         configfiles=[config_path],

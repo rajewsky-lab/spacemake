@@ -695,7 +695,7 @@ def get_dge_collection_from_run_mode(
     return out_files
 
 
-def get_all_barcode_readcounts(wildcards):
+def get_all_barcode_readcounts(wildcards, prealigned=False):
     # returns all available barcode readcounts
     project_id = wildcards.project_id
     sample_id = wildcards.sample_id
@@ -724,7 +724,10 @@ def get_all_barcode_readcounts(wildcards):
         "polyA_adapter_trimmed": polyA_adapter_trimmed_wildcard,
     }
 
-    return {"bc_readcounts": expand(barcode_readcounts, **extra_args)}
+    if prealigned:
+        return {"bc_readcounts": expand(barcode_readcounts, **extra_args)}
+    else:
+        return {"bc_readcounts": expand(barcode_readcounts_prealigned, **extra_args)}
 
 
 def get_qc_sheet_input_files(wildcards):
@@ -854,6 +857,27 @@ def get_barcode_files_matching_summary_input(wildcards):
     return {
         "puck_barcode_files": pbfs,
         "parsed_spatial_barcode_files": parsed_spatial_barcode_files,
+    }
+
+
+def get_stats_prealigned_spatial_barcodes(wildcards):
+    pbf_ids, pbfs = project_df.get_puck_barcode_ids_and_files(
+        project_id=wildcards.project_id, sample_id=wildcards.sample_id
+    )
+
+    stats_prealigned_spatial_barcodes = [
+        expand(
+            stats_prealigned_spatial_barcodes,
+            project_id=wildcards.project_id,
+            sample_id=wildcards.sample_id,
+            puck_barcode_file_id=pbf_id,
+        )[0]
+        for pbf_id in pbf_ids
+    ]
+
+    return {
+        "puck_barcode_files": pbfs,
+        "stats_prealigned_spatial_barcodes": stats_prealigned_spatial_barcodes,
     }
 
 
