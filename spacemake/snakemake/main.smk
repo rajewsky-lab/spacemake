@@ -637,6 +637,7 @@ rule create_barcode_files_matching_summary:
             project_df.config.get_run_mode(list(get_run_modes_from_sample(
             wildcards.project_id, wildcards.sample_id).keys())[0]).variables
     run:
+        import os
         out_df = pd.DataFrame(columns=[
             'puck_barcode_file_id',
             'n_barcodes',
@@ -672,6 +673,7 @@ rule create_barcode_files_matching_summary:
                 out_df = out_df.append({
                     'puck_barcode_file_id': pbf_id,
                     'puck_barcode_file': pbf,
+                    'parsed_barcode_file': parsed_barcode_file,
                     'n_barcodes': n_barcodes,
                     'n_matching': n_matching,
                     'matching_ratio': matching_ratio,
@@ -683,25 +685,31 @@ rule create_barcode_files_matching_summary:
                 }, ignore_index=True)
 
             out_df.to_csv(output[0], index=False)
+
+            # update the project df (but do not dump) to only process some tiles above the threshold
+            above_threshold_mask = out_df.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
+
+            _puck_barcode_files = out_df[above_threshold_mask]['puck_barcode_file'].values
+            _puck_barcode_files_id = out_df[above_threshold_mask]['puck_barcode_file_id'].values
+
+            project_df.add_update_sample(
+                action='update',
+                project_id=wildcards.project_id,
+                sample_id=wildcards.sample_id,
+                puck_barcode_file=_puck_barcode_files,
+                puck_barcode_file_id=_puck_barcode_files_id,
+            )
+
+            # we rewrite the project df to keep only those pucks with > 0.2 matches
+            project_df.dump()
+
+            # we remove the unmatched barcode files from the directory
+            _puck_barcode_nokeep_files = out_df[~above_threshold_mask]['parsed_barcode_file'].values
+
+            for f in _puck_barcode_nokeep_files:
+                if os.path.isfile(fname):
+                    os.remove(fname)
+
         else:
             # save empty file
             out_df.to_csv(output[0], index=False)
-
-        # update the project df (but do not dump) to only process some tiles above the threshold
-        bc_filter = out_df[
-            out_df.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
-        ]
-
-        _puck_barcode_files = bc_filter['puck_barcode_file'].values
-        _puck_barcode_files_id = bc_filter['puck_barcode_file_id'].values
-
-        project_df.add_update_sample(
-            action='update',
-            project_id=wildcards.project_id,
-            sample_id=wildcards.sample_id,
-            puck_barcode_file=_puck_barcode_files,
-            puck_barcode_file_id=_puck_barcode_files_id,
-        )
-
-        # we rewrite the project df to keep only those pucks with > 0.2 matches
-        project_df.dump()
