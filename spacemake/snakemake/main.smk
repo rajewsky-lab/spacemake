@@ -671,6 +671,7 @@ rule create_barcode_files_matching_summary:
                 
                 out_df = out_df.append({
                     'puck_barcode_file_id': pbf_id,
+                    'puck_barcode_file': pbf,
                     'n_barcodes': n_barcodes,
                     'n_matching': n_matching,
                     'matching_ratio': matching_ratio,
