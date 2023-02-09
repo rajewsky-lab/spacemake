@@ -865,7 +865,7 @@ def get_stats_prealigned_spatial_barcodes(wildcards):
         project_id=wildcards.project_id, sample_id=wildcards.sample_id
     )
 
-    stats_prealigned_spatial_barcodes = [
+    parsed_stats_prealigned_sp_bc = [
         expand(
             stats_prealigned_spatial_barcodes,
             project_id=wildcards.project_id,
@@ -877,7 +877,7 @@ def get_stats_prealigned_spatial_barcodes(wildcards):
 
     return {
         "puck_barcode_files": pbfs,
-        "stats_prealigned_spatial_barcodes": stats_prealigned_spatial_barcodes,
+        "stats_prealigned_spatial_barcodes": parsed_stats_prealigned_sp_bc,
     }
 
 

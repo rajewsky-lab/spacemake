@@ -93,7 +93,7 @@ parsed_spatial_barcodes = (
 )
 stats_prealigned_spatial_barcodes = (
     complete_data_root
-    + "/puck_barcode_files/stats_prealigned_spatial_barcodes_{puck_barcode_file_id}.csv"
+    + "/stats_prealigned_spatial_barcodes_{puck_barcode_file_id}.csv"
 )
 puck_barcode_files_summary = complete_data_root + "/puck_barcode_files_summary.csv"
 puck_count_barcode_matches_summary = complete_data_root + "/puck_count_barcode_matches.csv"

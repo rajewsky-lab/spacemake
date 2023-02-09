@@ -321,7 +321,7 @@ rule get_barcode_readcounts:
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)['{cell}'],
+            sample_id = wildcards.sample_id)['{cell}']
     shell:
         """
         {dropseq_tools}/BamTagHistogram -m 32g \
@@ -329,7 +329,7 @@ rule get_barcode_readcounts:
         O= {output} \
         TAG={params.cell_barcode_tag} \
         READ_MQ=0
-        """tagged_bam
+        """
 
 rule get_barcode_readcounts_prealigned:
     # we perform some preliminary counting on the prealigned reads
@@ -340,7 +340,7 @@ rule get_barcode_readcounts_prealigned:
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)['{cell}'],
+            sample_id = wildcards.sample_id)['{cell}']
     shell:
         """
         {dropseq_tools}/BamTagHistogram -m 32g \
@@ -355,7 +355,7 @@ rule create_stats_prealigned_spatial_barcodes:
         unpack(get_puck_file),
         unpack(lambda wildcards: get_all_barcode_readcounts(wildcards, prealigned=True))
     output:
-        temp(stats_prealigned_spatial_barcodes)
+        stats_prealigned_spatial_barcodes
     run:
         # load all readcounts
         bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
@@ -383,12 +383,12 @@ rule create_stats_prealigned_spatial_barcodes:
         bc.to_csv(output[0], index=False)
 
         puck_stats = pd.DataFrame({
-            'puck_barcode_file': pbf,
-            'parsed_barcode_file': parsed_barcode_file,
-            'n_barcodes': n_barcodes,
-            'n_matching': n_matching,
-            'matching_ratio': matching_ratio,
-        }, ignore_index=True)
+            'puck_barcode_file_id': [wildcards.puck_barcode_file_id],
+            'parsed_barcode_file': [input[0]],
+            'n_barcodes': [n_barcodes],
+            'n_matching': [n_matching],
+            'matching_ratio': [matching_ratio],
+        })
         puck_stats.to_csv(output[0], index=False)
 
 rule merge_stats_prealigned_spatial_barcodes:
@@ -410,7 +410,6 @@ rule merge_stats_prealigned_spatial_barcodes:
         out_df = pd.DataFrame(columns=[
             'puck_barcode_file_id',
             'puck_barcode_file',
-            'parsed_barcode_file',
             'n_barcodes',
             'n_matching',
             'matching_ratio'
@@ -424,7 +423,6 @@ rule merge_stats_prealigned_spatial_barcodes:
                     input['stats_prealigned_spatial_barcodes'],
                 ):
                 _puck_df = pd.read_csv(stats_pbf)
-                _puck_df['puck_barcode_file_id'] = pbf_id
                 
                 out_df = out_df.append(_puck_df, ignore_index=True)
 
