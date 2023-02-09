@@ -351,11 +351,12 @@ rule get_barcode_readcounts_prealigned:
         """
 
 rule create_stats_prealigned_spatial_barcodes:
+    # use shared resources here, do not load for every pair, this can have a speedup
     input:
         unpack(get_puck_file),
         unpack(lambda wildcards: get_all_barcode_readcounts(wildcards, prealigned=True))
     output:
-        stats_prealigned_spatial_barcodes
+        temp(stats_prealigned_spatial_barcodes)
     run:
         # load all readcounts
         bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
@@ -384,7 +385,7 @@ rule create_stats_prealigned_spatial_barcodes:
 
         puck_stats = pd.DataFrame({
             'puck_barcode_file_id': [wildcards.puck_barcode_file_id],
-            'parsed_barcode_file': [input[0]],
+            'puck_barcode_file': [input[0]],
             'n_barcodes': [n_barcodes],
             'n_matching': [n_matching],
             'matching_ratio': [matching_ratio],
@@ -404,8 +405,6 @@ rule merge_stats_prealigned_spatial_barcodes:
             project_df.config.get_run_mode(list(get_run_modes_from_sample(
             wildcards.project_id, wildcards.sample_id).keys())[0]).variables
     run:
-        # TODO: the counting can be done while merging, saving to a temporary file, and
-        # here we just merge into a single file (temporary)
         import os
         out_df = pd.DataFrame(columns=[
             'puck_barcode_file_id',
@@ -746,8 +745,6 @@ rule count_barcode_matches:
             project_df.config.get_run_mode(list(get_run_modes_from_sample(
             wildcards.project_id, wildcards.sample_id).keys())[0]).variables
     run:
-        # TODO: the counting can be done while merging, saving to a temporary file, and
-        # here we just merge into a single file (temporary)
         import os
         out_df = pd.DataFrame(columns=[
             'puck_barcode_file_id',
