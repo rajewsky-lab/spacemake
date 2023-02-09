@@ -695,16 +695,17 @@ def get_puck_file(wildcards):
     
 
 def get_puck_collection(wildcards):
-    puck_name = project_df.get_metadata(
-        "puck", project_id=wildcards.project_id, sample_id=wildcards.sample_id
+    puck_vars = project_df.get_puck_variables(
+        project_id = wildcards.project_id,
+        sample_id = wildcards.sample_id
     )
 
-    coordinate_system = config["pucks"][puck_name]["coordinate_system"]
+    coordinate_system = puck_vars["coordinate_system"]
 
     if coordinate_system is None or coordinate_system == '' or coordinate_system == 'None':
         return []
     else:
-        return coordinate_system
+        return [coordinate_system]
     
 
 def get_puck_collection_stitching_input(wildcards):
@@ -722,8 +723,7 @@ def get_puck_collection_stitching_input(wildcards):
     if len(coordinate_system) == 0:
         return None
     
-    return [
-        get_dge_from_run_mode(
+    dge = get_dge_from_run_mode(
             project_id=wildcards.project_id,
             sample_id=wildcards.sample_id,
             run_mode=run_mode,
@@ -731,7 +731,8 @@ def get_puck_collection_stitching_input(wildcards):
             downsampling_percentage=wildcards.downsampling_percentage,
             puck_barcode_file_id=puck_barcode_file_ids,
         )["dge"]
-    ]
+
+    return [dge]
 
 
 def get_barcode_files_matching_summary_input(wildcards):

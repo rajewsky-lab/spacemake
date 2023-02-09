@@ -397,7 +397,7 @@ class RunMode(ConfigMainVariable):
         "mesh_type": str,
         "mesh_spot_diameter_um": int,
         "mesh_spot_distance_um": int,
-        "spatial_barcode_min_matches": int,
+        "spatial_barcode_min_matches": float,
     }
 
     def has_parent(self):
