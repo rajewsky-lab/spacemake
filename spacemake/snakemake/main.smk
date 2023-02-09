@@ -17,7 +17,7 @@ import scanpy as sc
 
 from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
     parse_barcode_file, load_external_dge, attach_puck_variables, attach_puck
-from spacemake.spatial import create_meshed_adata
+from spacemake.spatial import create_meshed_adata, puck_collection
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
 from spacemake.errors import SpacemakeError
@@ -134,6 +134,8 @@ rule run_analysis:
                 if config['with_fastqc'] else []
         ),
         unpack(get_all_dges),
+        # this creates the dge as a collection of pucks (i.e., spatial stitching)
+        unpack(get_all_dges_collection),
         # this will also create the clean dge
         get_output_files(automated_report, data_root_type = 'complete_data',
             downsampling_percentage='', puck_barcode_file_matching_type='spatial_matching'),
@@ -151,7 +153,7 @@ rule get_whitelist_barcodes:
             downsampling_percentage='',
             run_on_external=False,
         ),
-        get_output_files(puck_barcode_files_summary,
+        get_output_files(puck_count_barcode_matches_summary,
             data_root_type = 'complete_data',
             downsampling_percentage='', run_on_external=False)
 
@@ -412,7 +414,8 @@ rule create_dge:
 rule create_h5ad_dge:
     input:
         unpack(get_puck_file),
-        unpack(get_raw_dge)
+        unpack(get_raw_dge),
+        puck_barcode_files_summary
     # output here will either be n_beads=number, n_beads=spatial
     output: dge_out_h5ad, dge_out_h5ad_obs
     run:
@@ -470,7 +473,9 @@ rule create_mesh_spatial_dge:
 
 rule puck_collection_stitching:
     input:
-        unpack(get_puck_collection_stitching_input)
+        unpack(get_puck_collection_stitching_input),
+        # the puck_barcode_files_summary is required for puck_metadata
+        puck_barcode_files_summary
     output:
         dge_spatial_collection_mesh,
         dge_spatial_collection_mesh_obs
@@ -483,16 +488,12 @@ rule puck_collection_stitching:
         ),
     run:
         _pc = puck_collection.merge_pucks_to_collection(
-            input,
+            # takes all input except the puck_barcode_files
+            input[:-1],
             params['puck_metadata'][0],
             params['puck_data']['coordinate_system'],
             "",
             "puck_id",
-            no_reset_index,
-            no_transform,
-            merge_output,
-            join_output,
-            output,
         )
 
         _pc.write_h5ad(output[0])
@@ -653,9 +654,7 @@ rule count_barcode_matches:
                     input['puck_barcode_files'],
                     input['parsed_spatial_barcode_files'],
                 ):
-                print("reading pbf")
                 n_barcodes = pd.read_csv(pbf).shape[0]
-                print("reading parsed bf")
                 n_matching = pd.read_csv(parsed_barcode_file).shape[0]
                 matching_ratio = round(float(n_matching)/n_barcodes, 2)
                 
@@ -668,27 +667,15 @@ rule count_barcode_matches:
                     'matching_ratio': matching_ratio,
                 }, ignore_index=True)
 
-            # update the project df (but do not dump) to only process some tiles above the threshold
             above_threshold_mask = out_df.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
-
-            _puck_barcode_files = out_df[above_threshold_mask]['puck_barcode_file'].values
-            _puck_barcode_files_id = out_df[above_threshold_mask]['puck_barcode_file_id'].values
-
-            print(_puck_barcode_files)
-            print(_puck_barcode_files_id)
-
-            project_df.add_update_sample(
-                action='update',
-                project_id=wildcards.project_id,
-                sample_id=wildcards.sample_id,
-                puck_barcode_file=_puck_barcode_files,
-                puck_barcode_file_id=_puck_barcode_files_id,
-            )
+            out_df['pass_threshold'] = 0
+            out_df['pass_threshold'][above_threshold_mask] = 1
 
             out_df.to_csv(output[0], index=False)
         else:
             # save empty file
             out_df.to_csv(output[0], index=False)
+
 
 rule create_barcode_files_matching_summary:
     input:
