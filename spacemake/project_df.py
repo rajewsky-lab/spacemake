@@ -41,6 +41,7 @@ class ProjectDF:
         "basecalls_dir": None,
         "R1": None,
         "R2": None,
+        "reads": None,
         "longreads": None,
         "longread_signature": None,
         "investigator": "unknown",
@@ -69,6 +70,7 @@ class ProjectDF:
         "basecalls_dir": "str",
         "R1": "object",
         "R2": "object",
+        "reads": "object",
         "longreads": "str",
         "longread_signature": "str",
         "investigator": "str",
@@ -243,6 +245,7 @@ class ProjectDF:
             [
                 "R1",
                 "R2",
+                "reads",
                 "basecalls_dir",
                 "sample_sheet",
                 "longreads",
@@ -262,6 +265,7 @@ class ProjectDF:
             data.R2  # R1 is optional (bulk samples)
             or (data.basecalls_dir and data.sample_sheet)
             or (data.longreads)
+            or (data.reads)
             and not data.dge
             or data.is_merged
         ):
@@ -290,6 +294,7 @@ class ProjectDF:
             [
                 "R1",
                 "R2",
+                "reads",
                 "basecalls_dir",
                 "sample_sheet",
                 "longreads",
@@ -303,6 +308,7 @@ class ProjectDF:
             or data.R2
             or (data.sample_sheet and data.basecalls_dir)
             or data.dge
+            or data.reads
         ):
             return True
         elif data.longreads:
@@ -375,6 +381,10 @@ class ProjectDF:
 
         project_list = []
         # required if upgrading from pre-longread tree
+        if not "reads" in self.df.columns:
+            modified = True
+            self.df["reads"] = None
+
         if not "longreads" in self.df.columns:
             modified = True
             self.df["longreads"] = None
@@ -695,6 +705,7 @@ class ProjectDF:
         sample_id=None,
         R1=None,
         R2=None,
+        reads=None,
         dge=None,
         longreads=None,
         longread_signature=None,
@@ -714,6 +725,7 @@ class ProjectDF:
         :param sample_id:
         :param R1:
         :param R2:
+        :param reads:
         :param dge:
         :param longreads:
         :param longread_signature:
@@ -756,7 +768,13 @@ class ProjectDF:
         if R1 == ["None"]:
             R1 = None
 
-        if action == "add" and (R2 is None) and not is_merged:
+        if R2 == ["None"]:
+            R2 = None
+        
+        if reads == "None":
+            reads = None
+        
+        if action == "add" and (R2 is None) and (reads is None) and not is_merged:
             self.logger.info("R2 not provided, trying longreads")
 
             if not longreads:
@@ -780,10 +798,13 @@ class ProjectDF:
                     )
 
         # assert files first
-        if R1 is not None:
-            assert_file(R1, default_value=None, extension=".fastq.gz")
+        # if R1 is not None:
+        assert_file(R1, default_value=None, extension=".fastq.gz")
 
+        # if R2 is not None:
         assert_file(R2, default_value=None, extension=".fastq.gz")
+
+        assert_file(reads, default_value=None, extension=[".txt", ".csv", ".tsv"])
         assert_file(longreads, default_value=None, extension="all")
         assert_file(
             dge,
@@ -834,6 +855,7 @@ class ProjectDF:
         # first populate kwargs
         kwargs["R1"] = R1
         kwargs["R2"] = R2
+        kwargs["reads"] = reads
         kwargs["dge"] = dge
         kwargs["longreads"] = longreads
         kwargs["longread_signature"] = longread_signature

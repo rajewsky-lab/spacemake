@@ -232,6 +232,15 @@ def get_linked_reads(wildcards):
                 "fastq.gz", "fastq"
             )
 
+        matrix = project_df.get_metadata(
+            "reads",
+            sample_id=wildcards.sample_id,
+            project_id=wildcards.project_id,
+        )
+        if str(matrix).lower() != "none":
+            reads["reads"] = matrix
+
+
     # print(f"resulting reads: '{reads}'")
     return reads
 

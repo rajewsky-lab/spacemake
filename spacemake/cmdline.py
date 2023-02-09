@@ -230,6 +230,14 @@ def get_data_parser(reads_required=False):
     )
 
     parser.add_argument(
+        "--reads",
+        type=str,
+        default="None",
+        help="path to a CSV file listing reads for the sample (can be used for pooling reads and also for aggregating bulk samples into one big analysis with different cell barcodes for each sample)",
+        required=reads_required,
+    )
+
+    parser.add_argument(
         "--dge",
         type=str,
         help="Path to dge matrix. spacemake can also handle already processed"

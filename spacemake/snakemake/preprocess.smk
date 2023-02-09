@@ -79,7 +79,8 @@ rule tag_reads_bc_umi:
     params:
         bc_params = get_bc_preprocess_settings,
         read1 = lambda wc: get_linked_reads(wc).get("R1", None),
-        read2 = lambda wc: get_linked_reads(wc).get("R2", None)
+        read2 = lambda wc: get_linked_reads(wc).get("R2", None),
+        reads = lambda wc: get_linked_reads(wc).get("reads", None)
     output:
         ubam = tagged_bam,
         bc_stats = stats_dir + "/{sample_id}.bc_stats.tsv"
@@ -95,6 +96,7 @@ rule tag_reads_bc_umi:
         "  --debug={log_debug} "
         "  --read1={params.read1} "
         "  --read2={params.read2} "
+        "  --matrix={params.reads} "
         "  --parallel={threads} "
         "  --save-stats={output.bc_stats} "
         # "  --save-cell-barcodes={output.bc_counts} "
@@ -116,7 +118,7 @@ rule trim_adapters_polyA:
             project_id=wildcards.project_id,
             sample_id=wildcards.sample_id
         )
-    threads: 10
+    threads: 12
     shell:
         "python {bin_dir}/cutadapt_bam.py {input} "
         "  --sample={wildcards.sample_id} "

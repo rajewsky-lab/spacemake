@@ -25,14 +25,15 @@ import spacemake.util as util
 # * refactor into multiple modules?
 
 
-def read_to_queues(params, Qfq, args, Qerr, abort_flag):
+def read_to_queues(input_files, params, Qfq, args, Qerr, abort_flag):
     """
     Reads from a fastq (.gz) file, gathers the raw FASTQ data
     into chunks, and places them - round-robin - onto Queues
     for the worker processes.
 
     Args:
-        params (_type_): List of input files to read
+        input_files (list): List of input files to be read
+        params (list): List of parameter dictionaries to supersede args for each input file
         Qfq (_type_): list of n_workers Queues to place chunks on
         args (_type_): parsed cmdline args
         Qerr (_type_): Queue connecting to main process for error message retrieval
@@ -48,13 +49,13 @@ def read_to_queues(params, Qfq, args, Qerr, abort_flag):
     T0 = time()
     dT = 0
 
-    def dispatch():
+    def dispatch(par):
         nonlocal chunk, n_chunk, n_reads, T0
         # send this chunk to worker i
         # using round-robin
         i = n_chunk % args.parallel
         logger.debug(f"putting chunk {n_chunk} onto queue {i}")
-        Qfq[i].put((n_chunk, chunk))
+        Qfq[i].put((n_chunk, chunk, par))
         n_chunk += 1
         n_reads += len(chunk) / 4
         chunk = []
@@ -72,8 +73,8 @@ def read_to_queues(params, Qfq, args, Qerr, abort_flag):
         Qerr=Qerr,
         exc_flag=abort_flag,
     ) as el:
-        for fname in params:
-            logger.info(f"iterating over reads from '{fname}'")
+        for fname, par in zip(input_files, params):
+            logger.info(f"iterating over reads from '{fname}' with special params={par}")
             if fname.endswith(".gz"):
                 src = gzip.open(fname, mode="rt")
             else:
@@ -82,10 +83,10 @@ def read_to_queues(params, Qfq, args, Qerr, abort_flag):
             for line in src:
                 chunk.append(line)
                 if len(chunk) >= args.chunk_size:
-                    dispatch()
+                    dispatch(par)
 
             if len(chunk):
-                dispatch()
+                dispatch(par)
 
         el.logger.info("finished! Closing down.")
         for i in range(args.parallel):
@@ -139,7 +140,7 @@ def make_formatter_from_args(args):
         d,
     )
     # from said dict we can now retrieve the function object
-    # and store it as self.format
+    # and call it many times over
     func = d["format_func"]
     return func
 
@@ -158,7 +159,6 @@ def make_BAM_header(args):
         ],
         "RG": [
             {"ID": "A", "SM": args.sample},
-            # {"ID": "U", "SM": f"unassigned_{args.sample}"},
         ],
     }
     return pysam.AlignmentHeader.from_dict(header)
@@ -216,6 +216,7 @@ def quality_trim(fq_src, min_qual=20, phred_base=33):
         new_end = end - (qtrim[::-1]).argmax()
 
         # TODO: yield A3,T3 adapter-trimming tags
+        # TODO: convert to cutadapt/BWA qual-trim logic
         if new_end != end:
             qual = qual[:new_end]
             seq = seq[:new_end]
@@ -229,11 +230,12 @@ def parallel_worker(Qfq1, Qfq2, Qres, args, Qerr, abort_flag, stat_lists):
     def iter_paired(Qfq1, Qfq2):
         src1 = queue_iter(Qfq1, abort_flag)
         src2 = queue_iter(Qfq2, abort_flag)
-        for (n1, chunk1), (n2, chunk2) in zip(src1, src2):
+        for (n1, chunk1, par1), (n2, chunk2, par2) in zip(src1, src2):
             logger.debug(
                 f"received chunk {n1} {n2} of paired {len(chunk1)} {len(chunk2)} raw FASTQ lines"
             )
             assert n1 == n2
+            assert par1 == par2
 
             fq_src1 = util.FASTQ_src(chunk1)
             fq_src2 = util.FASTQ_src(chunk2)
@@ -246,10 +248,10 @@ def parallel_worker(Qfq1, Qfq2, Qres, args, Qerr, abort_flag, stat_lists):
             for (_, seq1, qual1), (name2, seq2, qual2) in zip(fq_src1, fq_src2):
                 out.append((name2, seq1, qual1, seq2, qual2))
 
-            yield n1, out
+            yield n1, out, par1
 
     def iter_single(Qfq2):
-        for n, chunk in queue_iter(Qfq2, abort_flag):
+        for n, chunk, par in queue_iter(Qfq2, abort_flag):
             logger.debug(
                 f"received chunk {n} of single-end {len(chunk)} raw FASTQ lines"
             )
@@ -261,7 +263,7 @@ def parallel_worker(Qfq1, Qfq2, Qres, args, Qerr, abort_flag, stat_lists):
                 )
 
             out = [(name2, "NA", "NA", seq2, qual2) for name2, seq2, qual2 in fq_src2]
-            yield n, out
+            yield n, out, par
 
     with ExceptionLogging(
         f"spacemake.bin.fastq_to_uBAM.worker {args.sample}",
@@ -279,10 +281,15 @@ def parallel_worker(Qfq1, Qfq2, Qres, args, Qerr, abort_flag, stat_lists):
         else:
             ingress = iter_single(Qfq2)
 
-        for n_chunk, chunk in ingress:
+        for n_chunk, chunk, par in ingress:
             # TODO: also retrieve parameters such as CB=NNNN for each chunk
             # and recreate a formatter. Since chunk_size is ~100k, this should
             # be negligible but add flexibility for multiple input files etc.
+            kw = vars(args)
+            kw.update(par)
+            import argparse
+            args = argparse.Namespace(**kw)
+
             fmt = Formatter(args)  # , **params
             results = []
             for fqid, r1, q1, r2, qual2 in chunk:
@@ -370,14 +377,35 @@ def dict_merge(sources):
 
 
 def get_input_params(args):
-    return [args.read1,], [
-        args.read2,
-    ]
+    import pandas as pd
+    if str(args.matrix) != None:
+        df = pd.read_csv(args.matrix, sep=',', index_col=None)
+        if not 'R1' in df.columns:
+            df['R1'] = 'None'
 
+        R1 = df['R1'].to_list()
+        R2 = df['R2'].to_list()
+        # TODO extract other column values into a list of dictionaries (most importantly cell=...)
+        # which can override how the formatter in the workers processes the raw reads
+        params = [{},] * len(R1)
+
+    else:
+        R1 = [args.read1,]
+        R2 = [args.read2,]
+        params = [{},]
+
+    return R1, R2, params
 
 def main_parallel(args):
+    input_reads1, input_reads2, input_params = get_input_params(args)
+    have_read1 = set([str(r1) != "None" for r1 in input_reads1]) == set([True])
+
     # queues for communication between processes
-    Qfq1 = [mp.JoinableQueue(5) for i in range(args.parallel)]
+    if have_read1:
+        Qfq1 = [mp.JoinableQueue(5) for i in range(args.parallel)]
+    else:
+        Qfq1 = [None for i in range(args.parallel)]
+
     Qfq2 = [mp.JoinableQueue(5) for i in range(args.parallel)]
     Qres = [mp.Queue(5) for i in range(args.parallel)]  # BAM records as string
     Qerr = mp.Queue()  # child-processes can report errors back to the main process here
@@ -391,28 +419,29 @@ def main_parallel(args):
     stat_lists = [Ns, cb_counts]
     workers = []
 
-    input_params1, input_params2 = get_input_params(args)
     res = 0
     with ExceptionLogging(
         "spacemake.bin.fastq_to_uBAM.main_parallel", exc_flag=abort_flag
     ) as el:
 
         # read FASTQ in chunks and put them in Qfq
-        reader1 = mp.Process(
-            target=read_to_queues,
-            name="reader1",
-            args=(input_params1, Qfq1, args, Qerr, abort_flag),
-        )
+        if have_read1:
+            reader1 = mp.Process(
+                target=read_to_queues,
+                name="reader1",
+                args=(input_reads1, input_params, Qfq1, args, Qerr, abort_flag),
+            )
+            reader1.start()
+
         reader2 = mp.Process(
             target=read_to_queues,
             name="reader2",
-            args=(input_params2, Qfq2, args, Qerr, abort_flag),
+            args=(input_reads2, input_params, Qfq2, args, Qerr, abort_flag),
         )
 
-        reader1.start()
         reader2.start()
 
-        el.logger.debug("Started both readers")
+        el.logger.debug("Started readers")
 
         # worker i consumes chunks of paired FASTQ from Qfq1[i] and Qfq2[i],
         # processes them, and put the results in Qres[i]
@@ -435,7 +464,9 @@ def main_parallel(args):
         el.logger.debug("Started writer")
 
         # wait until all sequences have been thrown onto Qfq
-        q1 = join_with_empty_queues(reader1, Qfq1 + [Qerr], abort_flag)
+        if have_read1:
+            q1 = join_with_empty_queues(reader1, Qfq1 + [Qerr], abort_flag)
+
         q2 = join_with_empty_queues(reader2, Qfq2 + [Qerr], abort_flag)
         el.logger.debug("The readers exited")
 
@@ -515,7 +546,11 @@ def parse_args():
         "fastq_to_uBAM.py",
         description="Convert raw reads1 and reads2 FASTQ into a single BAM file with cell barcode and UMI as BAM-tags",
     )
-
+    parser.add_argument(
+        "--matrix",
+        default=None,
+        help="sample_matrix.csv file desribing from where to get read1 and read2 (FASTQ format)",
+    )
     parser.add_argument(
         "--read1",
         default=None,
@@ -525,7 +560,7 @@ def parse_args():
         "--read2",
         default="/dev/stdin",
         help="source from where to get read2 (FASTQ format)",
-        required=True,
+        # required=True,
     )
     parser.add_argument("--cell", default="r1[8:20][::-1]")
     parser.add_argument("--UMI", default="r1[0:8]")
