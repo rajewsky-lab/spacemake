@@ -151,7 +151,7 @@ rule get_whitelist_barcodes:
             downsampling_percentage='',
             run_on_external=False,
         ),
-        get_output_files(puck_barcode_files_summary,
+        get_output_files(puck_count_barcode_matches,
             data_root_type = 'complete_data',
             downsampling_percentage='', run_on_external=False)
 
@@ -438,20 +438,27 @@ rule create_h5ad_dge:
 
 rule create_mesh_spatial_dge:
     input:
-        dge_spatial
+        dge_spatial,
+        puck_barcode_files_summary
     output:
         dge_spatial_mesh,
         dge_spatial_mesh_obs
     params:
         puck_data = lambda wildcards: project_df.get_puck_variables(
             project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id),
-        pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id,
-            puck_barcode_file_id = wildcards.puck_barcode_file_id)
+            sample_id = wildcards.sample_id)
     run:
         adata = sc.read(input[0])
+
+        df = pd.read_csv(puck_barcode_files_summary)
+
+        df = df.loc[df.puck_barcode_file_id == wildcards.puck_barcode_file_id]
+
+        if df.empty:
+            px_by_um = None
+        else:
+            px_by_um = df.iloc[0].to_dict()["px_by_um"] 
+
         if wildcards.spot_distance_um == 'hexagon':
             mesh_type = 'hexagon'
             # if hexagon, this will be ignored
@@ -459,12 +466,14 @@ rule create_mesh_spatial_dge:
         else:
             mesh_type = 'circle'
             spot_distance_um = float(wildcards.spot_distance_um)
+
         adata = create_meshed_adata(adata,
-            px_by_um = params['pbf_metrics']['px_by_um'],
+            px_by_um = px_by_um,
             bead_diameter_um = params['puck_data']['spot_diameter_um'],
             spot_diameter_um = float(wildcards.spot_diameter_um),
             spot_distance_um = spot_distance_um,
             mesh_type = mesh_type)
+
         adata.write(output[0])
         adata.obs.to_csv(output[1])
 
@@ -621,6 +630,79 @@ rule split_reads_sam_to_bam:
     shell:
         "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
 
+rule count_barcode_matches:
+    input:
+        unpack(get_barcode_files_matching_summary_input)
+    output:
+        puck_count_barcode_matches
+    params:
+        pbf_ids = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id)[0],
+        run_mode_variables = lambda wildcards:
+            project_df.config.get_run_mode(list(get_run_modes_from_sample(
+            wildcards.project_id, wildcards.sample_id).keys())[0]).variables
+    run:
+        import os
+        out_df = pd.DataFrame(columns=[
+            'puck_barcode_file_id',
+            'puck_barcode_file',
+            'parsed_barcode_file',
+            'n_barcodes',
+            'n_matching',
+            'matching_ratio'
+            ])
+
+        if ('puck_barcode_files' in input.keys() and
+            'parsed_spatial_barcode_files' in input.keys()):
+            for pbf_id, pbf, parsed_barcode_file in zip(
+                    params['pbf_ids'],
+                    input['puck_barcode_files'],
+                    input['parsed_spatial_barcode_files'],
+                ):
+                n_barcodes = shell(f"unpigz -c {pbf}")
+                n_matching = shell(f"unpigz -c {parsed_barcode_file}")
+                matching_ratio = round(float(n_matching)/n_barcodes, 2)
+                
+                out_df = out_df.append({
+                    'puck_barcode_file_id': pbf_id,
+                    'puck_barcode_file': pbf,
+                    'parsed_barcode_file': parsed_barcode_file,
+                    'n_barcodes': n_barcodes,
+                    'n_matching': n_matching,
+                    'matching_ratio': matching_ratio,
+                }, ignore_index=True)
+
+            out_df.to_csv(output[0], index=False)
+
+            # update the project df (but do not dump) to only process some tiles above the threshold
+            above_threshold_mask = out_df.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
+
+            _puck_barcode_files = out_df[above_threshold_mask]['puck_barcode_file'].values
+            _puck_barcode_files_id = out_df[above_threshold_mask]['puck_barcode_file_id'].values
+
+            project_df.add_update_sample(
+                action='update',
+                project_id=wildcards.project_id,
+                sample_id=wildcards.sample_id,
+                puck_barcode_file=_puck_barcode_files,
+                puck_barcode_file_id=_puck_barcode_files_id,
+            )
+
+            # we rewrite the project df to keep only those pucks with > 0.2 matches
+            project_df.dump()
+
+            # we remove the unmatched barcode files from the directory
+            _puck_barcode_nokeep_files = out_df[~above_threshold_mask]['parsed_barcode_file'].values
+
+            for f in _puck_barcode_nokeep_files:
+                if os.path.isfile(f):
+                    os.remove(f)
+
+        else:
+            # save empty file
+            out_df.to_csv(output[0], index=False)
+
 rule create_barcode_files_matching_summary:
     input:
         unpack(get_barcode_files_matching_summary_input)
@@ -640,6 +722,8 @@ rule create_barcode_files_matching_summary:
         import os
         out_df = pd.DataFrame(columns=[
             'puck_barcode_file_id',
+            'puck_barcode_file',
+            'parsed_barcode_file',
             'n_barcodes',
             'n_matching',
             'matching_ratio', 
@@ -707,8 +791,8 @@ rule create_barcode_files_matching_summary:
             _puck_barcode_nokeep_files = out_df[~above_threshold_mask]['parsed_barcode_file'].values
 
             for f in _puck_barcode_nokeep_files:
-                if os.path.isfile(fname):
-                    os.remove(fname)
+                if os.path.isfile(f):
+                    os.remove(f)
 
         else:
             # save empty file
