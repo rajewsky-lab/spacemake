@@ -433,6 +433,26 @@ def get_novosparc_variables(pdf, args):
 
     return ret
 
+def update_project_df_barcode_matches():
+    from spacemake.snakemake.variables import puck_count_barcode_matches_summary
+
+    for index, row in pdf.df.iterrows():
+        project_id, sample_id = index
+
+        # check if barcodes have been filtered
+        _f_barcodes_df = puck_count_barcode_matches_summary.format(project_id=project_id,
+                sample_id=sample_id)
+    
+        if os.path.exists(_f_barcodes_df):
+            barcodes_df = pd.read_csv(_f_barcodes_df)
+            above_threshold_mask = barcodes_df['pass_threshold'] == 1
+
+            _puck_barcode_files = barcodes_df[above_threshold_mask]['puck_barcode_file'].values.tolist().__str__()
+            _puck_barcode_files_id = barcodes_df[above_threshold_mask]['puck_barcode_file_id'].values.tolist().__str__()
+
+            pdf.df.loc[index, 'puck_barcode_file'] = _puck_barcode_files
+            pdf.df.loc[index, 'puck_barcode_file_id'] = _puck_barcode_files_id
+
 @message_aggregation(logger_name)
 def spacemake_run(pdf, args):
     """spacemake_run.
@@ -495,6 +515,10 @@ def spacemake_run(pdf, args):
     
     if preprocess_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
+
+    # update valid pucks (above threshold) before continuing to downstream
+    update_project_df_barcode_matches()
+    pdf.dump()
 
     # run spacemake downstream
     analysis_finished = snakemake.snakemake(
