@@ -99,6 +99,14 @@ def get_all_dges(wildcards):
             project_id=project_id, sample_id=sample_id
         )
 
+        coordinate_system = project_df.get_puck_variables(
+            project_id = project_id,
+            sample_id = sample_id
+        )["coordinate_system"]
+
+        # will consider puck_collection within all dges if a coordinate system is specified in the puck
+        with_puck_collection = False if not coordinate_system else True
+
         for run_mode in row["run_mode"]:
             if project_df.has_dge(project_id=project_id, sample_id=sample_id):
                 for pbf_id in puck_barcode_file_ids:
@@ -110,6 +118,7 @@ def get_all_dges(wildcards):
                             data_root_type="complete_data",
                             downsampling_percentage="",
                             puck_barcode_file_id=pbf_id,
+                            with_puck_collection=with_puck_collection,
                         )["dge"],
                     )
 
@@ -477,6 +486,7 @@ def get_dge_from_run_mode(
     data_root_type,
     downsampling_percentage,
     puck_barcode_file_id,
+    with_puck_collection=False,
 ):
     has_dge = project_df.has_dge(project_id=project_id, sample_id=sample_id)
 
@@ -571,6 +581,36 @@ def get_dge_from_run_mode(
         )
         for key, pattern in out_files_pattern.items()
     }
+
+    if with_puck_collection:
+        if run_mode_variables["mesh_data"]:
+            dge_out_pattern = dge_spatial_collection_mesh
+            dge_out_summary_pattern = dge_spatial_collection_mesh_obs
+        else:
+            dge_out_pattern = dge_spatial_collection
+            dge_out_summary_pattern = dge_spatial_collection_obs
+
+        out_files_pattern = {"dge_summary": dge_out_summary_pattern, "dge": dge_out_pattern}
+
+        collection_out_files = {
+            key: expand(
+                pattern,
+                project_id=project_id,
+                sample_id=sample_id,
+                dge_type=dge_type,
+                dge_cleaned=dge_cleaned,
+                polyA_adapter_trimmed=polyA_adapter_trimmed,
+                mm_included=mm_included,
+                spot_diameter_um=spot_diameter_um,
+                spot_distance_um=spot_distance_um,
+                n_beads=n_beads,
+                is_external=external_wildcard,
+                data_root_type=data_root_type,
+                downsampling_percentage=downsampling_percentage,
+                puck_barcode_file_id=puck_barcode_file_id,
+            )
+            for key, pattern in out_files_pattern.items()
+        }
 
     return out_files
 
@@ -692,47 +732,27 @@ def get_puck_file(wildcards):
         return []
     else:
         return {"barcode_file": puck_barcode_file}
-    
 
-def get_puck_collection(wildcards):
-    puck_vars = project_df.get_puck_variables(
-        project_id = wildcards.project_id,
-        sample_id = wildcards.sample_id
-    )
-
-    coordinate_system = puck_vars["coordinate_system"]
-
-    if coordinate_system is None or coordinate_system == '' or coordinate_system == 'None':
-        return []
-    else:
-        return [coordinate_system]
-    
 
 def get_puck_collection_stitching_input(wildcards):
     # there are three options:
     # 1) no spatial dge
     # 2) spatial dge, no mesh
     # 3) spatial dge with a mesh
-    coordinate_system = get_puck_collection(wildcards)
     run_mode = list(get_run_modes_from_sample(wildcards.project_id, wildcards.sample_id).keys())[0]
 
     puck_barcode_file_ids = project_df.get_puck_barcode_ids_and_files(
                 wildcards.project_id, wildcards.sample_id
             )[0]
 
-    if len(coordinate_system) == 0:
-        return None
-    
-    dge = get_dge_from_run_mode(
+    return [get_dge_from_run_mode(
             project_id=wildcards.project_id,
             sample_id=wildcards.sample_id,
             run_mode=run_mode,
             data_root_type=wildcards.data_root_type,
             downsampling_percentage=wildcards.downsampling_percentage,
             puck_barcode_file_id=puck_barcode_file_ids,
-        )["dge"]
-
-    return [dge]
+        )["dge"]]
 
 
 def get_barcode_files_matching_summary_input(wildcards):
