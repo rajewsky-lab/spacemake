@@ -91,7 +91,7 @@ parsed_spatial_barcodes = (
     + "/puck_barcode_files/spatial_barcodes_{puck_barcode_file_id}.csv"
 )
 puck_barcode_files_summary = complete_data_root + "/puck_barcode_files_summary.csv"
-puck_count_barcode_matches = complete_data_root + "/puck_count_barcode_matches.csv"
+puck_count_barcode_matches_summary = complete_data_root + "/puck_count_barcode_matches.csv"
 
 # dge creation
 dge_root = data_root + "/dge"
