@@ -702,3 +702,6 @@ rule create_barcode_files_matching_summary:
             puck_barcode_file=_puck_barcode_files,
             puck_barcode_file_id=_puck_barcode_files_id,
         )
+
+        # we rewrite the project df to keep only those pucks with > 0.2 matches
+        project_df.dump()
