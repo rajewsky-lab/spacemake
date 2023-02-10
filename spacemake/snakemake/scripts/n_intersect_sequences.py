@@ -41,6 +41,14 @@ def setup_parser(parser):
     )
 
     parser.add_argument(
+        "--query-separator",
+        type=str,
+        default="\t",
+        help="if input is a tabular plain text file, this specifies the character for column separation",
+        choices=['\t', ',', ';'],
+    )
+
+    parser.add_argument(
         "--target",
         type=str,
         nargs="+",
@@ -78,6 +86,14 @@ def setup_parser(parser):
     )
 
     parser.add_argument(
+        "--target-separator",
+        type=str,
+        default="\t",
+        help="if input is a tabular plain text file, this specifies the character for column separation",
+        choices=['\t', ',', ';'],
+    )
+
+    parser.add_argument(
         "--summary-output",
         type=str,
         help="a summary output file containing the number of matches between query and target, per target file",
@@ -105,36 +121,36 @@ def BAM_src(src, tag : str = None):
         else:
             yield None, read.get_tag(tag), None
 
-def plain_src(f : str, skip : int = 0, column : int = 0):
-    reads = pd.read_csv(f, sep='\t', skiprows=skip)
+def plain_src(f : str, skip : int = 0, column : int = 0, separator: str = '\t'):
+    reads = pd.read_csv(f, sep=separator, skiprows=skip)
     reads = reads.iloc[:, column]
 
     for read in reads:
         yield None, read, None
 
-def read_with_tag(fname: str, tag: str = None, skip: int = None, column : int = 0):
+def read_with_tag(f: str, tag: str = None, skip: int = None, column : int = 0, separator : str = '\t'):
     import gzip
 
-    if type(fname) is not str:
-        src = FASTQ_src(fname)  # assume its a stream or file-like object already
-    elif fname.endswith(".txt") or fname.endswith(".txt.gz"):
-        src = plain_src(fname, skip, column)
-    elif fname.endswith(".gz"):
-        src = FASTQ_src(gzip.open(fname, mode="rt"))
-    elif fname.endswith(".bam"):
-        src = BAM_src(fname, tag=tag)
+    if type(f) is not str:
+        src = FASTQ_src(f)  # assume its a stream or file-like object already
+    elif f.endswith(".txt") or f.endswith(".txt.gz"):
+        src = plain_src(f, skip, column, separator)
+    elif f.endswith(".gz"):
+        src = FASTQ_src(gzip.open(f, mode="rt"))
+    elif f.endswith(".bam"):
+        src = BAM_src(f, tag=tag)
     else:
-        src = FASTQ_src(open(fname))
+        src = FASTQ_src(open(f))
         
     for _, seq, _ in src:
         yield seq
 
-# TODO: use a partial function
+# TODO: use a partial function to pass args to not use global context
 def find_matches(f):
     global query_seqs, args
     
     start = time.time()
-    target = set(read_with_tag(f, args.target_tag, args.target_plain_skip, args.target_plain_column))
+    target = set(read_with_tag(f, args.target_tag, args.target_plain_skip, args.target_plain_column, args.target_separator))
     n_matches = len(target.intersection(query_seqs))
     pct_matches_target = n_matches/len(target)
     print(f"queried {f} in {(time.time()-start)} s")
@@ -145,8 +161,6 @@ def find_matches(f):
 def cmdline():
     """cmdline."""
     import argparse
-    # TODO: universally load tsv or csv files; agnostic to format of puck barcode
-    # behavior as similar as possible to main.smk create_spatial_barcode_file rule!
 
     global args, query_seqs
 
@@ -161,7 +175,7 @@ def cmdline():
     if args.target_id is not None and len(args.target_id) == len(args.target):
         raise ValueError(f"there is a different number of target_id ({len(args.target_id)}) and target ({len(args.target)})")
 
-    query_seqs = read_with_tag(args.query, args.query_tag, args.query_plain_skip, args.query_plain_column)
+    query_seqs = read_with_tag(args.query, args.query_tag, args.query_plain_skip, args.query_plain_column, args.query_separator)
     logger.info(f"read query file from '{args.query}'")
 
     # get unique reads into a global context
