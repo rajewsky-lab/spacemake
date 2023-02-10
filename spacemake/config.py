@@ -148,7 +148,7 @@ def get_run_mode_parser(required=True):
         "--spatial_barcode_min_matches",
         type=float,
         required=False,
-        default=0.5,
+        default=0,
         help="minimum ratio (0, 1] of spatial barcode matches to further consider a puck"
         + "across the rest of the pipeline",
     )
@@ -423,6 +423,14 @@ class Puck(ConfigMainVariable):
             "barcodes" in self.variables
             and self.variables["barcodes"]
             and self.variables["barcodes"] != "None"
+        )
+    
+    @property
+    def has_coordinate_system(self):
+        return (
+            "coordinate_system" in self.variables
+            and self.variables["coordinate_system"]
+            and self.variables["coordinate_system"] != "None"
         )
 
 
@@ -705,8 +713,9 @@ class ConfigFile:
         self.variables["species"][name] = species_refs
         return species_refs
 
-    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None):
+    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None, coordinate_system=None):
         assert_file(barcodes, default_value=None, extension="all")
+        assert_file(coordinate_system, default_value=None, extension="all")
 
         puck = {}
 
@@ -718,6 +727,10 @@ class ConfigFile:
 
         if barcodes is not None:
             puck["barcodes"] = barcodes
+
+        if coordinate_system is not None:
+            puck["coordinate_system"] = coordinate_system
+
 
         return puck
 
