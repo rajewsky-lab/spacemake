@@ -860,6 +860,16 @@ def get_barcode_files_matching_summary_input(wildcards):
     }
 
 
+def get_barcode_files(wildcards):
+    pbf_ids, pbfs = project_df.get_puck_barcode_ids_and_files(
+        project_id=wildcards.project_id, sample_id=wildcards.sample_id
+    )
+
+    return {
+        "puck_barcode_files": pbfs
+    }
+
+
 def get_stats_prealigned_spatial_barcodes(wildcards):
     pbf_ids, pbfs = project_df.get_puck_barcode_ids_and_files(
         project_id=wildcards.project_id, sample_id=wildcards.sample_id
