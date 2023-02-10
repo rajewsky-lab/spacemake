@@ -355,6 +355,10 @@ rule merge_stats_prealigned_spatial_barcodes:
         )[0]
     output:
         puck_count_prealigned_barcode_matches_summary
+    # at most 50% of CPU resources allocated to finding tiles
+    # with 64 cores, in 'margaret', this takes 10 minutes to match 
+    # ~3,5k targets of 2 M barcodes, against a query of ~600 M reads
+    threads: max(workflow.cores * 0.5, 1)
     shell:
         "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
         " --query {input.bc_prealign}"
@@ -364,7 +368,7 @@ rule merge_stats_prealigned_spatial_barcodes:
         " --target-id {params.pbc_id}"
         " --target-plain-column 0"
         " --summary-output {output}"
-        " --n-jobs {workflow.cores}"
+        " --n-jobs {threads}"
 
 rule create_top_barcode_whitelist:
     input:
