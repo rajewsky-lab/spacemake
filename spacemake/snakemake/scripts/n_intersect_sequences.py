@@ -53,7 +53,7 @@ def setup_parser(parser):
         type=str,
         nargs="+",
         help="target puck ids for summary output",
-        default=None
+        required=True,
     )
 
     parser.add_argument(
@@ -139,7 +139,7 @@ def find_matches(f):
     pct_matches_target = n_matches/len(target)
     print(f"queried {f} in {(time.time()-start)} s")
 
-    return (f, n_matches, len(target), n_matches, pct_matches_target)
+    return (f, len(target), n_matches, pct_matches_target)
     
 @message_aggregation(logger_name)
 def cmdline():
@@ -158,6 +158,9 @@ def cmdline():
 
     args = parser.parse_args()
 
+    if args.target_id is not None and len(args.target_id) == len(args.target):
+        raise ValueError(f"there is a different number of target_id ({len(args.target_id)}) and target ({len(args.target)})")
+
     query_seqs = read_with_tag(args.query, args.query_tag, args.query_plain_skip, args.query_plain_column)
     logger.info(f"read query file from '{args.query}'")
 
@@ -169,10 +172,9 @@ def cmdline():
     with mp.Pool(args.n_jobs) as pool:
         results = pool.map(find_matches, args.target)
     
-    df = pd.DataFrame(results, columns=['puck_barcode_file', 'puck_barcode_file', 'n_barcodes', 'n_matching', 'matching_ratio'])
-    if args.target_id is not None and len(args.target_id) == len(args.target):
-        df['puck_barcode_file_id'] = args.target_id
-    df.to_csv(args.summary_output)
+    df = pd.DataFrame(results, columns=['puck_barcode_file', 'n_barcodes', 'n_matching', 'matching_ratio'])
+    df['puck_barcode_file_id'] = args.target_id
+    df.to_csv(args.summary_output, index=False)
 
 
 if __name__ == "__main__":
