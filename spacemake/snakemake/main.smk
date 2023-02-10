@@ -397,6 +397,7 @@ rule create_spatial_barcode_file:
     output:
         parsed_spatial_barcodes
     run:
+        # TODO: benchmark this rule - set+np index instead of merge?
         # load all readcounts
         bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
             names=['read_n', 'cell_bc']) for bc_rc in input['bc_readcounts']]
@@ -722,10 +723,7 @@ rule count_barcode_matches:
             out_df['pass_threshold'] = 0
             out_df['pass_threshold'][above_threshold_mask] = 1
 
-            out_df.to_csv(output[0], index=False)
-        else:
-            # save empty file
-            out_df.to_csv(output[0], index=False)
+        out_df.to_csv(output[0], index=False)
 
 
 rule create_barcode_files_matching_summary:
@@ -794,7 +792,4 @@ rule create_barcode_files_matching_summary:
                     'px_by_um': px_by_um,
                 }, ignore_index=True)
 
-            out_df.to_csv(output[0], index=False)
-        else:
-            # save empty file
-            out_df.to_csv(output[0], index=False)
+        out_df.to_csv(output[0], index=False)
