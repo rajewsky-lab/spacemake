@@ -2,7 +2,6 @@ import logging
 
 import multiprocessing as mp
 import pandas as pd
-import tqdm
 import time
 
 from spacemake.util import message_aggregation, FASTQ_src
