@@ -75,7 +75,7 @@ qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id}.h
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = "{polyA_adapter_trimmed}.txt.gz"
 barcode_readcounts = complete_data_root + "/out_readcounts" + barcode_readcounts_suffix
-barcode_readcounts_prealigned = complete_data_root + "/out_readcounts_prealigned" + barcode_readcounts_suffix
+barcode_readcounts_prealigned = complete_data_root + "/out_readcounts_prealigned.txt.gz"
 strand_info = split_reads_strand_type
 
 # united final.bam
