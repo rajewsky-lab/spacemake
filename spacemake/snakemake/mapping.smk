@@ -64,7 +64,7 @@ from collections import defaultdict
 ANNOTATED_BAMS = defaultdict(set)
 REF_NAMES = defaultdict(set)
 ALL_BAMS = defaultdict(set)
-
+BAM_IS_NOT_TEMP = set()
 SAMPLE_MAP_STRATEGY = {}
 
 # used for symlink name to source mapping
@@ -99,6 +99,11 @@ default_STAR_MAP_FLAGS = (
     " --limitOutSJcollapsed 5000000"
 )
 
+def maybe_temporary(bam):
+    if bam in BAM_IS_NOT_TEMP:
+        return bam
+    else:
+        return temp(bam)
 
 ######################################################
 ##### Utility functions specific for this module #####
@@ -181,6 +186,7 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
         mr.mapper = mapper
         mr.ref_name = ref
         mr.out_name = f"{ref}.{mapper}"
+        mr.keep_unmapped = False
 
         if link_name:
             lr = dotdict(link_src=mr.out_name, link_name=link_name, ref_name=mr.ref_name)
@@ -201,9 +207,11 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
         if left == right:
             continue
 
+        last_mr = []
         for r in right.split(","):
             mr, lr = process(r, left=left)
             map_rules.append(mr)
+            last_mr.append(mr)
             
             if lr:
                 link_rules.append(lr)
@@ -211,7 +219,8 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
                 if final in lr.link_name:
                     final_link = lr
 
-        left = f"not_{mr.out_name}"
+        for mr in last_mr:
+            mr.keep_unmapped = True
 
     if not final_link:
         # we need to manufacture a "final" link_rule by taking the last mapping
@@ -252,6 +261,8 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             
             mr.out_path = wc_fill(mapped_bam, mr)
             mr.out_unmapped_path = wc_fill(unmapped_bam, mr)
+            if mr.keep_unmapped:
+                BAM_IS_NOT_TEMP.add(mr.out_unmapped_path)
             
             mr.link_name = mr.input_name
             mr.input_path = wc_fill(linked_bam, mr)
@@ -443,7 +454,7 @@ rule map_reads_bowtie2:
         unpack(lambda wc: get_map_inputs(wc, mapper='bowtie2')),
     output:
         bam=bt2_mapped_bam,
-        ubam=bt2_unmapped_bam
+        ubam=maybe_temporary(bt2_unmapped_bam)
     log: 
         bt2 = bt2_mapped_log,
         hdr = bt2_mapped_log.replace('.log', '.splice_bam_header.log')
@@ -513,7 +524,7 @@ rule map_reads_STAR:
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
         bam=star_mapped_bam,
-        ubam=star_unmapped_bam,
+        ubam=maybe_temporary(star_unmapped_bam),
         tmp=temp(directory(star_prefix + "_STARgenome"))
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
     log:
