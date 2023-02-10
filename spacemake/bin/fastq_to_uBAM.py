@@ -94,7 +94,7 @@ def read_to_queues(input_files, params, Qfq, args, Qerr, abort_flag):
 
 
 format_func_template = """
-def format_func(qname=None, r2_qname=None, r2_qual=None, r1=None, r2=None):
+def format_func(qname=None, r2_qname=None, r2_qual=None, r1=None, r2=None, R1=None, R2=None):
     qparts = r2_qname.split(':N:0:')
     if len(qparts) > 1:
         i5i7 = qparts[1].replace('+', '')
@@ -292,22 +292,36 @@ def parallel_worker(Qfq1, Qfq2, Qres, args, Qerr, abort_flag, stat_lists):
 
             fmt = Formatter(args)  # , **params
             results = []
-            for fqid, r1, q1, r2, qual2 in chunk:
+            for fqid, r1, q1, r2, q2 in chunk:
                 N["total"] += 1
-                if args.paired_end:
+                if args.paired_end: 
+                    if args.paired_end[0] == 'r':
+                        # rev_comp R1 and reverse qual1
+                        q1 = q1[::-1]
+                        r1 = util.rev_comp(r1)
+
+                    if args.paired_end[1] == 'r':
+                        # rev_comp R2 and reverse qual2
+                        q2 = q2[::-1]
+                        r2 = util.rev_comp(r2)
+
                     rec1 = fmt.make_bam_record(
                         qname=fqid,
-                        r1=r1,
+                        r1="THISSHOULDNEVERBEREFERENCED",
                         r2=r1,
-                        r2_qual=qual2,
+                        R1=r1,
+                        R2=r2,
+                        r2_qual=q1,
                         r2_qname=fqid,
                         flag=69,  # unmapped, paired, first in pair
                     )
                     rec2 = fmt.make_bam_record(
                         qname=fqid,
-                        r1=r1,
+                        r1="THISSHOULDNEVERBEREFERENCED",
                         r2=r2,
-                        r2_qual=qual2,
+                        R1=r1,
+                        R2=r2,
+                        r2_qual=q2,
                         r2_qname=fqid,
                         flag=133,  # unmapped, paired, second in pair
                     )
@@ -319,7 +333,7 @@ def parallel_worker(Qfq1, Qfq2, Qres, args, Qerr, abort_flag, stat_lists):
                         qname=fqid,
                         r1=r1,
                         r2=r2,
-                        r2_qual=qual2,
+                        r2_qual=q2,
                         r2_qname=fqid,
                     )
                     results.append(rec)
@@ -378,7 +392,7 @@ def dict_merge(sources):
 
 def get_input_params(args):
     import pandas as pd
-    if str(args.matrix) != None:
+    if str(args.matrix) != "None":
         df = pd.read_csv(args.matrix, sep=',', index_col=None)
         if not 'R1' in df.columns:
             df['R1'] = 'None'
@@ -387,7 +401,11 @@ def get_input_params(args):
         R2 = df['R2'].to_list()
         # TODO extract other column values into a list of dictionaries (most importantly cell=...)
         # which can override how the formatter in the workers processes the raw reads
-        params = [{},] * len(R1)
+
+        if 'cell' in df.columns:
+            params = [{'cell': f'"{c}"'} for c in df['cell']]
+        else:
+            params = [{},] * len(R1)
 
     else:
         R1 = [args.read1,]
@@ -568,8 +586,8 @@ def parse_args():
     parser.add_argument("--qual", default="r2_qual")
     parser.add_argument(
         "--paired-end",
-        default=False,
-        action="store_true",
+        default=None,
+        choices=['fr', 'ff', 'rf', 'rr'],
         help="read1 and read2 are paired end mates and store both in the BAM",
     )
     parser.add_argument(
