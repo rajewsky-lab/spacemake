@@ -187,7 +187,7 @@ def cmdline():
 
     args = parser.parse_args()
 
-    if args.target_id is not None and len(args.target_id) == len(args.target):
+    if len(args.target_id) != len(args.target):
         raise ValueError(
             f"target_id ({len(args.target_id)}) and target ({len(args.target)}) are different in size"
         )
