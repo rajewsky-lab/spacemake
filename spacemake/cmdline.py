@@ -779,6 +779,7 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
+        delete_temp_output=True,
     )
 
     if preprocess_finished is False:
