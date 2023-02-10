@@ -530,7 +530,6 @@ def spacemake_run(pdf, args):
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
-        gui=args["gui"],
         config=config_variables,
     )
     
@@ -553,7 +552,6 @@ def spacemake_run(pdf, args):
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
-        gui=args["gui"],
         config=config_variables,
     )
     
@@ -576,7 +574,6 @@ def spacemake_run(pdf, args):
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
-        gui=args["gui"],
         config=config_variables,
     )
 
