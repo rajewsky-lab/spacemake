@@ -101,6 +101,14 @@ def setup_parser(parser):
     )
 
     parser.add_argument(
+        "--min-threshold",
+        type=float,
+        default=0,
+        help="targets with 'matching_ratio' above --min-threshold are marked as True; else, False.",
+        required=False,
+    )
+
+    parser.add_argument(
         "--n-jobs",
         type=int,
         help="number of parallel jobs (up to {AVAILABLE_CPUS} in this machine) for database lookup",
@@ -216,6 +224,8 @@ def cmdline():
         columns=["puck_barcode_file", "n_barcodes", "n_matching", "matching_ratio"],
     )
     df["puck_barcode_file_id"] = args.target_id
+    df['pass_threshold'] = 0
+    df['pass_threshold'][df['matching_ratio'] > args.min_threshold] = 1
     df.to_csv(args.summary_output, index=False)
 
 
