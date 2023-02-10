@@ -192,6 +192,20 @@ def get_run_parser():
         action="store_true",
         help="Run also fastqc as part of the spacemake run",
     )
+    parser.add_argument(
+        "--gui",
+        nargs="?",
+        const="8000",
+        metavar="PORT",
+        type=str,
+        help="Serve an HTML based user interface to the given network and "
+        "port e.g. 168.129.10.15:8000. By default Snakemake is only "
+        "available in the local network (default port: 8000). To make "
+        "Snakemake listen to all ip addresses add the special host address "
+        "0.0.0.0 to the url (0.0.0.0:8000). This is important if Snakemake "
+        "is used in a virtualised environment like Docker. If possible, a "
+        "browser window is opened.",
+    )
 
     return parser
 
