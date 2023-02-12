@@ -335,8 +335,10 @@ def aggregate_adata_by_indices(
     )
 
     aggregated_adata.obs["n_joined"] = [len(x) for x in ix_array]
+    
+    mesh_bc_ilocs = np.arange(len(original_ilocs))[original_ilocs]
 
-    joined_dict = {i: x for i, x in enumerate(ix_array)}
+    joined_dict = {i: mesh_bc_ilocs[x] for i, x in enumerate(ix_array)}
 
     indices_joined_spatial_units = dok_matrix(
         (len(joined_dict), len(adata.obs_names)), dtype=np.int8
