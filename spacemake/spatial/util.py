@@ -336,7 +336,7 @@ def aggregate_adata_by_indices(
 
     aggregated_adata.obs["n_joined"] = [len(x) for x in ix_array]
     
-    mesh_bc_ilocs = np.arange(len(original_ilocs))[original_ilocs]
+    mesh_bc_ilocs = np.arange(len(idx_to_aggregate))[idx_to_aggregate]
 
     joined_dict = {i: mesh_bc_ilocs[x] for i, x in enumerate(ix_array)}
 
