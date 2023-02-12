@@ -192,20 +192,6 @@ def get_run_parser():
         action="store_true",
         help="Run also fastqc as part of the spacemake run",
     )
-    parser.add_argument(
-        "--gui",
-        nargs="?",
-        const="8000",
-        metavar="PORT",
-        type=str,
-        help="Serve an HTML based user interface to the given network and "
-        "port e.g. 168.129.10.15:8000. By default Snakemake is only "
-        "available in the local network (default port: 8000). To make "
-        "Snakemake listen to all ip addresses add the special host address "
-        "0.0.0.0 to the url (0.0.0.0:8000). This is important if Snakemake "
-        "is used in a virtualised environment like Docker. If possible, a "
-        "browser window is opened.",
-    )
 
     return parser
 
@@ -471,6 +457,42 @@ def update_project_df_barcode_matches(prealigned=False):
 
             pdf.df.loc[index, 'puck_barcode_file'] = _puck_barcode_files
             pdf.df.loc[index, 'puck_barcode_file_id'] = _puck_barcode_files_id
+
+
+def snakemake_handle_gui_request(cli_args, _smk_args):
+    """
+    snakemake_handle_gui_request
+    is partially adapted from snakemake's main
+    this
+    """
+    from functools import partial
+
+    try:
+        import snakemake.gui as gui
+    except ImportError:
+        print(
+            "Error: GUI needs Flask to be installed. Install "
+            "with easy_install or contact your administrator.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    _snakemake = partial(snakemake, os.path.abspath(cli_args.snakefile))
+    gui.register(_snakemake, cli_args)
+
+    if ":" in cli_args.gui:
+        host, port = cli_args.gui.split(":")
+    else:
+        port = cli_args.gui
+        host = "127.0.0.1"
+
+    url = "http://{}:{}".format(host, port)
+    print("Listening on {}.".format(url), file=sys.stderr)
+
+    try:
+        gui.app.run(debug=False, threaded=True, port=int(port), host=host)
+    except (KeyboardInterrupt, SystemExit):
+        pass
 
 @message_aggregation(logger_name)
 def spacemake_run(pdf, args):
