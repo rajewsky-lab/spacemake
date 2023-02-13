@@ -221,7 +221,7 @@ def get_all_dges_collection(wildcards):
         if coordinate_system == '':
             continue
 
-        if os.path.exists(coordinate_system):
+        if not os.path.exists(coordinate_system):
             raise FileNotFoundError(f"at project {project_id} sample {sample_id} "+
                                     f"'coordinate_system' file {coordinate_system} could not be found")
 
