@@ -137,10 +137,11 @@ rule run_analysis:
         # this creates the dge as a collection of pucks (i.e., spatial stitching)
         unpack(get_all_dges_collection),
         # this will also create the clean dge
-        get_output_files(automated_report, data_root_type = 'complete_data',
-            downsampling_percentage='', puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet, data_root_type = 'complete_data',
-            downsampling_percentage='', run_on_external=False,
+        get_output_files(automated_report, 
+            data_root_type = 'complete_data', downsampling_percentage='', 
+            puck_barcode_file_matching_type='spatial_matching'),
+        get_output_files(qc_sheet, 
+            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
             puck_barcode_file_matching_type='spatial_matching'),
         # finally, everything registered via register_module_output_hook()
         get_module_outputs(),
@@ -651,6 +652,83 @@ rule create_automated_report:
         r_shared_scripts= repo_dir + '/scripts/shared_functions.R'
     script:
         'scripts/automated_analysis_create_report.Rmd'
+
+# Report and QC for puck_collection
+# # TODO: reduce redundancy with previous!
+# rule create_qc_sheet_pc:
+#     input:
+#         unpack(get_qc_sheet_input_files_puck_collection),
+#         ribo_log=parsed_ribo_depletion_log
+#     params:
+#         sample_info = lambda wildcards: project_df.get_sample_info(
+#             wildcards.project_id, wildcards.sample_id),
+#         puck_variables = lambda wildcards:
+#             project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
+#                 return_empty=True),
+#         pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
+#             project_id = wildcards.project_id,
+#             sample_id = wildcards.sample_id,
+#             puck_barcode_file_id = wildcards.puck_barcode_file_id),
+#         is_spatial = lambda wildcards:
+#             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
+#                 puck_barcode_file_id=wildcards.puck_barcode_file_id),
+#         run_modes = lambda wildcards: get_run_modes_from_sample(
+#             wildcards.project_id, wildcards.sample_id)
+#     output:
+#         qc_sheet_puck_collection
+#     script:
+#         "scripts/qc_sequencing_create_sheet.Rmd"
+
+# rule run_automated_analysis_pc:
+#     input:
+#         unpack(get_automated_analysis_dge_input_puck_collection)
+#     output:
+#         automated_analysis_result_file_puck_collection
+#     params:
+#         is_spatial = lambda wildcards:
+#             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
+#                 puck_barcode_file_id=wildcards.puck_barcode_file_id),
+#         run_mode_variables = lambda wildcards:
+#             project_df.config.get_run_mode(wildcards.run_mode).variables
+#     script:
+#         'scripts/automated_analysis.py'
+
+# rule create_automated_analysis_processed_data_files_pc:
+#     input:
+#         automated_analysis_result_file_puck_collection
+#     output:
+#         **automated_analysis_processed_data_files_puck_collection
+#     params:
+#         is_spatial = lambda wildcards:
+#             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
+#                 puck_barcode_file_id=wildcards.puck_barcode_file_id),
+#     script:
+#         'scripts/automated_analysis_create_processed_data_files.py'
+        
+# rule create_automated_report_pc:
+#     input:
+#         unpack(get_parsed_puck_file),
+#         **automated_analysis_processed_data_files_puck_collection,
+#     # spawn at most 4 automated analyses
+#     threads: max(workflow.cores / 8, 1)
+#     output:
+#         automated_report_puck_collection
+#     params:
+#         run_mode_variables = lambda wildcards:
+#             project_df.config.get_run_mode(wildcards.run_mode).variables,
+#         puck_variables = lambda wildcards:
+#             project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
+#                 return_empty=True),
+#         pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
+#             project_id = wildcards.project_id,
+#             sample_id = wildcards.sample_id,
+#             puck_barcode_file_id = wildcards.puck_barcode_file_id),
+#         is_spatial = lambda wildcards:
+#             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
+#                 puck_barcode_file_id=wildcards.puck_barcode_file_id),
+#         r_shared_scripts= repo_dir + '/scripts/shared_functions.R'
+#     script:
+#         'scripts/automated_analysis_create_report.Rmd'
 
 rule split_final_bam:
     input:

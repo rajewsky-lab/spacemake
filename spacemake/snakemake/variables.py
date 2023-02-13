@@ -146,13 +146,13 @@ dge_spatial_obs = (
 dge_spatial_collection = (
     dge_out_prefix
     + dge_out_suffix
-    + ".spatial_beads.puck_collection"
+    + ".spatial_beads_puck_collection"
     + h5ad_dge_suffix
 )
 dge_spatial_collection_obs = (
     dge_out_prefix
     + dge_out_suffix
-    + ".spatial_beads.puck_collection"
+    + ".spatial_beads_puck_collection"
     + h5ad_dge_obs_suffix
 )
 
@@ -166,7 +166,7 @@ dge_spatial_mesh_obs = dge_spatial_mesh_prefix + h5ad_dge_obs_suffix
 
 # spatial + collection + meshed dge
 dge_spatial_collection_mesh_suffix = (
-    ".spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}.puck_collection"
+    ".spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}_puck_collection"
 )
 dge_spatial_collection_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_collection_mesh_suffix
 dge_spatial_collection_mesh = dge_spatial_collection_mesh_prefix + h5ad_dge_suffix
@@ -200,7 +200,7 @@ automated_analysis_root = (
     data_root + "/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}"
 )
 automated_report_prefix = (
-    automated_analysis_root + "/{sample_id}_{puck_barcode_file_id}_"
+    automated_analysis_root + "/{sample_id}_{puck_barcode_file_id}"
 )
 automated_report = automated_report_prefix + "automated_report.html"
 automated_analysis_result_file = automated_report_prefix + "results.h5ad"
