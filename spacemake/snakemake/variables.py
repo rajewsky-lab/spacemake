@@ -200,7 +200,7 @@ automated_analysis_root = (
     data_root + "/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}"
 )
 automated_report_prefix = (
-    automated_analysis_root + "/{sample_id}_{puck_barcode_file_id}"
+    automated_analysis_root + "/{sample_id}_{puck_barcode_file_id}_"
 )
 automated_report = automated_report_prefix + "automated_report.html"
 automated_analysis_result_file = automated_report_prefix + "results.h5ad"
