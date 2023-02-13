@@ -152,9 +152,7 @@ rule get_stats_prealigned_barcodes:
             downsampling_percentage='',
             run_on_external=False,
         ),
-        get_output_files(puck_count_prealigned_barcode_matches_summary,
-            data_root_type = 'complete_data',
-            downsampling_percentage='', run_on_external=False)
+        get_prealignment_files(puck_count_prealigned_barcode_matches_summary)
 
 rule get_whitelist_barcodes:
     input:

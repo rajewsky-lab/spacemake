@@ -447,7 +447,8 @@ def update_project_df_barcode_matches(prealigned=False):
         # check if barcodes have been filtered
         _f_barcodes_df = _bc_file.format(project_id=project_id,
                 sample_id=sample_id)
-    
+
+        # project_df is only updated if a prealignment barcode matching file is found
         if os.path.exists(_f_barcodes_df):
             barcodes_df = pd.read_csv(_f_barcodes_df)
             above_threshold_mask = barcodes_df['pass_threshold'] == 1

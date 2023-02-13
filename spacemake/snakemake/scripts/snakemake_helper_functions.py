@@ -88,6 +88,34 @@ def get_output_files(
     return out_files
 
 
+def get_prealignment_files(pattern):
+    df = project_df.df
+
+    prealignment_files = []
+
+    for index, _ in df.iterrows():
+        project_id, sample_id = index
+
+        run_mode_name = project_df.get_metadata(
+            "run_mode", project_id=project_id, sample_id=sample_id
+        )[0]
+
+        run_mode_vars = project_df.config.get_run_mode(run_mode_name).variables
+
+        if run_mode_vars["spatial_barcode_min_matches"] == 0:
+            continue
+
+        # TODO: does this need to be separated per run mode?
+        prealignment_files.append(expand(
+                pattern,
+                project_id=project_id,
+                sample_id=sample_id,
+            )
+        )
+
+    return prealignment_files
+
+
 def get_all_dges(wildcards):
     df = project_df.df
 
