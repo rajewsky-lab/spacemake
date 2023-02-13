@@ -791,6 +791,6 @@ rule create_barcode_files_matching_summary:
                     'y_pos_min_px': [y_pos_min_px],
                     'y_pos_max_px': [y_pos_max_px],
                     'px_by_um': [px_by_um],
-                }), ignore_index=True], sort=False)
+                })], ignore_index=True, sort=False)
 
         out_df.to_csv(output[0], index=False)
