@@ -9,6 +9,7 @@ def get_output_files(
     run_on_external=True,
     puck_barcode_file_matching_type="none",
     check_puck_collection=False,
+    qc=False,
     **kwargs,
 ):
     out_files = []
@@ -92,16 +93,28 @@ def get_output_files(
             if check_puck_collection:
                 puck_barcode_file_ids = "puck_collection"
 
-            out_files = out_files + expand(
-                pattern,
-                project_id=project_id,
-                sample_id=sample_id,
-                puck_barcode_file_id=puck_barcode_file_ids,
-                run_mode=run_mode,
-                umi_cutoff=run_mode_variables["umi_cutoff"],
-                polyA_adapter_trimmed=polyA_adapter_trimmed,
-                **kwargs,
-            )
+            if qc:
+                out_files = out_files + expand(
+                    pattern,
+                    project_id=project_id,
+                    sample_id=sample_id,
+                    puck_barcode_file_id=puck_barcode_file_ids,
+                    run_mode=run_mode,
+                    umi_cutoff=run_mode_variables["umi_cutoff"],
+                    polyA_adapter_trimmed=polyA_adapter_trimmed,
+                    **kwargs,
+                )
+            else:
+                out_files = out_files + expand(
+                    pattern,
+                    project_id=project_id,
+                    sample_id=sample_id,
+                    puck_barcode_file_id_qc=puck_barcode_file_ids,
+                    run_mode=run_mode,
+                    umi_cutoff=run_mode_variables["umi_cutoff"],
+                    polyA_adapter_trimmed=polyA_adapter_trimmed,
+                    **kwargs,
+                )
 
     return out_files
 
@@ -588,11 +601,15 @@ def get_parsed_puck_file(wildcards):
     is_spatial = project_df.is_spatial(
         project_id=wildcards.project_id,
         sample_id=wildcards.sample_id,
-        puck_barcode_file_id=wildcards.puck_barcode_file_id,
+        puck_barcode_file_id=wildcards.puck_barcode_file_id_qc,
     )
 
     if is_spatial:
-        return {"puck_file": parsed_spatial_barcodes}
+        return parsed_spatial_barcodes.format(
+            project_id=wildcards.project_id,
+            sample_id=wildcards.sample_id,
+            puck_barcode_file_id=wildcards.puck_barcode_file_id_qc,
+        )
     else:
         return []
 
@@ -869,14 +886,14 @@ def get_qc_sheet_input_files(wildcards):
     }
 
     for run_mode in run_modes:
-        if wildcards.puck_barcode_file_id != "puck_collection":
+        if wildcards.puck_barcode_file_id_qc != "puck_collection":
             run_mode_dge = get_dge_from_run_mode(
                 project_id,
                 sample_id,
                 run_mode,
                 data_root_type=wildcards.data_root_type,
                 downsampling_percentage=wildcards.downsampling_percentage,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id,
+                puck_barcode_file_id=wildcards.puck_barcode_file_id_qc,
             )
         else:
             run_mode_dge = get_dge_collection_from_run_mode(
@@ -1001,7 +1018,7 @@ def get_automated_analysis_dge_input(wildcards):
     # 1) no spatial dge
     # 2) spatial dge, no mesh
     # 3) spatial dge with a mesh
-    if wildcards.puck_barcode_file_id != "puck_collection":
+    if wildcards.puck_barcode_file_id_qc != "puck_collection":
         return [
             get_dge_from_run_mode(
                 project_id=wildcards.project_id,
@@ -1009,7 +1026,7 @@ def get_automated_analysis_dge_input(wildcards):
                 run_mode=wildcards.run_mode,
                 data_root_type=wildcards.data_root_type,
                 downsampling_percentage=wildcards.downsampling_percentage,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id,
+                puck_barcode_file_id=wildcards.puck_barcode_file_id_qc,
             )["dge"]
         ]
     else:
@@ -1020,7 +1037,6 @@ def get_automated_analysis_dge_input(wildcards):
                 run_mode=wildcards.run_mode,
                 data_root_type=wildcards.data_root_type,
                 downsampling_percentage=wildcards.downsampling_percentage,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id,
             )["dge"]
         ]
 
