@@ -504,9 +504,10 @@ rule create_h5ad_dge:
 
         # add 'cell_bc' name to index for same format as individual pucks
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
-        adata.index.name = 'cell_bc'
         adata.write(output[0])
-        adata.obs.to_csv(output[1])
+        df = adata.obs
+        df.index.name = "cell_bc"
+        df.to_csv(output[1])
 
 rule create_mesh_spatial_dge:
     input:
