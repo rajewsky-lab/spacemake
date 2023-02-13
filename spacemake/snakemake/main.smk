@@ -505,9 +505,7 @@ rule create_h5ad_dge:
         # add 'cell_bc' name to index for same format as individual pucks
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         adata.write(output[0])
-        df = adata.obs
-        df.index.name = "cell_bc"
-        df.to_csv(output[1])
+        adata.obs.to_csv(output[1])
 
 rule create_mesh_spatial_dge:
     input:
@@ -567,7 +565,11 @@ rule puck_collection_stitching:
         )
 
         _pc.write_h5ad(output[0])
-        _pc.obs.to_csv(output[1])
+        # add 'cell_bc' name to index for same format as individual pucks
+        # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
+        df = _pc.obs
+        df.index.name = "cell_bc"
+        df.to_csv(output[1])
 
         # TODO: create a merged barcode file and save into puck_barcode_files
         # to ensure full compatibility with automated_analysis_create_report.Rmd
