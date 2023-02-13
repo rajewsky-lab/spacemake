@@ -234,6 +234,8 @@ def merge_pucks_to_collection(
         puck_collection_list, merge=merge_output, join=join_output
     )
 
+    puck_collection.uns = {np.unique(puck.obs[puck_id_key])[0]: puck.uns for puck in puck_collection_list}
+
     return puck_collection
 
 @message_aggregation(logger_name)
