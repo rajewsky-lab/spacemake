@@ -569,7 +569,10 @@ rule puck_collection_stitching:
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         df = _pc.obs
         df.index.name = "cell_bc"
-        df.to_csv(output[1])
+        # only get numeric columns, to avoid problems during summarisation
+        # we could implement sth like df.A.str.extract('(\d+)')
+        # to avoid losing information from columns that are not numeric
+        df._get_numeric_data().to_csv(output[1])
 
         # TODO: create a merged barcode file and save into puck_barcode_files
         # to ensure full compatibility with automated_analysis_create_report.Rmd
