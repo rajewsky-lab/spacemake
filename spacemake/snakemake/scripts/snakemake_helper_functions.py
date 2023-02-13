@@ -129,7 +129,6 @@ def get_all_dges(wildcards):
 
         for run_mode in row["run_mode"]:
             if project_df.has_dge(project_id=project_id, sample_id=sample_id):
-                # only process those that are above the threshold
                 for pbf_id in puck_barcode_file_ids:
                     dges.append(
                         get_dge_from_run_mode(
@@ -186,6 +185,7 @@ def get_all_dges_collection(wildcards):
                         )["dge"]
                     )
 
+    print(dges)
     return dges
 
 
