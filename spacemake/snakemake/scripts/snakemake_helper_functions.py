@@ -118,16 +118,30 @@ def get_all_dges(wildcards):
 
 
 def get_all_dges_collection(wildcards):
+    import os
     df = project_df.df
 
     dges = []
 
     for index, row in df.iterrows():
         project_id, sample_id = index
-        coordinate_system = project_df.get_puck_variables(
+
+        puck_vars = project_df.get_puck_variables(
             project_id = project_id,
             sample_id = sample_id
-        )["coordinate_system"]
+        )
+
+        if "coordinate_system" not in puck_vars.keys():
+            continue
+
+        coordinate_system = puck_vars["coordinate_system"]
+
+        if coordinate_system == '':
+            continue
+
+        if os.path.exists(coordinate_system):
+            raise FileNotFoundError(f"at project {project_id} sample {sample_id} "+
+                                    f"'coordinate_system' file {coordinate_system} could not be found")
 
         # will consider puck_collection within all dges if a coordinate system is specified in the puck
         with_puck_collection = False if not coordinate_system else True
