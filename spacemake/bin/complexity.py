@@ -115,9 +115,10 @@ def main(args):
         #   long as 2^64 is >> number of sequenced molecules 
         #   (which should be true for the foreseeable future)
 
-    chunks.append(chunk[:chunk_size - chunk_free])
-    print(f"concatenating {len(chunks)} chunks")
+    if chunk_free < chunk_size:
+        chunks.append(chunk[:chunk_size - chunk_free])
 
+    # print(f"concatenating {len(chunks)} chunks")
     logger.debug(f"finished loading all reads. Concatenating {len(chunks)} chunks.")
     keys = np.concatenate(chunks)
     chunks = None # free some memory
@@ -140,9 +141,11 @@ def main(args):
                 f"sub-sampling {args.sample}\t{tagval}\t{100.0 * n/N_reads:.2f} %\t{n}\t{n_UMI}\t{n/n_UMI:.2f}"
             )
             data.append((tagval, n, n_UMI, n / n_UMI))
-    else:
+    elif N_reads > 0:
         n, n_UMI = subsample(keys, N_reads)
         data.append((tagval, n, n_UMI, n / n_UMI))
+    else:
+        data.append((tagval, 0, 0, np.NaN))
 
     df = pd.DataFrame(data, columns=["tagval", "n_reads", "n_umis", "pcr_factor"])
     df["sample"] = args.sample

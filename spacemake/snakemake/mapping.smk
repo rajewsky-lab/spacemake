@@ -99,6 +99,14 @@ default_STAR_MAP_FLAGS = (
     " --limitOutSJcollapsed 5000000"
 )
 
+def is_paired_end(project_id, sample_id):
+    row = project_df.df.loc[(project_id, sample_id)].to_dict()
+    #print(f"{project_id} {sample_id} -> {row['barcode_flavor']}")
+    flavor_d = project_df.config.get_variable("barcode_flavors", name=row['barcode_flavor'])
+    pe = flavor_d.get('paired_end', 'single-end')
+
+    return pe != 'single-end'
+
 def maybe_temporary(bam):
     if bam in BAM_IS_NOT_TEMP:
         return bam
@@ -285,16 +293,18 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             default_STAR_INDEX = wc_fill(star_index, mr)
             default_BT2_INDEX = wc_fill(bt2_index_param, mr)
             if mr.mapper == "bowtie2":
-                mr.map_flags = species_d[mr.ref_name].get("BT2_flags", default_BT2_MAP_FLAGS)
                 mr.map_index_param = species_d[mr.ref_name].get("BT2_index", default_BT2_INDEX) # the parameter passed on to the mapper
                 mr.map_index = os.path.dirname(mr.map_index_param) # the index_dir
                 mr.map_index_file = mr.map_index_param + ".1.bt2" # file present if the index is actually there
+                mr.map_flags = species_d[mr.ref_name].get("BT2_flags", default_BT2_MAP_FLAGS)
+                if is_paired_end(mr.project_id, mr.sample_id):
+                    mr.map_flags += " --align-paired-reads"
 
             elif mr.mapper == "STAR":
-                mr.map_flags = species_d[mr.ref_name].get("STAR_flags", default_STAR_MAP_FLAGS)
                 mr.map_index = species_d[mr.ref_name].get("index_dir", default_STAR_INDEX)
                 mr.map_index_param = mr.map_index
                 mr.map_index_file = mr.map_index + "/SAindex"
+                mr.map_flags = species_d[mr.ref_name].get("STAR_flags", default_STAR_MAP_FLAGS)
 
             MAP_RULES_LKUP[mr.out_path] = mr
             INDEX_FASTA_LKUP[mr.map_index_file] = mr
