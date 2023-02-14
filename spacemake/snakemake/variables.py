@@ -91,6 +91,10 @@ parsed_spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/spatial_barcodes_{puck_barcode_file_id}.csv"
 )
+parsed_spatial_barcodes_pc = (
+    complete_data_root
+    + "/puck_barcode_files/spatial_barcodes_puck_collection.csv"
+)
 stats_prealigned_spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/stats_prealigned_spatial_barcodes_{puck_barcode_file_id}.csv"
