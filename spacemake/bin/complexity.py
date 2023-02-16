@@ -120,8 +120,11 @@ def main(args):
 
     # print(f"concatenating {len(chunks)} chunks")
     logger.debug(f"finished loading all reads. Concatenating {len(chunks)} chunks.")
-    keys = np.concatenate(chunks)
-    chunks = None # free some memory
+    if chunks:
+        keys = np.concatenate(chunks)
+        chunks = None # free some memory
+    else:
+        keys = []
 
     logger.debug("sorting...")
     keys.sort()
