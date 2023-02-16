@@ -71,7 +71,12 @@ def load_cutadapt(fname):
     df = pd.read_csv(fname, sep="\t")
     reads = df.loc["reads"].set_index("key")
     bases = df.loc["bases"].set_index("key")
-    rlens = df.loc["L_final"].set_index("key")
+    rlens = df.loc["L_final"]
+    if type(rlens) == pd.core.series.Series:
+        # we only have one length and pandas returns a Series instead of a dataframe...
+        rlens = pd.DataFrame(rlens).T.set_index('key')
+    else:
+        rlens = rlens.set_index("key")
 
     def name_mangle(names):
         out = []
