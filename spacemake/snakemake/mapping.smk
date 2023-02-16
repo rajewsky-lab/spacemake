@@ -108,9 +108,12 @@ def is_paired_end(project_id, sample_id):
     return pe != 'single-end'
 
 def maybe_temporary(bam):
+    # print("these are the NOT TEMP bam files", sorted(BAM_IS_NOT_TEMP))
     if bam in BAM_IS_NOT_TEMP:
+        # print(bam, "is not temp!")
         return bam
     else:
+        # print(bam, "is TEMP!!!1!!11einself")
         return temp(bam)
 
 ######################################################
@@ -227,14 +230,19 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
                 if final in lr.link_name:
                     final_link = lr
 
-        for mr in last_mr:
-            mr.keep_unmapped = True
+        left = f"not_{mr.out_name}"
+
+    for mr in last_mr:
+        mr.keep_unmapped = True
 
     if not final_link:
         # we need to manufacture a "final" link_rule by taking the last mapping
         last = map_rules[-1]
         link_rules.append(dotdict(link_src=last.out_name, link_name=final, ref_name=last.ref_name))
 
+    # print("generated the following map_rules")
+    # for m in map_rules:
+    #     print(m)
     return map_rules, link_rules
 
 
@@ -270,6 +278,7 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             mr.out_path = wc_fill(mapped_bam, mr)
             mr.out_unmapped_path = wc_fill(unmapped_bam, mr)
             if mr.keep_unmapped:
+                print("keeping", mr.out_unmapped_path)
                 BAM_IS_NOT_TEMP.add(mr.out_unmapped_path)
             
             mr.link_name = mr.input_name
@@ -297,8 +306,6 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
                 mr.map_index = os.path.dirname(mr.map_index_param) # the index_dir
                 mr.map_index_file = mr.map_index_param + ".1.bt2" # file present if the index is actually there
                 mr.map_flags = species_d[mr.ref_name].get("BT2_flags", default_BT2_MAP_FLAGS)
-                if is_paired_end(mr.project_id, mr.sample_id):
-                    mr.map_flags += " --align-paired-reads"
 
             elif mr.mapper == "STAR":
                 mr.map_index = species_d[mr.ref_name].get("index_dir", default_STAR_INDEX)
@@ -464,12 +471,13 @@ rule map_reads_bowtie2:
         unpack(lambda wc: get_map_inputs(wc, mapper='bowtie2')),
     output:
         bam=bt2_mapped_bam,
-        ubam=maybe_temporary(bt2_unmapped_bam)
+        ubam=bt2_unmapped_bam, # maybe_temporary()
     log: 
         bt2 = bt2_mapped_log,
         hdr = bt2_mapped_log.replace('.log', '.splice_bam_header.log')
     params:
         auto = lambda wc, output: get_map_params(wc, output, mapper='bowtie2'),
+        PE=lambda wc: "--align-paired-reads --no-mixed" if is_paired_end(wc.project_id, wc.sample_id) else "",
     threads: 32 
     shell:
         # 1) decompress unmapped reads from existing BAM
@@ -483,7 +491,7 @@ rule map_reads_bowtie2:
         # 3) align reads with bowtie2, *preserving the original BAM tags*
         "| bowtie2 -p {threads} --reorder --mm"
         "  -x {params.auto[index]} -b /dev/stdin --preserve-tags"
-        "  {params.auto[flags]} 2> {log.bt2}"
+        "  {params.auto[flags]} {params.PE} 2> {log.bt2}"
         " "
         # fix the BAM header to accurately reflect the entire history of processing via PG records.
         "| python {bin_dir}/splice_bam_header.py"
@@ -534,7 +542,7 @@ rule map_reads_STAR:
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
         bam=star_mapped_bam,
-        ubam=maybe_temporary(star_unmapped_bam),
+        ubam=star_unmapped_bam, # maybe_temporary(
         tmp=temp(directory(star_prefix + "_STARgenome"))
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
     log:
@@ -542,6 +550,7 @@ rule map_reads_STAR:
         hdr=star_target_log_file.replace(".log", ".splice_bam_header.log")
     params:
         auto=get_map_params,
+        PE=lambda wc: "PE" if is_paired_end(wc.project_id, wc.sample_id) else "SE",
         # annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
         # annotation=lambda wilcards, output: BAM_ANN_LKUP.get(output.bam, "can't_find_annotation"),
         # flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP.get(output.bam, "can't_find_flags"),
@@ -552,7 +561,7 @@ rule map_reads_STAR:
         "  --genomeDir {params.auto[index]}"
         "  --readFilesIn {input.bam}"
         "  --readFilesCommand samtools view -f 4"
-        "  --readFilesType SAM SE"
+        "  --readFilesType SAM {params.PE}"
         "  --sjdbGTFfile {params.auto[annotation]}"
         "  --outFileNamePrefix {params.star_prefix}"
         "  --runThreadN {threads}"
