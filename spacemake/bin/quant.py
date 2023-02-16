@@ -32,7 +32,7 @@ class DGE:
     def add_read(self, gene, cell, channels=["count"]):
         if channels:
             if self.allowed_bcs and not cell in self.allowed_bcs:
-                return
+                cell = "NA"
 
             self.DGE_cells.add(cell)
             self.DGE_genes.add(gene)
@@ -327,6 +327,9 @@ def select_alignment(src, countable_regions=set(['N', 'C', 'U', 'CU'])):
     for rec in src:
         if rec.is_unmapped:
             continue
+
+        if rec.is_paired and rec.is_read2:
+            continue # TODO: proper sanity checks and/or disambiguation
 
         if rec.query_name != last_qname:
             if len(batch) == 1:
