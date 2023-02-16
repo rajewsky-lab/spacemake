@@ -295,15 +295,15 @@ def parallel_worker(Qfq1, Qfq2, Qres, args, Qerr, abort_flag, stat_lists):
             for fqid, r1, q1, r2, q2 in chunk:
                 N["total"] += 1
                 if args.paired_end: 
-                    if args.paired_end[0] == 'r':
-                        # rev_comp R1 and reverse qual1
-                        q1 = q1[::-1]
-                        r1 = util.rev_comp(r1)
+                    # if args.paired_end[0] == 'r':
+                    #     # rev_comp R1 and reverse qual1
+                    #     q1 = q1[::-1]
+                    #     r1 = util.rev_comp(r1)
 
-                    if args.paired_end[1] == 'r':
-                        # rev_comp R2 and reverse qual2
-                        q2 = q2[::-1]
-                        r2 = util.rev_comp(r2)
+                    # if args.paired_end[1] == 'r':
+                    #     # rev_comp R2 and reverse qual2
+                    #     q2 = q2[::-1]
+                    #     r2 = util.rev_comp(r2)
 
                     rec1 = fmt.make_bam_record(
                         qname=fqid,
