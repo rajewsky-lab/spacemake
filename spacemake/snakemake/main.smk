@@ -734,14 +734,14 @@ rule count_barcode_matches:
                 n_matching = pd.read_csv(parsed_barcode_file).shape[0]
                 matching_ratio = round(float(n_matching)/n_barcodes, 2)
                 
-                out_df = out_df.append({
-                    'puck_barcode_file_id': pbf_id,
-                    'puck_barcode_file': pbf,
-                    'parsed_barcode_file': parsed_barcode_file,
-                    'n_barcodes': n_barcodes,
-                    'n_matching': n_matching,
-                    'matching_ratio': matching_ratio,
-                }, ignore_index=True)
+                out_df = pd.concat([out_df, pd.DataFrame({
+                    'puck_barcode_file_id': [pbf_id],
+                    'puck_barcode_file': [pbf],
+                    'parsed_barcode_file': [parsed_barcode_file],
+                    'n_barcodes': [n_barcodes],
+                    'n_matching': [n_matching],
+                    'matching_ratio': [matching_ratio],
+                })], ignore_index=True, sort=False)
 
             above_threshold_mask = out_df.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
             out_df['pass_threshold'] = 0
