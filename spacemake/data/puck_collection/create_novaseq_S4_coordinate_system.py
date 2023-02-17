@@ -24,14 +24,14 @@ def setup_parser(parser):
         "--x-offset",
         type=int,
         help="the offset in the x axis. Units are important during puck collection generation.",
-        default=33100,
+        default=33809,
     )
 
     parser.add_argument(
         "--y-offset",
         type=int,
         help="the offset of the y axis. Units are important during puck collection generation.",
-        default=36115,
+        default=36342,
     )
 
     parser.add_argument(
@@ -45,7 +45,7 @@ def setup_parser(parser):
         "--swath-offset-even",
         type=int,
         help="the swath offset for even columns",
-        default=6250,
+        default=6201,
     )
 
     parser.add_argument(
