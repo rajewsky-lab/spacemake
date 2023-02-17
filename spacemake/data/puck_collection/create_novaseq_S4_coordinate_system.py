@@ -116,7 +116,7 @@ def create_coordinate_system(
                         pd.DataFrame(
                             {
                                 "puck_id": [puck_id],
-                                "x_ofset": [x_ofs],
+                                "x_offset": [x_ofs],
                                 "y_offset": [y_ofs],
                                 "z_offset": [z_ofs],
                             }
