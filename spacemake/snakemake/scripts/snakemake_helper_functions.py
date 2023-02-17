@@ -604,7 +604,7 @@ def get_parsed_puck_file(wildcards):
         puck_barcode_file_id=wildcards.puck_barcode_file_id_qc,
     )
 
-    if is_spatial:
+    if is_spatial or wildcards.puck_barcode_file_id_qc == "puck_collection":
         return parsed_spatial_barcodes.format(
             project_id=wildcards.project_id,
             sample_id=wildcards.sample_id,

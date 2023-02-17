@@ -877,7 +877,9 @@ class ProjectDF:
         self, project_id: str, sample_id: str, puck_barcode_file_id: str
     ) -> bool:
         """Returns true if a sample with index (project_id, sample_id) is spatial,
-        meaning that it has spatial barcodes attached.
+        meaning that it has spatial barcodes attached. Or, if the puck_barcode_file_id
+        is 'puck_collection', meaning that the same is necessarily spatial (transformed
+        from local to global coordinates)
 
         :param project_id:
         :type project_id: str
@@ -892,7 +894,7 @@ class ProjectDF:
             puck_barcode_file_id=puck_barcode_file_id,
         )
 
-        if puck_barcode_file is not None:
+        if puck_barcode_file is not None or puck_barcode_file_id == "puck_collection":
             return True
         else:
             return False
@@ -1063,6 +1065,7 @@ class ProjectDF:
         sample_id: str,
         puck_barcode_file_id: str,
     ):
+        import numpy as np
         summary_file = puck_barcode_files_summary.format(
             project_id=project_id, sample_id=sample_id
         )
@@ -1072,24 +1075,44 @@ class ProjectDF:
 
         df = pd.read_csv(summary_file)
 
-        df = df.loc[df.puck_barcode_file_id == puck_barcode_file_id]
+        df_puck = df.loc[df.puck_barcode_file_id == puck_barcode_file_id]
 
-        if df.empty:
+        # we calculate the stats for the puck_collection here
+        # the max and min coordinates are not in global system
+        if puck_barcode_file_id == "puck_collection":
+            def multi_func(functions):
+                def f(col):
+                    return functions[col.name](col)
+                return f
+
+            df_pc = df._get_numeric_data() \
+                        .apply(multi_func({'x_pos_min_px': np.min, 
+                                          'x_pos_max_px': np.max, 
+                                          'y_pos_min_px': np.min,
+                                          'y_pos_max_px': np.max, 
+                                          'n_barcodes': np.mean,
+                                          'n_matching': np.mean,
+                                          'matching_ratio': np.mean,
+                                          'px_by_um': np.mean}))
+
+            return df_pc.to_dict()
+
+        if df_puck.empty:
             return None
         else:
-            return df.iloc[0].to_dict()
+            return df_puck.iloc[0].to_dict()
         
     def get_puck(
             self, project_id: str, sample_id: str, return_empty=False
     ) -> Puck:
-        """get_puck_variables.
+        """get_puck.
 
         :param project_id: project_id of a sample
         :type project_id: str
         :param sample_id: sample_id of a sample
         :type sample_id: str
         :param return_empty:
-        :return: A Puck object containing puck name and variables
+        :return: A Puck object containing puck object
         :rtype: Puck
         """
         puck_name = self.get_metadata(

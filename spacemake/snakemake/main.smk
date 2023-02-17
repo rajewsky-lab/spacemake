@@ -563,6 +563,10 @@ rule puck_collection_stitching:
             "",
             "puck_id",
         )
+        
+        # x_pos and y_pos to be global coordinates
+        _pc.obs['x_pos'] = _pc.obsm['spatial'][..., 0]
+        _pc.obs['y_pos'] = _pc.obsm['spatial'][..., 1]
 
         _pc.write_h5ad(output[0])
         # add 'cell_bc' name to index for same format as individual pucks
@@ -573,13 +577,6 @@ rule puck_collection_stitching:
         # we could implement sth like df.A.str.extract('(\d+)')
         # to avoid losing information from columns that are not numeric
         df._get_numeric_data().to_csv(output[1])
-
-
-        # create a merged barcode file and save into puck_barcode_files
-        # to ensure full compatibility with automated_analysis_create_report.Rmd
-        # TODO: put _barcode_file this as an output of this rule.
-        pc_output_barcode_file = parsed_spatial_barcodes_pc.format(project_id=wildcards.project_id, sample_id=wildcards.sample_id)
-        df[['x_pos', 'y_pos']].to_csv(pc_output_barcode_file)
 
 rule create_qc_sheet:
     input:
@@ -656,7 +653,6 @@ rule create_automated_analysis_processed_data_files:
         
 rule create_automated_report:
     input:
-        puck_file = get_parsed_puck_file,
         **automated_analysis_processed_data_files,
     # spawn at most 4 automated analyses
     threads: max(workflow.cores / 8, 1)
