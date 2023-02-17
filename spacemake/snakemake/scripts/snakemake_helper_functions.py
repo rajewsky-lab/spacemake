@@ -169,8 +169,10 @@ def get_prealignment_files(pattern):
         )[0]
 
         run_mode_vars = project_df.config.get_run_mode(run_mode_name).variables
+        puck_variables = project_df.get_puck_variables(project_id = index[0], sample_id = index[1])
 
-        if run_mode_vars["spatial_barcode_min_matches"] == 0:
+        if run_mode_vars["spatial_barcode_min_matches"] == 0 \
+            or puck_variables['coordinate_system'] == '':
             continue
 
         # TODO: does this need to be separated per run mode?

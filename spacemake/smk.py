@@ -451,6 +451,10 @@ def update_project_df_barcode_matches(prealigned=False):
         # project_df is only updated if a prealignment barcode matching file is found
         if os.path.exists(_f_barcodes_df):
             barcodes_df = pd.read_csv(_f_barcodes_df)
+
+            if 'pass_threshold' not in barcodes_df.columns:
+                continue
+
             above_threshold_mask = barcodes_df['pass_threshold'] == 1
 
             _puck_barcode_files = barcodes_df[above_threshold_mask]['puck_barcode_file'].values.tolist().__str__()
@@ -502,6 +506,9 @@ def spacemake_run(pdf, args):
     # join config_variables and novosparc_variables
     # to flatten the directory
     config_variables = {**config_variables, **novosparc_variables}
+
+    # assert that the project_df is valid before running the pipeline
+    pdf.assert_valid()
 
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
