@@ -459,42 +459,6 @@ def update_project_df_barcode_matches(prealigned=False):
             pdf.df.loc[index, 'puck_barcode_file'] = _puck_barcode_files
             pdf.df.loc[index, 'puck_barcode_file_id'] = _puck_barcode_files_id
 
-
-def snakemake_handle_gui_request(cli_args, _smk_args):
-    """
-    snakemake_handle_gui_request
-    is partially adapted from snakemake's main
-    this
-    """
-    from functools import partial
-
-    try:
-        import snakemake.gui as gui
-    except ImportError:
-        print(
-            "Error: GUI needs Flask to be installed. Install "
-            "with easy_install or contact your administrator.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    _snakemake = partial(snakemake, os.path.abspath(cli_args.snakefile))
-    gui.register(_snakemake, cli_args)
-
-    if ":" in cli_args.gui:
-        host, port = cli_args.gui.split(":")
-    else:
-        port = cli_args.gui
-        host = "127.0.0.1"
-
-    url = "http://{}:{}".format(host, port)
-    print("Listening on {}.".format(url), file=sys.stderr)
-
-    try:
-        gui.app.run(debug=False, threaded=True, port=int(port), host=host)
-    except (KeyboardInterrupt, SystemExit):
-        pass
-
 @message_aggregation(logger_name)
 def spacemake_run(pdf, args):
     """spacemake_run.
