@@ -86,6 +86,7 @@ default_BT2_MAP_FLAGS = (
     " -L 10 -D 30 -R 30"
     " --ignore-quals"
     " --score-min=L,0,1.5" # require 75% of perfect match (2=base match)
+    " -k 10"
 )
 # original rRNA mapping code used --very-fast-local and that was that.
 
