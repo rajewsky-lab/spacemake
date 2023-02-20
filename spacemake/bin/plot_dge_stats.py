@@ -15,11 +15,15 @@ import spacemake.util as util
 
 def cell_hist_plot(ax, df, key="n_reads", n_bins=100, xlog=True, ylog=True, **kw):
     values = df[key].values
+    # print(values)
     if xlog:
-        lv = np.log10(values)
+        lv = np.log10(values + 1)
     else:
         lv = values
 
+    # exclude extreme outliers
+    lmin, lmax = np.percentile(lv, [0.1, 99.9])
+    lv = lv[(lv >= lmin) & (lv <= lmax)]
     hist, bin_edges = np.histogram(lv, bins=n_bins)
     if xlog:
         bin_edges = 10 ** bin_edges
@@ -128,7 +132,7 @@ def main(args):
     fig, axes = plt.subplots(2, 2, figsize=(8, 5))
     axes = np.array(axes).ravel()
     cell_hist_plot(axes[0], adata.obs, key="n_exonic_reads")
-    cell_hist_plot(axes[1], adata.obs, key="n_exonic_counts")
+    cell_hist_plot(axes[1], adata.obs, key="n_counts")
     cell_hist_plot(axes[2], adata.obs, key="n_genes")
     cell_hist_plot(axes[3], adata.obs, key="reads_per_counts", xlog=False)
     fig.tight_layout()
@@ -137,7 +141,7 @@ def main(args):
     # loglog version of knee plot
     fig, ax = plt.subplots(figsize=(6, 5))
     fig.suptitle(sample_name)
-    loglog_knee_plot(ax, adata.obs, key="n_exonic_counts")
+    loglog_knee_plot(ax, adata.obs, key="n_counts")
     ax.grid(axis="y")
     fig.tight_layout()
     fig.savefig(util.ensure_path(args.out_knee))
