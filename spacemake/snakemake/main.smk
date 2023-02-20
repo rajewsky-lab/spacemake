@@ -265,6 +265,7 @@ rule create_spatial_barcode_whitelist:
         # save both the whitelist and the beads in a separate file
         bc[['cell_bc']].to_csv(output[0], header=False, index=False)
         
+dge_stats = stats_dir + '/' + dge_out_suffix + ".{n_beads}_beads_{puck_barcode_file_id}.quant.tsv"
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
     # topBarcodesClean.txt file or just the regular topBarcodes.txt
@@ -274,7 +275,8 @@ rule create_dge:
         # unpack(get_dge_input_bam)
     output:
         dge=dge_out,
-        dge_summary=dge_out_summary
+        dge_summary=dge_out_summary,
+        stats=dge_stats
     log: dge_out.replace(".h5ad", ".log")
     params:
         dge_root = dge_root,
@@ -296,6 +298,7 @@ rule create_dge:
         " --output={params.dge_root}/ "
         " --out-dge={output.dge} "
         " --out-summary={output.dge_summary} "
+        " --out-stats={output.stats} "
         " --cell-bc-allowlist={input.top_barcodes} "
         "{input.annotated_bams}"
 

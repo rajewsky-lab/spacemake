@@ -31,7 +31,8 @@ class DGE:
 
     def add_read(self, gene, cell, channels=["count"]):
         if channels:
-            if self.allowed_bcs and not cell in self.allowed_bcs:
+            if self.allowed_bcs and not (cell in self.allowed_bcs):
+                # print(f"discarding '{cell}' as NA", cell in self.allowed_bcs)
                 cell = "NA"
 
             self.DGE_cells.add(cell)
@@ -119,9 +120,8 @@ class DGE:
 class DefaultCounter:
 
     channels = ["counts", "exonic_counts", "exonic_reads", "intronic_counts", "intronic_reads"]
-    rank_cells_by = "n_reads"
     logger = logging.getLogger("spacemake.quant.DefaultCounter")
-    priorities={
+    alignment_priorities = {
         'C': 101, # coding exon
         'c': 100, # coding exon (lower case == antisense)
         'U': 51,  # UTR exon
@@ -132,6 +132,20 @@ class DefaultCounter:
         'n': 20,
         'I': 11, # intronic region
         'i': 10,
+        '-': 0,
+    }
+    gene_priorities = {
+        'C': 101, # coding exon
+        'c': 100, # coding exon (lower case == antisense)
+        'U': 51,  # UTR exon
+        'u': 50,
+        'CU': 51, # overlaps both, CDS+UTR (should in fact never occur as 'CU')
+        'cu': 50,
+        'N': 21, # exon of non-coding transcript
+        'n': 20,
+        'I': 11, # intronic region
+        'i': 10,
+        '-': 0,
     }
     exonic_set = set(["C", "U", "CU", "N", "c", "u", "cu", "n"])
     intronic_set = set(["I", "i"])
@@ -148,8 +162,10 @@ class DefaultCounter:
     
         self.uniq = set()
         self.stats = defaultdict(int)
+        self.stats_by_ref = {}
+        self.last_ref = None
 
-    def select_single_alignment(self, bundle):
+    def select_single_alignment(self, bundle, by_score=False):
         """
         If multiple alignments are reported for one fragment/read try to make a reasonable choice:
         If one of the alignments is to a coding exon, but the others are not, choose the exonic one.
@@ -159,15 +175,18 @@ class DefaultCounter:
         from collections import defaultdict
 
         def get_prio(gf):
-            prios = [self.priorities.get(f, 0) for f in gf]
+            prios = [self.alignment_priorities.get(f, 0) for f in gf]
             return max(prios)
 
         top_prio = 0
         n_top = 0
         kept = None
           
-        for gn, gf in bundle:
-            p = get_prio(gf)
+        for gn, gf, score in bundle:
+            if by_score:
+                p = score
+            else:
+                p = get_prio(gf)
             if p > top_prio:
                 top_prio = p
                 kept = (gn, gf)
@@ -192,7 +211,7 @@ class DefaultCounter:
             gene_gf = defaultdict(list)
             max_prio = 0
             for n, f in zip(gn, gf):
-                p = self.priorities.get(f, 0)
+                p = self.gene_priorities.get(f, 0)
                 gene_prio[n] = max(gene_prio[n], p)
                 max_prio = max([max_prio, p])
                 gene_gf[n].append(f)
@@ -252,16 +271,30 @@ class DefaultCounter:
         return channels
 
 
-    def process_bam_bundle(self, cell, umi, bundle):
+    def set_reference(self, ref):
+        if ref != self.last_ref:
+            self.logger.info(f"switching to reference '{ref}'")
+            # fresh counter
+            self.stats = defaultdict(int) 
+            self.stats_by_ref[ref] = self.stats
+            self.last_ref = ref
+
+            ## TODO extract new paramters for process_bam_bundle..
+            #self.select_single_alignment_kw = lookup(ref)
+            #self.select_gene_kw = lookup(ref)
+
+    def process_bam_bundle(self, cell, umi, bundle, reference_name):
         gene = None
         channels = set()
+        self.set_reference(reference_name)
 
         if len(bundle) == 1:
             self.stats['N_frags_unique_mapped'] += 1
-            tags = bundle[1]
+            tags = bundle[0][:2] # ignore score
         else:
             self.stats['N_frags_multimapped'] += 1
-            tags = self.select_single_alignment(bundle)
+            # TODO: make by_score configurable
+            tags = self.select_single_alignment(bundle, by_score=(reference_name == "miRNA"))
             
         if tags:
             self.stats['N_frags_countable'] += 1
@@ -273,7 +306,7 @@ class DefaultCounter:
                 # handle the whole uniqueness in a way that can parallelize
                 # maybe split by CB[:2]? This way, distributed uniq() sets would
                 # never overlap
-                key = hash(cell, gene, umi)
+                key = hash((cell, gene, umi))
                 uniq = not (key in self.uniq)
                 if uniq:
                     self.uniq.add(key)
@@ -282,15 +315,18 @@ class DefaultCounter:
             else:
                 self.stats['N_gene_ambig'] += 1
 
-        return gene, cell, channels
-
+        return gene, channels
 
     def get_stats_df(self):
         data = {}
-        for k, v in self.stats.items():
-            data[k] = [v]
+        for ref in sorted(self.stats_by_ref.keys()):
+            data['ref'] = [ref]
+            for k, v in self.stats_by_ref[ref].items():
+                data[k] = [v]
 
-        return pd.DataFrame(data, index=['count']).T
+        df = pd.DataFrame(data, index=['ref', 'count']).T
+        print(df)
+        return df
 
 
     def save_stats(self, path, sep='\t', **kw):
@@ -415,7 +451,7 @@ def bam_iter_bundles(bam_name, logger, args, stats):
     """
 
     def extract(rec):
-        return (rec.get_tag('gn').split(','), rec.get_tag('gf').split(','))
+        return (rec.get_tag('gn').split(','), rec.get_tag('gf').split(','), rec.get_tag('AS'))
 
     bam = util.quiet_bam_open(bam_name, "rb", check_sq=False, threads=4)
     last_qname = None
@@ -438,8 +474,8 @@ def bam_iter_bundles(bam_name, logger, args, stats):
             if bundle:
                 yield CB, MI, bundle
 
-            CB = rec.get_tag('CB'),
-            MI = rec.get_tag('MI'),
+            CB = rec.get_tag('CB')
+            MI = rec.get_tag('MI')
             bundle = [extract(rec),]
             last_qname = rec.query_name
         else:
@@ -477,8 +513,9 @@ def main(args):
         for cell, umi, bundle in bam_iter_bundles(bam_name, logger, args, counter.stats):
             # all the work done in the counter instance should be delegated to workers
             # uniq() is tricky. Perhaps only one worker for now...
-            gene, channels = counter.process_bam_bundle(cell, umi, bundle)
+            gene, channels = counter.process_bam_bundle(cell, umi, bundle, reference_name)
             if gene:
+                # print(f"add_read gene={gene} cell={cell} channels={channels}")
                 dge.add_read(gene=gene, cell=cell, channels=channels)
 
             # keep track of the BAM origin of every gene (in case we combine multiple BAMs)
@@ -490,7 +527,7 @@ def main(args):
     )
     adata = count_class.postprocess_adata(adata, sparse_d)
     if args.out_stats:
-        count_class.save_stats(args.out_stats)
+        counter.save_stats(args.out_stats.format(**locals()))
 
     # if args.cell_rank_cutoff > 0:
     #     counts = adata.obs[count_class.rank_cells_by].sort_values(ascending=False)
