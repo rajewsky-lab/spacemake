@@ -24,14 +24,14 @@ def setup_parser(parser):
         "--x-offset",
         type=int,
         help="the offset in the x axis. Units are important during puck collection generation.",
-        default=33809,
+        default=33739,
     )
 
     parser.add_argument(
         "--y-offset",
         type=int,
         help="the offset of the y axis. Units are important during puck collection generation.",
-        default=36342,
+        default=36282,
     )
 
     parser.add_argument(
@@ -108,7 +108,10 @@ def create_coordinate_system(
 
                     x_ofs = int(col) * x_offset
 
-                    y_ofs = int(row) * y_offset + swath_offsets[int(col) % 2]
+                    swath_offset = swath_offsets[int(col) % 2]
+                    swath_offset = -swath_offset if side == 1 else swath_offset
+
+                    y_ofs = int(row) * y_offset + swath_offset
 
                     z_ofs = 0
 
