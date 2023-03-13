@@ -61,6 +61,21 @@ def load_GTF(
     Returns:
         pandas.DataFrame: all GTF annotation data converted to a DataFrame with columns: chrom, feature, start (0-based), end, strand, [attributes]
     """
+
+    ## Efficient representation of GTF features as bit-mask
+    feat2bit = {
+        "transcript": 1,
+        "exon": 2,
+        "UTR": 4,
+        "CDS": 8,
+    }
+
+    # IDEA: plus (low nibble) and minus strand (high nibble) sense would both fit into one byte!
+    # extracting only specific-strand features:
+    #
+    #   f_plus = mask & 0b1111
+    #   f_minus = mask >> 4
+
     if type(src) is str:
         if src.endswith(".gz"):
             src = gzip.open(src, "rt")
@@ -106,21 +121,6 @@ def load_GTF(
         lambda t: abbreviations.get(t, t)
     )
     return df
-
-
-## Efficient representation of GTF features as bit-mask
-feat2bit = {
-    "transcript": 1,
-    "exon": 2,
-    "UTR": 4,
-    "CDS": 8,
-}
-
-# IDEA: plus (low nibble) and minus strand (high nibble) sense would both fit into one byte!
-# extracting only specific-strand features:
-#
-#   f_plus = mask & 0b1111
-#   f_minus = mask >> 4
 
 def make_lookup(d):
     return np.array(
@@ -989,7 +989,7 @@ def build_compiled_annotation(args):
 
 
 def query_regions(args):
-    logger = logging.getLogger("spacemake.annotator.query")
+    logger = logging.getLogger("spacemake.annotator.query_regions")
     if args.compiled:
         ga = GenomeAnnotation.from_compiled_index(args.compiled)
     else:
@@ -1008,6 +1008,41 @@ def query_regions(args):
             ],
         )
         print(f"gn={gn}\tgf={gf}\tgt={gt}")
+
+
+
+def query_gff(args):
+    logger = logging.getLogger("spacemake.annotator.query_gff")
+    if args.compiled:
+        ga = GenomeAnnotation.from_compiled_index(args.compiled)
+    else:
+        ga = GenomeAnnotation.from_GTF(args.gtf)
+
+    for line in open(args.gff):
+        if line.startswith('#'):
+            continue
+        
+        parts = line.split("\t")
+        if len(parts) != 9:
+            # not a GTF/GFF formatted line
+            continue
+
+        chrom, source, feature, start, end, score, strand, frame, attr_str = parts
+
+        start = int(start) - 1
+        end = int(end)
+
+        logger.debug(f"querying region '{chrom}:{start}-{end}:{strand}'")
+
+        gn, gf, gt = ga.get_annotation_tags(
+            chrom,
+            strand,
+            [
+                (start, end),
+            ],
+        )
+        print(f'{line.rstrip()} gn "{gn}"; gf "{gf}"; gt "{gt}";')
+
 
 
 def parse_args():
@@ -1087,6 +1122,20 @@ def parse_args():
         help="path to the original annotation (e.g. gencodev38.gtf.gz)",
     )
     query_parser.add_argument("region", default=[], help="region to query", nargs="+")
+
+    gff_parser = subparsers.add_parser("gff")
+    gff_parser.set_defaults(func=query_gff)
+    gff_parser.add_argument(
+        "--compiled",
+        default=None,
+        help="path to a directoy in which a compiled version of the GTF is stored",
+    )
+    gff_parser.add_argument(
+        "--gff",
+        default=None,
+        help="path to the gff file you want queried",
+    )
+
     return parser.parse_args()
 
 
