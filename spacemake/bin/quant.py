@@ -9,6 +9,108 @@ from spacemake.contrib import __version__, __author__, __license__, __email__
 import datetime
 import os
 
+"""
+This module implements the functionality needed to aggregate annotated alignments from a BAM file
+into a digital gene expression (DGE) matrix.
+The matrix has gene names as columns and cell barcodes as rows. It is stored as a scipy.sparse.csr_matrix
+to save RAM. Depending on the kinds of features a read can be annotated with, counting goes through
+two stages of disambiguation (see below) and then a determination of "how to count" the read. A read can be 
+counted into more than one count-matrix which will be stored as 'layers' in the resulting AnnData object
+(see below).
+
+Configuration of the counting rules is done via the config.yaml. All parameters below have a 
+corresponding entry there. The section "quant" holds is subdivided by flavors (for example "default") 
+and each flavor can set the values of any of the options below. If you choose to customize further,
+you can even set a different (sub-)class to be used for counting and potentially define additional paramters
+to configure it in the YAML as well.
+
+## BAM ingestion
+
+BAM records are first grouped into 'bundles' of alternative alignments for the same read. Each bundle
+consists of a cell barcode, a UMI sequence and a list of one or more possible alignments. For the purpose
+of counting gene expression, the different alignments are represented by the values of the gn, gf, and gt 
+BAM tags.
+
+## alignment disambiguation
+
+If we have more than one alignment in a bundle, the next step is to try and disambiguate between them.
+For this purpose, the alignments are assigned priorites from the 'alignment_priorities' dictionary.
+If there is a tie with multiple alignments having the same priority, the disambiguation failed and
+the read can not be counted (for example aligning to two paralogous genes with exactly the same alignment
+score). However, if there is one alignment with the highest priority, disambiguation has succeeded 
+(for example an exonic region of one specific gene being preferred over alternative intergenic 
+alignments).
+
+## gene disambiguation
+
+Even if a single alignment can be selected, there can still be conflicting annotations for a read: it 
+may align to a region that is annotated for more than one overlapping genes. In this case another round
+of disambiguation is attempted, this time using the 'gene_priorities' dictionary.
+Here, for example, a coding exon annotation in the sense direction of the read would take precedence
+over an intronic annotation to another gene on the opposite strand.
+
+## channel determination
+
+Lastly, if a read has been found to be assignable to one gene, we may still count it into different
+channels (note, within each channel, the sum of all counts will never exceed the number of reads
+Reads are never counted multiple times into the same channel. That includes the main adata.X channel).
+
+For example, if a read aligns in an intronic region, it can be counted into 'intronic_reads'. If it is
+furthermore the first time we observe this combination of cell barcode and UMI, it would additionally be 
+counted as 'intronic_counts' ('counts' meaning "unique molecules").
+If 'intronic_counts' are included in the "default_X_counts" parameters, it would also count to the main
+DGE matrix stored as adata.X .
+
+## A note on parallelization
+
+In order to decide if a read has been seen more than once already (copies of the same BC & UMI sequences)
+each DefaultCounter instance maintains a set() of hash values. To ensure correctness but still allow
+parallelization, the input process will place bundles into distinct queues based on the cell barcode
+sequence.
+
+For example, if we want to run 4 counting-processes in parallel, we would map the first nucleotide to the 
+processes such that barcodes starting with 'A'-> process 1, 'C' -> process 2, 'G' -> process 3, 
+'T' -> process 3. In this manner the separate sets of hash values are guaranteed to never overlap and the
+test for UMI uniqueness is not an issue.
+
+
+"""
+default_channels = ["counts", "exonic_counts", "exonic_reads", "intronic_counts", "intronic_reads"]
+default_X_counts = ["exonic_counts", "intronic_counts"] # what should be counted into adata.X matrix
+default_alignment_priorities = {
+    'C': 101, # coding exon
+    'c': 100, # coding exon (lower case == antisense)
+    'U': 51,  # UTR exon
+    'u': 50,
+    'CU': 51, # overlaps both, CDS+UTR (should in fact never occur as 'CU')
+    'cu': 50,
+    'N': 21, # exon of non-coding transcript
+    'n': 20,
+    'I': 11, # intronic region
+    'i': 10,
+    '-': 0,
+}
+default_gene_priorities = {
+    'C': 101, # coding exon
+    'c': 100, # coding exon (lower case == antisense)
+    'U': 51,  # UTR exon
+    'u': 50,
+    'CU': 51, # overlaps both, CDS+UTR (should in fact never occur as 'CU')
+    'cu': 50,
+    'N': 21, # exon of non-coding transcript
+    'n': 20,
+    'I': 11, # intronic region
+    'i': 10,
+    '-': 0,
+}
+default_exonic_tags = ["C", "U", "CU", "N", "c", "u", "cu", "n"]
+default_intronic_tags = ["I", "i"]
+exon_intron_disambiguation_functions = {
+    "exon_wins": lambda channels: channels - set(["intronic_reads", "intronic_counts"]),
+    "intron_wins": lambda channels: channels - set(["exonic_reads", "exonic_counts"]),
+    "count_both": lambda channels: channels,
+}
+
 
 class DGE:
     logger = logging.getLogger("spacemake.quant.DGE")
@@ -86,7 +188,7 @@ class DGE:
         return sparse_channels, obs, var
 
     @staticmethod
-    def sparse_arrays_to_adata(channel_d, obs, var, main_channel):
+    def sparse_arrays_to_adata(channel_d, obs, var, main_channel='counts'):
         """_summary_
         Creates an AnnData object from sparse matrices in the channel_d dictionary. The main_channel
         will be assigned to adata.X, the others to adata.layers[channel].
@@ -117,53 +219,75 @@ class DGE:
         return adata
 
 
+class CountingStatistics:
+    def __init__(self):
+        self.stats_by_ref = defaultdict(lambda : defaultdict(int))
+
+    def count(self, ref, name):
+        self.stats_by_ref[ref][name] += 1
+
+    def get_stats_df(self):
+        dfs = []
+        for ref in sorted(self.stats_by_ref.keys()):
+            data = {}
+            data['ref'] = ref
+            for k, v in self.stats_by_ref[ref].items():
+                data[k] = [v]
+
+            dfs.append(pd.DataFrame(data))
+
+        return pd.concat(dfs)
+
+    def save_stats(self, path, sep='\t', **kw):
+        self.get_stats_df().to_csv(path, sep=sep, **kw)
+
+
 class DefaultCounter:
 
-    channels = ["counts", "exonic_counts", "exonic_reads", "intronic_counts", "intronic_reads"]
     logger = logging.getLogger("spacemake.quant.DefaultCounter")
-    alignment_priorities = {
-        'C': 101, # coding exon
-        'c': 100, # coding exon (lower case == antisense)
-        'U': 51,  # UTR exon
-        'u': 50,
-        'CU': 51, # overlaps both, CDS+UTR (should in fact never occur as 'CU')
-        'cu': 50,
-        'N': 21, # exon of non-coding transcript
-        'n': 20,
-        'I': 11, # intronic region
-        'i': 10,
-        '-': 0,
-    }
-    gene_priorities = {
-        'C': 101, # coding exon
-        'c': 100, # coding exon (lower case == antisense)
-        'U': 51,  # UTR exon
-        'u': 50,
-        'CU': 51, # overlaps both, CDS+UTR (should in fact never occur as 'CU')
-        'cu': 50,
-        'N': 21, # exon of non-coding transcript
-        'n': 20,
-        'I': 11, # intronic region
-        'i': 10,
-        '-': 0,
-    }
-    exonic_set = set(["C", "U", "CU", "N", "c", "u", "cu", "n"])
-    intronic_set = set(["I", "i"])
 
-    def __init__(self, X_channels=["exonic_counts", "intronic_counts"], **kw):
+    def __init__(self, 
+        channels = default_channels,
+        alignment_priorities = default_alignment_priorities,
+        gene_priorities = default_gene_priorities,
+        exonic_tags = default_exonic_tags,
+        intronic_tags = default_intronic_tags,
+        X_counts=default_X_counts,
+        exon_intron_disambiguation = "exon_wins",
+        stats=None,
+        **kw):
+
         self.kw = kw
-#         if not stranded:
-#             self.exonic_set |= set([x.lower() for x in self.exonic_set])
-#  #           self.coding_set |= set([x.lower() for x in self.coding_set])
-#             self.intronic_set |= set([x.lower() for x in self.intronic_set])
+        self.channels = channels
+        self.alignment_priorities = alignment_priorities
+        self.gene_priorities = gene_priorities
+        self.exonic_set = set(exonic_tags)
+        self.intronic_set = set(intronic_tags)
 
         # which channels shall contribute to the adata.X (main channel)
-        self.count_X_channels = set(X_channels)
+        self.count_X_channels = set(X_counts)
+
+        # how to handle reads that align to both intron and exon features
+        self.exon_intron_disambiguation_func = exon_intron_disambiguation_functions[exon_intron_disambiguation]
     
         self.uniq = set()
-        self.stats = defaultdict(int)
-        self.stats_by_ref = {}
         self.last_ref = None
+        if stats is None:
+            stats = CountingStatistics()
+
+        self.stats = stats
+
+    def set_reference(self, ref):
+        if ref != self.last_ref:
+            self.logger.info(f"switching to reference '{ref}'")
+            # fresh counter
+            self.last_ref = ref
+            ## TODO extract new paramters for process_bam_bundle..
+            #self.select_single_alignment_kw = lookup(ref)
+            #self.select_gene_kw = lookup(ref)
+
+    def count_stats(self, name):
+        self.stats.count(self.last_ref, name)
 
     def select_single_alignment(self, bundle, by_score=False):
         """
@@ -198,8 +322,7 @@ class DefaultCounter:
         if n_top == 1:
             return kept
         else:
-            self.stats['N_frags_ambiguous'] += 1
-
+            self.count_stats('N_frags_ambiguous')
 
     def select_gene(self, tags):
         gn, gf = tags
@@ -223,9 +346,9 @@ class DefaultCounter:
                 # YES we can salvage this read
                 gn = gn_new
                 gf = gene_gf[gn[0]]
-                self.stats['N_gene_disambiguated'] += 1
+                self.count_stats('N_gene_disambiguated')
             else:
-                self.stats['N_gene_disambiguation_failed'] += 1
+                self.count_stats('N_gene_disambiguation_failed')
                 # print(gene_prio)
                 # print(gene_gf)
 
@@ -234,7 +357,6 @@ class DefaultCounter:
             # we have one gene!
 
         return gene, gf
-
 
     def determine_channels(self, gf, uniq):
         channels = set()
@@ -255,33 +377,20 @@ class DefaultCounter:
 
         # post-process: if both exon & intron annotations 
         # (but from different isoforms) are present
-        # count the read as exonic
+        # decide how to count
         if exon and intron:
-            channels -= set(["intronic_reads", "intronic_counts"])
+            channels = self.exon_intron_disambiguation_func(channels)
 
         if channels & self.count_X_channels:
             channels.add("counts")
         
         for c in channels:
-            self.stats[f'N_channel_{c}'] += 1
+            self.count_stats(f'N_channel_{c}')
 
         if not channels:
-            self.stats[f'N_channel_NONE'] += 1
+            self.count_stats(f'N_channel_NONE')
 
         return channels
-
-
-    def set_reference(self, ref):
-        if ref != self.last_ref:
-            self.logger.info(f"switching to reference '{ref}'")
-            # fresh counter
-            self.stats = defaultdict(int) 
-            self.stats_by_ref[ref] = self.stats
-            self.last_ref = ref
-
-            ## TODO extract new paramters for process_bam_bundle..
-            #self.select_single_alignment_kw = lookup(ref)
-            #self.select_gene_kw = lookup(ref)
 
     def process_bam_bundle(self, cell, umi, bundle, reference_name):
         gene = None
@@ -289,19 +398,19 @@ class DefaultCounter:
         self.set_reference(reference_name)
 
         if len(bundle) == 1:
-            self.stats['N_frags_unique_mapped'] += 1
+            self.count_stats('N_frags_unique_mapped')
             tags = bundle[0][:2] # ignore score
         else:
-            self.stats['N_frags_multimapped'] += 1
+            self.count_stats('N_frags_multimapped')
             # TODO: make by_score configurable
             tags = self.select_single_alignment(bundle, by_score=(reference_name == "miRNA"))
             
         if tags:
-            self.stats['N_frags_countable'] += 1
+            self.count_stats('N_frags_countable')
             # count the alignment every way that the counter prescribes
             gene, gf = self.select_gene(tags)
             if gene:
-                self.stats['N_gene_determined'] += 1
+                self.count_stats('N_gene_determined')
 
                 # handle the whole uniqueness in a way that can parallelize
                 # maybe split by CB[:2]? This way, distributed uniq() sets would
@@ -313,32 +422,16 @@ class DefaultCounter:
 
                 channels = self.determine_channels(gf, uniq)
             else:
-                self.stats['N_gene_ambig'] += 1
+                self.count_stats('N_gene_ambig')
 
         return gene, channels
 
-    def get_stats_df(self):
-        data = {}
-        for ref in sorted(self.stats_by_ref.keys()):
-            data['ref'] = [ref]
-            for k, v in self.stats_by_ref[ref].items():
-                data[k] = [v]
-
-        df = pd.DataFrame(data, index=['ref', 'count']).T
-        print(df)
-        return df
-
-
-    def save_stats(self, path, sep='\t', **kw):
-        self.get_stats_df().to_csv(path, sep=sep, **kw)
-
-    @staticmethod
-    def postprocess_adata(adata, sparse_d):
+    def postprocess_adata(self, adata, sparse_d):
         # number of genes detected in this cell
         adata.obs["n_genes"] = sparse_summation(adata.X > 0, axis=1)
 
         # add marginal counts:
-        for c in DefaultCounter.channels:
+        for c in self.channels:
             adata.obs[f"n_{c}"] = sparse_summation(sparse_d[c], axis=1)
 
         adata.obs["n_reads"] = adata.obs["n_exonic_reads"] + adata.obs["n_intronic_reads"]
@@ -348,6 +441,7 @@ class DefaultCounter:
 
 def parse_cmdline():
     parser = util.make_minimal_parser(prog="quant.py", description="quantify per-cell gene expression from BAM files by counting into a (sparse) DGE matrix")
+    parser.add_argument("--config", default="config.yaml", help="path to config-file")
 
     parser.add_argument(
         "bam_in",
@@ -363,20 +457,26 @@ def parse_cmdline():
         # nargs="+",
     )
     parser.add_argument(
-        "--count-class",
-        help="full name of a class initialized with a BAM header, that needs to provide a parse_bam_record() function (see documentation). default=spacemake.quant.DefaultCounter",
-        default="spacemake.quant.DefaultCounter",
+        "--flavor",
+        help="name of the adapter flavor used to retrieve sequences and parameters from the config.yaml",
+        default="default",
     )
-    parser.add_argument(
-        "--count-class-params",
-        help="OPTIONAL: path to a YAML file which will be parsed and the dictionary passed on to the --count-class constructor",
-        default="",
-    )
-    parser.add_argument(
-        "--main-channel",
-        help="name of the channel to be stored as AnnData.X (default='counts')",
-        default="counts",
-    )
+
+    # parser.add_argument(
+    #     "--count-class",
+    #     help="full name of a class initialized with a BAM header, that needs to provide a parse_bam_record() function (see documentation). default=spacemake.quant.DefaultCounter",
+    #     default="spacemake.quant.DefaultCounter",
+    # )
+    # parser.add_argument(
+    #     "--count-class-params",
+    #     help="OPTIONAL: path to a YAML file which will be parsed and the dictionary passed on to the --count-class constructor",
+    #     default="",
+    # )
+    # parser.add_argument(
+    #     "--main-channel",
+    #     help="name of the channel to be stored as AnnData.X (default='counts')",
+    #     default="counts",
+    # )
     # parser.add_argument(
     #     "--count-X",
     #     help="names of the channels to be stored as AnnData.X (default='exonic_UMI')",
@@ -415,8 +515,7 @@ def parse_cmdline():
         default="{args.output}/{args.sample}.stats.tsv",
     )
 
-
-    return parser.parse_args()
+    return util.load_config_with_fallbacks(parser.parse_args())
 
 
 def get_counter_class(classpath):
@@ -481,10 +580,6 @@ def bam_iter_bundles(bam_name, logger, args, stats):
         else:
             bundle.append(extract(rec))
 
-        if stats['N_records'] % 1000000 == 0:
-            for k, v in sorted(stats.items()):
-                print(f"{k}\t{v/1000:.1f}k")
-
     if bundle:
         yield CB, MI, bundle
         
@@ -494,23 +589,27 @@ def main(args):
     util.ensure_path(args.output + "/")
 
     # prepare counter instance
-    count_kw = vars(args)
-    from_yaml = util.load_yaml(args.count_class_params)
-    count_kw.update(from_yaml)
-    count_class = get_counter_class(args.count_class)
-    counter = count_class(**count_kw)
+    # count_kw = vars(args)
+
+    # from_yaml = util.load_yaml(args.count_class_params)
+    # count_kw.update(from_yaml)
+
+    stats = CountingStatistics()
+    config = args.config['quant'][args.flavor]
+    count_class = get_counter_class(config['counter_class'])
+    counter = count_class(stats=stats, **config)
 
     # prepare the sparse-matrix data collection (for multiple channels in parallel)
-    dge = DGE(channels=count_class.channels, cell_bc_allowlist=args.cell_bc_allowlist)
+    dge = DGE(channels=counter.channels, cell_bc_allowlist=args.cell_bc_allowlist)
 
     # iterate over all annotated BAMs from the input
     gene_source = {}
     for bam_name in args.bam_in:
         reference_name = os.path.basename(bam_name).split(".")[0]
-        # counter.set_reference(reference_name)
+        counter.set_reference(reference_name)
 
         # iterate over BAM and count
-        for cell, umi, bundle in bam_iter_bundles(bam_name, logger, args, counter.stats):
+        for cell, umi, bundle in bam_iter_bundles(bam_name, logger, args, stats.stats_by_ref[reference_name]):
             # all the work done in the counter instance should be delegated to workers
             # uniq() is tricky. Perhaps only one worker for now...
             gene, channels = counter.process_bam_bundle(cell, umi, bundle, reference_name)
@@ -521,13 +620,16 @@ def main(args):
             # keep track of the BAM origin of every gene (in case we combine multiple BAMs)
             gene_source[gene] = reference_name
 
+            if stats.stats_by_ref[reference_name]['N_records'] % 1000000 == 0:
+                print(stats.get_stats_df().T)
+
     sparse_d, obs, var = dge.make_sparse_arrays()
     adata = dge.sparse_arrays_to_adata(
-        sparse_d, obs, var, main_channel=args.main_channel
+        sparse_d, obs, var
     )
-    adata = count_class.postprocess_adata(adata, sparse_d)
+    adata = counter.postprocess_adata(adata, sparse_d)
     if args.out_stats:
-        counter.save_stats(args.out_stats.format(**locals()))
+        stats.save_stats(args.out_stats.format(**locals()))
 
     # if args.cell_rank_cutoff > 0:
     #     counts = adata.obs[count_class.rank_cells_by].sort_values(ascending=False)
@@ -557,7 +659,7 @@ def main(args):
 
     import pandas as pd
 
-    df = pd.DataFrame(data).sort_values(args.main_channel)
+    df = pd.DataFrame(data).sort_values('counts')
     df.to_csv(pname, sep="\t")
 
     tname = args.out_summary.format(args=args)
