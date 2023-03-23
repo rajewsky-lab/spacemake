@@ -75,8 +75,9 @@ test for UMI uniqueness is not an issue.
 
 
 """
-default_channels = ["counts", "exonic_counts", "exonic_reads", "intronic_counts", "intronic_reads"]
+default_channels = ["counts", "reads", "exonic_counts", "exonic_reads", "intronic_counts", "intronic_reads"]
 default_X_counts = ["exonic_counts", "intronic_counts"] # what should be counted into adata.X matrix
+default_X_reads = ["exonic_reads", "intronic_reads"] # what should be counted into adata.layers["reads"] matrix (correspond with adata.X but for reads not UMIs)
 default_alignment_priorities = {
     'C': 101, # coding exon
     'c': 100, # coding exon (lower case == antisense)
@@ -178,7 +179,7 @@ class DGE:
         sparse_channels = OrderedDict()
         for channel in self.channels:
             counts = counts_by_channel[channel]
-            self.logger.debug(f"making channel {channel} from counts len={len(counts)} sum={np.array(counts).sum()}")
+            self.logger.debug(f"constructing sparse-matrix for channel '{channel}' from n={len(counts)} non-zero entries (sum={np.array(counts).sum()})")
             m = scipy.sparse.csr_matrix(
                 (counts, (row_ind, col_ind))
             )
@@ -209,13 +210,18 @@ class DGE:
 
         X = channel_d[main_channel]
         adata = anndata.AnnData(X, dtype=X.dtype)
+        adata.obs[f'n_counts'] = sparse_summation(adata.X, axis=1)
         adata.obs_names = obs
         adata.var_names = var
 
         for channel, sparse in channel_d.items():
             if channel != main_channel:
                 adata.layers[channel] = sparse
+                # add marginal counts
+                adata.obs[f'n_{channel}'] = sparse_summation(adata.layers[channel], axis=1)
 
+        # number of genes detected in this cell
+        adata.obs["n_genes"] = sparse_summation(adata.X > 0, axis=1)
         return adata
 
 
@@ -234,7 +240,8 @@ class CountingStatistics:
             for k, v in self.stats_by_ref[ref].items():
                 data[k] = [v]
 
-            dfs.append(pd.DataFrame(data))
+            df = pd.DataFrame(data)
+            dfs.append(df[sorted(df.columns)])
 
         return pd.concat(dfs)
 
@@ -253,6 +260,7 @@ class DefaultCounter:
         exonic_tags = default_exonic_tags,
         intronic_tags = default_intronic_tags,
         X_counts=default_X_counts,
+        X_reads=default_X_reads,
         exon_intron_disambiguation = "exon_wins",
         alignment_selection="priority",
         gene_selection="priority",
@@ -271,6 +279,7 @@ class DefaultCounter:
         self.select_alignment = {
             'priority': self.select_alignment_by_priority,
             'take_first': self.select_first_alignment,
+            'take_first_plus': self.select_first_plus_alignment,
         }[alignment_selection]
 
         # how to choose among multiple genes
@@ -281,6 +290,7 @@ class DefaultCounter:
 
         # which channels shall contribute to the adata.X (main channel)
         self.count_X_channels = set(X_counts)
+        self.read_X_channels = set(X_reads)
 
         # how to handle reads that align to both intron and exon features
         self.exon_intron_disambiguation_func = exon_intron_disambiguation_functions[exon_intron_disambiguation]
@@ -291,6 +301,13 @@ class DefaultCounter:
     ## Alignment selection strategies
     def select_first_alignment(self, bundle):
         return bundle[0]
+
+    def select_first_plus_alignment(self, bundle):
+        # only consider alignments on the + strand (for custom indices)
+        plus = [b for b in bundle if b[1] == '+']
+        if plus:
+            return plus[0]
+
 
     def select_alignment_by_priority(self, bundle):
         """
@@ -342,7 +359,8 @@ class DefaultCounter:
         # print(len(gn_new))
         if len(gn_new) == 1:
             # YES we can salvage this read
-            return gn_new, gene_gf[gn[0]]
+            gene = gn_new[0]
+            return gene, gene_gf[gene]
         else:
             # NO still ambiguous
             return None, None
@@ -382,6 +400,7 @@ class DefaultCounter:
         selected = None
         channels = set()
         # self.set_reference(reference_name)
+        # print(f"bundle={bundle}")
         if len(bundle) == 1:
             self.stats['N_aln_unique'] += 1
             selected = bundle[0]
@@ -399,9 +418,13 @@ class DefaultCounter:
             # self.stats[f'N_aln_{chrom}'] += 1
             self.stats[f'N_aln_{strand}'] += 1
             if len(gn) == 1:
-                self.stats['N_gene_unique'] += 1
                 gene = gn[0]
-                gf = gf[0]
+                if gene is None:
+                    self.stats['N_gene_none'] += 1    
+                else:
+                    self.stats['N_gene_unique'] += 1
+                # gf = gf
+                # print(f"uniq gene: {gene} {gf}")
             else:
                 self.stats['N_gene_multi'] += 1
                 gene, gf = self.select_gene(*selected)
@@ -412,6 +435,7 @@ class DefaultCounter:
                     
             # count the alignment every way that the counter prescribes
             if gene:
+                # print(f"gene={gene} gf={gf}")
                 self.stats['N_aln_counted'] += 1
                 if gf[0].islower():
                     self.stats['N_aln_antisense'] += 1
@@ -434,19 +458,6 @@ class DefaultCounter:
                     self.stats[f'N_channel_NONE'] += 1
 
         return gene, channels
-
-    # TODO: refactor out of the Counter class
-    def postprocess_adata(self, adata, sparse_d):
-        # number of genes detected in this cell
-        adata.obs["n_genes"] = sparse_summation(adata.X > 0, axis=1)
-
-        # add marginal counts:
-        for c in self.channels:
-            adata.obs[f"n_{c}"] = sparse_summation(sparse_d[c], axis=1)
-
-        adata.obs["n_reads"] = adata.obs["n_exonic_reads"] + adata.obs["n_intronic_reads"]
-        adata.obs["n_counts"] = adata.obs["n_exonic_counts"] + adata.obs["n_intronic_counts"]
-        return adata
 
 
 def parse_cmdline():
@@ -530,6 +541,11 @@ def get_config_for_refs(args):
     that the DGE object can be created before any data are parsed.
     """
     flavors = args.config['quant']
+    # replace str of counter class name/path with actual class object
+    for name, config in flavors.items():
+        config['counter_class'] = get_counter_class(config.get('counter_class', "spacemake.quant.DefaultCounter"))
+        config['name'] = name
+
     ref_d = {}
     default = 'default'
     for f in args.flavor.split(','):
@@ -541,11 +557,9 @@ def get_config_for_refs(args):
 
     ref_d['*'] = flavors[default]
 
-    # replace str of counter class name/path with actual class object
     # collect all channel names that can be expected to be generated
     channels = []
     for ref, config in ref_d.items():
-        config['counter_class'] = get_counter_class(config.get('counter_class', "spacemake.quant.DefaultCounter"))
         channels.extend(config.get('channels', default_channels))
 
     return ref_d, sorted(set(channels))
@@ -640,6 +654,7 @@ def main(args):
             last_ref = reference_name
             ref_stats = stats.stats_by_ref[reference_name]
             config = conf_d.get(reference_name, conf_d['*'])
+            logger.info(f"processing alignments to reference '{reference_name}'. Building counter with '{config['name']}' rules")
             counter = config['counter_class'](stats=ref_stats, uniq=uniq, **config)
 
         # iterate over BAM and count
@@ -661,7 +676,6 @@ def main(args):
     adata = dge.sparse_arrays_to_adata(
         sparse_d, obs, var
     )
-    adata = counter.postprocess_adata(adata, sparse_d)
     if args.out_stats:
         stats.save_stats(args.out_stats.format(**locals()))
 
