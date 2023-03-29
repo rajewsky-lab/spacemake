@@ -158,3 +158,51 @@ adapter_flavors:
         min_overlap: 3
     paired_end: single-end
         
+quant:
+  default:
+    counter_class: "spacemake.quant.DefaultCounter"
+    channels: 
+      - "counts"
+      - "exonic_counts"
+      - "exonic_reads"
+      - "intronic_counts"
+      - "intronic_reads"
+    X_counts: ["exonic_counts", "intronic_counts"]
+    alignment_priorities: {
+        'C': 101, # coding exon
+        'c': 100, # coding exon (lower case == antisense)
+        'U': 51,  # UTR exon
+        'u': 50,
+        'CU': 51, # overlaps both, CDS+UTR (should in fact never occur as 'CU')
+        'cu': 50,
+        'N': 21, # exon of non-coding transcript
+        'n': 20,
+        'I': 11, # intronic region
+        'i': 10,
+        '-': 0,
+    }
+    gene_priorities: {
+        'C': 101, # coding exon
+        'c': 100, # coding exon (lower case == antisense)
+        'U': 51,  # UTR exon
+        'u': 50,
+        'CU': 51, # overlaps both, CDS+UTR (should in fact never occur as 'CU')
+        'cu': 50,
+        'N': 21, # exon of non-coding transcript
+        'n': 20,
+        'I': 11, # intronic region
+        'i': 10,
+        '-': 0,
+    }
+    exonic_tags: ["C", "U", "CU", "N", "c", "u", "cu", "n"]
+    intronic_tags: ["I", "i"]
+    alignment_selection: priority
+    exon_intron_disambiguation: "exon_wins"
+  miRNA:
+    alignment_selection: take_first
+  chrom:
+    alignment_selection: take_first    
+    gene_selection: chrom
+  custom_index:
+    alignment_selection: take_first_plus
+    gene_selection: chrom
