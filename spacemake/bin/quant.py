@@ -186,6 +186,10 @@ class DGE:
             row_ind.append(ind_of_cell[cell])
             col_ind.append(ind_of_gene[gene])
 
+        if (not len(row_ind)) or (not len(col_ind)):
+            self.logger.warning(f"empty indices len(row_ind)={len(row_ind)} len(col_ind)={len(col_ind)}")
+            return {}, [], []
+
         sparse_channels = OrderedDict()
         for channel in self.channels:
             counts = counts_by_channel[channel]
@@ -257,6 +261,9 @@ class CountingStatistics:
 
             df = pd.DataFrame(data)
             dfs.append(df[sorted(df.columns)])
+
+        if not dfs:
+            dfs = [pd.DataFrame({})]
 
         return pd.concat(dfs)
 
@@ -577,7 +584,7 @@ def get_config_for_refs(args):
     default = 'default'
     for f in args.flavor.split(','):
         if '@' in f:
-            name, ref = f.split('@')
+            ref, name = f.split('@')
             ref_d[ref] = flavors[name]
         else:
             default = f
