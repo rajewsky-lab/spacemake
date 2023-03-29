@@ -41,7 +41,8 @@ def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
     if not "n_reads" in adata.obs and n_reads is not None:
         adata.obs["n_reads"] = n_reads
 
-    adata.obs["reads_per_counts"] = adata.obs["n_reads"] / adata.obs["n_counts"]
+    if "n_reads" in adata.obs:
+        adata.obs["reads_per_counts"] = adata.obs["n_reads"] / adata.obs["n_counts"]
 
 
 def calculate_shannon_entropy_scompression(adata):
