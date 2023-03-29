@@ -49,7 +49,7 @@ def queue_iter(Q, abort_flag, stop_item=None, timeout=1, logger=logging):
         except queue.Empty:
             pass
         else:
-            if item == stop_item:
+            if item is stop_item:
                 logger.debug("received stop_item")
                 # signals end->exit
                 try:
@@ -60,7 +60,8 @@ def queue_iter(Q, abort_flag, stop_item=None, timeout=1, logger=logging):
 
                 break
             else:
-                # logging.debug(f"queue_iter->item {item}")
+                # logging.debug(f"queue_iter->item {item}, not {stop_item}")
+                # print(f"queue_iter->item {type(item)}, not {type(stop_item)}")
                 yield item
 
 
