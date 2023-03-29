@@ -8,6 +8,16 @@ import spacemake.util as util
 from spacemake.contrib import __version__, __author__, __license__, __email__
 import datetime
 import os
+import multiprocessing as mp
+from spacemake.parallel import (
+    put_or_abort,
+    queue_iter,
+    join_with_empty_queues,
+    chunkify,
+    ExceptionLogging,
+    log_qerr,
+)
+import spacemake.util as util
 
 """
 This module implements the functionality needed to aggregate annotated alignments from a BAM file
@@ -227,10 +237,15 @@ class DGE:
 
 class CountingStatistics:
     def __init__(self):
-        self.stats_by_ref = defaultdict(lambda : defaultdict(int))
+        self.stats_by_ref = defaultdict(defaultdict(int).copy)
 
     def count(self, ref, name):
         self.stats_by_ref[ref][name] += 1
+
+    def add_other_stats(self, other):
+        for ref, stats in other.items():
+            for k, v in stats.items():
+                self.stats_by_ref[ref][k] += v
 
     def get_stats_df(self):
         dfs = []
@@ -443,7 +458,7 @@ class DefaultCounter:
                     self.stats['N_aln_sense'] += 1
 
                 # handle the whole uniqueness in a way that can parallelize
-                # maybe split by CB[:2]? This way, distributed uniq() sets would
+                # maybe split by UMI[:2]? This way, distributed uniq() sets would
                 # never overlap
                 key = hash((cell, umi))
                 uniq = not (key in self.uniq)
@@ -476,6 +491,18 @@ def parse_cmdline():
         default=1,
         type=int
         # nargs="+",
+    )
+    parser.add_argument(
+        "--parallel",
+        help="number of parallel worker processes. Needs to be divisible by 2 (default=4)",
+        default=4,
+        type=int
+    )
+    parser.add_argument(
+        "--buffer-size",
+        help="number of bundles per buffer (default=1000)",
+        default=1000,
+        type=int
     )
     parser.add_argument(
         "--flavor",
@@ -719,6 +746,302 @@ def main(args):
     df.to_csv(tname, sep="\t")
 
 
+class RoundRobinDispatch:
+    def __init__(self, args, Qin):
+        self.logger = logging.getLogger("spacemake.quant.RoundRobinDispatch")
+        self.args = args
+        self.Qin = Qin
+        self.n = args.parallel
+        self.nt = int(np.log(self.n) / np.log(5))
+        # assert 5**self.nt % self.n == 0
+        assert 5**self.nt >= self.n
+
+        self.logger.debug(f"splitting bundles by first {self.nt} bases of the UMI to assign to {self.n} queues")
+        self.cb_map = {'': 0}
+        for i, kmer in enumerate(util.generate_kmers(self.nt, nts="ACGTN")):
+            self.cb_map[kmer] = i % self.n
+
+        self.max_buffer_len = args.buffer_size
+        self.buffers = [list() for i in range(self.n)]
+        self.n_chunks = 0
+
+    def push_to_queues(self, ref):
+        for buf, Q in zip(self.buffers, self.Qin):
+            if buf:
+                Q.put((self.n_chunks, ref, buf))
+                self.n_chunks += 1
+
+        self.buffers = [list() for i in range(self.n)]
+
+    def ingest(self, cell, umi, bundle, ref):
+        # remove 'N' and dispatch according to remaining bases
+
+        buf = self.buffers[self.cb_map[umi[:self.nt]]]
+        buf.append((cell, umi, bundle))
+        if len(buf) >= self.max_buffer_len:
+            self.push_to_queues(ref)
+    
+    def shutdown(self):
+        for Q in self.Qin:
+            Q.put(None)
+
+
+def BAM_reader(Qin, args, Qerr, abort_flag, stat_list):
+    with ExceptionLogging(
+        "spacemake.quant.BAM_reader", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
+        from time import time
+        stats = CountingStatistics() # statistics on disambiguation and counting
+        ref_stats = None
+        last_ref = None
+        dispatch = RoundRobinDispatch(args, Qin)
+
+        # iterate over all annotated BAMs from the input
+        for bam_name in args.bam_in:
+            reference_name = os.path.basename(bam_name).split(".")[0]
+            if last_ref != reference_name:
+                # create a new counter-class instance with the configuration
+                # for this reference name (genome, miRNA, rRNA, ...)
+                last_ref = reference_name
+                ref_stats = stats.stats_by_ref[reference_name]
+                t0 = time()
+                el.logger.info(f"reading alignments to reference '{reference_name}'.")
+
+            # iterate over BAM and assign bundles to the input queues
+            for cell, umi, bundle in bam_iter_bundles(bam_name, el.logger, args, stats=ref_stats):
+                dispatch.ingest(cell, umi, bundle, reference_name)
+                if ref_stats['N_records'] % 100000 == 0:
+                    N = ref_stats['N_records']
+                    t = time() - t0
+                    print(f"ingested {N} BAM records in {t:.1f} seconds ({0.001 * N/t:.2f} k/sec).")
+                    print(stats.get_stats_df().T)
+
+    
+            dispatch.push_to_queues(reference_name)
+        
+        el.logger.debug("done. closing queues.")
+        dispatch.shutdown()
+        
+        el.logger.debug("syncing stats...")
+        stat_list.append(stats.stats_by_ref)
+        
+        el.logger.debug("shutting down...")
+
+
+def bundle_processor(Qin, Qout, args, Qerr, abort_flag, stat_list):
+    with ExceptionLogging(
+        "spacemake.quant.bundle_processor", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
+        # load detailed counter configurations for each reference name
+        # plus a default setting ('*' key)
+        conf_d, channels = get_config_for_refs(args)
+
+        # these objects can be (re-)used by successive counter_class instances
+        stats = CountingStatistics() # statistics on disambiguation and counting
+        uniq = set() # keep track of (CB, UMI) tuples we already encountered
+
+        last_ref = None
+        counter = None
+        ref_stats = None
+        for n_chunk, ref, bundles in queue_iter(Qin, abort_flag):
+            if last_ref != ref:
+                # create a new counter-class instance with the configuration
+                # for this reference name (genome, miRNA, rRNA, ...)
+                last_ref = ref
+                ref_stats = stats.stats_by_ref[ref]
+                config = conf_d.get(ref, conf_d['*'])
+                el.logger.info(f"processing alignments to reference '{ref}'. Building counter with '{config['name']}' rules")
+                counter = config['counter_class'](stats=ref_stats, uniq=uniq, **config)
+
+            # iterate over BAM and extract countable information
+            count_data = []
+            for cell, umi, bundle in bundles:
+                # all the work done in the counter instance should be delegated to workers
+                # uniq() is tricky. Perhaps only one worker for now...
+                gene, channels = counter.process_bam_bundle(cell, umi, bundle)
+                if gene:
+                    count_data.append((gene, cell, channels))
+                    # print(f"add_read gene={gene} cell={cell} channels={channels}")
+                    # dge.add_read(gene=gene, cell=cell, channels=channels)
+
+            Qout.put((n_chunk, ref, count_data))
+            Qin.task_done()
+            count_data = []
+        
+        el.logger.debug("done. syncing stats and gene_source")
+        stat_list.append(stats.stats_by_ref)
+
+        el.logger.debug("shutting down")
+
+
+def DGE_counter(Qin, args, Qerr, abort_flag, stat_list):
+    with ExceptionLogging(
+        "spacemake.quant.DGE_counter", Qerr=Qerr, exc_flag=abort_flag
+    ) as el:
+        # load detailed counter configurations for each reference name
+        # plus a default setting ('*' key)
+        conf_d, channels = get_config_for_refs(args)
+        
+        # prepare the sparse-matrix data collection (for multiple channels in parallel)
+        dge = DGE(channels=channels, cell_bc_allowlist=args.cell_bc_allowlist)
+
+        # keep track of which reference contained which gene names
+        gene_source = {}
+    
+        # iterate over chunks of count_data prepared by the worker processes
+        for n_chunk, ref, count_data in queue_iter(Qin, abort_flag):
+            for gene, cell, channels in count_data:
+                dge.add_read(gene=gene, cell=cell, channels=channels)
+                # keep track of the mapping reference origin of every gene 
+                # (in case we combine multiple BAMs)
+                gene_source[gene] = ref
+
+            Qin.task_done()
+
+        el.logger.debug("completed counting. Writing output.")
+
+        sparse_d, obs, var = dge.make_sparse_arrays()
+        adata = dge.sparse_arrays_to_adata(
+            sparse_d, obs, var
+        )
+        adata.var["reference"] = [gene_source[gene] for gene in var]
+        adata.uns["sample_name"] = args.sample
+        adata.uns[
+            "DGE_info"
+        ] = f"created with spacemake.quant version={__version__} on {datetime.datetime.today().isoformat()}"
+        adata.uns["DGE_cmdline"] = sys.argv
+        adata.write(args.out_dge.format(args=args))
+
+        ## write out marginal counts across both axes:
+        #   summing over obs/cells -> pseudo bulk
+        #   summing over genes -> UMI/read distribution
+        pname = args.out_bulk.format(args=args)
+
+        data = OrderedDict()
+
+        data["sample_name"] = args.sample
+        data["reference"] = [gene_source[gene] for gene in var]
+        data["gene"] = var
+        for channel, M in sparse_d.items():
+            data[channel] = sparse_summation(M)
+
+        import pandas as pd
+
+        df = pd.DataFrame(data).sort_values('counts')
+        df.to_csv(pname, sep="\t")
+
+        tname = args.out_summary.format(args=args)
+
+        data = OrderedDict()
+
+        # TODO: add back in once we dropped the Rmd QC sheet scripts
+        # data["sample_name"] = args.sample
+        data["cell_bc"] = obs
+        for channel, M in sparse_d.items():
+            data[channel] = sparse_summation(M, axis=1)
+
+        df = pd.DataFrame(data)
+        df.to_csv(tname, sep="\t")
+
+
+def main_parallel(args):
+    logger = util.setup_logging(args, "spacemake.quant.main_parallel")
+    util.ensure_path(args.output + "/")
+
+    # queues for communication between processes
+    Qin = [mp.JoinableQueue(args.parallel * 10) for i in range(args.parallel)]
+    Qout = mp.JoinableQueue()
+    Qerr = mp.Queue()  # child-processes can report errors back to the main process here
+
+    # Proxy objects to allow workers to report statistics about the run
+    with mp.Manager() as manager:
+        abort_flag = mp.Value("b")
+        abort_flag.value = False
+
+        stat_list = manager.list()
+        with ExceptionLogging(
+            "spacemake.quant.main_parallel", exc_flag=abort_flag
+        ) as el:
+
+            # read BAM in chunks and put them in Qsam
+            dispatcher = mp.Process(
+                target=BAM_reader,
+                name="BAM_reader",
+                args=(Qin, args, Qerr, abort_flag, stat_list),
+            )
+
+            dispatcher.start()
+            el.logger.debug("Started dispatch")
+
+            # workers consume chunks of BAM from Qsam
+            # process them, and put the results in Qres
+            workers = []
+            for i in range(args.parallel):
+                w = mp.Process(
+                    target=bundle_processor,
+                    name=f"worker_{i}",
+                    args=(Qin[i], Qout, args, Qerr, abort_flag, stat_list),
+                )
+                w.start()
+                workers.append(w)
+
+            el.logger.debug("Started workers")
+
+            collector = mp.Process(
+                target=DGE_counter,
+                name="output",
+                args=(Qout, args, Qerr, abort_flag, stat_list),
+            )
+            collector.start()
+            el.logger.debug("Started collector")
+            # wait until all sequences have been thrown onto Qfq
+            qerr = join_with_empty_queues(dispatcher, Qin + [Qerr], abort_flag, logger=el.logger)
+            el.logger.debug("The dispatcher exited")
+
+            if qerr[-1]:
+                el.logger.info(f"{len(qerr)} chunks were drained from Qfq upon abort.")
+                log_qerr(qerr[-1])
+
+            # wait until the workers have completed every task and placed
+            # every output chunk onto Qres.
+            el.logger.debug("Waiting for writer to accumulating all data")
+            Qout.join()
+
+            el.logger.debug("Telling writer to stop.")
+            Qout.put(None)
+            import time
+            time.sleep(1)
+            print(Qout.qsize())
+            collector.join()
+            el.logger.debug("Collector has joined.")
+
+            # el.logger.debug("Joining input queues")
+            # [Q.join() for Q in Qin]
+
+            el.logger.debug("Waiting for workers to exit")
+            for i, w in enumerate(workers):
+                w.join()
+
+            el.logger.debug(
+                "All worker processes have joined. Gathering statistics."
+            )
+
+            
+            stats = CountingStatistics()
+            for s in stat_list:
+                stats.add_other_stats(s)
+                
+            if args.out_stats:
+                stats.save_stats(args.out_stats.format(**locals()))
+
+        if el.exception:
+            return -1
+
+
+
 if __name__ == "__main__":
     args = parse_cmdline()
-    main(args)
+    if args.parallel > 0:
+        main_parallel(args)
+    else:
+        main(args)
