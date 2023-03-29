@@ -67,7 +67,7 @@ rule overview:
     params:
         mapped_list = lambda wildcards, input: " ".join(input.mapped),
         not_mapped_list = lambda wildcards, input: " ".join(input.not_mapped),
-        map_strategy = lambda wildcards: SAMPLE_MAP_STRATEGY[(wildcards.project_id, wildcards.sample_id)],
+        map_strategy = lambda wildcards: map_data['SAMPLE_MAP_STRATEGY'][(wildcards.project_id, wildcards.sample_id)],
     shell:
         "python {bin_dir}/plot_overview.py "
         "  --sample={wildcards.sample_id} "
@@ -138,7 +138,8 @@ rule make_complexity_plot:
         "  --cutadapt={input.trimmed} "
         "  {input.complexity}"
 
-def get_plots():
+def get_plots(config=None, project_df=None):
+    from spacemake.map_strategy import map_data
     out_files = []
     for (project_id, sample_id), row in project_df.df.iterrows():
         # barcode & UMI freq stats
@@ -165,10 +166,10 @@ def get_plots():
             ref='{ref}'
         )
         out_files.append(
-            expand(dge_metrics_plot.format(**context), ref=REF_NAMES[(project_id, sample_id)])
+            expand(dge_metrics_plot.format(**context), ref=map_data['REF_NAMES'][(project_id, sample_id)])
         )
         out_files.append(
-            expand(dge_metrics_plot.format(**context), ref=REF_NAMES[(project_id, sample_id)])
+            expand(dge_metrics_plot.format(**context), ref=map_data['REF_NAMES'][(project_id, sample_id)])
         )
     return out_files
 

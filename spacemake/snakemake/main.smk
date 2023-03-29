@@ -82,7 +82,7 @@ def register_module_output_hook(hook, module="built-in"):
 def get_module_outputs():
     outputs = []
     for hook, module in _module_output_hooks:
-        for out in hook():
+        for out in hook(project_df=project_df, config=config):
             smk_logger.debug(f"output provided by '{module}' module (via '{hook.__name__}'): '{out}'")
             outputs.append(out)
     
@@ -265,13 +265,13 @@ rule create_spatial_barcode_whitelist:
         # save both the whitelist and the beads in a separate file
         bc[['cell_bc']].to_csv(output[0], header=False, index=False)
         
-dge_stats = stats_dir + '/' + dge_out_suffix + ".{n_beads}_beads_{puck_barcode_file_id}.quant.tsv"
+dge_stats = stats_dir + '/dge' + dge_out_suffix + ".{n_beads}_beads_{puck_barcode_file_id}.quant.tsv"
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
     # topBarcodesClean.txt file or just the regular topBarcodes.txt
     input:
         unpack(get_top_barcodes),  # snakemake_helper_functions.py either top barcodes or spatial allowlist
-        unpack(get_annotated_bams),  # comes from the mapping.smk core module
+        unpack(get_all_mapped_bams),  # comes from the mapping.smk core module
         # unpack(get_dge_input_bam)
     output:
         dge=dge_out,
@@ -281,26 +281,30 @@ rule create_dge:
     params:
         dge_root = dge_root,
         dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
-        cell_barcode_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)['{cell}'],
-        umi_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)['{UMI}']
+        # cell_barcode_tag = lambda wildcards: get_bam_tag_names(
+        #     project_id = wildcards.project_id,
+        #     sample_id = wildcards.sample_id)['{cell}'],
+        # umi_tag = lambda wildcards: get_bam_tag_names(
+        #     project_id = wildcards.project_id,
+        #     sample_id = wildcards.sample_id)['{UMI}'],
+        count_flavors = lambda wildcards: get_count_flavor_str(wildcards) # from map_strategy.py
     # at most 8 dges will be created the same time
     # threads: max(workflow.cores * 0.125, 1)
     shell:
         "python {bin_dir}/quant.py "
-        " --sample={wildcards.sample_id} "
-        " --log-level={log_level} "
-        " --log-file={log} "
-        " --debug={log_debug} "
-        " --output={params.dge_root}/ "
-        " --out-dge={output.dge} "
-        " --out-summary={output.dge_summary} "
-        " --out-stats={output.stats} "
-        " --cell-bc-allowlist={input.top_barcodes} "
-        "{input.annotated_bams}"
+        "  --sample={wildcards.sample_id} "
+        "  --log-level={log_level} "
+        "  --log-file={log} "
+        "  --debug={log_debug} "
+        "  --parallel=5 "
+        "  --config={spacemake_config} "
+        "  --flavor={params.count_flavors} "
+        "  --output={params.dge_root}/ "
+        "  --out-dge={output.dge} "
+        "  --out-summary={output.dge_summary} "
+        "  --out-stats={output.stats} "
+        "  --cell-bc-allowlist={input.top_barcodes} "
+        "{input.mapped_bams}"
 
 
 rule create_h5ad_dge:
