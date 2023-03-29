@@ -1,38 +1,4 @@
-import pandas as pd
-
-
-class dotdict(dict):
-    """dot.notation access to dictionary attributes"""
-
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
-
-    def __str__(self):
-        buf = ["dotdict"]
-        for k, v in self.items():
-            if not k.startswith("__"):
-                buf.append(f"  {k} = {v}")
-
-        return "\n".join(buf)
-
-
-def wc_fill(x, wc):
-    """
-    Versatile helper function that can render any string template used in the mapping and reports modules,
-    either filling in from a Wildcards object, or from a dotdict.
-    """
-    return x.format(
-        sample_id=getattr(wc, "sample_id", "NO_sample_id"),
-        project_id=getattr(wc, "project_id", "NO_project_id"),
-        species=getattr(wc, "species", "NO_species"),
-        ref_name=getattr(wc, "ref_name", "NO_ref_name"),
-        mapper=getattr(wc, "mapper", "NO_mapper"),
-        link_name=getattr(wc, "link_name", "NO_link_name"),
-        polyA_adapter_trimmed=getattr(wc, "polyA_adapter_trimmed", ""),
-        data_root_type=getattr(wc, "data_root_type", "complete_data"),
-    )
-
+from spacemake.util import dotdict, wc_fill
 
 ################################
 # Final output file generation #
