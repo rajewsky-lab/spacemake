@@ -55,8 +55,8 @@ class ProjectDF:
         "puck": "default",
         "dge": None,
         "map_strategy": {  # default mapping strategy changes depending on if we have rRNA or not
-            True: "bowtie2:rRNA->STAR:genome:final",  # map in parallel to rRNA and genome (default so far)
-            False: "STAR:genome:final",  # w/o rRNA, map to genome directly
+            True: "rRNA:bowtie2->genome:STAR",  # map in parallel to rRNA and genome (default so far)
+            False: "genome:STAR",  # w/o rRNA, map to genome directly
         },
         "adapter_flavor": "default",
     }
@@ -399,6 +399,15 @@ class ProjectDF:
             self.df["map_strategy"] = self.df["species"].apply(
                 self.get_default_map_strategy_for_species
             )
+
+        # validate and correct map_strategies
+        from spacemake.map_strategy import validate_mapstr
+        corrected_map_strategies = []
+        for row in self.df.itertuples():
+            corrected_map_strategies.append(
+                validate_mapstr(row.map_strategy, config=self.config, species=row.species)
+            )
+        self.df['map_strategy'] = corrected_map_strategies
 
         if not "adapter_flavor" in self.df.columns:
             self.df["adapter_flavor"] = self.project_df_default_values["adapter_flavor"]
