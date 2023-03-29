@@ -10,6 +10,13 @@ LINE_SEPARATOR = "-" * 50 + "\n"
 
 bool_in_str = ["True", "true", "False", "false"]
 
+def generate_kmers(k, nts='ACGT'):
+    if k == 0:
+        yield ''
+    elif k > 0:
+        for x in nts:
+            for mer in generate_kmers(k-1, nts=nts):
+                yield x + mer
 
 def quiet_bam_open(*argc, **kw):
     """_summary_
