@@ -195,7 +195,8 @@ class DGE:
             counts = counts_by_channel[channel]
             self.logger.debug(f"constructing sparse-matrix for channel '{channel}' from n={len(counts)} non-zero entries (sum={np.array(counts).sum()})")
             m = scipy.sparse.csr_matrix(
-                (counts, (row_ind, col_ind))
+                (counts, (row_ind, col_ind)),
+                dtype=np.float32
             )
             self.logger.debug(f"resulting sparse matrix shape={m.shape} len(obs)={len(obs)} len(var)={len(var)}")
             sparse_channels[channel] = m
