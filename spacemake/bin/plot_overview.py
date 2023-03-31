@@ -107,7 +107,7 @@ def parse_map_strategy(map_strategy):
     targets = []
 
     for tok in tokens:
-        ref, mapper = tok.split(":")[:2]
+        mapper, ref = tok.split(":")[:2]
         targets.append(f"{mapper}.{ref}")
 
     return targets
