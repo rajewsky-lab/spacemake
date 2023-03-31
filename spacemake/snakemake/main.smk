@@ -142,14 +142,14 @@ rule run_analysis:
         # this will also create the clean dge
         get_output_files(automated_report, # data_root_type = 'complete_data',
             downsampling_percentage='', puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet, # data_root_type = 'complete_data',
-            downsampling_percentage='', run_on_external=False,
-            puck_barcode_file_matching_type='spatial_matching'),
+        # get_output_files(qc_sheet, # data_root_type = 'complete_data',
+        # downsampling_percentage='', run_on_external=False,
+        # puck_barcode_file_matching_type='spatial_matching'),
         # finally, everything registered via register_module_output_hook()
         get_module_outputs(),
 
 
-rule get_whitelist_barcodes:
+rule get_allowlist_barcodes:
     input:
         get_output_files(barcode_readcounts,
             data_root_type='complete_data',
@@ -212,7 +212,7 @@ rule get_barcode_readcounts:
         "| gzip -c > {output} "
 
 
-rule create_top_barcode_whitelist:
+rule create_top_barcode_allowlist:
     input:
         barcode_readcounts
     output:
@@ -464,30 +464,30 @@ rule create_automated_report:
     script:
         'scripts/automated_analysis_create_report.Rmd'
 
-rule split_final_bam:
-    input:
-        unpack(get_final_bam)
-    output:
-        temp(split_reads_sam_files),
-        split_reads_read_type,
-        split_reads_strand_type
-    params:
-        prefix=split_reads_root
-    shell:
-        """
-        sambamba view -F 'mapping_quality==255' -h {input} | \
-        python {repo_dir}/scripts/split_reads_by_strand_info.py \
-        --prefix {params.prefix} /dev/stdin
-        """
+# rule split_final_bam:
+#     input:
+#         unpack(get_final_bam)
+#     output:
+#         temp(split_reads_sam_files),
+#         split_reads_read_type,
+#         split_reads_strand_type
+#     params:
+#         prefix=split_reads_root
+#     shell:
+#         """
+#         sambamba view -F 'mapping_quality==255' -h {input} | \
+#         python {repo_dir}/scripts/split_reads_by_strand_info.py \
+#         --prefix {params.prefix} /dev/stdin
+#         """
 
-rule split_reads_sam_to_bam:
-    input:
-        split_reads_sam_pattern
-    output:
-        split_reads_bam_pattern
-    threads: 2
-    shell:
-        "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
+# rule split_reads_sam_to_bam:
+#     input:
+#         split_reads_sam_pattern
+#     output:
+#         split_reads_bam_pattern
+#     threads: 2
+#     shell:
+#         "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
 
 rule create_barcode_files_matching_summary:
     input:

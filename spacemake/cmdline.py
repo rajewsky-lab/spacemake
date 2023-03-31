@@ -768,22 +768,22 @@ def spacemake_run(args):
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
     # run snakemake
-    preprocess_finished = snakemake.snakemake(
-        snakefile,
-        configfiles=[var.config_path],
-        cores=args["cores"],
-        dryrun=args["dryrun"],
-        targets=["get_whitelist_barcodes"],
-        touch=args["touch"],
-        force_incomplete=args["rerun_incomplete"],
-        keepgoing=args["keep_going"],
-        printshellcmds=args["printshellcmds"],
-        config=config_variables,
-        delete_temp_output=True,
-    )
+    # preprocess_finished = snakemake.snakemake(
+    #     snakefile,
+    #     configfiles=[var.config_path],
+    #     cores=args["cores"],
+    #     dryrun=args["dryrun"],
+    #     targets=[],
+    #     touch=args["touch"],
+    #     force_incomplete=args["rerun_incomplete"],
+    #     keepgoing=args["keep_going"],
+    #     printshellcmds=args["printshellcmds"],
+    #     config=config_variables,
+    #     delete_temp_output=True,
+    # )
 
-    if preprocess_finished is False:
-        raise SpacemakeError("an error occurred while snakemake() ran")
+    # if preprocess_finished is False:
+    #     raise SpacemakeError("an error occurred while snakemake() ran")
 
     # run spacemake downstream
     analysis_finished = snakemake.snakemake(
