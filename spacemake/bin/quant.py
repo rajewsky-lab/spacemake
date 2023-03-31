@@ -1,7 +1,9 @@
 import pandas as pd
 import numpy as np
 import sys
+import re
 import logging
+import pysam
 import argparse
 from collections import defaultdict, OrderedDict
 import spacemake.util as util
@@ -508,8 +510,8 @@ def parse_cmdline():
     )
     parser.add_argument(
         "--buffer-size",
-        help="number of bundles per buffer (default=1000)",
-        default=1000,
+        help="number of bundles per buffer (default=10000)",
+        default=10000,
         type=int
     )
     parser.add_argument(
@@ -613,7 +615,7 @@ def sparse_summation(X, axis=0):
 
 
 ## This will become the reader process
-def bam_iter_bundles(bam_name, logger, args, stats):
+def bam_iter_bundles(bam_src, logger, args, stats):
     """
     Generator: gathers successive BAM records into bundles as long as they belong to the same read/fragment/mate pair
     (by qname). Recquired for chunking input data w/o breaking up this information.
@@ -621,43 +623,46 @@ def bam_iter_bundles(bam_name, logger, args, stats):
 
     def extract(rec):
         return (
-            bam.get_reference_name(rec.tid), # chrom
+            bam_src.header.get_reference_name(rec.tid), # chrom
             '-' if rec.is_reverse else '+', # strand
             rec.get_tag('gn').split(',') if rec.has_tag('gn') else '-', # gene names
             rec.get_tag('gf').split(',') if rec.has_tag('gf') else '-', # gene feature overlap encodings
             rec.get_tag('AS') # alignment score
         )
 
-    bam = util.quiet_bam_open(bam_name, "rb", check_sq=False, threads=4)
     last_qname = None
     bundle = []
+    bundle_ref = None
     CB = 'NN'
     MI = 'NN'
 
-    for rec in util.timed_loop(bam.fetch(until_eof=True), logger, skim=args.skim):
-        stats['N_records'] += 1
+    # for ref, rec in util.timed_loop(bam_src, logger, skim=args.skim):
+    for ref, rec in bam_src:
+        ref_stats = stats.stats_by_ref[ref]
+        ref_stats['N_records'] += 1
         if rec.is_paired and rec.is_read2:
             continue # TODO: proper sanity checks and/or disambiguation
 
         if rec.is_unmapped:
-            stats['N_unmapped'] += 1
+            ref_stats['N_unmapped'] += 1
             continue
 
         if rec.query_name != last_qname:
-            stats['N_frags'] += 1
+            ref_stats['N_frags'] += 1
 
             if bundle:
-                yield CB, MI, bundle
+                yield bundle_ref, CB, MI, bundle
 
             CB = rec.get_tag('CB')
             MI = rec.get_tag('MI')
             bundle = [extract(rec),]
             last_qname = rec.query_name
+            bundle_ref = ref
         else:
             bundle.append(extract(rec))
 
     if bundle:
-        yield CB, MI, bundle
+        yield ref, CB, MI, bundle
         
 
 def main(args):
@@ -754,44 +759,114 @@ def main(args):
     df.to_csv(tname, sep="\t")
 
 
-class RoundRobinDispatch:
-    def __init__(self, args, Qin):
-        self.logger = logging.getLogger("spacemake.quant.RoundRobinDispatch")
-        self.args = args
+class SplitBAMbyUMI:
+    def __init__(self, Qin, buf_size=10000, k=4):
+        self.logger = logging.getLogger("spacemake.quant.SplitBAMbyUMI")
         self.Qin = Qin
-        self.n = args.parallel
-        self.nt = int(np.log(self.n) / np.log(5))
-        # assert 5**self.nt % self.n == 0
-        assert 5**self.nt >= self.n
+        self.n = len(Qin)
+        self.k = k
+        self.regexp = re.compile(f'MI:Z:({"." * self.k})')
 
-        self.logger.debug(f"splitting bundles by first {self.nt} bases of the UMI to assign to {self.n} queues")
-        self.cb_map = {'': 0}
-        for i, kmer in enumerate(util.generate_kmers(self.nt, nts="ACGTN")):
-            self.cb_map[kmer] = i % self.n
+        self.buffers = [list() for n in range(self.n)]
+        self.buffer_map = {}
 
-        self.max_buffer_len = args.buffer_size
-        self.buffers = [list() for i in range(self.n)]
+        from spacemake.util import generate_kmers
+        for i, kmer in enumerate(generate_kmers(k, nts='ACGTN')):
+            j = i % self.n
+            self.buffer_map[kmer] = self.buffers[j]
+            self.logger.debug(f"assigning {kmer} -> worker {j}")
+
+        self.logger.debug(f"splitting reads by first 4 bases of the UMI to assign to {self.n} queues")
+        self.max_buf_size = buf_size
         self.n_chunks = 0
 
     def push_to_queues(self, ref):
+        sizes = []
+        # print(f"push_to_queues, buffers={self.buffers}")
         for buf, Q in zip(self.buffers, self.Qin):
+            sizes.append(len(buf))
             if buf:
-                Q.put((self.n_chunks, ref, buf))
+                # print("pushing buffer", buf)
+                # MJ: just spent the better part of an hour debugging 
+                # to realize there is some async black magic happening 
+                # in Q.put() or whatever.
+                # cause if you send the actual buf and then clear() it
+                # right after put() the receiver gets truncated or no data.
+                # Yeah. For. real.
+                # so buf.copy() it is... :-/
+                Q.put((self.n_chunks, ref, buf.copy()))
+                buf.clear()
                 self.n_chunks += 1
 
-        self.buffers = [list() for i in range(self.n)]
+        return np.array(sizes)
+  
+    def broadcast(self, rec):
+        # print(f"broadcast, buffers={self.buffers}")
+        for buf in self.buffers:
+            buf.append(rec)
 
-    def ingest(self, cell, umi, bundle, ref):
-        # remove 'N' and dispatch according to remaining bases
-
-        buf = self.buffers[self.cb_map[umi[:self.nt]]]
-        buf.append((cell, umi, bundle))
-        if len(buf) >= self.max_buffer_len:
-            self.push_to_queues(ref)
-    
     def shutdown(self):
+        self.logger.info("sending None to all queues to signal end of input")
         for Q in self.Qin:
             Q.put(None)
+
+    def iter_bam(self, bam_name, ref='na'):
+        import subprocess
+        import re
+
+        proc = subprocess.Popen(['samtools', 'view', '-h', '--no-PG', '--threads=4', bam_name], stdout=subprocess.PIPE, text=True)
+        while line := proc.stdout.readline():
+            if line.startswith('@'):
+                self.broadcast(line)
+            else:
+                M = re.search(self.regexp, line)
+                buf = self.buffer_map[M.groups()[0]]
+                # print(f"appending to buffer of L={len(buf)}")
+                buf.append(line)
+
+                if len(buf) > self.max_buf_size:
+                    yield self.push_to_queues(ref)
+
+        yield self.push_to_queues(ref)
+
+
+class AlignedSegmentsFromQueue:
+    def __init__(self, Qin, abort_flag):
+        self.Qin = Qin
+        self.abort_flag = abort_flag
+        self.header = None
+        self.header_lines = []
+        self.last_ref = None
+
+    def __iter__(self):
+        for n_chunk, ref, sam_lines in queue_iter(self.Qin, self.abort_flag):
+            if ref != self.last_ref:
+                self.header = None
+                self.header_lines = []
+                self.last_ref = ref
+
+            # print(f"received chunk {n_chunk} with {len(sam_lines)} lines: {sam_lines}")
+            for line in sam_lines:
+                # print(line)
+                if line.startswith('@'):
+                    self.header_lines.append(line)
+                else:
+                    if not self.header:
+                        # print("about to construct header:")
+                        # print(self.header_lines)
+                        self.header = pysam.AlignmentHeader.from_text("".join(self.header_lines))
+                        # print(self.header)
+                    else:
+                        sam = pysam.AlignedSegment.fromstring(line, self.header)
+                        # print(sam)
+                        yield ref, sam
+            
+            self.Qin.task_done()
+
+# def AlignedSegmentsFromFile(bam_name):
+#     bam = util.quiet_bam_open(bam_name, "rb", check_sq=False, threads=4)
+#     for rec in bam.fetch(until_eof=True):
+#         yield rec
 
 
 def BAM_reader(Qin, args, Qerr, abort_flag, stat_list):
@@ -802,31 +877,40 @@ def BAM_reader(Qin, args, Qerr, abort_flag, stat_list):
         stats = CountingStatistics() # statistics on disambiguation and counting
         ref_stats = None
         last_ref = None
-        dispatch = RoundRobinDispatch(args, Qin)
+        dispatch = SplitBAMbyUMI(Qin, buf_size=args.buffer_size)
 
-        # iterate over all annotated BAMs from the input
+        # iterate over all BAMs with countable alignments
+        N = 0
+        T0 = time()
         for bam_name in args.bam_in:
             reference_name = os.path.basename(bam_name).split(".")[0]
             if last_ref != reference_name:
                 # create a new counter-class instance with the configuration
                 # for this reference name (genome, miRNA, rRNA, ...)
                 last_ref = reference_name
-                ref_stats = stats.stats_by_ref[reference_name]
+                # ref_stats = stats.stats_by_ref[reference_name]
                 t0 = time()
+                t1 = time()
+                N_ref = 0
                 el.logger.info(f"reading alignments to reference '{reference_name}'.")
 
-            # iterate over BAM and assign bundles to the input queues
-            for cell, umi, bundle in bam_iter_bundles(bam_name, el.logger, args, stats=ref_stats):
-                dispatch.ingest(cell, umi, bundle, reference_name)
-                if ref_stats['N_records'] % 100000 == 0:
-                    N = ref_stats['N_records']
+            # split-by-UMI dispatch
+            for n_pushed in dispatch.iter_bam(bam_name, ref=reference_name):
+                n = n_pushed.sum()
+                N += n
+                N_ref += n
+                # ref_stats['N_records'] = N_ref
+                if time() - t1 > 2:
                     t = time() - t0
-                    print(f"ingested {N} BAM records in {t:.1f} seconds ({0.001 * N/t:.2f} k/sec).")
-                    print(stats.get_stats_df().T)
+                    el.logger.debug(f"worker load distribution: {n_pushed / float(n)}")
+                    el.logger.info(f"ingested {N_ref} BAM records in {t:.1f} seconds ({0.001 * N_ref/t:.2f} k/sec).")
+                    t1 = time()
 
-    
-            dispatch.push_to_queues(reference_name)
-        
+        t = time() - T0
+        el.logger.debug(f"worker load distribution: {n_pushed / float(n)}")
+        el.logger.info(f"ingested {N} BAM records in {t:.1f} seconds ({0.001 * N/t:.2f} k/sec).")
+        t1 = time()
+
         el.logger.debug("done. closing queues.")
         dispatch.shutdown()
         
@@ -851,7 +935,11 @@ def bundle_processor(Qin, Qout, args, Qerr, abort_flag, stat_list):
         last_ref = None
         counter = None
         ref_stats = None
-        for n_chunk, ref, bundles in queue_iter(Qin, abort_flag):
+        n_chunk = 0
+        count_data_chunk = []
+
+        bam_src = AlignedSegmentsFromQueue(Qin, abort_flag)
+        for ref, cell, umi, bundle in bam_iter_bundles(bam_src, el.logger, args, stats=stats):
             if last_ref != ref:
                 # create a new counter-class instance with the configuration
                 # for this reference name (genome, miRNA, rRNA, ...)
@@ -861,21 +949,24 @@ def bundle_processor(Qin, Qout, args, Qerr, abort_flag, stat_list):
                 el.logger.info(f"processing alignments to reference '{ref}'. Building counter with '{config['name']}' rules")
                 counter = config['counter_class'](stats=ref_stats, uniq=uniq, **config)
 
-            # iterate over BAM and extract countable information
-            count_data = []
-            for cell, umi, bundle in bundles:
-                # all the work done in the counter instance should be delegated to workers
-                # uniq() is tricky. Perhaps only one worker for now...
-                gene, channels = counter.process_bam_bundle(cell, umi, bundle)
-                if gene:
-                    count_data.append((gene, cell, channels))
-                    # print(f"add_read gene={gene} cell={cell} channels={channels}")
-                    # dge.add_read(gene=gene, cell=cell, channels=channels)
+            # try to select alignment and gene and determine into which
+            # channels we want to count
+            gene, channels = counter.process_bam_bundle(cell, umi, bundle)
+            if gene:
+                count_data_chunk.append((gene, cell, channels))
+                # print(f"add_read gene={gene} cell={cell} channels={channels}")
+                # dge.add_read(gene=gene, cell=cell, channels=channels)
 
-            Qout.put((n_chunk, ref, count_data))
-            Qin.task_done()
-            count_data = []
+            if len(count_data_chunk) >= args.buffer_size:
+                Qout.put((n_chunk, ref, count_data_chunk))
+                n_chunk += 1
+                count_data_chunk = []
         
+        if count_data_chunk:
+            Qout.put((n_chunk, ref, count_data_chunk))
+            n_chunk += 1
+            count_data_chunk = []
+
         el.logger.debug("done. syncing stats and gene_source")
         stat_list.append(stats.stats_by_ref)
 
@@ -950,7 +1041,7 @@ def DGE_counter(Qin, args, Qerr, abort_flag, stat_list):
 
         df = pd.DataFrame(data)
         df.to_csv(tname, sep="\t")
-
+        el.logger.debug("shutdown")
 
 def main_parallel(args):
     logger = util.setup_logging(args, "spacemake.quant.main_parallel")
@@ -1012,14 +1103,27 @@ def main_parallel(args):
 
             # wait until the workers have completed every task and placed
             # every output chunk onto Qres.
-            el.logger.debug("Waiting for writer to accumulating all data")
-            Qout.join()
+
+            import time
+            el.logger.debug("Waiting for workers to process all data")
+            for Q, w in zip(Qin, workers):
+                while Q.qsize() > 0:
+                    time.sleep(.1)
+                # el.logger.debug(f"Q-size: {Q.qsize()}")
+                # w.join()
+                # el.logger.debug(f"Q-size: {Q.qsize()}")
+                # el.logger.debug(".")
+
+            el.logger.debug("Waiting for writer to accumulate all data")
+            # Qout.join()
+            while Qout.qsize():
+                time.sleep(.1)
+                # print(Qout.qsize())
 
             el.logger.debug("Telling writer to stop.")
             Qout.put(None)
-            import time
-            time.sleep(1)
-            print(Qout.qsize())
+
+
             collector.join()
             el.logger.debug("Collector has joined.")
 
