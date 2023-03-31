@@ -22,8 +22,10 @@ def cell_hist_plot(ax, df, key="n_reads", n_bins=100, xlog=True, ylog=True, **kw
         lv = values
 
     # exclude extreme outliers
-    lmin, lmax = np.percentile(lv, [0.1, 99.9])
-    lv = lv[(lv >= lmin) & (lv <= lmax)]
+    if len(lv) > 1000:
+        lmin, lmax = np.percentile(lv, [0.1, 99.9])
+        lv = lv[(lv >= lmin) & (lv <= lmax)]
+
     hist, bin_edges = np.histogram(lv, bins=n_bins)
     if xlog:
         bin_edges = 10 ** bin_edges
