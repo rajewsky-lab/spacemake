@@ -129,12 +129,9 @@ def get_all_mapped_bams(wc):
     return {'mapped_bams' : sorted(map_data['ALL_BAMS'][(wc.project_id, wc.sample_id)])}
 
 def get_count_flavor_str(wc):
-    print(f"get_count_flavor_str: {wc.project_id} {wc.sample_id}")
     cflavors = []
     for bam in get_all_mapped_bams(wc)['mapped_bams']:
         mr = map_data['MAP_RULES_LKUP'][bam]
-        print(f"bam: '{bam}'")
-        print(f"ref: {mr.ref_name} cflavor: {mr.cflavor}")
         cflavors.append(f"{mr.ref_name}@{mr.cflavor}")
     
     return ",".join(cflavors)
@@ -357,7 +354,6 @@ def get_mapped_BAM_output(project_df=None, config=None, default_strategy="genome
             mr.out_path = wc_fill(mapped_bam, mr)
             mr.out_unmapped_path = wc_fill(unmapped_bam, mr)
             if mr.keep_unmapped:
-                print("keeping", mr.out_unmapped_path)
                 map_data['BAM_IS_NOT_TEMP'].add(mr.out_unmapped_path)
             
             mr.link_name = mr.input_name
