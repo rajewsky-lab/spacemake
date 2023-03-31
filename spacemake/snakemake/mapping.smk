@@ -279,7 +279,7 @@ rule create_bowtie2_index:
     log:
         bt2_index_log
     params:
-        auto = lambda wc: INDEX_FASTA_LKUP[wc_fill(bt2_index_file, wc)]
+        auto = lambda wc: map_data['INDEX_FASTA_LKUP'][wc_fill(bt2_index_file, wc)]
     shell:
         "mkdir -p {params.auto[map_index]} \n"
         "bowtie2-build --ftabchars 12 "
