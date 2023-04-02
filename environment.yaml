@@ -6,7 +6,7 @@ channels:
     - defaults
 dependencies:
     - python>=3.6
-    - snakemake>=5.32.0,<6.4.0
+    - snakemake>=7.25.0
     - star>=2.7.1a
     - samtools>=1.13
     - sambamba>=0.6.8
