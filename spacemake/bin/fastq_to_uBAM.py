@@ -403,7 +403,8 @@ def get_input_params(args):
         # which can override how the formatter in the workers processes the raw reads
 
         if 'cell' in df.columns:
-            params = [{'cell': f'"{c}"'} for c in df['cell']]
+            # params = [{'cell': f'"{c}"'} for c in df['cell']]
+            params = [{'cell': c} for c in df['cell']]
         else:
             params = [{},] * len(R1)
 
