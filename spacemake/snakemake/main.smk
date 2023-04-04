@@ -289,22 +289,23 @@ rule create_dge:
         #     sample_id = wildcards.sample_id)['{UMI}'],
         count_flavors = lambda wildcards: get_count_flavor_str(wildcards) # from map_strategy.py
     # at most 8 dges will be created the same time
-    # threads: max(workflow.cores * 0.125, 1)
+    threads: 8
     shell:
-        "python {bin_dir}/quant.py "
-        "  --sample={wildcards.sample_id} "
-        "  --log-level={log_level} "
-        "  --log-file={log} "
-        "  --debug={log_debug} "
-        "  --parallel=5 "
-        "  --config={spacemake_config} "
-        "  --flavor={params.count_flavors} "
-        "  --output={params.dge_root}/ "
-        "  --out-dge={output.dge} "
-        "  --out-summary={output.dge_summary} "
-        "  --out-stats={output.stats} "
-        "  --cell-bc-allowlist={input.top_barcodes} "
-        "{input.mapped_bams}"
+        "python {bin_dir}/quant.py"
+        "  --sample={wildcards.sample_id}"
+        "  --log-level={log_level}"
+        "  --log-file={log}"
+        "  --debug={log_debug}"
+        "  --parallel={threads}"
+        "  --buffer-size=100000"
+        "  --config={spacemake_config}"
+        "  --flavor={params.count_flavors}"
+        "  --output={params.dge_root}/"
+        "  --out-dge={output.dge}"
+        "  --out-summary={output.dge_summary}"
+        "  --out-stats={output.stats}"
+        "  --cell-bc-allowlist={input.top_barcodes}"
+        "  {input.mapped_bams}"
 
 
 rule create_h5ad_dge:
