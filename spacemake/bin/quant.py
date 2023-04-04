@@ -415,7 +415,9 @@ class DefaultCounter:
             channels = self.exon_intron_disambiguation_func(channels)
 
         if channels & self.count_X_channels:
-            channels.add("counts")
+            channels.add("reads")
+            if uniq:
+                channels.add("counts")
         
         return channels
 
