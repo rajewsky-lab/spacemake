@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter
 import numpy as np
 
-def plot_cell_hist(df, key="n_reads", bins=100, xlog=True, ylog=False, ax=None, **kw):
+def cell_hist(adata, key="n_reads", bins=100, xlog=True, ylog=False, ax=None, **kw):
+    df = adata.obs
     if ax is None:
         _, ax = plt.subplots(figsize=(4, 3))
 
@@ -53,79 +54,140 @@ def plot_cell_hist(df, key="n_reads", bins=100, xlog=True, ylog=False, ax=None, 
         # formatter.set_scientific(False)
         # axis.set_minor_formatter(formatter)
 
+    ax.spines.right.set_visible(False)
+    ax.spines.top.set_visible(False)
 
-def plot_loglog_knee(adata, key="n_counts", ax=None):
+
+def loglog_knee(adata, key="n_counts", ax=None, min_cells=500, title=None, debug=False):
+    """
+    we will plot the number of cell barcodes (CBs) on the y-axis which have a UMI 
+    count larger than a sliding threshold, which is plotted on the x-axis
+    due to the dynamic ranges of both dimensions we plot this double-logarithmic
+    
+      - for low cutoffs (left side of plot) we will first see a large number of cell barcodes 
+          which are background (encapsulation of free floating RNA)
+      - eventually, the number of CBs begins to drop, that's often the regime of
+          sequencing or synthesis errors in the CBs, think of it as a "shadow" of the real
+          cells shifted to the left by ~2 orders of magnitude (error rate ~1%).
+      - then we get to a region where the slope is less negative, or even approximates a 
+          plateau (if cells are very homogeneous, e.g. cell culture). These are the captured
+          transcriptomes of real cells
+      - at very high cutoffs, we start seeing a rapid drop in cells that have that many UMIs.
+          This is to be expected.
+    
+    This function also tries to autodetect a UMI cutoff value that would separate 
+    properly captured cellular transcriptomes by finding the peak of the second derivate at 
+    the inflection point between "plateau" of cells and background further on the left.
+    If you want to see the details on this, pass `debug=True`. Note that when cell numbers get 
+    low on the high end of UMI cutoffs, the derivative estimation from the spline fit gets noisy.
+    To mask this noise, we employ a min_cells cutoff.
+    """
     df = adata.obs
     fig = None
     if ax is None:
-        fig, ax = plt.subplots(figsize=(6, 5))
+        fig, ax = plt.subplots(figsize=(6, 4))
 
-    # UMI = np.sort(np.array(df[key].values, dtype=int))[::-1]
     UMI = np.array(df[key].values, dtype=int)
     if not len(UMI):
         return
 
     UMIsum = UMI.sum()
-    # ax.plot(UMI.values.cumsum()[:n_rank], label=f"{key} (total={UMIsum/1e6:.1f} M)")
-    # upper_q = np.percentile(UMI, 95)
-    # if idx == "miRNA":
-    # axh.hist(UMI, bins=100, label=idx, histtype="step", range=(0, upper_q))
-    ax.loglog(
-        len(UMI) - np.bincount(UMI).cumsum(),
-        label=f"{key} (total={UMIsum/1e6:.1f} M)",
-        alpha=0.75,
-        lw=3,
-    )
+    # bincount is like a histogram of bin-size 1 and always starting at 0
+    n_CBs = len(UMI)
+    y = np.array(n_CBs - np.bincount(UMI).cumsum(), dtype=np.float32)
 
-    # ax.axvline(100, color="k", ls="dashed", lw=0.1)
-    ax.set_ylabel("cumulative no. cells")
+    import scipy.interpolate
+    x = np.arange(len(y)) + 1
+    ly = np.log10(y + 1)
+    lx = np.log10(x)
+    # linear interpolation on the log-scale
+    f = scipy.interpolate.interp1d(lx, ly)
+    # bicubic spline approximation of the linear interpolation,
+    # with constant extensions beyond the boundary. 
+    # We use the lin-approx first to get an evenly spaced sampling 
+    # of the data on log(x), which makes everything better...
+    x = np.arange(0, lx.max(), 0.01)
+    spl = scipy.interpolate.UnivariateSpline(x, f(x), ext=3, k=4, s=0.01)
+    # mask noisy estimates of second derivative when we reach low cell count
+    dd = np.where(spl(x) > np.log10(min_cells), spl.derivative(2)(x), 0)
+    # reasonable UMI cutoff value from peak of second derivative
+    x_cut = int(10**x[dd.argmax()])
+    n_cells = (UMI >= x_cut).sum()
+    n_UMI = ((UMI >= x_cut) * UMI).sum()
+    if debug:
+        ax.plot(x, f(x), label='linear interpolation of ')
+        ax.plot(x, spl(x), label='spline interpolation of linear interpolation')
+        ax.plot(x, spl.derivative(1)(x), label='first derivative of spline')
+        # ax.plot(x, spl.derivative(2)(x), label="2nd")
+        ax.plot(x, dd, label='masked, second derivative of spline')
+        ax.axvline(x[dd.argmax()])
+    else:
+        ax.loglog(
+            y,
+            label=f"{key} (total={UMIsum/1e6:.1f}M)",
+            alpha=0.75,
+            lw=3,
+        )
+        
+        ax.axvline(x_cut, color='r', lw=0.5, label=f'suggested UMI cutoff:\n  UMI >= {x_cut}\n  n_cells={n_cells}\n  n_UMI={n_UMI/1e6:.1f}M ({100.0 * n_UMI/UMIsum:.1f} %)')
+    
+    ax.set_ylabel("no. cells above cutoff")
     ax.set_xlabel(f"{key} > x")
 
-    # ax.set_ylabel(f"cumulative {key}")
-    # ax.set_xlabel("cell BC rank")
-    # ax.set_xlim(0, n_rank)
-    ax.legend()
-    # fig.tight_layout()
+    ax.legend(loc='lower left', fancybox=False, markerscale=0.5)
     ax.grid(axis="y")
+
     if fig:
-        sample_name = adata.uns.get("sample_name", "no-sample-name")
-        fig.suptitle(sample_name)
+        
+        if not title:
+            sample_name = adata.uns.get("sample_name", "no-sample-name")
+            fig.suptitle(sample_name)
+        else:
+            fig.suptitle(title)
+
         fig.tight_layout()
 
-    return fig
+    ax.spines.right.set_visible(False)
+    ax.spines.top.set_visible(False)
+
+    return fig, x_cut
 
 
-def plot_dge_stats(adata, hist_kw={}, fig_kw={'figsize': (8,5)}):
-    import scanpy as sc
-    sc.pp.filter_cells(adata, min_counts=1)
-    # re-generating the metrics
-    adata.obs["n_exonic_reads"] = adata.layers["exonic_reads"].sum(axis=1)[:, 0]
-    adata.obs["n_reads"] = adata.layers["reads"].sum(axis=1)[:, 0]
-    adata.obs["n_exonic_counts"] = adata.X.sum(axis=1)[:, 0]
-    adata.obs["n_genes"] = (adata.X > 0).sum(axis=1)[:, 0]
-    adata.obs["reads_per_counts"] = (
-        adata.obs["n_exonic_reads"] / adata.obs["n_exonic_counts"]
-    )
-
-    # print(adata)
-    # print(adata.obs)
-    # print(adata.var)
-
+def dge_stats(adata, hist_kw={}, fig_kw={'figsize': (8,5)}):
     # cell metrics plot
     fig, axes = plt.subplots(2, 2, **fig_kw)
     axes = np.array(axes).ravel()
-    plot_cell_hist(adata.obs, key="n_exonic_reads", ax=axes[0], **hist_kw)
-    plot_cell_hist(adata.obs, key="n_counts", ax=axes[1], **hist_kw)
-    plot_cell_hist(adata.obs, key="n_genes", ax=axes[2], **hist_kw)
-    plot_cell_hist(adata.obs, key="reads_per_counts", xlog=False, ax=axes[3], **hist_kw)
+    cell_hist(adata, key="n_reads", ax=axes[0], **hist_kw)
+    cell_hist(adata, key="n_counts", ax=axes[1], **hist_kw)
+    cell_hist(adata, key="n_genes", ax=axes[2], **hist_kw)
+    cell_hist(adata, key="reads_per_counts", xlog=False, ax=axes[3], **hist_kw)
     fig.subplots_adjust(hspace=0.4)
     # fig.tight_layout()
 
     return fig
 
+def reads_per_UMI(adata, ax=None):
+    import matplotlib.pyplot as plt
 
+    if ax is None:
+        fig, ax = plt.subplots()
 
-def scatter_plot(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap='tab10', title='counts', ax=None, default_figsize=(5,5)):
+    n_gene_reads = np.array(adata.layers['exonic_reads'].sum(axis=1))[:,0]
+    n_gene_UMIs = np.array(adata.layers['exonic_counts'].sum(axis=1))[:,0]
+
+    ratio = n_gene_reads / n_gene_UMIs
+
+    ax.hist(
+        ratio,
+        bins=50, #np.linspace(pcr_coding.min(), np.percentile(pcr_coding, 99), 100),
+        alpha=1.0, label="exonic reads per UMI")
+
+    ax.spines.right.set_visible(False)
+    ax.spines.top.set_visible(False)
+    
+    return ratio
+
+def scatter(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap='tab10', title='counts', ax=None, default_figsize=(5,5)):
     """
     Produce a square, log-scaled scatter plot of the values in df, plotting column 'y' against column 'x'.
     If column names '{x}_lo' and '{x}_hi' are detected, they define errorbars for the plot.
@@ -202,7 +264,7 @@ def scatter_plot(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap
     return R, pval    
 
 
-def mRNA_miRNA_overview_plot(adata, gridsize=30, bins_mrna=100, bins_mirna=100, title="overview"):
+def mRNA_miRNA_overview(adata, gridsize=30, bins_mrna=100, bins_mirna=100, title="overview"):
     import matplotlib.pyplot as plt
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, sharex=False, figsize=(12, 3))
     fig.suptitle(title)
@@ -246,7 +308,7 @@ def mRNA_miRNA_overview_plot(adata, gridsize=30, bins_mrna=100, bins_mirna=100, 
     print(f"Thus, we keep {len(adata)} cells with a median protein coding mRNA count of {int(y_mrna.median())} and miRNA count of {int(y_mirna.median())} for further analysis.")
 
 
-def plot_cell_metrics(adata, x="coding", y="mt", gridsize=30, bins_x=100, bins_y=100, title="per-cell metrics"):
+def cell_metrics(adata, x="coding", y="mt", gridsize=30, bins_x=100, bins_y=100, title="per-cell metrics"):
     import matplotlib.pyplot as plt
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
     fig.suptitle(title)
@@ -273,25 +335,4 @@ def plot_cell_metrics(adata, x="coding", y="mt", gridsize=30, bins_x=100, bins_y
     fig.tight_layout()
     return fig
 
-
-def plot_reads_per_UMI(adata, ax=None):
-    import matplotlib.pyplot as plt
-
-    if ax is None:
-        fig, ax = plt.subplots()
-
-    n_gene_reads = np.array(adata.layers['exonic_reads'].sum(axis=1))[:,0]
-    n_gene_UMIs = np.array(adata.layers['exonic_counts'].sum(axis=1))[:,0]
-
-    ratio = n_gene_reads / n_gene_UMIs
-
-    ax.hist(
-        ratio,
-        bins=50, #np.linspace(pcr_coding.min(), np.percentile(pcr_coding, 99), 100),
-        alpha=1.0, label="reads per UMI")
-
-    ax.spines.right.set_visible(False)
-    ax.spines.top.set_visible(False)
-    
-    return ratio
 

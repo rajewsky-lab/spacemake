@@ -9,7 +9,8 @@ import logging
 import numpy as np
 
 import spacemake.util as util
-from spacemake.pl import plot_dge_stats, plot_loglog_knee
+import spacemake.tk as tk
+import spacemake.pl as pl
 
 def parse_args():
     parser = util.make_minimal_parser(prog="plot_dge_stats.py")
@@ -40,14 +41,14 @@ def main(args):
     # subsetting to miRNA only counts
     if args.reference:
         mask = adata.var["reference"] == args.reference
-        adata = adata[:, mask]
+        adata = adata[:, mask].copy()
 
-    fig = plot_dge_stats(adata)
+    adata = tk.add_common_metrics(adata)
+    fig = pl.dge_stats(adata)
     fig.savefig(util.ensure_path(args.out_metrics))
 
-
     # loglog version of knee plot
-    fig = plot_loglog_knee(adata, key="n_counts")
+    fig, _ = pl.loglog_knee(adata, key="n_counts")
     fig.savefig(util.ensure_path(args.out_knee))
 
     return adata
