@@ -118,7 +118,7 @@ class ConfigFile:
 
     def __init__(self):
         self.variables = {
-            "root_dir": "",
+            "root_dir": ".",
             "temp_dir": "/tmp",
             "species": {},
             "barcode_flavors": {},
