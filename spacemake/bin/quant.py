@@ -154,8 +154,9 @@ class DGE:
             self.DGE_cells.add(cell)
             self.DGE_genes.add(gene)
 
+            d = self.counts[(gene, cell)]
             for channel in channels:
-                self.counts[(gene, cell)][channel] += 1
+                d[channel] += 1
 
     def make_sparse_arrays(self):
         """_summary_
@@ -285,6 +286,7 @@ class DefaultCounter:
 
         # which channels shall contribute to the adata.X (main channel)
         self.count_X_channels = set(X_counts)
+        # which channels shall contribute to the adata.layers['reads'] (main channel reads version)
         self.read_X_channels = set(X_reads)
 
         # how to handle reads that align to both intron and exon features
@@ -385,10 +387,11 @@ class DefaultCounter:
             channels = self.exon_intron_disambiguation_func(channels)
 
         if channels & self.count_X_channels:
+            channels.add("counts")
+
+        if channels & self.read_X_channels:
             channels.add("reads")
-            if uniq:
-                channels.add("counts")
-        
+
         return channels
 
     ## main function: alignment bundle -> counting channels
@@ -609,7 +612,9 @@ def bam_iter_bundles(bam_src, logger, args, stats):
     MI = 'NN'
 
     # for ref, rec in util.timed_loop(bam_src, logger, skim=args.skim):
-    for ref, rec in bam_src:
+    for bam_name, rec in bam_src:
+        ref = os.path.basename(bam_name).split(".")[0]
+
         ref_stats = stats.stats_by_ref[ref]
         ref_stats['N_records'] += 1
         if rec.is_paired and rec.is_read2:
@@ -738,7 +743,7 @@ def main(args):
 #         yield rec
 
 
-def bundle_processor(Qin, Qout, Qerr, abort_flag, stat_list, args={}, **kw):
+def bundle_processor(Qin, Qout, Qerr, abort_flag, stat_list, args={}, count_class=CountingStatistics, **kw):
     with ExceptionLogging(
         "spacemake.quant.bundle_processor", Qerr=Qerr, exc_flag=abort_flag
     ) as el:
@@ -747,7 +752,7 @@ def bundle_processor(Qin, Qout, Qerr, abort_flag, stat_list, args={}, **kw):
         conf_d, channels = get_config_for_refs(args)
 
         # these objects can be (re-)used by successive counter_class instances
-        stats = CountingStatistics() # statistics on disambiguation and counting
+        stats = count_class() # statistics on disambiguation and counting
         uniq = set() # keep track of (CB, UMI) tuples we already encountered
 
         last_ref = None
