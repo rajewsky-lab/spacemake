@@ -107,11 +107,34 @@ def loglog_knee(adata, key="n_counts", ax=None, min_cells=500, title=None, debug
     # We use the lin-approx first to get an evenly spaced sampling 
     # of the data on log(x), which makes everything better...
     x = np.arange(0, lx.max(), 0.01)
-    spl = scipy.interpolate.UnivariateSpline(x, f(x), ext=3, k=4, s=0.01)
+    spl = scipy.interpolate.UnivariateSpline(x, f(x), ext=3, k=5, s=0.01)
     # mask noisy estimates of second derivative when we reach low cell count
-    dd = np.where(spl(x) > np.log10(min_cells), spl.derivative(2)(x), 0)
+    valid = spl(x) > np.log10(min_cells)
+    d2_spl = spl.derivative(2)
+    d3_spl = spl.derivative(3)
+    dd = np.where(valid, d2_spl(x), 0)
+    ddd = np.where(valid, d3_spl(x), 0)
+
+    # we want to find roots of the third derivative as possible inflection points
+    from scipy.interpolate import PPoly, splrep
+    ppoly = PPoly.from_spline(splrep(x[valid], ddd[valid]))
+    roots = ppoly.roots(extrapolate=False)
+    x_cuts = []
+    for r in roots:
+        # we have a local maximum in second derivative. 
+        # That's what we're looking for.
+        if d2_spl(r) > 0: 
+            x_cuts.append(r)
+    
+    # keep the right-most inflection point with 
+    # correct curvature: -> \_ NOT =\
+    if len(x_cuts):
+        x_cut = int(10**x_cuts[-1])
+    else:
+        x_cut = np.nan
+
     # reasonable UMI cutoff value from peak of second derivative
-    x_cut = int(10**x[dd.argmax()])
+    # x_cut = int(10**x[dd.argmax()])
     n_cells = (UMI >= x_cut).sum()
     n_UMI = ((UMI >= x_cut) * UMI).sum()
     if debug:
@@ -120,7 +143,8 @@ def loglog_knee(adata, key="n_counts", ax=None, min_cells=500, title=None, debug
         ax.plot(x, spl.derivative(1)(x), label='first derivative of spline')
         # ax.plot(x, spl.derivative(2)(x), label="2nd")
         ax.plot(x, dd, label='masked, second derivative of spline')
-        ax.axvline(x[dd.argmax()])
+        ax.plot(x, ddd, label='masked, third derivative of spline')
+        ax.axvline(roots[-1])
     else:
         ax.loglog(
             y,
