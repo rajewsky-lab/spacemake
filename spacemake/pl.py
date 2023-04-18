@@ -211,7 +211,7 @@ def reads_per_UMI(adata, ax=None):
     
     return ratio
 
-def scatter(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap='tab10', title='counts', ax=None, default_figsize=(5,5)):
+def scatter(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap='tab10', title='counts', ax=None, default_figsize=(5,5), logx=True, logy=True):
     """
     Produce a square, log-scaled scatter plot of the values in df, plotting column 'y' against column 'x'.
     If column names '{x}_lo' and '{x}_hi' are detected, they define errorbars for the plot.
@@ -226,8 +226,10 @@ def scatter(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap='tab
 
     ax.set_prop_cycle(color=plt.get_cmap(cmap).colors)
     ax.set_aspect(1)
-    ax.set_xscale('log')
-    ax.set_yscale('log')
+    if logx:
+        ax.set_xscale('log')
+    if logy:
+        ax.set_yscale('log')
     xerr = []
     yerr = []
     if x+'_lo' in df.columns:
@@ -237,7 +239,13 @@ def scatter(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap='tab
         yerr = np.array([df[y] - df[y+'_lo'], df[y+'_hi'] - df[y]])
 
     from scipy.stats import pearsonr
-    R, pval = pearsonr(np.log10(df[x] + 1), np.log10(df[y] + 1))
+    X = df[x] + 1
+    Y = df[y] + 1
+    if logx:
+        X = np.log10(X)
+    if logy:
+        Y = np.log10(Y)
+    R, pval = pearsonr(X, Y)
     print(f"R={R:.2f} pval={pval:.2e}")
     #if xerr or yerr:
     #    ax.errorbar(x, y, data=df+1, xerr=xerr, yerr=yerr, color="gray", label=f'all (R={R:.2f})', alpha=0.4, fmt='.')
