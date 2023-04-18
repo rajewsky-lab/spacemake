@@ -289,10 +289,10 @@ class SplitBAMbyUMI:
         self.max_buf_size = buf_size
         self.n_chunks = 0
 
-    def push_to_queues(self, ref):
+    def push_to_queues(self, bam_name):
         import numpy as np
         sizes = []
-        # print(f"push_to_queues, buffers={self.buffers}")
+        self.logger.debug(f"push_to_queues, {bam_name}, buffer_sizes={self.get_buffer_sizes()}")
         for buf, Q in zip(self.buffers, self.Qin):
             sizes.append(len(buf))
             if buf:
@@ -304,10 +304,11 @@ class SplitBAMbyUMI:
                 # right after put() the receiver gets truncated or no data.
                 # Yeah. For. real.
                 # so buf.copy() it is... :-/
-                Q.put((self.n_chunks, ref, buf.copy()))
+                Q.put((self.n_chunks, bam_name, buf.copy()))
                 buf.clear()
                 self.n_chunks += 1
 
+        # self.logger.debug(f"push_to_queues done, {bam_name}, buffer_sizes={self.get_buffer_sizes()}")
         return np.array(sizes)
   
     def broadcast(self, rec):
@@ -320,11 +321,13 @@ class SplitBAMbyUMI:
         for Q in self.Qin:
             Q.put(None)
 
-    def iter_bam(self, bam_name, ref='na'):
+    def iter_bam(self, bam_path):
         import subprocess
         import re
+        import os
 
-        proc = subprocess.Popen(['samtools', 'view', '-h', '--no-PG', '--threads=4', bam_name], stdout=subprocess.PIPE, text=True)
+        bam_name = os.path.basename(bam_path)
+        proc = subprocess.Popen(['samtools', 'view', '-h', '--no-PG', '--threads=4', bam_path], stdout=subprocess.PIPE, text=True)
         while line := proc.stdout.readline():
             if line.startswith('@'):
                 self.broadcast(line)
@@ -335,10 +338,13 @@ class SplitBAMbyUMI:
                 buf.append(line)
 
                 if len(buf) > self.max_buf_size:
-                    yield self.push_to_queues(ref)
+                    yield self.push_to_queues(bam_name)
+        
+        self.logger.debug(f"Completed ingesting from {bam_name}. Flushing buffers and moving on")
+        yield self.push_to_queues(bam_name)
 
-        yield self.push_to_queues(ref)
-
+    def get_buffer_sizes(self):
+        return [len(buf) for buf in self.buffers]
 
 class CountingStatistics:
     def __init__(self):
@@ -392,19 +398,13 @@ def BAM_reader(Qin, bam_in, Qerr, abort_flag, stat_list, buffer_size=10000, log_
         T0 = time()
         for bam_name in bam_in:
             reference_name = os.path.basename(bam_name).split(".")[0]
-            reference_name = bam_name
-            if last_ref != reference_name:
-                # create a new counter-class instance with the configuration
-                # for this reference name (genome, miRNA, rRNA, ...)
-                last_ref = reference_name
-                # ref_stats = stats.stats_by_ref[reference_name]
-                t0 = time()
-                t1 = time()
-                N_ref = 0
-                el.logger.info(f"reading alignments to reference '{reference_name}'.")
+            el.logger.info(f"reading alignments from {bam_name} to reference '{reference_name}'.")
+            t0 = time()
+            t1 = time()
+            N_ref = 0
 
             # split-by-UMI dispatch
-            for n_pushed in dispatch.iter_bam(bam_name, ref=reference_name):
+            for n_pushed in dispatch.iter_bam(bam_name):
                 n = n_pushed.sum()
                 N += n
                 N_ref += n
@@ -436,16 +436,19 @@ class AlignedSegmentsFromQueue:
         self.header = None
         self.header_lines = []
         self.last_ref = None
+        self.logger = logging.getLogger("spacemake.parallel.AlignedSegmentsFromQueue")
 
     def __iter__(self):
         import pysam
         for n_chunk, ref, sam_lines in queue_iter(self.Qin, self.abort_flag):
             if ref != self.last_ref:
+                self.logger.debug(f"switched BAM {self.last_ref} -> {ref}, expecting new header.")
                 self.header = None
                 self.header_lines = []
                 self.last_ref = ref
 
-            # print(f"received chunk {n_chunk} with {len(sam_lines)} lines: {sam_lines}")
+            self.logger.debug(f"received chunk {n_chunk} ref={ref} with {len(sam_lines)} line 0: {sam_lines[0]}")
+
             for line in sam_lines:
                 # print(line)
                 if line.startswith('@'):
