@@ -578,7 +578,7 @@ class GenomeAnnotation:
         classifications = []
         t0 = time()
         for n, idx in enumerate(cidx):
-            res = self.classifier.process(idx) # <- ((gn, gf, gt), isoform_overlaps dict)
+            res = postprocess_tags(*self.classifier.process(idx)) # <- ((gn, gf, gt), isoform_overlaps dict)
             # classifications.append(to_tags(res))
             classifications.append(res)
 
@@ -604,7 +604,7 @@ class GenomeAnnotation:
 
         return gc
 
-    def get_annotation_tags(self, chrom: str, strand: str, blocks):
+    def get_annotation_tags(self, chrom: str, strand: str, blocks, postprocess=False):
         def collapse_tag_values(values):
             if len(set(values)) == 1:
                 return [
@@ -614,6 +614,9 @@ class GenomeAnnotation:
                 return values
 
         gn, gf, gt = self.query_blocks(chrom, blocks)
+        if postprocess:
+            gn, gf, gt = postprocess_tags(gn, gf, gt)
+
         if len(gf):
             gn = ",".join(collapse_tag_values(gn))
             gf = ",".join(gf)
@@ -629,3 +632,40 @@ class GenomeAnnotation:
             gf = gf.upper()
 
         return gn, gf, gt
+    
+
+def postprocess_tags(gn, gf, gt):
+    """
+    post-process multiple functional annotations for a single gene,
+    as can arise if we have multiple isoforms in a region.
+    Assuming that this is called during compilation, the query region
+    is a minimal combination of uniquely overlapping features. 
+    Since we postprocess annotation for each gene separately, some 
+    combinations can then ONLY arise by isoform differences. This is
+    not the same scenario as overlapping distinct functional elements of
+    all isoforms. We want:
+        'C,I' -> "overlaps exonic regions *and* intronic regions in all known isoforms"
+        'C|I' -> "overlaps a region that is coding in some and intronic in other isoforms"
+        "C,C|I,I" -> "overlaps a region that is coding in all isoforms, a region that is coding in
+        some and intronic in others, and a region that is intronic in all isoforms"
+    """
+    # print("input", gn, gf, gt)
+    from collections import defaultdict
+    gf_by_gn = defaultdict(set)
+    gt_by_gn = defaultdict(set)
+    for n, f, t in zip(gn, gf, gt):
+        gf_by_gn[n].add(f)
+        gt_by_gn[n].add(t)
+    
+    # print(gf_by_gn)
+    # print(gt_by_gn)
+    gn = sorted(gf_by_gn.keys())
+    # print(gn)
+    # print("|".join(sorted(gf_by_gn['B'])))
+    gf = ["|".join(sorted(gf_by_gn[n])) for n in gn]
+    gt = ["|".join(sorted(gt_by_gn[n])) for n in gn]
+
+    return gn, gf, gt
+
+
+
