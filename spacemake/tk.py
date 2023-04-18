@@ -206,7 +206,7 @@ def stitch_mRNA_and_miRNA(mdata_path, midata_path, mrna_umi_cutoff=1000, mirna_u
     m = (midata.obs['miRNA_counts'] >= mirna_umi_cutoff) #& (adata.obs['n_counts'] < 10000000)
     midata = midata[m, mirna_genes].copy()
     print(f"pre-filtered midata {midata.X.shape}")
-    print(f"pre-filtered midata var {midata.var['reference']}")
+    # print(f"pre-filtered midata var {midata.var['reference']}")
 
     # pre-filter mRNA -> apply UMI cutoff and select only genes from the genome index
     # print(f"mdata {mdata}")
@@ -216,7 +216,7 @@ def stitch_mRNA_and_miRNA(mdata_path, midata_path, mrna_umi_cutoff=1000, mirna_u
     m = mdata.obs['genome_counts'] >= mrna_umi_cutoff
     mdata = mdata[m, genome_genes].copy()
     print(f"pre-filtered mdata {mdata.X.shape}")
-    print(f"pre-filtered mdata var {mdata.var['reference']}")
+    # print(f"pre-filtered mdata var {mdata.var['reference']}")
 
     # simplify miRNA names if requested
     print(f"copying midata")
@@ -249,17 +249,18 @@ def stitch_mRNA_and_miRNA(mdata_path, midata_path, mrna_umi_cutoff=1000, mirna_u
     print("merging")
     # merge both AnnData objects over common cells
     adata = merge_adata_objects_on_cells(mdata_norm, midata_norm)
-    print(f"merged, normalized data {adata}")
+    print(f"merged, normalized data {adata.X.shape}")
     raw = merge_adata_objects_on_cells(mdata, midata)
-    print(f"raw data: {raw}")
+    # print(f"raw data: {raw}")
     adata.raw = raw
 
-    adata.var['reference'] = pd.Series(
-        mdata.var['reference'].tolist() + (['miRNA'] * midata.X.shape[1])
-    ).astype('category')
+    # pandas needs the list of strings first. Inserting a Series of category type will
+    # set everything to NaN due to index mismatch. Yay
+    adata.var['reference'] = mdata.var['reference'].tolist() + ['miRNA'] * midata.X.shape[1]
+    adata.var['reference'] = adata.var['reference'].astype('category')
 
     adata.obs['n_counts'] = raw.X.sum(axis=1)
-
+    
     print(f"we have the following references {adata.var['reference'].drop_duplicates()}.")
     miRNA_genes = adata.var_names[adata.var['reference'] == 'miRNA'].to_list()
     genome_genes = adata.var_names[adata.var['reference'] == 'genome'].to_list()
