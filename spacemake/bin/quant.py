@@ -639,101 +639,101 @@ def bam_iter_bundles(bam_src, logger, args, stats):
             bundle.append(extract(rec))
 
     if bundle:
-        yield ref, CB, MI, bundle
+        yield bundle_ref, CB, MI, bundle
         
 
-def main(args):
-    logger = util.setup_logging(args, "spacemake.quant.main")
-    util.ensure_path(args.output + "/")
-    # load detailed counter configurations for each reference name
-    # plus a default setting ('*' key)
-    conf_d, channels = get_config_for_refs(args)
+# def main(args):
+#     logger = util.setup_logging(args, "spacemake.quant.main")
+#     util.ensure_path(args.output + "/")
+#     # load detailed counter configurations for each reference name
+#     # plus a default setting ('*' key)
+#     conf_d, channels = get_config_for_refs(args)
     
-    # prepare the sparse-matrix data collection (for multiple channels in parallel)
-    dge = DGE(channels=channels, cell_bc_allowlist=args.cell_bc_allowlist)
+#     # prepare the sparse-matrix data collection (for multiple channels in parallel)
+#     dge = DGE(channels=channels, cell_bc_allowlist=args.cell_bc_allowlist)
 
-    # keep track of which reference contained which gene names
-    gene_source = {}
+#     # keep track of which reference contained which gene names
+#     gene_source = {}
     
-    # these objects can be (re-)used by successive counter_class instances
-    stats = CountingStatistics() # statistics on disambiguation and counting
-    uniq = set() # keep track of (CB, UMI) tuples we already encountered
+#     # these objects can be (re-)used by successive counter_class instances
+#     stats = CountingStatistics() # statistics on disambiguation and counting
+#     uniq = set() # keep track of (CB, UMI) tuples we already encountered
 
-    last_ref = None
-    counter = None
-    ref_stats = None
-    # iterate over all annotated BAMs from the input
-    for bam_name in args.bam_in:
-        reference_name = os.path.basename(bam_name).split(".")[0]
-        if last_ref != reference_name:
-            # create a new counter-class instance with the configuration
-            # for this reference name (genome, miRNA, rRNA, ...)
-            last_ref = reference_name
-            ref_stats = stats.stats_by_ref[reference_name]
-            config = conf_d.get(reference_name, conf_d['*'])
-            logger.info(f"processing alignments to reference '{reference_name}'. Building counter with '{config['name']}' rules")
-            counter = config['counter_class'](stats=ref_stats, uniq=uniq, **config)
+#     last_ref = None
+#     counter = None
+#     ref_stats = None
+#     # iterate over all annotated BAMs from the input
+#     for bam_name in args.bam_in:
+#         reference_name = os.path.basename(bam_name).split(".")[0]
+#         if last_ref != reference_name:
+#             # create a new counter-class instance with the configuration
+#             # for this reference name (genome, miRNA, rRNA, ...)
+#             last_ref = reference_name
+#             ref_stats = stats.stats_by_ref[reference_name]
+#             config = conf_d.get(reference_name, conf_d['*'])
+#             logger.info(f"processing alignments to reference '{reference_name}'. Building counter with '{config['name']}' rules")
+#             counter = config['counter_class'](stats=ref_stats, uniq=uniq, **config)
 
-        # iterate over BAM and count
-        for cell, umi, bundle in bam_iter_bundles(bam_name, logger, args, stats=ref_stats):
-            # all the work done in the counter instance should be delegated to workers
-            # uniq() is tricky. Perhaps only one worker for now...
-            gene, channels = counter.process_bam_bundle(cell, umi, bundle)
-            if gene:
-                # print(f"add_read gene={gene} cell={cell} channels={channels}")
-                dge.add_read(gene=gene, cell=cell, channels=channels)
+#         # iterate over BAM and count
+#         for cell, umi, bundle in bam_iter_bundles(bam_name, logger, args, stats=ref_stats):
+#             # all the work done in the counter instance should be delegated to workers
+#             # uniq() is tricky. Perhaps only one worker for now...
+#             gene, channels = counter.process_bam_bundle(cell, umi, bundle)
+#             if gene:
+#                 # print(f"add_read gene={gene} cell={cell} channels={channels}")
+#                 dge.add_read(gene=gene, cell=cell, channels=channels)
 
-            # keep track of the BAM origin of every gene (in case we combine multiple BAMs)
-            gene_source[gene] = reference_name
+#             # keep track of the BAM origin of every gene (in case we combine multiple BAMs)
+#             gene_source[gene] = reference_name
 
-            if ref_stats['N_records'] % 1000000 == 0:
-                print(stats.get_stats_df().T)
+#             if ref_stats['N_records'] % 1000000 == 0:
+#                 print(stats.get_stats_df().T)
 
-    sparse_d, obs, var = dge.make_sparse_arrays()
-    adata = dge.sparse_arrays_to_adata(
-        sparse_d, obs, var
-    )
-    if args.out_stats:
-        stats.save_stats(args.out_stats.format(**locals()))
+#     sparse_d, obs, var = dge.make_sparse_arrays()
+#     adata = dge.sparse_arrays_to_adata(
+#         sparse_d, obs, var
+#     )
+#     if args.out_stats:
+#         stats.save_stats(args.out_stats.format(**locals()))
 
-    adata.var["reference"] = [gene_source[gene] for gene in var]
-    adata.uns["sample_name"] = args.sample
-    adata.uns[
-        "DGE_info"
-    ] = f"created with spacemake.quant version={__version__} on {datetime.datetime.today().isoformat()}"
-    adata.uns["DGE_cmdline"] = sys.argv
-    adata.write(args.out_dge.format(args=args))
+#     adata.var["reference"] = [gene_source[gene] for gene in var]
+#     adata.uns["sample_name"] = args.sample
+#     adata.uns[
+#         "DGE_info"
+#     ] = f"created with spacemake.quant version={__version__} on {datetime.datetime.today().isoformat()}"
+#     adata.uns["DGE_cmdline"] = sys.argv
+#     adata.write(args.out_dge.format(args=args))
 
-    ## write out marginal counts across both axes:
-    #   summing over obs/cells -> pseudo bulk
-    #   summing over genes -> UMI/read distribution
-    pname = args.out_bulk.format(args=args)
+#     ## write out marginal counts across both axes:
+#     #   summing over obs/cells -> pseudo bulk
+#     #   summing over genes -> UMI/read distribution
+#     pname = args.out_bulk.format(args=args)
 
-    data = OrderedDict()
+#     data = OrderedDict()
 
-    data["sample_name"] = args.sample
-    data["reference"] = [gene_source[gene] for gene in var]
-    data["gene"] = var
-    for channel, M in sparse_d.items():
-        data[channel] = sparse_summation(M)
+#     data["sample_name"] = args.sample
+#     data["reference"] = [gene_source[gene] for gene in var]
+#     data["gene"] = var
+#     for channel, M in sparse_d.items():
+#         data[channel] = sparse_summation(M)
 
-    import pandas as pd
+#     import pandas as pd
 
-    df = pd.DataFrame(data).sort_values('counts')
-    df.to_csv(pname, sep="\t")
+#     df = pd.DataFrame(data).sort_values('counts')
+#     df.to_csv(pname, sep="\t")
 
-    tname = args.out_summary.format(args=args)
+#     tname = args.out_summary.format(args=args)
 
-    data = OrderedDict()
+#     data = OrderedDict()
 
-    # TODO: add back in once we dropped the Rmd QC sheet scripts
-    # data["sample_name"] = args.sample
-    data["cell_bc"] = obs
-    for channel, M in sparse_d.items():
-        data[channel] = sparse_summation(M, axis=1)
+#     # TODO: add back in once we dropped the Rmd QC sheet scripts
+#     # data["sample_name"] = args.sample
+#     data["cell_bc"] = obs
+#     for channel, M in sparse_d.items():
+#         data[channel] = sparse_summation(M, axis=1)
 
-    df = pd.DataFrame(data)
-    df.to_csv(tname, sep="\t")
+#     df = pd.DataFrame(data)
+#     df.to_csv(tname, sep="\t")
 
 
 
@@ -763,9 +763,14 @@ def bundle_processor(Qin, Qout, Qerr, abort_flag, stat_list, args={}, count_clas
 
         bam_src = AlignedSegmentsFromQueue(Qin, abort_flag)
         for ref, cell, umi, bundle in bam_iter_bundles(bam_src, el.logger, args, stats=stats):
-            if last_ref != ref:
+            if ref != last_ref:
                 # create a new counter-class instance with the configuration
                 # for this reference name (genome, miRNA, rRNA, ...)
+                if count_data_chunk:
+                    Qout.put((n_chunk, last_ref, count_data_chunk))
+                    n_chunk += 1
+                    count_data_chunk = []
+
                 last_ref = ref
                 ref_stats = stats.stats_by_ref[ref]
                 config = conf_d.get(ref, conf_d['*'])
@@ -816,6 +821,9 @@ def DGE_counter(Qin, Qerr, abort_flag, stat_list, args={}, **kw):
                 dge.add_read(gene=gene, cell=cell, channels=channels)
                 # keep track of the mapping reference origin of every gene 
                 # (in case we combine multiple BAMs)
+                if gene.startswith("mm_") and ref != "genome":
+                    print(f"gene {gene} is in {ref} ? RLY?")
+
                 gene_source[gene] = ref
 
             Qin.task_done()
