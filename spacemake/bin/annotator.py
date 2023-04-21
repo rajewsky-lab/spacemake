@@ -306,52 +306,6 @@ def annotate_BAM_parallel(args):
     return ret_code
 
 
-# def annotate_BAM_linear(bam, ga, out, repeat=1, interval=5):
-#     # import pysam
-
-#     # as_strand = {"+": "-", "-": "+"}
-#     logger = logging.getLogger("spacemake.annotator.chunks_from_BAM")
-
-#     t0 = time()
-#     T = interval
-#     n: str = 0
-
-#     tid_cache = {}
-
-#     def get_reference_name(tid):
-#         if not tid in tid_cache:
-#             tid_cache[tid] = bam.get_reference_name(tid)
-#         return tid_cache[tid]
-
-#     for read in bam.fetch(until_eof=True):
-#         n += 1
-#         gn = None
-#         gf = "-"
-#         gt = None
-#         if not read.is_unmapped:
-#             chrom = get_reference_name(read.tid)
-#             strand = "-" if read.is_reverse else "+"
-#             gn, gf, gt = ga.get_annotation_tags(chrom, strand, read.get_blocks())
-
-#         read.set_tag("gn", gn)
-#         read.set_tag("gf", gf)
-#         read.set_tag("gt", gt)
-#         read.set_tag("XF", None)
-#         read.set_tag("gs", None)
-#         out.write(read)
-
-#         dt = time() - t0
-#         if dt > T:
-#             logger.debug(
-#                 f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
-#             )
-#             T += interval
-
-#     logger.info(
-#         f"processed {n} alignments in {dt:.2f} seconds ({n/dt:.2f} reads/second)"
-#     )
-
-
 def build_compiled_annotation(args):
     logger = logging.getLogger("spacemake.annotator.build_compiled_annotation")
     if CompiledClassifier.files_exist(args.compiled):
@@ -387,7 +341,7 @@ def query_regions(args):
             strand,
             [
                 (int(start), int(end)),
-            ],
+            ]
         )
         print(f"gn={gn}\tgf={gf}\tgt={gt}")
 
