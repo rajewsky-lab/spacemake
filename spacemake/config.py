@@ -76,14 +76,14 @@ def get_run_mode_parser(required=True):
         + "parameter is set, contiguous islands within umi_cutoff passing beads will "
         + "also be included in the analysis",
     )
-    parser.add_argument(
-        "--polyA_adapter_trimming",
-        required=False,
-        choices=bool_in_str,
-        type=str,
-        help="if set, reads will have polyA stretches and adapter sequence overlaps trimmed "
-        + "BEFORE mapping.",
-    )
+    # parser.add_argument(
+    #     "--polyA_adapter_trimming",
+    #     required=False,
+    #     choices=bool_in_str,
+    #     type=str,
+    #     help="if set, reads will have polyA stretches and adapter sequence overlaps trimmed "
+    #     + "BEFORE mapping.",
+    # )
     parser.add_argument(
         "--count_intronic_reads",
         required=False,
@@ -581,6 +581,18 @@ class ConfigFile:
                 if not var in RunMode.variable_types:
                     del variables[var]
 
+            if ("polyA_adapter_trimming" in variables) and (
+                variables["polyA_adapter_trimming"] == False
+            ):
+                import logging
+
+                logger = logging.getLogger("spacemake.config")
+                logger.warning(
+                    f"WARNING: run_mode {run_mode_name} lists polyA_adapter_trimming=false. This is no longer supported and will be overriden with true"
+                )
+                variables["polyA_adapter_trimming"] = True
+
+            # print(f"assigning run mode {run_mode_name}: {variables}")
             self.variables["run_modes"][run_mode_name] = variables
 
     def dump(self):
@@ -723,7 +735,7 @@ class ConfigFile:
         # --name is absolutely REQUIRED and its value has to map somehow onto
         # an internal function name
         # @TAMAS: can you help?
-        print(f"add_variable() called with variable={variable} name={name} kw={kwargs}")
+        # print(f"add_variable() called with variable={variable} name={name} kw={kwargs}")
 
         if variable == "species":
             # for the species command, collision check is on the reference name, not the species name
@@ -769,6 +781,7 @@ class ConfigFile:
         return variable_data
 
     def get_variable(self, variable, name):
+        # print(f"config.get_variable({variable}, {name})")
         if not self.variable_exists(variable, name):
             raise ConfigVariableNotFoundError(variable, name)
         else:
