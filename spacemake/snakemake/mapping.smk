@@ -51,6 +51,14 @@ def get_map_inputs(wc, mapper="STAR"):
         'bam' : mr.input_path,
         'index_file' : mr.map_index_file
     }
+    # TODO: provide common STAR index loading as a service
+    # as of now, snakemake groups all STAR mapping jobs together and
+    # insists on running them concurrently (no serialization). This is
+    # not usable.
+    #
+    # if mapper == "STAR":
+    #     d['idx_service'] = ancient(mr.star_idx_service)
+
     if hasattr(mr, "ann_final_compiled_target") and mr.ann_final_compiled_target:
         d['annotation'] = mr.ann_final_compiled_target
 
@@ -193,17 +201,25 @@ rule parse_ribo_log:
     script: 'scripts/parse_ribo_log.py'
 
 
+rule load_STAR_index:
+    input: 
+        idx_file = star_index_file,
+        idx_dir = star_index
+    output: service(star_idx_service)
+    shell:
+        "python {bin_dir}/load_STAR_idx.py {input.idx_dir} {output}"
+
 rule map_reads_STAR:
     input: 
         # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
-        unpack(get_map_inputs)
+        unpack(get_map_inputs),
         # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
         bam=star_mapped_bam,
         ubam=star_unmapped_bam, # maybe_temporary(
-        tmp=temp(directory(star_prefix + "_STARgenome"))
+        # tmp=temp(directory(star_prefix + "_STARgenome"))
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
     log:
         star=star_target_log_file,
@@ -219,10 +235,11 @@ rule map_reads_STAR:
     shell:
         "STAR {params.auto[flags]}"
         "  --genomeDir {params.auto[index]}"
+        "  --genomeLoad LoadAndKeep"
         "  --readFilesIn {input.bam}"
         "  --readFilesCommand samtools view -f 4"
         "  --readFilesType SAM {params.PE}"
-        "  --sjdbGTFfile {params.auto[annotation]}"
+        # "  --sjdbGTFfile {params.auto[annotation]}"
         "  --outFileNamePrefix {params.star_prefix}"
         "  --runThreadN {threads}"
         " "

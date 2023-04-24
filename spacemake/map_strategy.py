@@ -72,6 +72,7 @@ bt2_index_param = bt2_index + '/{ref_name}'
 bt2_index_file = bt2_index_param + '.1.bt2'
 bt2_index_log = bt2_index_param + '.log'
 species_reference_sequence = 'species_data/{species}/{ref_name}/sequence.fa'
+star_idx_service = '{species}.{ref_name}.STAR_index_loaded'
 species_reference_annotation = 'species_data/{species}/{ref_name}/annotation.gtf'
 species_reference_annotation_compiled = 'species_data/{species}/{ref_name}/compiled_annotation'
 species_reference_annotation_compiled_target = 'species_data/{species}/{ref_name}/compiled_annotation/non_overlapping.csv'
@@ -90,7 +91,7 @@ default_BT2_MAP_FLAGS = (
 # original rRNA mapping code used --very-fast-local and that was that.
 
 default_STAR_MAP_FLAGS = (
-    " --genomeLoad NoSharedMemory"
+    # " --genomeLoad NoSharedMemory"
     " --outSAMprimaryFlag AllBestScore"
     " --outSAMattributes Standard"
     " --outSAMunmapped Within"
@@ -393,6 +394,7 @@ def get_mapped_BAM_output(project_df=None, config=None, default_strategy="genome
                 mr.map_index = species_d[mr.ref_name].get("index_dir", default_STAR_INDEX)
                 mr.map_index_param = mr.map_index
                 mr.map_index_file = mr.map_index + "/SAindex"
+                mr.star_idx_service = star_idx_service.format(**mr)
                 mr.map_flags = species_d[mr.ref_name].get("STAR_flags", default_STAR_MAP_FLAGS)
 
             map_data['MAP_RULES_LKUP'][mr.out_path] = mr
