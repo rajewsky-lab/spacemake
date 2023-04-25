@@ -182,6 +182,27 @@ def overlaps_to_tags(isoform_overlaps: dict, flags_lookup=default_lookup) -> tup
                 These case-mangling operations are carried out in get_annotation_tags()
         
     """
+    # PROBLEM:
+    # order of tag values is given by order of annotation records, not anything
+    # reproducible, such as alphabetical order. This is makes testing and counting
+    # un-necessarily hard. Let's try to collect by gene and sort gf,gt on gf for same gene
+
+    # by_gn = defaultdict(set)
+    # for transcript_id, info in isoform_overlaps.items():
+    #     _gf = default_lookup[info.flags]
+
+    #     # print(f">> {transcript_id} => {info.flags:04b} => {_gm} {_gf}")
+    #     by_gn[info.gene_name].add((_gf, info.transcript_type))
+
+    # gn = []
+    # gf = []
+    # gt = []
+    # for n, tags in by_gn.items():
+    #     for f,t in sorted(tags):
+    #         gn.append(n)
+    #         gf.append(f)
+    #         gt.append(t)
+
     tags = set()
     for transcript_id, info in isoform_overlaps.items():
         _gf = default_lookup[info.flags]
@@ -197,6 +218,7 @@ def overlaps_to_tags(isoform_overlaps: dict, flags_lookup=default_lookup) -> tup
         gf.append(f)
         gt.append(t)
 
+    # print(f"overlaps_to_tags {gn} {gf} {gt}")
     return (gn, gf, gt)
 
 
@@ -299,6 +321,7 @@ class CompiledClassifier:
         return os.access(cdf_path, os.R_OK) and os.access(cclass_path, os.R_OK)
 
     # The only piece of work left is merging multiple pre-classified annotations
+    # TODO: ensure deterministic ordering of joined annotation tags
     def joiner(self, cidx):
         # we want to report each combination only once
         # Note: This code path is executed rarely
@@ -651,21 +674,31 @@ def postprocess_tags(gn, gf, gt):
     """
     # print("input", gn, gf, gt)
     from collections import defaultdict
-    gf_by_gn = defaultdict(set)
-    gt_by_gn = defaultdict(set)
+    by_gn = defaultdict(set)
     for n, f, t in zip(gn, gf, gt):
-        gf_by_gn[n].add(f)
-        gt_by_gn[n].add(t)
+        by_gn[n].add((f, t))
     
     # print(gf_by_gn)
     # print(gt_by_gn)
-    gn = sorted(gf_by_gn.keys())
+    gn = sorted(by_gn.keys())
     # print(gn)
     # print("|".join(sorted(gf_by_gn['B'])))
-    gf = ["|".join(sorted(gf_by_gn[n])) for n in gn]
-    gt = ["|".join(sorted(gt_by_gn[n])) for n in gn]
+    gf = []
+    gt = []
+    for n in gn:
+        _gf = []
+        _gt = []
+        for f, t in sorted(by_gn[n]):
+            _gf.append(f)
+            _gt.append(t)
 
+        gf.append("|".join(_gf))
+        gt.append("|".join(_gt))
+
+    # gf = ["|".join(sorted(by_gn[n])) for n in gn]
+    # gt = ["|".join(sorted(gt_by_gn[n])) for n in gn]
     return gn, gf, gt
+
 
 
 
