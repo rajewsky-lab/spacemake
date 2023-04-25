@@ -140,6 +140,7 @@ abbreviations = {
     "processed_transcript": "t",
     "processed_pseudogene": "p",
     "lncRNA": "l",
+    "lincRNA": "li",
     "nonsense_mediated_decay": "n",
     "retained_intron": "i",
 }
@@ -515,14 +516,14 @@ class GenomeAnnotation:
         ga = cls(df, GTFClassifier(df))
         return ga
 
-    def sanity_check(self, df):
-        for chrom, nc in self.chrom_ncls_map.items():
-            starts, ends, idx = np.array(nc.intervals()).T
-            self.logger.debug(
-                f"checking {chrom} with starts from {starts.min()}-{starts.max()} and idx from {idx.min()}-{idx.max()}"
-            )
+    # def sanity_check(self, df):
+    #     for chrom, nc in self.chrom_ncls_map.items():
+    #         starts, ends, idx = np.array(nc.intervals()).T
+    #         self.logger.debug(
+    #             f"checking {chrom} with starts from {starts.min()}-{starts.max()} and idx from {idx.min()}-{idx.max()}"
+    #         )
 
-            assert idx.max() < len(df)
+    #         assert idx.max() < len(df)
 
     def query_idx(self, chrom, start, end):
         nested_list = self.chrom_ncls_map.get(chrom, [])
@@ -627,7 +628,7 @@ class GenomeAnnotation:
 
         return gc
 
-    def get_annotation_tags(self, chrom: str, strand: str, blocks, postprocess=False):
+    def get_annotation_tags(self, chrom: str, strand: str, blocks):
         def collapse_tag_values(values):
             if len(set(values)) == 1:
                 return [
@@ -637,17 +638,14 @@ class GenomeAnnotation:
                 return values
 
         gn, gf, gt = self.query_blocks(chrom, blocks)
-        if postprocess:
-            gn, gf, gt = postprocess_tags(gn, gf, gt)
-
         if len(gf):
             gn = ",".join(collapse_tag_values(gn))
             gf = ",".join(gf)
             gt = ",".join(collapse_tag_values(gt))
         else:
-            gn = None
+            gn = "-"
             gf = "-"
-            gt = None
+            gt = "-"
 
         if strand == '-':
             gf = gf.translate(default_strand_translation)
@@ -691,6 +689,9 @@ def postprocess_tags(gn, gf, gt):
         for f, t in sorted(by_gn[n]):
             _gf.append(f)
             _gt.append(t)
+
+        if len(set(_gt)) == 1:
+            _gt = [_gt[0],]
 
         gf.append("|".join(_gf))
         gt.append("|".join(_gt))
