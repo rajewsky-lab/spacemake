@@ -291,7 +291,7 @@ rule create_dge:
     # at most 8 dges will be created the same time
     threads: 16
     shell:
-        "python {bin_dir}/quant.py"
+        "python {bin_dir}/quantify.py"
         "  --sample={wildcards.sample_id}"
         "  --log-level={log_level}"
         "  --log-file={log}"
