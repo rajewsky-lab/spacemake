@@ -684,17 +684,14 @@ def postprocess_tags(gn, gf, gt):
     gf = []
     gt = []
     for n in gn:
-        _gf = []
-        _gt = []
+        _gf = set()
+        _gt = set()
         for f, t in sorted(by_gn[n]):
-            _gf.append(f)
-            _gt.append(t)
+            _gf.add(f)
+            _gt.add(t)
 
-        if len(set(_gt)) == 1:
-            _gt = [_gt[0],]
-
-        gf.append("|".join(_gf))
-        gt.append("|".join(_gt))
+        gf.append("|".join(sorted(_gf)))
+        gt.append("|".join(sorted(_gt)))
 
     # gf = ["|".join(sorted(by_gn[n])) for n in gn]
     # gt = ["|".join(sorted(gt_by_gn[n])) for n in gn]
