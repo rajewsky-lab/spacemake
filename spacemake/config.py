@@ -320,15 +320,18 @@ class ConfigFile:
 
     def process_barcode_flavor_args(self, **kw):
         # r(1|2) and then string slice
-        to_match = r"r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$"
+        # this is too restrictive. What about umi = "r1[12:20] + r2[:8]" ? 
+        # would be perfectly reasonable 
+
+        # to_match = r"r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$"
 
         umi = kw.get("umi", None)
-        if umi is not None and re.match(to_match, umi) is None:
-            raise InvalidBarcodeStructure("umi", to_match)
+        # if umi is not None and re.match(to_match, umi) is None:
+        #     raise InvalidBarcodeStructureError("umi", to_match)
 
         cell_barcode = kw.get("cell", None)
-        if cell_barcode is not None and re.match(to_match, cell_barcode) is None:
-            raise InvalidBarcodeStructure("cell", to_match)
+        # if cell_barcode is not None and re.match(to_match, cell_barcode) is None:
+        #     raise InvalidBarcodeStructureError("cell", to_match)
 
         barcode_flavor = {}
 
@@ -425,7 +428,7 @@ class ConfigFile:
             d["BT2_flags"] = BT2_flags
 
         if STAR_flags:
-            d["STAR_flags"] = BT2_flags
+            d["STAR_flags"] = STAR_flags
 
         species_refs = self.variables["species"].get(name, {})
         species_refs[reference] = d
