@@ -206,3 +206,15 @@ quant:
   custom_index:
     alignment_selection: take_first_plus
     gene_selection: chrom
+species:
+    test_hsa:
+        genome:
+            annotation: "{spacemake_dir}/test_data/test_annotation.gtf.gz"
+            sequence: "{spacemake_dir}/test_data/test_genome.fa.gz"
+        miRNA:
+            annotation: "{spacemake_dir}/test_data/mirgenedb.hsa.mature.gtf.gz"
+            sequence: "{spacemake_dir}/test_data/mirgenedb.hsa.mature.fa.gz"
+        rRNA:
+            annotation: ''
+            sequence: "{spacemake_dir}/test_data/rRNA_hsa.fa.gz"
+
