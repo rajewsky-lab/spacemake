@@ -272,6 +272,14 @@ def get_variable_action_subparsers(config, parent_parser, variable):
         type=str,
         required=True,
     )
+    if variable == "species":
+        delete_parser.add_argument(
+            "--reference",
+            help=f"name of the reference to be deleted (genome, rRNA, ...)",
+            type=str,
+            required=True,
+        )
+
     delete_parser.set_defaults(func=func, action="delete", variable=variable)
 
     # add command
@@ -619,15 +627,24 @@ class ConfigFile:
                 variable_name_sg = self.main_variables_pl2sg[variable_name]
                 raise ConfigVariableNotFoundError(variable_name_sg, key)
 
-    def delete_variable(self, variable_name, variable_key):
+    def delete_variable(self, variable_name, variable_key, **kw):
         self.assert_variable(variable_name, variable_key)
 
         if variable_name in self.vars_with_default and variable_key == "default":
             raise EmptyConfigVariableError(variable_name)
 
         variable_data = self.variables[variable_name][variable_key]
+        if variable_name == "species":
+            ref_name = kw['reference']
+            if ref_name in self.variables[variable_name][variable_key]:
+                del self.variables[variable_name][variable_key][kw['reference']]
+            else:
+                logging.warning(f"reference {ref_name} is not registered under species {variable_key}")
 
-        del self.variables[variable_name][variable_key]
+            if len(self.variables[variable_name][variable_key]) == 0:
+                # this was the last reference entry. 
+                # Let's remove the species altogether
+                del self.variables[variable_name][variable_key]
 
         return variable_data
 
