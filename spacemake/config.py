@@ -326,6 +326,8 @@ class ConfigFile:
                 # this was the last reference entry. 
                 # Let's remove the species altogether
                 del self.variables[variable_name][variable_key]
+        else:
+            del self.variables[variable_name][variable_key]
 
         return variable_data
 
