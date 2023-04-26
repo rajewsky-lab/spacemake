@@ -215,7 +215,7 @@ class DefaultCounter:
         gene_gf = defaultdict(list)
         max_prio = 0
         for n, f in zip(gn, gf):
-            f_prios = [self.gene_priorities.get(f, 0) for f in gf.split('|')]
+            f_prios = [self.gene_priorities.get(x, 0) for x in f.split('|')]
             p = max(f_prios)
             gene_prio[n] = max(gene_prio[n], p)
             max_prio = max([max_prio, p])
