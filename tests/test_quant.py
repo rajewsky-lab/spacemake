@@ -12,6 +12,14 @@ test_bundles = [
         ('chr1', '+', 'A', 'C', 0),
         ('chr2', '-', 'B', 'I', 0),
         ], ("A", {'counts', 'reads', 'exonic_counts', 'exonic_reads'})),
+    ("mm_complex", 'ACGTACGT', 'ACACA', [
+        ('chr1', '+', 'A', 'C|N|I,I', 0),
+        ('chr2', '-', 'B', 'n', 0),
+        ], ("A", {'counts', 'reads', 'intronic_counts', 'intronic_reads'})),
+    ("mm_complex2", 'ACGTACGT', 'ATACA', [
+        ('chr1', '+', 'A', 'N,C|N|I,U', 0),
+        ('chr2', '-', 'B', 'n', 0),
+        ], ("A", {'counts', 'reads', 'exonic_counts', 'exonic_reads'})),
     ("mm_ambig", 'ACGTACGT', 'AAACG', [
         ('chr1', '+', 'A', 'C', 0),
         ('chr2', '-', 'B', 'C', 0),
