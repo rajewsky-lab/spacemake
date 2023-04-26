@@ -415,9 +415,9 @@ def add_common_metrics(adata, mt_gene_pattern="^mt-", protein_coding_genes_path=
 
     adata.obs["n_reads"] = 0
     if "exonic_reads" in adata.layers:
-        adata.obs["n_reads"] += np.array(adata.layers["exonic_reads"].sum(axis=1))[0]
+        adata.obs["n_reads"] += np.array(adata.layers["exonic_reads"].sum(axis=1))[:, 0]
     if "intronic_reads" in adata.layers:
-        adata.obs["n_reads"] += np.array(adata.layers["intronic_reads"].sum(axis=1))[0]
+        adata.obs["n_reads"] += np.array(adata.layers["intronic_reads"].sum(axis=1))[:, 0]
 
     if (adata.obs["n_reads"] == 0).all():
         adata.obs["n_reads"] = adata.obs["n_counts"]
