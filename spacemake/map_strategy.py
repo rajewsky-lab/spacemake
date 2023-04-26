@@ -142,8 +142,10 @@ def get_count_flavor_str(wc):
 ##########################
 
 def validate_mapstr(mapstr, config={}, species=None):
-    if species:
+    if species and config:
         species_d = config.get_variable("species", name=species)
+    else:
+        species_d = {}
 
     def process(token):
         """
@@ -172,8 +174,7 @@ def validate_mapstr(mapstr, config={}, species=None):
             # we have a counting-flavor directive
             mapper, cflavor = mapper.split('@')
             if config:
-                if not cflavor in config['quant']:
-                    raise ValueError(f"counting flavor {cflavor} is not among the flavors registered: {sorted(config['quant'].keys())}")
+                config.assert_variable("quant", cflavor)
         else:
             cflavor = None
         
@@ -429,9 +430,3 @@ def get_mapped_BAM_output(project_df=None, config=None, default_strategy="genome
 
     # print("out_files", out_files)
     return out_files
-
-
-if __name__ == "__main__":
-    test_str = "rRNA:bowtie2->bowtie2:miRNA@custom_index->genome:STAR:final"
-    print(test_str)
-    print(validate_mapstr(test_str, {}))

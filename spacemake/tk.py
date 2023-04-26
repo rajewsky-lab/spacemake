@@ -333,7 +333,7 @@ def assign_species(adata, species_patterns, pct_thresh=80):
     return masks
 
 
-def pre_filter(adata, umi_cutoff=0, umi_key="n_counts", normalize=True, mt_gene_pattern="^mt-", protein_coding_genes_path='/data/rajewsky/projects/sc_smRNA_marvin/sm/species_data/mouse/genome/protein_coding_genes.txt'):
+def pre_filter(adata, umi_cutoff=0, umi_key="n_counts", normalize=True, mt_gene_pattern="^mt-", protein_coding_genes_path=''):
     import re
     genome_genes = adata.var['reference'] == 'genome'
     adata.uns['genome_genes'] = genome_genes
@@ -343,18 +343,19 @@ def pre_filter(adata, umi_cutoff=0, umi_key="n_counts", normalize=True, mt_gene_
     adata.uns['mt_genes'] = sorted(mt_genes)
     print(f"detected {len(mt_genes)} mitochondrial gene names")
 
-    protein_coding = set([g.strip() for g in open(protein_coding_genes_path)])
-    print(f"detected {len(protein_coding)} protein coding gene names")
-    adata.uns['protein_coding_genes'] = sorted(protein_coding)
 
     adata.obs['n_genome_counts'] = adata[:, genome_genes].X.sum(axis=1)
     adata.obs['n_mt_counts'] = adata[:, mt_genes].X.sum(axis=1)
-    adata.var['protein_coding'] = adata.var_names.isin(protein_coding)
-    adata.obs['n_coding_counts'] = adata[:, adata.var['protein_coding']].X.sum(axis=1)
-
-    adata.obs['pct_coding'] = (100.0 * adata.obs['n_coding_counts']) / adata.obs['n_counts']
     adata.obs['pct_mt'] = (100.0 * adata.obs['n_mt_counts']) / adata.obs['n_counts']
-    
+
+    if protein_coding_genes_path:
+        protein_coding = set([g.strip() for g in open(protein_coding_genes_path)])
+        print(f"detected {len(protein_coding)} protein coding gene names")
+        adata.uns['protein_coding_genes'] = sorted(protein_coding)
+        adata.var['protein_coding'] = adata.var_names.isin(protein_coding)
+        adata.obs['n_coding_counts'] = adata[:, adata.var['protein_coding']].X.sum(axis=1)
+        adata.obs['pct_coding'] = (100.0 * adata.obs['n_coding_counts']) / adata.obs['n_counts']
+  
     # remove the low-count barcodes lumped together already at the quant.py stage
     m = adata.obs_names != 'NA'
     adata = adata[m, :]
@@ -411,6 +412,16 @@ def add_common_metrics(adata, mt_gene_pattern="^mt-", protein_coding_genes_path=
 
     # re-generate the metrics/marginals of the adata matrix
     adata.obs["n_counts"] = adata.X.sum(axis=1)
+
+    adata.obs["n_reads"] = 0
+    if "exonic_reads" in adata.layers:
+        adata.obs["n_reads"] += np.array(adata.layers["exonic_reads"].sum(axis=1))[0]
+    if "intronic_reads" in adata.layers:
+        adata.obs["n_reads"] += np.array(adata.layers["intronic_reads"].sum(axis=1))[0]
+
+    if (adata.obs["n_reads"] == 0).all():
+        adata.obs["n_reads"] = adata.obs["n_counts"]
+
     adata.obs["n_genes"] = (adata.X > 0).sum(axis=1)
     adata.var["n_cells"] = (adata.X > 0).sum(axis=0).T
 

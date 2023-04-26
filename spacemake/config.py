@@ -102,6 +102,7 @@ class ConfigFile:
         "adapter_flavors": "adapter_flavor",
         "run_modes": "run_mode",
         "species": "species",
+        "quant": "quant",
     }
 
     main_variables_sg2pl = {value: key for key, value in main_variables_pl2sg.items()}
@@ -126,6 +127,7 @@ class ConfigFile:
             "adapters": {},
             "run_modes": {},
             "pucks": {},
+            "quant": {},
         }
         self.file_path = "config.yaml"
         self.logger = logging.getLogger(logger_name)
@@ -177,7 +179,27 @@ class ConfigFile:
                     default_val.update(cf.variables[var_with_default]["default"])
                     cf.variables[var_with_default]["default"] = default_val
 
+        cf.expand_strings()
         return cf
+
+    def expand_strings(self, **kw):
+        kw['spacemake_dir'] = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
+        # print(f"expanding strings in config with context={kw}")
+        import collections.abc as abc
+        def recurse(d):
+            if type(d) == str:
+                return d.format(**kw)
+
+            if isinstance(d, abc.Mapping):
+                for key, value in d.items():
+                    d[key] = recurse(value)
+
+            elif isinstance(d, abc.Collection):
+                d = [recurse(x) for x in d]
+
+            return d
+
+        self.variables = recurse(self.variables)
 
     def assert_main_variable(self, variable):
         if variable not in self.main_variables_pl2sg.keys():
@@ -955,6 +977,22 @@ def get_adapter_flavor_parser(required=True):
     return parser
 
 
+def get_quant_parser(required=True):
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False,
+        add_help=False,
+        description="add/update counting flavors (quant)",
+    )
+    parser.add_argument(
+        "--name",
+        help=(
+            "name of the counting flavor."
+        ),
+        type=str,
+        required=True,
+    )
+    return parser
+
 def get_variable_action_subparsers(parent_parser, variable):
 
     if variable == "barcode_flavors":
@@ -975,6 +1013,12 @@ def get_variable_action_subparsers(parent_parser, variable):
     elif variable == "species":
         variable_singular = variable
         variable_add_update_parser = get_species_parser
+    elif variable == "quant":
+        variable_singular = variable
+        variable_add_update_parser = get_quant_parser
+
+    else:
+        print(f"suspicious variable {variable}")
 
     command_help = {
         "list": f"list {variable} and their settings",

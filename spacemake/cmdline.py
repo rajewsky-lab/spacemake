@@ -3,6 +3,7 @@ import os
 import logging
 from spacemake.util import message_aggregation
 from spacemake.config import ConfigFile
+from spacemake.contrib import __version__, __license__, __author__, __email__
 
 logger_name = "spacemake.main"
 logger = logging.getLogger(logger_name)
@@ -1010,7 +1011,7 @@ def cmdline():
     args = parser_main.parse_args()
 
     if args.version and args.subcommand is None:
-        print(importlib.metadata.version("spacemake"))
+        print(__version__)
         return 0
     else:
         del args.version
