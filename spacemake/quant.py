@@ -75,21 +75,11 @@ default_alignment_priorities = {
     'U': 100, # UTR exon
     'N': 90, # exon of non-coding transcript
     'I': 50, # intronic region
-    'C|U': 100, # overlaps both, CDS+UTR (should in fact never occur as 'CU')
-    'C|I': 100, # overlaps a region that is coding in at least one isoform, but intronic in others
-    'C|N': 100, # overlaps a region that is coding in at least one isoform, but non-coding in others
-    'I|U': 100, # overlaps a region that is UTR in at least one isoform, but intronic in others
-    'I|N' : 90, # overlaps a region that is non-coding in at least one isoform, but intronic in others
     # lower case == antisense
     'c': 10,
     'u': 10,
     'n': 9,
     'i': 5,
-    'c|u': 10,
-    'c|i': 10,
-    'c|n': 10,
-    'i|u': 10,
-    'i|n': 9,
     # intergenic
     '-': 0,
 }
@@ -98,25 +88,13 @@ default_gene_priorities = {
     'U': 100, # UTR exon
     'N': 90, # exon of non-coding transcript
     'I': 50, # intronic region
-    'C|U': 100, # overlaps both, CDS+UTR (should in fact never occur as 'CU')
-    'C|I': 100, # overlaps a region that is coding in at least one isoform, but intronic in others
-    'C|N': 100, # overlaps a region that is coding in at least one isoform, but non-coding in others
-    'I|U': 100, # overlaps a region that is UTR in at least one isoform, but intronic in others
-    'I|N' : 90, # overlaps a region that is non-coding in at least one isoform, but intronic in others
-    # lower case == antisense
     'c': 10,
     'u': 10,
     'n': 9,
     'i': 5,
-    'c|u': 10,
-    'c|i': 10,
-    'c|n': 10,
-    'i|u': 10,
-    'i|n': 9,
-    # intergenic
     '-': 0,
 }
-default_exonic_tags = ["C", "U", "N", "C|U", "C|I", "C|N", "I|U", "I|N"]
+default_exonic_tags = ["C", "U", "N"]
 default_exonic_tags += [t.lower() for t in default_exonic_tags]
 default_intronic_tags = ["I", "i"]
 
@@ -202,7 +180,12 @@ class DefaultCounter:
         from collections import defaultdict
 
         def get_prio(gf):
-            prios = [self.alignment_priorities.get(f, 0) for f in gf]
+            prios = []
+            for f in gf:
+                f_prios = [self.gene_priorities.get(x, 0) for x in f.split('|')]
+                prios.append(max(f_prios))
+
+            # prios = [self.alignment_priorities.get(f, 0) for f in gf]
             return max(prios)
 
         top_prio = 0
@@ -232,7 +215,8 @@ class DefaultCounter:
         gene_gf = defaultdict(list)
         max_prio = 0
         for n, f in zip(gn, gf):
-            p = self.gene_priorities.get(f, 0)
+            f_prios = [self.gene_priorities.get(f, 0) for f in gf.split('|')]
+            p = max(f_prios)
             gene_prio[n] = max(gene_prio[n], p)
             max_prio = max([max_prio, p])
             gene_gf[n].append(f)
