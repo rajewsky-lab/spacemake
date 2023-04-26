@@ -58,7 +58,7 @@ def cell_hist(adata, key="n_reads", bins=100, xlog=True, ylog=False, ax=None, **
     ax.spines.top.set_visible(False)
 
 
-def loglog_knee(adata, key="n_counts", ax=None, min_cells=500, title=None, debug=False):
+def loglog_knee(adata, key="n_counts", ax=None, min_cells=500, title=None, debug=False, min_n_for_fit=100):
     """
     we will plot the number of cell barcodes (CBs) on the y-axis which have a UMI 
     count larger than a sliding threshold, which is plotted on the x-axis
@@ -87,51 +87,52 @@ def loglog_knee(adata, key="n_counts", ax=None, min_cells=500, title=None, debug
     if ax is None:
         fig, ax = plt.subplots(figsize=(6, 4))
 
+    x_cut = np.nan
+
     UMI = np.array(df[key].values, dtype=int)
     if not len(UMI):
-        return
+        return fig, x_cut
 
     UMIsum = UMI.sum()
     # bincount is like a histogram of bin-size 1 and always starting at 0
     n_CBs = len(UMI)
     y = np.array(n_CBs - np.bincount(UMI).cumsum(), dtype=np.float32)
 
-    import scipy.interpolate
-    x = np.arange(len(y)) + 1
-    ly = np.log10(y + 1)
-    lx = np.log10(x)
-    # linear interpolation on the log-scale
-    f = scipy.interpolate.interp1d(lx, ly)
-    # bicubic spline approximation of the linear interpolation,
-    # with constant extensions beyond the boundary. 
-    # We use the lin-approx first to get an evenly spaced sampling 
-    # of the data on log(x), which makes everything better...
-    x = np.arange(0, lx.max(), 0.01)
-    spl = scipy.interpolate.UnivariateSpline(x, f(x), ext=3, k=5, s=0.01)
-    # mask noisy estimates of second derivative when we reach low cell count
-    valid = spl(x) > np.log10(min_cells)
-    d2_spl = spl.derivative(2)
-    d3_spl = spl.derivative(3)
-    dd = np.where(valid, d2_spl(x), 0)
-    ddd = np.where(valid, d3_spl(x), 0)
+    if len(y) > min_n_for_fit:
+        import scipy.interpolate
+        x = np.arange(len(y)) + 1
+        ly = np.log10(y + 1)
+        lx = np.log10(x)
+        # linear interpolation on the log-scale
+        f = scipy.interpolate.interp1d(lx, ly)
+        # bicubic spline approximation of the linear interpolation,
+        # with constant extensions beyond the boundary. 
+        # We use the lin-approx first to get an evenly spaced sampling 
+        # of the data on log(x), which makes everything better...
+        x = np.arange(0, lx.max(), 0.01)
+        spl = scipy.interpolate.UnivariateSpline(x, f(x), ext=3, k=5, s=0.01)
+        # mask noisy estimates of second derivative when we reach low cell count
+        valid = spl(x) > np.log10(min_cells)
+        d2_spl = spl.derivative(2)
+        d3_spl = spl.derivative(3)
+        dd = np.where(valid, d2_spl(x), 0)
+        ddd = np.where(valid, d3_spl(x), 0)
 
-    # we want to find roots of the third derivative as possible inflection points
-    from scipy.interpolate import PPoly, splrep
-    ppoly = PPoly.from_spline(splrep(x[valid], ddd[valid]))
-    roots = ppoly.roots(extrapolate=False)
-    x_cuts = []
-    for r in roots:
-        # we have a local maximum in second derivative. 
-        # That's what we're looking for.
-        if d2_spl(r) > 0: 
-            x_cuts.append(r)
-    
-    # keep the right-most inflection point with 
-    # correct curvature: -> \_ NOT =\
-    if len(x_cuts):
-        x_cut = int(10**x_cuts[-1])
-    else:
-        x_cut = np.nan
+        # we want to find roots of the third derivative as possible inflection points
+        from scipy.interpolate import PPoly, splrep
+        ppoly = PPoly.from_spline(splrep(x[valid], ddd[valid]))
+        roots = ppoly.roots(extrapolate=False)
+        x_cuts = []
+        for r in roots:
+            # we have a local maximum in second derivative. 
+            # That's what we're looking for.
+            if d2_spl(r) > 0: 
+                x_cuts.append(r)
+        
+        # keep the right-most inflection point with 
+        # correct curvature: -> \_ NOT =\
+        if len(x_cuts):
+            x_cut = int(10**x_cuts[-1])
 
     # reasonable UMI cutoff value from peak of second derivative
     # x_cut = int(10**x[dd.argmax()])
