@@ -39,7 +39,6 @@ run_modes:
         umi_cutoff: [1000]
         clean_dge: False
         detect_tissue: True
-        polyA_adapter_trimming: False
         count_intronic_reads: False
         count_mm_reads: True
     slide_seq:
@@ -51,7 +50,6 @@ run_modes:
         n_beads: 10000
         umi_cutoff: [500]
         detect_tissue: False
-        polyA_adapter_trimming: True
         count_intronic_reads: True
         count_mm_reads: False
     seq_scope:

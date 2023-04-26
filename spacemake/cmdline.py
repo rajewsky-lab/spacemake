@@ -682,7 +682,7 @@ def spacemake_init(args):
 
         for key, value in species_info.items():
             cf.add_variable(
-                "species", key, genome=value["genome"], annotation=value["annotation"]
+                "species", key, reference="genome", sequence=value["genome"], annotation=value["annotation"]
             )
 
     # copy visium_puck_barcode_file

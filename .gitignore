@@ -16,9 +16,12 @@ samples.yaml
 *.fa
 *.gtf
 *.DS_Store
+*.log
+*.bam
+.coverage*
 .snakemake
 build
-
+__pycache__
 spacemake.egg-info
 scratch
 

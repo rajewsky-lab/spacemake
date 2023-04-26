@@ -272,6 +272,98 @@ def binning_hexagon(x, y, gridsize, extent=None, last_row=False):
     return coordinates, accumulated
 
 
+def aggregate_adata_by_indices(
+    adata, idx_to_aggregate, idx_aggregated, coordinates_aggregated
+):
+    import pandas as pd
+    import numpy as np
+    import anndata
+
+    from scipy.sparse import csr_matrix, csc_matrix, vstack, dok_matrix
+
+    joined_C = adata.X[idx_to_aggregate]
+
+    # at which indices does the index in the newly created matrix change
+    change_ix = np.where(idx_aggregated[:-1] != idx_aggregated[1:])[0] + 1
+
+    # array of indices, split by which row they should go together
+
+    ix_array = np.asarray(
+        np.split(np.arange(idx_aggregated.shape[0]), change_ix, axis=0), dtype="object"
+    )
+
+    joined_C_sumed = vstack(
+        [
+            csr_matrix(joined_C[ix_array[n].astype(int), :].sum(0))
+            for n in range(len(ix_array))
+        ]
+    )
+
+    aggregated_adata = anndata.AnnData(
+        csc_matrix(joined_C_sumed),
+        obs=pd.DataFrame(
+            {
+                "x_pos": coordinates_aggregated[:, 0],
+                "y_pos": coordinates_aggregated[:, 1],
+            }
+        ),
+        var=adata.var,
+    )
+
+    aggregated_adata.obsm["spatial"] = coordinates_aggregated
+
+    # rename index
+    aggregated_adata.obs.index.name = "cell_bc"
+
+    def summarise_adata_obs_column(adata, column, summary_fun=sum):
+        vals_to_join = adata.obs[column].to_numpy()[idx_to_aggregate]
+        vals_joined = np.array(
+            [
+                summary_fun(vals_to_join[ix_array[n].astype(int)])
+                for n in range(len(ix_array))
+            ]
+        )
+        return vals_joined
+
+    print(adata)
+
+    # summarise and attach n_reads, calculate metrics (incl. pcr)
+    calculate_adata_metrics(
+        aggregated_adata,
+        # provide the n_reads as a parameter
+        n_reads=summarise_adata_obs_column(adata, "n_reads"),
+    )
+
+    aggregated_adata.obs["n_joined"] = [len(x) for x in ix_array]
+    
+    mesh_bc_ilocs = np.arange(len(idx_to_aggregate))[idx_to_aggregate]
+
+    joined_dict = {i: mesh_bc_ilocs[x] for i, x in enumerate(ix_array)}
+
+    indices_joined_spatial_units = dok_matrix(
+        (len(joined_dict), len(adata.obs_names)), dtype=np.int8
+    )
+
+    for obs_name_aggregate, obs_name_to_aggregate in joined_dict.items():
+        indices_joined_spatial_units[obs_name_aggregate, obs_name_to_aggregate] = 1
+
+    indices_joined_spatial_units = indices_joined_spatial_units.tocsr()
+    aggregated_adata.uns["spatial_units_obs_names"] = np.array(adata.obs_names)
+    aggregated_adata.uns["indices_joined_spatial_units"] = indices_joined_spatial_units
+
+    from statistics import mean
+
+    for column in [
+        "exact_entropy",
+        "theoretical_entropy",
+        "exact_compression",
+        "theoretical_compression",
+    ]:
+        aggregated_adata.obs[column] = summarise_adata_obs_column(adata, column, mean)
+
+    return aggregated_adata
+
+
 def create_meshed_adata(
     adata,
     px_by_um,
@@ -282,13 +374,9 @@ def create_meshed_adata(
     start_at_minimum=False,
     optimized_binning=True,
 ):
-    import pandas as pd
-    import scanpy as sc
     import numpy as np
-    import anndata
 
     from sklearn.metrics.pairwise import euclidean_distances
-    from scipy.sparse import csr_matrix, csc_matrix, vstack
 
     if not mesh_type in ["circle", "hexagon"]:
         raise ValueError(f"unrecognised mesh type {mesh_type}")
@@ -349,7 +437,7 @@ def create_meshed_adata(
     # visium spot center and other beads
     max_distance_px = (spot_diameter_um - bead_diameter_um) / um_by_px / 2
 
-    def _create_optimized_hex_mesh_properties(mesh):
+    def _create_optimized_hex_mesh_properties(mesh_px):
         _y_values = np.unique(mesh_px[:, 1])
         _x_values = np.unique(mesh_px[:, 0])
         grid_x = len(mesh_px[mesh_px[:, 1] == _y_values[1]])
@@ -436,73 +524,13 @@ def create_meshed_adata(
         new_ilocs = new_ilocs[sorted_ix]
         original_ilocs = original_ilocs[sorted_ix]
 
-    joined_C = adata.X[original_ilocs]
-
-    # at which indices does the index in the newly created matrix change
-    change_ix = np.where(new_ilocs[:-1] != new_ilocs[1:])[0] + 1
-
-    # array of indices, split by which row they should go together
-
-    ix_array = np.asarray(
-        np.split(np.arange(new_ilocs.shape[0]), change_ix, axis=0), dtype="object"
-    )
-
-    joined_C_sumed = vstack(
-        [
-            csr_matrix(joined_C[ix_array[n].astype(int), :].sum(0))
-            for n in range(len(ix_array))
-        ]
-    )
-
     joined_coordinates = mesh_px[np.unique(new_ilocs)]
 
-    adata_out = anndata.AnnData(
-        csc_matrix(joined_C_sumed),
-        obs=pd.DataFrame(
-            {"x_pos": joined_coordinates[:, 0], "y_pos": joined_coordinates[:, 1]}
-        ),
-        var=adata.var,
+    meshed_adata = aggregate_adata_by_indices(
+        adata,
+        idx_to_aggregate=original_ilocs,
+        idx_aggregated=new_ilocs,
+        coordinates_aggregated=joined_coordinates,
     )
 
-    adata_out.obsm["spatial"] = joined_coordinates
-
-    # rename index
-    adata_out.obs.index.name = "cell_bc"
-
-    def summarise_adata_obs_column(adata, column, summary_fun=sum):
-        vals_to_join = adata.obs[column].to_numpy()[original_ilocs]
-        vals_joined = np.array(
-            [
-                summary_fun(vals_to_join[ix_array[n].astype(int)])
-                for n in range(len(ix_array))
-            ]
-        )
-        return vals_joined
-
-    print(adata)
-
-    # Aggregate and attach individual columns
-    for column in ['n_UMI', 'n_exonic_UMI', 'n_intronic_UMI',
-                   'n_reads', 'n_intronic_read', 'n_exonic_read']:
-        adata_out.obs[column] = summarise_adata_obs_column(adata, column, sum)
-
-    # summarise and attach n_reads, calculate metrics (incl. pcr)
-    calculate_adata_metrics(
-        adata_out,
-        # provide the n_reads as a parameter
-        n_reads=summarise_adata_obs_column(adata, "n_reads"),
-    )
-
-    adata_out.obs["n_joined"] = [len(x) for x in ix_array]
-
-    from statistics import mean
-
-    for column in [
-        "exact_entropy",
-        "theoretical_entropy",
-        "exact_compression",
-        "theoretical_compression",
-    ]:
-        adata_out.obs[column] = summarise_adata_obs_column(adata, column, mean)
-
-    return adata_out
+    return meshed_adata
