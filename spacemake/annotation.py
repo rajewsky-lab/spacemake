@@ -136,15 +136,21 @@ default_lookup = make_lookup({
 default_strand_translation = str.maketrans("CUNIcuni", "cuniCUNI", "")
 
 abbreviations = {
-    "protein_coding": "c",
-    "processed_transcript": "t",
-    "processed_pseudogene": "p",
-    "lncRNA": "l",
-    "lincRNA": "li",
-    "nonsense_mediated_decay": "n",
-    "retained_intron": "i",
+    "protein_coding": "C",
+    "processed_transcript": "N",
+    "processed_pseudogene": "P",
+    "transcribed_unprocessed_pseudogene": "P",
+    "transcribed_processed_pseudogene": "P",
+    "transcribed_unitary_pseudogene": "P",
+    "lncRNA": "L",
+    "lincRNA": "I",
+    "nonsense_mediated_decay": "D",
+    "retained_intron": "R",
+    "miRNA": "M",
+    "tRNA": "t",
+    "snoRNA": "s",
+    "rRNA": "r",
 }
-
 
 ## Space-efficient container of aggregating overlap information (isoform resolution)
 ## TODO: find a better, more compact/faster intermediate layer
