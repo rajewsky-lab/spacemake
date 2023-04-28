@@ -194,9 +194,10 @@ def stitch_mRNA_and_miRNA(mdata_path, midata_path, mrna_umi_cutoff=1000, mirna_u
     midata = sc.read_h5ad(midata_path)
     # print(f"initial midata {midata}")
     if 'NA' in midata.obs_names:
-        ambient_mirna = midata['NA'].to_df().T['NA']
+        ambient_mirna = midata['NA', :].to_df().T['NA']
     else:
         ambient_mirna = 0
+
     midata.var['ambient'] = ambient_mirna
 
     # pre-filter miRNA -> apply UMI cutoff and select only miRNA genes
@@ -409,6 +410,10 @@ def add_common_metrics(adata, mt_gene_pattern="^mt-", protein_coding_genes_path=
     # lose all zero rows/columns
     sc.pp.filter_cells(adata, min_counts=1)
     sc.pp.filter_genes(adata, min_counts=1)
+
+    # foreign adata import?
+    if not "reference" in adata.var:
+        adata.var["reference"] = "genome"
 
     # re-generate the metrics/marginals of the adata matrix
     adata.obs["n_counts"] = adata.X.sum(axis=1)
