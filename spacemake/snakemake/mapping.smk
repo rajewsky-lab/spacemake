@@ -235,7 +235,8 @@ rule map_reads_STAR:
     shell:
         "STAR {params.auto[flags]}"
         "  --genomeDir {params.auto[index]}"
-        "  --genomeLoad LoadAndKeep"
+        # "  --genomeLoad LoadAndKeep"
+        "  --genomeLoad NoSharedMemory"
         "  --readFilesIn {input.bam}"
         "  --readFilesCommand samtools view -f 4"
         "  --readFilesType SAM {params.PE}"
