@@ -333,22 +333,37 @@ class mRNACounter(BaseCounter):
     def select_gene(self, chrom, strand, gn, gf, score):
         # let's see if we can prioritize which gene we are interested in
         gene_prio = defaultdict(int)
-        gene_gf = defaultdict(list)
+        gene_gf = defaultdict(set)
         max_prio = 0
+        max_code = '-'
         for n, f in zip(gn, gf):
-            f_prios = [self.gene_priorities.get(x, 0) for x in f.split('|')]
-            p = max(f_prios)
-            gene_prio[n] = max(gene_prio[n], p)
-            max_prio = max([max_prio, p])
-            gene_gf[n].append(f)
-        
+            codes = f.split('|')
+            f_prios = np.array([self.gene_priorities.get(x, 0) for x in codes])
+            i = f_prios.argmax()
+            p = f_prios[i]
+            c = codes[i]
+
+            if p < 0:
+                gene_prio[n] -= p 
+                # we get a penalty. Useful if the overlap extends 
+                # beyond the boundaries of a feature
+            elif gene_prio[n] <= p:
+                # we have found are higher priority annotation
+                gene_prio[n] = p
+                # keep only the highest priority codes per compound code,
+                # examples: 
+                # C|I -> C 
+                # N|U|I -> U
+                gene_gf[n].add(c)
+                max_prio = max([max_prio, p])
+
         # restrict to genes tied for highest priority hits
         gn_new = [n for n in set(gn) if gene_prio[n] == max_prio]
         # print(len(gn_new))
         if len(gn_new) == 1:
             # YES we can salvage this read
             gene = gn_new[0]
-            return gene, gene_gf[gene]
+            return gene, sorted(gene_gf[gene])
         else:
             # NO still ambiguous
             return None, None
