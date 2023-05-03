@@ -98,79 +98,203 @@ default_exonic_tags = ["C", "U", "N"]
 default_exonic_tags += [t.lower() for t in default_exonic_tags]
 default_intronic_tags = ["I", "i"]
 
-exon_intron_disambiguation_functions = {
-    "exon_wins": lambda channels: channels - set(["intronic_reads", "intronic_counts"]),
-    "intron_wins": lambda channels: channels - set(["exonic_reads", "exonic_counts"]),
-    "count_both": lambda channels: channels,
-}
-
 default_channels = ["counts", "reads", "exonic_counts", "exonic_reads", "intronic_counts", "intronic_reads"]
 default_X_counts = ["exonic_counts", "intronic_counts"] # what should be counted into adata.X matrix
 default_X_reads = ["exonic_reads", "intronic_reads"] # what should be counted into adata.layers["reads"] matrix (correspond with adata.X but for reads not UMIs)
 
 
-class DefaultCounter:
-
-    logger = logging.getLogger("spacemake.quant.DefaultCounter")
+class BaseCounter:
+    
+    logger = logging.getLogger("spacemake.quant.BaseCounter")
 
     def __init__(self, 
         channels = default_channels,
-        alignment_priorities = default_alignment_priorities,
-        gene_priorities = default_gene_priorities,
         exonic_tags = default_exonic_tags,
         intronic_tags = default_intronic_tags,
         X_counts=default_X_counts,
         X_reads=default_X_reads,
-        exon_intron_disambiguation = "intron_wins",
-        alignment_selection="priority",
-        gene_selection="priority",
+
         uniq=set(),
         stats=defaultdict(int),
         **kw):
 
         self.kw = kw
         self.channels = channels
-        self.alignment_priorities = alignment_priorities
-        self.gene_priorities = gene_priorities
         self.exonic_set = set(exonic_tags)
         self.intronic_set = set(intronic_tags)
-
-        # how to choose among multiple alignments
-        self.select_alignment = {
-            'priority': self.select_alignment_by_priority,
-            'take_first': self.select_first_alignment,
-            'take_first_plus': self.select_first_plus_alignment,
-        }[alignment_selection]
-
-        # how to choose among multiple genes
-        self.select_gene = {
-            'priority': self.select_gene_by_priority,
-            'chrom': self.select_chrom_as_gene,
-        }[gene_selection]
 
         # which channels shall contribute to the adata.X (main channel)
         self.count_X_channels = set(X_counts)
         # which channels shall contribute to the adata.layers['reads'] (main channel reads version)
         self.read_X_channels = set(X_reads)
-
-        # how to handle reads that align to both intron and exon features
-        self.exon_intron_disambiguation_func = exon_intron_disambiguation_functions[exon_intron_disambiguation]
-    
+  
         self.stats = stats
         self.uniq = uniq
 
-    ## Alignment selection strategies
-    def select_first_alignment(self, bundle):
+    ## Implement/overload the following functions in a sub-class to implement a desired counting behavior
+    def unique_alignment(self, bundle):
+        # nothing to do here, we have a unique alignment
+        return bundle[0]
+    
+    def select_alignment(self, bundle):
+        return None
+
+    def select_gene(self, bundle):
+        return None, None
+
+    def exon_intron_disambiguation(self, channels):
+        # how to handle reads that align to both intron and exon features
+        # default implementation counts everything
+        return channels
+
+    ## Count-channel determination
+    def determine_channels(self, gf, uniq):
+        channels = set()
+        exon = False
+        intron = False
+        for f in gf:
+            if f in self.exonic_set:
+                channels.add("exonic_reads")
+                exon = True
+                if uniq:
+                    channels.add("exonic_counts")
+
+            elif f in self.intronic_set:
+                channels.add("intronic_reads")
+                intron = True
+                if uniq:
+                    channels.add("intronic_counts")
+
+        # post-process: if both exon & intron annotations 
+        # (but from different isoforms) are present
+        # decide how to count
+        if exon and intron:
+            channels = self.exon_intron_disambiguation(channels)
+
+        if channels & self.count_X_channels:
+            channels.add("counts")
+
+        if channels & self.read_X_channels:
+            channels.add("reads")
+
+        return channels
+
+    def unique_alignment(self, bundle):
         return bundle[0]
 
-    def select_first_plus_alignment(self, bundle):
+    ## main function: alignment bundle -> counting channels
+    def process_bam_bundle(self, cell, umi, bundle):
+        gene = None
+        selected = None
+        channels = set()
+        # self.set_reference(reference_name)
+        # print(f"bundle={bundle}")
+        if len(bundle) == 1:
+            self.stats['N_aln_unique'] += 1
+            selected = self.unique_alignment(bundle)
+        else:
+            self.stats['N_aln_multi'] += 1
+            selected = self.select_alignment(bundle)
+            if selected:
+                self.stats['N_aln_selected'] += 1
+            else:
+                self.stats['N_aln_selection_failed'] += 1
+
+        if selected:
+            self.stats['N_aln_countable'] += 1
+            chrom, strand, gn, gf, score = selected
+            # self.stats[f'N_aln_{chrom}'] += 1
+            self.stats[f'N_aln_{strand}'] += 1
+            if len(gn) == 1:
+                gene = gn[0]
+                if gene is None or gene == '-':
+                    self.stats['N_gene_none'] += 1    
+                else:
+                    self.stats['N_gene_unique'] += 1
+                # gf = gf
+                # print(f"uniq gene: {gene} {gf}")
+            else:
+                self.stats['N_gene_multi'] += 1
+                gene, gf = self.select_gene(*selected)
+                if gene:
+                    self.stats['N_gene_selected'] += 1
+                else:
+                    self.stats['N_gene_selection_failed'] += 1
+                    
+            # count the alignment every way that the counter prescribes
+            if gene:
+                # print(f"gene={gene} gf={gf}")
+                self.stats['N_aln_counted'] += 1
+                if gf[0].islower():
+                    self.stats['N_aln_antisense'] += 1
+                else:
+                    self.stats['N_aln_sense'] += 1
+
+                # handle the whole uniqueness in a way that can parallelize
+                # maybe split by UMI[:2]? This way, distributed uniq() sets would
+                # never overlap
+                key = hash((cell, gene, umi))
+                uniq = not (key in self.uniq)
+                if uniq:
+                    self.uniq.add(key)
+
+                channels = self.determine_channels(gf, uniq)
+                for c in channels:
+                    self.stats[f'N_channel_{c}'] += 1
+
+                if not channels:
+                    self.stats[f'N_channel_NONE'] += 1
+
+        return gene, channels
+
+
+class CustomIndexCounter(BaseCounter):
+
+    logger = logging.getLogger("spacemake.quant.CustomIndexCounter")
+
+    def unique_alignment(self, bundle):
+        chrom, strand, _, _, score = bundle[0]
+        return (chrom, strand, [chrom], ['N'], score)
+
+    def select_alignment(self, bundle):
         # only consider alignments on the + strand (for custom indices)
         plus = [b for b in bundle if b[1] == '+']
         if plus:
-            return plus[0]
+            return self.unique_alignment(plus)
+
+    # def determine_channels(self, gf, uniq):
+    #     if uniq:
+    #         channels = {'reads', 'counts'}
+    #     else:
+    #         channels = {'reads'}
+
+    #     return channels
+
+    # select_gene and exon_intron_disambiguation never get called 
+    # and thus do not need to be implemented
 
 
-    def select_alignment_by_priority(self, bundle):
+class mRNACounter(BaseCounter):
+
+    logger = logging.getLogger("spacemake.quant.mRNACounter")
+
+    def __init__(self,
+        alignment_priorities = default_alignment_priorities,
+        gene_priorities = default_gene_priorities,
+        **kw):
+
+        BaseCounter.__init__(self, **kw)
+
+        self.alignment_priorities = alignment_priorities
+        self.gene_priorities = gene_priorities
+
+    def unique_alignment(self, bundle):
+        # no processing needed here. We have a unique alignment
+        return bundle[0]
+
+    ## Try to select the most meaningful (cDNA-derived) from multiple
+    ## reported alignments for a read
+    def select_alignment(self, bundle):
         """
         If multiple alignments are reported for one fragment/read try to make a reasonable choice:
         If one of the alignments is to a coding exon, but the others are not, choose the exonic one.
@@ -205,11 +329,8 @@ class DefaultCounter:
         if n_top == 1:
             return kept
 
-    ## Gene selection strategies
-    def select_chrom_as_gene(self, chrom, strand, gn, gf, score):
-        return chrom, ['N']
-
-    def select_gene_by_priority(self, chrom, strand, gn, gf, score):
+    ## Gene selection strategy, similar to alignment selection
+    def select_gene(self, chrom, strand, gn, gf, score):
         # let's see if we can prioritize which gene we are interested in
         gene_prio = defaultdict(int)
         gene_gf = defaultdict(list)
@@ -232,103 +353,10 @@ class DefaultCounter:
             # NO still ambiguous
             return None, None
 
-    ## Count-channel determination
-    def determine_channels(self, gf, uniq):
-        channels = set()
-        exon = False
-        intron = False
-        for f in gf:
-            if f in self.exonic_set:
-                channels.add("exonic_reads")
-                exon = True
-                if uniq:
-                    channels.add("exonic_counts")
+    def exon_intron_disambiguation(self, channels):
+        return channels - set(["exonic_reads", "exonic_counts"])
 
-            elif f in self.intronic_set:
-                channels.add("intronic_reads")
-                intron = True
-                if uniq:
-                    channels.add("intronic_counts")
-
-        # post-process: if both exon & intron annotations 
-        # (but from different isoforms) are present
-        # decide how to count
-        if exon and intron:
-            channels = self.exon_intron_disambiguation_func(channels)
-
-        if channels & self.count_X_channels:
-            channels.add("counts")
-
-        if channels & self.read_X_channels:
-            channels.add("reads")
-
-        return channels
-
-    ## main function: alignment bundle -> counting channels
-    def process_bam_bundle(self, cell, umi, bundle):
-        gene = None
-        selected = None
-        channels = set()
-        # self.set_reference(reference_name)
-        # print(f"bundle={bundle}")
-        if len(bundle) == 1:
-            self.stats['N_aln_unique'] += 1
-            selected = bundle[0]
-        else:
-            self.stats['N_aln_multi'] += 1
-            selected = self.select_alignment(bundle)
-            if selected:
-                self.stats['N_aln_selected'] += 1
-            else:
-                self.stats['N_aln_selection_failed'] += 1
-
-        if selected:
-            self.stats['N_aln_countable'] += 1
-            chrom, strand, gn, gf, score = selected
-            # self.stats[f'N_aln_{chrom}'] += 1
-            self.stats[f'N_aln_{strand}'] += 1
-            if len(gn) == 1:
-                gene = gn[0]
-                if gene is None:
-                    self.stats['N_gene_none'] += 1    
-                else:
-                    self.stats['N_gene_unique'] += 1
-                # gf = gf
-                # print(f"uniq gene: {gene} {gf}")
-            else:
-                self.stats['N_gene_multi'] += 1
-                gene, gf = self.select_gene(*selected)
-                if gene:
-                    self.stats['N_gene_selected'] += 1
-                else:
-                    self.stats['N_gene_selection_failed'] += 1
-                    
-            # count the alignment every way that the counter prescribes
-            if gene:
-                # print(f"gene={gene} gf={gf}")
-                self.stats['N_aln_counted'] += 1
-                if gf[0].islower():
-                    self.stats['N_aln_antisense'] += 1
-                else:
-                    self.stats['N_aln_sense'] += 1
-
-                # handle the whole uniqueness in a way that can parallelize
-                # maybe split by UMI[:2]? This way, distributed uniq() sets would
-                # never overlap
-                key = hash((cell, umi))
-                uniq = not (key in self.uniq)
-                if uniq:
-                    self.uniq.add(key)
-
-                channels = self.determine_channels(gf, uniq)
-                for c in channels:
-                    self.stats[f'N_channel_{c}'] += 1
-
-                if not channels:
-                    self.stats[f'N_channel_NONE'] += 1
-
-        return gene, channels
-
+DefaultCounter = mRNACounter
 
 def sparse_summation(X, axis=0):
     # for csr_array this would be fine

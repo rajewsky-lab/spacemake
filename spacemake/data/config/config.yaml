@@ -158,7 +158,7 @@ adapter_flavors:
         
 quant:
   default:
-    counter_class: "spacemake.quant.DefaultCounter"
+    counter_class: "spacemake.quant.mRNACounter"
     channels: 
       - "counts"
       - "reads"
@@ -194,13 +194,10 @@ quant:
     }
     exonic_tags: ["C", "U", "N"]
     intronic_tags: ["I", "i"]
-    alignment_selection: priority
-    exon_intron_disambiguation: "intron_wins"
-  miRNA:
-    alignment_selection: take_first
-  chrom:
-    alignment_selection: take_first    
-    gene_selection: chrom
   custom_index:
-    alignment_selection: take_first_plus
-    gene_selection: chrom
+    counter_class: "spacemake.quant.CustomIndexCounter"
+    channels: 
+      - "counts"
+      - "reads"
+#      - "exonic_counts"
+#      - "exonic_reads"
