@@ -31,6 +31,12 @@ test_bundles = [
     ("uniq", 'NNNNNNNN', 'AAAAC', [('chr1', '+', 'A', 'N', 0)], ("A", {'counts', 'reads', 'exonic_counts', 'exonic_reads'})),
 ]
 
+def test_gene_selection():
+    counter = quant.DefaultCounter()
+    assert counter.select_gene("chr1", "+", ["A", "B"], ["C|U|I", "i|n"], 90) == ("A", ['C'])
+    assert counter.select_gene("chr1", "+", ["A"], ["C|I","I","U"], 90) == ("A", ['C', 'I', 'U'])
+
+
 def test_default_counter():
     counter = quant.DefaultCounter()
     sm_dir = os.path.dirname(__file__)

@@ -139,8 +139,8 @@ def bam_iter_bundles(bam_src, logger, args, stats):
         return (
             bam_src.header.get_reference_name(rec.tid), # chrom
             '-' if rec.is_reverse else '+', # strand
-            rec.get_tag('gn').split(',') if rec.has_tag('gn') else '-', # gene names
-            rec.get_tag('gf').split(',') if rec.has_tag('gf') else '-', # gene feature overlap encodings
+            rec.get_tag('gn').split(',') if rec.has_tag('gn') else ['-'], # gene names
+            rec.get_tag('gf').split(',') if rec.has_tag('gf') else ['-'], # gene feature overlap encodings
             rec.get_tag('AS') # alignment score
         )
 

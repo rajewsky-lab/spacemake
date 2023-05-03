@@ -84,11 +84,11 @@ default_alignment_priorities = {
     '-': 0,
 }
 default_gene_priorities = {
-    'C': 100, # coding exon
+    'C': 110, # coding exon
     'U': 100, # UTR exon
     'N': 90, # exon of non-coding transcript
     'I': 50, # intronic region
-    'c': 10,
+    'c': 11,
     'u': 10,
     'n': 9,
     'i': 5,
@@ -139,8 +139,11 @@ class BaseCounter:
     def select_alignment(self, bundle):
         return None
 
-    def select_gene(self, bundle):
-        return None, None
+    def select_gene(self, chrom, strand, gn, gf, score):
+        if len(gn) == 1:
+            return gn[0], gf[0]
+        else:
+            return "-", "-"
 
     def exon_intron_disambiguation(self, channels):
         # how to handle reads that align to both intron and exon features
@@ -205,6 +208,8 @@ class BaseCounter:
             chrom, strand, gn, gf, score = selected
             # self.stats[f'N_aln_{chrom}'] += 1
             self.stats[f'N_aln_{strand}'] += 1
+
+            gene, gf = self.select_gene(*selected)
             if len(gn) == 1:
                 gene = gn[0]
                 if gene is None or gene == '-':
@@ -215,14 +220,13 @@ class BaseCounter:
                 # print(f"uniq gene: {gene} {gf}")
             else:
                 self.stats['N_gene_multi'] += 1
-                gene, gf = self.select_gene(*selected)
                 if gene:
                     self.stats['N_gene_selected'] += 1
                 else:
                     self.stats['N_gene_selection_failed'] += 1
                     
             # count the alignment every way that the counter prescribes
-            if gene:
+            if gene != '-':
                 # print(f"gene={gene} gf={gf}")
                 self.stats['N_aln_counted'] += 1
                 if gf[0].islower():
@@ -336,12 +340,14 @@ class mRNACounter(BaseCounter):
         gene_gf = defaultdict(set)
         max_prio = 0
         max_code = '-'
-        for n, f in zip(gn, gf):
+        import itertools
+        for n, f in itertools.zip_longest(gn, gf, fillvalue=gn[0]):
             codes = f.split('|')
             f_prios = np.array([self.gene_priorities.get(x, 0) for x in codes])
             i = f_prios.argmax()
             p = f_prios[i]
             c = codes[i]
+            gene_gf[n].add(c)
 
             if p < 0:
                 gene_prio[n] -= p 
@@ -354,7 +360,6 @@ class mRNACounter(BaseCounter):
                 # examples: 
                 # C|I -> C 
                 # N|U|I -> U
-                gene_gf[n].add(c)
                 max_prio = max([max_prio, p])
 
         # restrict to genes tied for highest priority hits
@@ -363,11 +368,14 @@ class mRNACounter(BaseCounter):
         if len(gn_new) == 1:
             # YES we can salvage this read
             gene = gn_new[0]
-            return gene, sorted(gene_gf[gene])
+            res = gene, sorted(gene_gf[gene])
         else:
             # NO still ambiguous
-            return None, None
+            res = "-", "-"
 
+        # print(f"gn={gn} gf={gf} -> res={res}")
+        return res
+    
     def exon_intron_disambiguation(self, channels):
         return channels - set(["exonic_reads", "exonic_counts"])
 
