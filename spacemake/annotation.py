@@ -135,6 +135,7 @@ default_lookup = make_lookup({
 })
 default_strand_translation = str.maketrans("CUNIcuni", "cuniCUNI", "")
 
+# short-hands for common transcript types
 abbreviations = {
     "protein_coding": "C",
     "processed_transcript": "N",
