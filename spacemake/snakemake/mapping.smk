@@ -12,7 +12,79 @@ to all downstream steps (DGE generation, qc_sheets, ...).
 # live
 from spacemake.map_strategy import *
 
+# used to fetch all info needed to create a BAM file
+MAP_RULES_LKUP = map_data['MAP_RULES_LKUP']
+#   key: path of output BAM file
+#   value: dotdict with plenty of attributes
+
+# used for symlink name to source mapping
+BAM_SYMLINKS = map_data['BAM_SYMLINKS']
+
+# used for automated mapping index generation
+INDEX_FASTA_LKUP = map_data['INDEX_FASTA_LKUP']
+#   key: bt2_index_file or star_index_file
+#   value: dotdict with 
+#       .ref_path: path to genome FASTA
+#       .ann_path: path to annotation file (GTF) [optional]
+
+# needed for later stages of SPACEMAKE which require one "star.Log.final.out" file.
+STAR_FINAL_LOG_SYMLINKS = map_data['STAR_FINAL_LOG_SYMLINKS']
+
 register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
+#####################################
+#### snakemake string templates #####
+#####################################
+# (may eventually move to variables.py)
+
+# The entry point: pre-processed, unmapped reads in a uBAM
+ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
+# this must be local and not have .bam appended!
+# basically, if ubam_input were used as {target} in linked_bam it should eval to 
+# "unaligned_bc_tagged.polyA_adapter_trimmed.bam"
+
+# The end-point. Usually annotation-tagged genome alignments
+final_target = "final.polyA_adapter_trimmed"
+# ubam_input = "unaligned_bc_tagged{polyA_adapter_trimmed}"
+# final_target = "final{polyA_adapter_trimmed}"
+
+# patterns for auto-generated BAM file names and symlinks
+linked_bam = complete_data_root + "/{link_name}.bam"
+mapped_bam = complete_data_root + "/{ref_name}.{mapper}.bam"
+star_mapped_bam = complete_data_root + "/{ref_name}.STAR.bam"
+bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.bam"
+
+# special log file used for rRNA "ribo depletion" stats
+bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
+
+# default places for mapping indices, unless specified differently in the config.yaml
+star_index = 'species_data/{species}/{ref_name}/star_index'
+star_index_param = star_index
+star_index_file = star_index + '/SAindex'
+
+bt2_index = 'species_data/{species}/{ref_name}/bt2_index'
+bt2_index_param = bt2_index + '/{ref_name}'
+bt2_index_file = bt2_index_param + '.1.bt2'
+
+species_reference_sequence = 'species_data/{species}/{ref_name}/sequence.fa'
+species_reference_annotation = 'species_data/{species}/{ref_name}/annotation.gtf'
+
+default_BT2_MAP_FLAGS = (
+    " --local"
+    " -L 10 -D 30 -R 30"
+    " --ignore-quals"
+    " --score-min=L,0,1.5" # require 75% of perfect match (2=base match)
+)
+# original rRNA mapping code used --very-fast-local and that was that.
+
+default_STAR_MAP_FLAGS = (
+    " --genomeLoad NoSharedMemory"
+    " --outSAMprimaryFlag AllBestScore"
+    " --outSAMattributes All"
+    " --outSAMunmapped Within"
+    " --outStd BAM_Unsorted"
+    " --outSAMtype BAM Unsorted"
+    " --limitOutSJcollapsed 5000000"
+)
 
 # TODO: port remaining python code to map_strategy.py
 # to expose it to enable coverage analysis and unit-testing
@@ -43,7 +115,6 @@ def get_map_rule(wc):
     return map_data['MAP_RULES_LKUP'][output]
 
 def get_map_inputs(wc, mapper="STAR"):
-    # print("get_map_inputs()")
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
@@ -51,60 +122,29 @@ def get_map_inputs(wc, mapper="STAR"):
         'bam' : mr.input_path,
         'index_file' : mr.map_index_file
     }
-    # TODO: provide common STAR index loading as a service
-    # as of now, snakemake groups all STAR mapping jobs together and
-    # insists on running them concurrently (no serialization). This is
-    # not usable.
-    #
-    # if mapper == "STAR":
-    #     d['idx_service'] = ancient(mr.star_idx_service)
+    if hasattr(mr, "ann_final"):
+        d['annotation'] = mr.ann_final
 
-    if hasattr(mr, "ann_final_compiled_target") and mr.ann_final_compiled_target:
-        d['annotation'] = mr.ann_final_compiled_target
-
-    # print(d)
-    # print("done.")
     return d
 
 def get_map_params(wc, output, mapper="STAR"):
-    # we are expecting an input stream of - possibly uncompressed - BAM
-    # this stream will get directed to either compressed BAM directly, or first
-    # annotated and then written to compressed BAM
-
-    # print("get_map_params()")
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
-    annotation_cmd = f"| samtools view --threads=4 -bh /dev/stdin > {output.bam}"
+    annotation_cmd = f"| samtools view --threads=4 -bh /dev/stdin > {output}"
     # this is a stub for "no annotation tagging"
     if hasattr(mr, "ann_final"):
         ann = mr.ann_final
         if ann and ann.lower().endswith(".gtf"):
-            ann_log = wc_fill(log_dir, wc) + f"/{mr.ref_name}.{mapper}.annotator.log"
-            stats_out = wc_fill(stats_dir, wc) + f"/{mr.ref_name}.{mapper}.annotator.tsv"
-            annotation_cmd = (
-                f"| python {bin_dir}/annotator.py "
-                f"  --sample={wc.sample_id} "
-                f"  --log-level={log_level} "
-                f"  --log-file={ann_log} "
-                f"  --debug={log_debug} "
-                f"  tag "
-                f"  --bam-in=/dev/stdin "
-                f"  --bam-out={mr.out_path} "
-                f"  --stats-out={stats_out} "
-                f"  --compiled={mr.ann_final_compiled} "
-                f"| samtools view --threads=4 -bh --no-PG > {output.bam} "
-            )
+            tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={mr.out_path} ANNOTATIONS_FILE={mr.ann_final}"
+            annotation_cmd = tagging_cmd.format(dropseq_tools=dropseq_tools, mr=mr)
 
-    d = {
+    return {
         'annotation_cmd' : annotation_cmd,
         'annotation' : mr.ann_final,
         'index' : mr.map_index_param,
         'flags' : mr.map_flags,
     }
-    # print("done..")
-    return d
-
 
 ##############################################################################
 #### Snakemake rules for mapping, symlinks, and mapping-index generation #####
@@ -117,7 +157,7 @@ ruleorder:
     symlink_final_log > map_reads_STAR
 
 rule symlinks:
-    input: lambda wc: map_data['BAM_SYMLINKS'].get(wc_fill(linked_bam, wc),f"NO_BAM_SYMLINKS_for_{wc_fill(linked_bam, wc)}")
+    input: lambda wc: BAM_SYMLINKS.get(wc_fill(linked_bam, wc),f"NO_BAM_SYMLINKS_for_{wc_fill(linked_bam, wc)}")
     output: linked_bam
     params:
         rel_input=lambda wildcards, input: os.path.basename(input[0])
@@ -125,12 +165,12 @@ rule symlinks:
         "ln -s {params.rel_input} {output}"
 
 rule symlink_final_log:
-    input: lambda wc: map_data['STAR_FINAL_LOG_SYMLINKS'][wc_fill(star_log_file, wc)]
+    input: lambda wc: STAR_FINAL_LOG_SYMLINKS[wc_fill(star_log_file, wc)]
     output: star_log_file
     params:
         rel_input=lambda wildcards, input: os.path.basename(input[0])
     shell:
-        "ln -s logs/{params.rel_input} {output}"
+        "ln -s {params.rel_input} {output}"
 
 rule map_reads_bowtie2:
     input:
@@ -138,14 +178,10 @@ rule map_reads_bowtie2:
         # index=lambda wc: BAM_IDX_LKUP[wc_fill(bt2_mapped_bam, wc)],
         unpack(lambda wc: get_map_inputs(wc, mapper='bowtie2')),
     output:
-        bam=bt2_mapped_bam,
-        ubam=bt2_unmapped_bam, # maybe_temporary()
-    log: 
-        bt2 = bt2_mapped_log,
-        hdr = bt2_mapped_log.replace('.log', '.splice_bam_header.log')
+        bam=bt2_mapped_bam
+    log: bt2_mapped_bam + ".log"
     params:
         auto = lambda wc, output: get_map_params(wc, output, mapper='bowtie2'),
-        PE=lambda wc: "--align-paired-reads --no-mixed" if is_paired_end(wc.project_id, wc.sample_id) else "",
     threads: 32 
     shell:
         # 1) decompress unmapped reads from existing BAM
@@ -159,33 +195,30 @@ rule map_reads_bowtie2:
         # 3) align reads with bowtie2, *preserving the original BAM tags*
         "| bowtie2 -p {threads} --reorder --mm"
         "  -x {params.auto[index]} -b /dev/stdin --preserve-tags"
-        "  {params.auto[flags]} {params.PE} 2> {log.bt2}"
+        "  {params.auto[flags]} 2> {log}"
         " "
         # fix the BAM header to accurately reflect the entire history of processing via PG records.
-        "| python {bin_dir}/splice_bam_header.py"
-        "  --in-ubam {input.bam} "
-        "  --log-level={log_level} "
-        "  --log-file={log.hdr} "
+        "| python {repo_dir}/scripts/splice_bam_header.py"
+        "  --in-ubam {input.bam}"
         " "
-        "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) "
-        "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
+        "{params.auto[annotation_cmd]}"
+        # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
 
 # TODO: unify these two functions and get rid of the params in parse_ribo_log rule below.
 def get_ribo_log(wc):
     "used in params: which allows to make this purely optional w/o creating fake output"
     ribo_bam = bt2_mapped_bam.format(project_id=wc.project_id, sample_id=wc.sample_id, ref_name='rRNA')
-    if ribo_bam in map_data['MAP_RULES_LKUP'] or ribo_bam in map_data['BAM_SYMLINKS']:
-        log = bt2_mapped_log.format(sample_id=wc.sample_id, project_id=wc.project_id, ref_name="rRNA")
-        return log
+    if ribo_bam in MAP_RULES_LKUP or ribo_bam in BAM_SYMLINKS:
+        return bt2_rRNA_log.format(project_id=wc.project_id, sample_id=wc.sample_id)
     else:
         return "no_rRNA_index"
 
 def get_ribo_log_input(wc):
     rrna_bam = bt2_mapped_bam.format(sample_id=wc.sample_id, project_id=wc.project_id, ref_name="rRNA")
-    if rrna_bam in map_data['MAP_RULES_LKUP']:
+    if rrna_bam in MAP_RULES_LKUP:
         # we plan to map against rRNA. This is the correct dependency:
-        log = bt2_mapped_log.format(sample_id=wc.sample_id, project_id=wc.project_id, ref_name="rRNA")
+        log = rrna_bam + '.log'
     
     else:
         # no rRNA reference available. Default to the stub
@@ -201,32 +234,19 @@ rule parse_ribo_log:
     script: 'scripts/parse_ribo_log.py'
 
 
-rule load_STAR_index:
-    input: 
-        idx_file = star_index_file,
-        idx_dir = star_index
-    output: service(star_idx_service)
-    shell:
-        "python {bin_dir}/load_STAR_idx.py {input.idx_dir} {output}"
-
 rule map_reads_STAR:
     input: 
         # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
-        unpack(get_map_inputs),
+        unpack(get_map_inputs)
         # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
         bam=star_mapped_bam,
-        ubam=star_unmapped_bam, # maybe_temporary(
-        # tmp=temp(directory(star_prefix + "_STARgenome"))
+        log=star_target_log_file,
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
-    log:
-        star=star_target_log_file,
-        hdr=star_target_log_file.replace(".log", ".splice_bam_header.log")
     params:
         auto=get_map_params,
-        PE=lambda wc: "PE" if is_paired_end(wc.project_id, wc.sample_id) else "SE",
         # annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
         # annotation=lambda wilcards, output: BAM_ANN_LKUP.get(output.bam, "can't_find_annotation"),
         # flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP.get(output.bam, "can't_find_flags"),
@@ -234,35 +254,26 @@ rule map_reads_STAR:
         star_prefix = star_prefix
     shell:
         "STAR {params.auto[flags]}"
-        "  --genomeDir {params.auto[index]}"
-        # "  --genomeLoad LoadAndKeep"
-        "  --genomeLoad NoSharedMemory"
-        "  --readFilesIn {input.bam}"
-        "  --readFilesCommand samtools view -f 4"
-        "  --readFilesType SAM {params.PE}"
-        # "  --sjdbGTFfile {params.auto[annotation]}"
-        "  --outFileNamePrefix {params.star_prefix}"
-        "  --runThreadN {threads}"
+        " --genomeDir {params.auto[index]}"
+        " --readFilesIn {input.bam}"
+        " --readFilesCommand samtools view -f 4"
+        " --readFilesType SAM SE"
+        " --sjdbGTFfile {params.auto[annotation]}"
+        " --outFileNamePrefix {params.star_prefix}"
+        " --runThreadN {threads}"
         " "
-        "| python {bin_dir}/splice_bam_header.py"
-
-        "  --in-ubam {input.bam}"
-        "  --log-level={log_level} "
-        "  --log-file={log.hdr} "
-        "  --debug={log_debug} "
+        "| python {repo_dir}/scripts/splice_bam_header.py"
+        " --in-ubam {input.bam}"
         " "
-        "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) "
-        "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
+        "{params.auto[annotation_cmd]}"
         " "
         "; rm -rf {params.tmp_dir}"
-        "; rm {params.star_prefix}Log.out"
-        "; rm {params.star_prefix}Log.std.out"
-        "; rm {params.star_prefix}Log.progress.out"
-        "; mv {params.star_prefix}Log.final.out {log.star}"
+
 
 ## Automatic index generation requires
 # a) that the reference sequence has already been provided (by user or another rule)
 # b) that the index is to be placed in the default location
+
 
 rule prepare_species_reference_sequence:
 	input:
@@ -294,17 +305,16 @@ rule create_bowtie2_index:
         species_reference_sequence
     output:
         bt2_index_file
-    log:
-        bt2_index_log
     params:
-        auto = lambda wc: map_data['INDEX_FASTA_LKUP'][wc_fill(bt2_index_file, wc)]
+        auto = lambda wc: INDEX_FASTA_LKUP[wc_fill(bt2_index_file, wc)]
     shell:
-        "mkdir -p {params.auto[map_index]} \n"
-        "bowtie2-build --ftabchars 12 "
-        "  --offrate 1 "
-        "  {params.auto[ref_path]} "
-        "  {params.auto[map_index_param]} "
-        " &> {log} "
+        """
+        mkdir -p {params.auto[map_index]}
+        bowtie2-build --ftabchars 12 \
+                      --offrate 1 \
+                      {params.auto[ref_path]} \
+                      {params.auto[map_index_param]}
+        """
 
 rule create_star_index:
     input:
@@ -313,7 +323,6 @@ rule create_star_index:
     output:
         index_dir=directory(star_index),
         index_file=star_index_file
-    log: star_index_log
     threads: max(workflow.cores * 0.25, 8)
     shell:
         """
@@ -322,21 +331,5 @@ rule create_star_index:
              --runThreadN {threads} \
              --genomeDir {output.index_dir} \
              --genomeFastaFiles {input.sequence} \
-             --sjdbGTFfile {input.annotation} &> {log}
+             --sjdbGTFfile {input.annotation}
         """
-
-rule compile_annotation:
-    input: species_reference_annotation
-    output: 
-        target = species_reference_annotation_compiled_target,
-        path = directory(species_reference_annotation_compiled)
-    log: species_reference_annotation_compiled + '/annotator_build.log'
-    shell:
-        "python {bin_dir}/annotator.py "
-        "  --log-file={log} "
-        "  --log-level={log_level} "
-        "  --debug={log_debug} "
-        "  build "
-        "  --gtf={input} "
-        "  --compiled={output.path}"
-
