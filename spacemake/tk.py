@@ -133,28 +133,30 @@ def merge_adata_objects_on_cells(adata1, adata2, genes1=None, genes2=None):
     return adata
 
 
+def simplify_mirname(mirname):
+    """
+    Remove the precursor name and modification id from the miRNA name.
+    Example: 
+    
+        Mir-124-P1-v1_3p -> Mir-124_3p
+
+    """
+    import re
+    M = re.search(r"^(\w+)-(\w+)\-(\d+)(.*?)_(5|3)p", mirname)
+    if not M:
+        return mirname
+    else:
+        species, a, b, c, d = M.groups()
+        return f"{species}-{a}-{b}_{d}p"
+
+
 def aggregate_gene_counts(adata, func=None):
 
-    def simplify(mirname):
-        """
-        Remove the precursor name and modification id from the miRNA name.
-        Example: 
-        
-            Mir-124-P1-v1_3p -> Mir-124_3p
-
-        """
-        import re
-        M = re.search(r"^(\w+)-(\w+)\-(\d+)(.*?)_(5|3)p", mirname)
-        if not M:
-            return mirname
-        else:
-            species, a, b, c, d = M.groups()
-            return f"{species}-{a}-{b}_{d}p"
 
     if func is None:
-        func = simplify
+        func = simplify_mirname
 
-    df = pd.DataFrame({'full': adata.var_names, 'short': [simplify(m) for m in adata.var_names]})
+    df = pd.DataFrame({'full': adata.var_names, 'short': [func(m) for m in adata.var_names]})
     new_counts = {}
     for name, group in df.groupby('short'):
         #print(name)
@@ -180,7 +182,7 @@ def aggregate_gene_counts(adata, func=None):
     return agg_data
 
 
-def stitch_mRNA_and_miRNA(mdata_path, midata_path, mrna_umi_cutoff=1000, mirna_umi_cutoff=25, simplify_mirnames=True, protein_coding_genes_path='', normalize=True, mt_gene_pattern="^mt-"):
+def stitch_mRNA_and_miRNA(mdata_path, midata_path, mrna_umi_cutoff=1000, mirna_umi_cutoff=25, simplify_mirnames=True, protein_coding_genes_path='', normalize=True, mt_gene_pattern="^mt-", mrna_umi_cutoff_key="genome_counts"):
     # load
     import re
     mdata = sc.read_h5ad(mdata_path)
@@ -214,7 +216,7 @@ def stitch_mRNA_and_miRNA(mdata_path, midata_path, mrna_umi_cutoff=1000, mirna_u
     genome_genes = mdata.var['reference'] == 'genome'
     mdata.obs['genome_counts'] = mdata[:, genome_genes].X.sum(axis=1)
     # print(f"genome_counts quantiles: {np.percentile(mdata.obs['genome_counts'], [1, 5, 25, 50, 75, 95, 99])}")
-    m = mdata.obs['genome_counts'] >= mrna_umi_cutoff
+    m = mdata.obs[mrna_umi_cutoff_key] >= mrna_umi_cutoff
     mdata = mdata[m, genome_genes].copy()
     print(f"pre-filtered mdata {mdata.X.shape}")
     # print(f"pre-filtered mdata var {mdata.var['reference']}")
