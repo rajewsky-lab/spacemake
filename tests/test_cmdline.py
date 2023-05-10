@@ -1,6 +1,7 @@
 import pytest
 from spacemake.cmdline import *
 import sys
+import os
 
 @pytest.fixture(scope="session")
 def test_root(tmp_path_factory):
@@ -15,6 +16,9 @@ def test_root(tmp_path_factory):
 
     return tmp
 
+def sm(*argc):
+    sys.argv = ["spacemake",] + list(argc)
+    cmdline()
 
 def test_parsers(test_root):
     get_project_sample_parser()
@@ -27,31 +31,54 @@ def test_parsers(test_root):
     get_data_parser()
     get_run_parser()
 
+    make_main_parser()
+
 
 def test_init(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("disposable")
     os.chdir(tmp.as_posix())
 
     # just get the version
-    sys.argv = ["spacemake", "--version"]
-    # args = make_main_parser().parse_args()
-    # args.func()
-    cmdline()
+    sm("--version")
 
     # test the init parser
-    sys.argv = ["spacemake", "init"]
-    cmdline()
+    sm("init")
 
 def test_subcommands(test_root):
     # test everything after init
     os.chdir(test_root.as_posix())
-    sys.argv = ["spacemake", "--version"]
-    cmdline()
 
-    sys.argv = ["spacemake", "projects", "list"]
-    cmdline()
+    sm("projects", "list")
+    sm("config", "list_adapter_flavors")
 
-    sys.argv = ["spacemake", "config", "list_adapter_flavors"]
-    cmdline()
+def test_species(test_root):
+    os.chdir(test_root.as_posix())
+    spacemake_dir = os.path.dirname(__file__) + '/../'
 
-    
+    sm(
+        "config", "add_species",
+        "--name=hsa_test",
+        "--reference=genome",
+        f"--annotation={spacemake_dir}/test_data/test_genome.fa.gz",
+        f"--sequence={spacemake_dir}/test_data/test_genome.fa.gz",
+    )
+
+def test_sample(test_root):
+    # test everything after init
+    os.chdir(test_root.as_posix())
+    spacemake_dir = os.path.dirname(__file__) + '/../'
+    sm(
+        "projects", "add_sample",
+        "--project_id=test", "--sample_id=test1", 
+        f'--R1={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz', 
+        f'--R2={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz', 
+        '--map_strategy="STAR:genome:final"',
+        '--species=hsa_test'
+    )
+
+def test_run(test_root):
+    # test everything after init
+    # os.chdir(test_root.as_posix())
+    # spacemake_dir = os.path.dirname(__file__) + '/../'
+    sm("run", "-np", "--cores=8")
+
