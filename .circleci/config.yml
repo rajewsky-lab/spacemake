@@ -18,9 +18,19 @@ jobs:
           name: "Say hello"
           command: "echo Hello, World!"
 
+  run_pytest:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - run:
+          name: "py.test"
+          command: "pytest --cov=spacemake tests/"
+ 
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/2.0/configuration-reference/#workflows
 workflows:
   say-hello-workflow:
     jobs:
       - say-hello
+      - run_pytest
