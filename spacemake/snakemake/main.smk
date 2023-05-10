@@ -15,9 +15,9 @@ import numpy as np
 import math
 import scanpy as sc
 
-from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
+from spacemake.preprocess.dge import dge_to_sparse_adata, attach_barcode_file,\
     parse_barcode_file, load_external_dge, attach_puck_variables
-from spacemake.spatial import create_meshed_adata
+from spacemake.spatial.util import create_meshed_adata
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
 from spacemake.errors import SpacemakeError
@@ -44,6 +44,9 @@ config['projects'] = config.get('projects', [])
 global_tmp = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
 spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
+
+import logging
+smk_logger = logging.getLogger("spacemake.main.smk")
 
 #######################
 # DIRECTORY STRUCTURE #
@@ -78,8 +81,8 @@ def register_module_output_hook(hook, module="built-in"):
 def get_module_outputs():
     outputs = []
     for hook, module in _module_output_hooks:
-        for out in hook():
-            print(f"output provided by '{module}' module (via '{hook.__name__}'): '{out}'")
+        for out in hook(project_df=project_df, config=config):
+            smk_logger.debug(f"output provided by '{module}' module (via '{hook.__name__}'): '{out}'")
             outputs.append(out)
     
     return outputs

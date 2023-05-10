@@ -1,4 +1,3 @@
-import anndata
 import logging
 
 logger_name = "spacemake.main"
@@ -27,7 +26,7 @@ class Spacemake:
 
     def load_processed_adata(
         self, project_id, sample_id, run_mode_name, umi_cutoff
-    ) -> anndata.AnnData:
+    ): #-> anndata.AnnData:
         """Load spacemake processed data.
 
         :param project_id: project_id of the data to be loaded.
@@ -47,6 +46,8 @@ class Spacemake:
         :rtype: anndata.AnnData
         """
         import scanpy as sc
+        # import anndata
+
 
         self.project_df.assert_run_mode(project_id, sample_id, run_mode_name)
         run_mode = self.config.get_run_mode(run_mode_name)
@@ -75,7 +76,7 @@ class Spacemake:
 
     def load_raw_spatial_adata(
         self, project_id, sample_id, run_mode_name
-    ) -> anndata.AnnData:
+    ): #-> anndata.AnnData:
         """Load raw, spacemake processed data.
 
         This function will load the raw countr matrix, created by spacemake.

@@ -1,5 +1,5 @@
-from anndata import AnnData
-from spacemake.preprocess import calculate_adata_metrics
+# from anndata import AnnData
+from spacemake.preprocess.dge import calculate_adata_metrics
 
 
 def compute_neighbors(adata, min_dist=None, max_dist=None):

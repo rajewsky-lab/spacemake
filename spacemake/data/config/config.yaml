@@ -1,3 +1,7 @@
+logging:
+  level: INFO
+  debug: "spacemake.util.read_fq"
+
 puck_data:
     barcode_file: 'predictions_ml.csv'
     root: 'puck_data'
@@ -62,12 +66,12 @@ run_modes:
         - 100
         - 300
 
-adapters:
-    smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'
-    optical_primer: 'GAATCACGATACGTACACCA'
-
 barcode_flavors:
     default:
+        cell: "r1[0:12]"
+        UMI: "r1[12:20]"
+        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+    dropseq:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
         bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
@@ -91,3 +95,33 @@ barcode_flavors:
         UMI: "r2[0:9]"
         bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
         cell: "r1[0:20]"
+
+adapter_flavors: 
+  dropseq:
+    cut_left:
+    - TSO_SMART:
+        max_error: 0.1
+        min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 30
+    - polyA:
+        max_error: 0.25
+        min_overlap: 3
+    - polyG:
+        max_error: 0.1
+        min_overlap: 3
+
+adapters:
+  optical_primer: GAATCACGATACGTACACCA
+  TSO_SMART: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+  SMART: AAGCAGTGGTATCAACGCAGAGTG
+  smart: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+  TSO_10x: AAGCAGTGGTATCAACGCAGAGTACATGGG
+  chromium_bead: CTACACGACGCTCTTCCGATCT
+  dropseq_bead: AAGCAGTGGTATCAACGCAGAGTAC
+  polyA: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+  polyG: GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+  nextflex_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACTGACCAATCTCGTATGCCGTCTTCTGCTTGAA
+  truseq_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACCCGTCCA
+

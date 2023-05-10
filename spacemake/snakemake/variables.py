@@ -19,6 +19,10 @@ data_root = illumina_root + "/{data_root_type}{downsampling_percentage}"
 downsampled_data_prefix = illumina_root + "/downsampled_data"
 downsampled_data_root = downsampled_data_prefix + "{downsampling_percentage}"
 
+log_dir = complete_data_root + '/logs'
+stats_dir = complete_data_root + '/stats'
+plots_dir = complete_data_root + '/plots'
+
 ##############
 # Demux vars #
 ##############
