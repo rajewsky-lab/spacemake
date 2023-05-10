@@ -281,7 +281,7 @@ def process_reads(read_source, args, stats={}, total={}, lhist={}):
             cols[10] = qual_str[start:end]
 
             if tags:
-                cols[-1] = f"{cols[-1]} {tags}"
+                cols[-1] = f"{cols[-1]}\t{tags}"
 
             yield "\t".join(cols)
 
