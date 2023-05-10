@@ -82,6 +82,7 @@ def loglog_knee(adata, key="n_counts", ax=None, min_cells=500, title=None, debug
     low on the high end of UMI cutoffs, the derivative estimation from the spline fit gets noisy.
     To mask this noise, we employ a min_cells cutoff.
     """
+    adata = adata[adata.obs_names != 'NA']
     df = adata.obs
     fig = None
     if ax is None:
@@ -212,7 +213,7 @@ def reads_per_UMI(adata, ax=None):
     
     return ratio
 
-def scatter(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap='tab10', title='counts', ax=None, default_figsize=(5,5), logx=True, logy=True):
+def scatter(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap='tab10', title='counts', ax=None, default_figsize=(5,5), logx=True, logy=True, plot_kw={}):
     """
     Produce a square, log-scaled scatter plot of the values in df, plotting column 'y' against column 'x'.
     If column names '{x}_lo' and '{x}_hi' are detected, they define errorbars for the plot.
@@ -220,7 +221,7 @@ def scatter(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap='tab
     """
     import matplotlib.pyplot as plt
     # restrict to genes that are properly expressed
-    df = df.loc[(df > cutoff).any(axis=1)]
+    df = df.loc[(df > cutoff).any(axis=1)].fillna(0)
 
     if ax is None:
         fig, ax = plt.subplots(figsize=default_figsize)
@@ -251,9 +252,14 @@ def scatter(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap='tab
     #if xerr or yerr:
     #    ax.errorbar(x, y, data=df+1, xerr=xerr, yerr=yerr, color="gray", label=f'all (R={R:.2f})', alpha=0.4, fmt='.')
     #else:
-    ax.plot(x, y, '.', data=df+1, label=f'all (R={R:.2f})', color="gray",
-            ms=5, mew=0,
-            alpha=0.4,)
+    kw = {    
+        'color': 'gray',
+        'ms': 5,
+        'mew': 0,
+        'alpha':0.4,
+    }
+    kw.update(plot_kw)
+    ax.plot(x, y, '.', data=df+1, label=f'all (R={R:.2f})', **kw)
 
     if y+'_lo' in df.columns and x+'_lo' in df.columns:
         up = df[y+'_lo'] > df[x+'_hi']
