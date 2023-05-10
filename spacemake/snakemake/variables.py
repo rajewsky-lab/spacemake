@@ -1,5 +1,7 @@
 # set root dir where the processed_data goes
 project_dir = "projects/{project_id}"
+config_path = "config.yaml"
+project_df = "project_df.csv"
 
 #################
 # DIRECTORY STR #
