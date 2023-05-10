@@ -110,6 +110,8 @@ adapters:
   dropseq_bead: AAGCAGTGGTATCAACGCAGAGTAC
   polyA: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
   polyG: GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+  nextflex_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACTGACCAATCTCGTATGCCGTCTTCTGCTTGAA
+  truseq_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACCCGTCCA
 
 adapter_flavors:
   SMARTER:
@@ -160,7 +162,61 @@ adapter_flavors:
         max_error: 0.1
         min_overlap: 3
     paired_end: single-end
-        
+  dropseq:
+    cut_left:
+    - TSO_SMART:
+        max_errors: 0.1
+        min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 30
+    - polyA:
+        max_errors: 0.25
+        min_overlap: 3
+    - polyG:
+        max_errors: 0.1
+        min_overlap: 3
+    paired_end: single-end
+  fc_SMART_UMI_RPE:
+    cut_left:
+    - TSO_SMART:
+        max_errors: 0.1
+        min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 32
+    - polyG:
+        max_errors: 0.25
+        min_overlap: 3
+    - Q:
+        min_base_quality: 32
+    - polyA:
+        max_errors: 0.25
+        min_overlap: 3
+  slac_10x:
+    cut_left:
+    - TSO_10x:
+        max_errors: 0.1
+        min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 32
+    - polyG:
+        max_errors: 0.2
+        min_overlap: 3
+    - polyA:
+        max_errors: 0.25
+        min_overlap: 3
+  truseq:
+    cut_right:
+    - Q:
+        min_base_quality: 29
+    - polyG:
+        max_errors: 0.2
+        min_overlap: 3
+    - truseq_RA3:
+        max_errors: 0.2
+        min_overlap: 3        
 quant:
   default:
     counter_class: "spacemake.quant.mRNACounter"
