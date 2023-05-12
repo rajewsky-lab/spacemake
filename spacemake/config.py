@@ -560,9 +560,9 @@ class ConfigFile:
             if variable == "adapters":
                 self.variables[variable].update(values)
             elif variable == "adapter_flavors":
-                raise NotImplementedError(
+                raise SpacemakeError(
                     (
-                        "Updating ofadapter flavors is not implemented! "
+                        "Updating of adapter flavors is not implemented! "
                         "please delete the flavor and then add aggain."
                     )
                 )
@@ -1089,7 +1089,7 @@ def setup_config_parser(parent_parser_subparsers):
     return parser_config
 
 
-@message_aggregation(logger_name)
+@message_aggregation(log_listen=logger_name)
 def add_update_delete_variable_cmdline(args):
     # set the name and delete from dictionary
     name = args["name"]
