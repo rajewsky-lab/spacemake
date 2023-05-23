@@ -188,7 +188,10 @@ class ConfigFile:
         import collections.abc as abc
         def recurse(d):
             if type(d) == str:
-                return d.format(**kw)
+                try:
+                    return d.format(**kw)
+                except KeyError:
+                    return d
 
             if isinstance(d, abc.Mapping):
                 for key, value in d.items():
