@@ -267,15 +267,17 @@ def scatter(df, x, y, hilight=[], cutoff=10, xlabel=None, ylabel=None, cmap='tab
     
     #hilight += df.index[up].to_list()
     #hilight += df.index[do].to_list()
-    for h in hilight:
-        select = df.index.str.contains(h)
-        if not select.sum():
-            continue
-    
-        if len(xerr) or len(yerr):
-            ax.errorbar(x, y, data=df.loc[select] + 1, xerr=xerr[:, select], yerr=yerr[:, select], alpha=0.4, marker='o', ms=6, label=h, mfc='none', mew=2, zorder=len(df) + 1, ls='')
-        else:
-            ax.plot(x, y, "o", data=df.loc[select] + 1, ms=6, label=h, mfc='none', mew=2, zorder=len(df) + 1)            
+    import collections
+    if isinstance(hilight, collections.abc.Container):
+        for h in hilight:
+            select = df.index.str.contains(h)
+            if not select.sum():
+                continue
+        
+            if len(xerr) or len(yerr):
+                ax.errorbar(x, y, data=df.loc[select] + 1, xerr=xerr[:, select], yerr=yerr[:, select], alpha=0.4, marker='o', ms=6, label=h, mfc='none', mew=2, zorder=len(df) + 1, ls='')
+            else:
+                ax.plot(x, y, "o", data=df.loc[select] + 1, ms=6, label=h, mfc='none', mew=2, zorder=len(df) + 1)
             
     ax.legend(loc="center left", bbox_to_anchor=(1, 0.5), frameon=False, handletextpad=0.4)
 
