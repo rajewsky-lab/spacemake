@@ -1,5 +1,33 @@
 import argparse
 import pandas as pd
+"""
+Global Coordinate System Generator for Novaseq S4 Flow Cell
+
+This Python script is designed to create a global coordinate system 
+for a Novaseq S4 flow cell. 
+
+It generates a DataFrame with puck names and their corresponding global 
+(x, y, z) coordinates and saves it to a CSV file.
+
+Usage:
+    python create_novaseq_S4_coordinate_system.py --output <output_file> [options]
+
+Example:
+    python create_novaseq_S4_coordinate_system.py \
+        --output output.csv \
+        --format-string fc_009_L{lane}{side_letter}_tile_{side_number}{column}{row:02d} \
+        --x-offset 33739 \
+        --y-offset 36282 \
+        --swath-offset-odd 0 \
+        --swath-offset-even 6201 \
+        --rows 78 \
+        --columns 6 \
+        --n_lanes 4 \
+        --zero-coded
+
+Author:
+    Daniel León-Periñán
+"""
 
 def setup_parser(parser):
     parser.add_argument(
@@ -80,16 +108,41 @@ def setup_parser(parser):
 
 
 def create_coordinate_system(
-    n_lanes,
-    n_cols,
-    n_rows,
-    x_offset,
-    y_offset,
-    swath_offsets_odd,
-    swath_offsets_even,
-    zero_coded,
-    format_string,
-):
+    n_lanes: int,
+    n_cols: int,
+    n_rows: int,
+    x_offset: int,
+    y_offset: int,
+    swath_offsets_odd: int,
+    swath_offsets_even: int,
+    zero_coded: bool,
+    format_string: str,
+) -> pd.DataFrame:
+    """
+    Create a global coordinate system for a Novaseq S4 flow cell.
+
+    :param n_lanes: Number of lanes in the flow cell.
+    :type n_lanes: int
+    :param n_cols: Number of columns in the flow cell.
+    :type n_cols: int
+    :param n_rows: Number of rows in the flow cell.
+    :type n_rows: int
+    :param x_offset: Offset in the x-axis for coordinate calculations.
+    :type x_offset: int
+    :param y_offset: Offset in the y-axis for coordinate calculations.
+    :type y_offset: int
+    :param swath_offsets_odd: Swath offset for odd columns.
+    :type swath_offsets_odd: int
+    :param swath_offsets_even: Swath offset for even columns.
+    :type swath_offsets_even: int
+    :param zero_coded: Whether row and column indices should start at 0, instead of 1.
+    :type zero_coded: bool
+    :param format_string:The format for puck names.
+    :type format_string: str
+    :returns: DataFrame with puck names and their corresponding global coordinates.
+    :rtype: pd.DataFrame
+    """
+
     one_coded_offset = 0 if zero_coded else 1
     swath_offsets = [swath_offsets_even, swath_offsets_odd]
     sides_letter = {1: "a", 2: "b"}
@@ -135,7 +188,7 @@ def cmdline():
     """cmdline."""
     parser = argparse.ArgumentParser(
         allow_abbrev=False,
-        description="create a global coordinate system for a novaseq S4 flow cell",
+        description="Global Coordinate System Generator for Novaseq S4 Flow Cell",
     )
     parser = setup_parser(parser)
     args = parser.parse_args()
