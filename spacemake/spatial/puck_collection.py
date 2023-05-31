@@ -12,6 +12,14 @@ DEFAULT_REGEX_PUCK_ID = "(L[1-4][a-b]_tile_[1-2][0-7][0-9][0-9])"
 
 
 def setup_parser(parser):
+    """
+    Set up command-line arguments for the script.
+
+    :param parser: Argument parser object.
+    :type parser: argparse.ArgumentParser
+    :returns: Updated argument parser object.
+    :rtype: argparse.ArgumentParser
+    """
     parser.add_argument(
         "--pucks",
         type=str,
@@ -91,10 +99,30 @@ def setup_parser(parser):
 
 
 def check_obs_unique(puck: anndata.AnnData, obs_key: str = "puck_id") -> bool:
+    """
+    Check if the observation keys in the AnnData object are unique.
+
+    :param puck: AnnData object.
+    :type puck: anndata.AnnData
+    :param obs_key: Observation key to check uniqueness, defaults to "puck_id".
+    :type obs_key: str, optional
+    :returns: True if the observation keys are unique, False otherwise.
+    :rtype: bool
+    """
     return puck.obs[obs_key].nunique() == 1
 
 
-def _transform_puck(puck: anndata.AnnData, pucks_transform: dict):
+def _transform_puck(puck: anndata.AnnData, pucks_transform: dict) -> anndata.AnnData:
+    """
+    Transform the spatial coordinates of the AnnData object.
+
+    :param puck: AnnData object.
+    :type puck: anndata.AnnData
+    :param pucks_transform: Dictionary containing puck transformations.
+    :type pucks_transform: dict
+    :returns: Transformed AnnData object.
+    :rtype: anndata.AnnData
+    """
     if not check_obs_unique(puck, "puck_id"):
         raise ValueError(f"puck_id exists in AnnData object but are not unique")
 
@@ -112,7 +140,21 @@ def create_puck_collection(
     puck_transform: dict,
     reset_index: bool = True,
     transform: bool = True,
-):
+) -> anndata.AnnData:
+    """
+    Create a puck collection with transformed spatial coordinates.
+
+    :param puck: AnnData object.
+    :type puck: anndata.AnnData
+    :param puck_transform: Dictionary containing puck transformations.
+    :type puck_transform: dict
+    :param reset_index: Flag to reset the observation index, defaults to True.
+    :type reset_index: bool, optional
+    :param transform: Flag to transform the spatial coordinates, defaults to True.
+    :type transform: bool, optional
+    :returns: Puck collection with transformed spatial coordinates.
+    :rtype: anndata.AnnData
+    """
     if reset_index:
         puck.obs_names = (
             puck.obs_names.astype(str) + ":" + puck.obs["puck_id"].astype(str)
@@ -124,7 +166,17 @@ def create_puck_collection(
     return puck
 
 
-def parse_puck_id_from_path(f: str, puck_id_regex: str = DEFAULT_REGEX_PUCK_ID):
+def parse_puck_id_from_path(f: str, puck_id_regex: str = DEFAULT_REGEX_PUCK_ID) -> str:
+    """
+    Parse the puck ID from the file path using the specified regex.
+
+    :param f: File path.
+    :type f: str
+    :param puck_id_regex: Regular expression to find the puck ID, defaults to DEFAULT_REGEX_PUCK_ID.
+    :type puck_id_regex: str, optional
+    :returns: Puck ID extracted from the file path.
+    :rtype: str
+    """
     import os
     import re
 
@@ -146,7 +198,22 @@ def read_pucks_to_list(
     puck_id: Union[int, List[int], None] = None,
     puck_id_regex: str = DEFAULT_REGEX_PUCK_ID,
     puck_id_key: str = "puck_id",
-):
+) -> List:
+    """
+    Read the pucks from file(s) and return a list of AnnData objects.
+
+    :param f: File path(s).
+    :type f: Union[str, List[str]]
+    :param puck_id: Puck ID(s), defaults to None.
+    :type puck_id: Union[int, List[int], None], optional
+    :param puck_id_regex: Regular expression to find the puck ID in file names, defaults to DEFAULT_REGEX_PUCK_ID.
+    :type puck_id_regex: str, optional
+    :param puck_id_key: Name of the variable where puck IDs are stored, defaults to "puck_id".
+    :type puck_id_key: str, optional
+    :returns: List of AnnData objects representing the pucks.
+    :rtype: List
+    """
+
     import scanpy as sc
 
     if type(f) is str:
@@ -191,7 +258,16 @@ def read_pucks_to_list(
     return pucks
 
 
-def parse_puck_coordinate_system_file(f: str):
+def parse_puck_coordinate_system_file(f: str) -> dict:
+    """
+    Parse the puck coordinate system file and return a dictionary.
+
+    :param f: File path of the coordinate system file.
+    :type f: str
+    :returns: Dictionary representing the puck coordinate system.
+    :rtype: dict
+    """
+
     import pandas as pd
 
     cs = pd.read_csv(f, sep="[,|\t]", engine="python")
@@ -213,7 +289,32 @@ def merge_pucks_to_collection(
     no_transform: bool = False,
     merge_output: str = "same",
     join_output: str = "inner",
-):
+) -> anndata.AnnData:
+    """
+    Merge multiple pucks into a single puck collection.
+
+    :param pucks: List of puck file paths.
+    :type pucks: List[str]
+    :param puck_id: List of puck IDs corresponding to the input files.
+    :type puck_id: List[str]
+    :param puck_coordinates: Name of the puck collection.
+    :type puck_coordinates: str
+    :param puck_id_regex: Regular expression to find the puck ID in file names, defaults to None.
+    :type puck_id_regex: str, optional
+    :param puck_id_key: Name of the variable where puck IDs are stored, defaults to "puck_id".
+    :type puck_id_key: str, optional
+    :param no_reset_index: Flag to not reset the observation index, defaults to False.
+    :type no_reset_index: bool, optional
+    :param no_transform: Flag to not transform the spatial coordinates, defaults to False.
+    :type no_transform: bool, optional
+    :param merge_output: How to merge pucks, can be "same", "unique", "first", or "only", defaults to "same".
+    :type merge_output: str, optional
+    :param join_output: How to join pucks, can be "inner" or "outer", defaults to "inner".
+    :type join_output: str, optional
+    :returns: Merged puck collection as an AnnData object.
+    :rtype: anndata.AnnData
+    """
+
     puck_transform = parse_puck_coordinate_system_file(puck_coordinates)
 
     pucks_list = read_pucks_to_list(pucks, puck_id, puck_id_regex, puck_id_key)
