@@ -6,12 +6,34 @@ import time
 
 from spacemake.util import message_aggregation, FASTQ_src
 
+"""
+Sequence intersection between a query file and target files.
+
+Usage:
+    python n_intersect_sequences.py \
+        --query input_reads.txt \
+        --target target_file1.txt target_file2.txt \
+        --target-id id1 id2 \
+        --summary-output output_summary.txt
+
+Author:
+    Daniel León-Periñán
+"""
+
 logger_name = "spacemake.snakemake.scripts.n_intersect_sequences"
 logger = logging.getLogger(logger_name)
 AVAILABLE_CPUS = mp.cpu_count()
 
 
 def setup_parser(parser):
+    """
+    Set up command-line arguments for the script.
+
+    :param parser: Argument parser object.
+    :type parser: argparse.ArgumentParser
+    :returns: Updated argument parser object.
+    :rtype: argparse.ArgumentParser
+    """
     parser.add_argument(
         "--query",
         type=str,
@@ -120,18 +142,44 @@ def setup_parser(parser):
     return parser
 
 
-def BAM_src(src, tag: str = None):
+def BAM_src(src: str, tag: str = None) -> tuple:
+    """
+    Generate read data from a BAM file.
+
+    :param src: Path to the BAM file.
+    :type src: str
+    :param tag: Tag to be used as the sequence. Defaults to None.
+    :type tag: str, optional
+    :yields: Tuple containing read name, sequence, and quality.
+    :rtype: tuple
+    """
+
     import pysam
 
     bam = pysam.AlignmentFile(src, "rb", check_sq=False)
-    for read in tqdm.tqdm(bam.fetch(until_eof=True)):
+    for read in bam.fetch(until_eof=True):
         if tag is None:
             yield read.query_name, read.query_sequence, read.query_qualities
         else:
             yield None, read.get_tag(tag), None
 
 
-def plain_src(f: str, skip: int = 0, column: int = 0, separator: str = "\t"):
+def plain_src(f: str, skip: int = 0, column: int = 0, separator: str = "\t") -> tuple:
+    """
+    Generate read data from a plain text file.
+
+    :param f: Path to the plain text file.
+    :type f: str
+    :param skip: Number of lines to skip. Defaults to 0.
+    :type skip: int, optional
+    :param column: Column to parse from the file. Defaults to 0.
+    :type column: int, optional
+    :param separator: Character for column separation. Defaults to "\t".
+    :type separator: str, optional
+    :yields: Tuple containing read name, sequence, and quality.
+    :rtype: tuple
+    """
+    
     reads = pd.read_csv(f, sep=separator, skiprows=skip)
     reads = reads.iloc[:, column]
 
@@ -141,7 +189,23 @@ def plain_src(f: str, skip: int = 0, column: int = 0, separator: str = "\t"):
 
 def read_with_tag(
     f: str, tag: str = None, skip: int = None, column: int = 0, separator: str = "\t"
-):
+) -> str:  
+    """
+    Read data from various sources based on the file type.
+
+    :param f: Path to the input file.
+    :type f: str
+    :param tag: Tag to be used as the sequence. Defaults to None.
+    :type tag: str, optional
+    :param skip: Number of lines to skip (plain text files only). Defaults to None.
+    :type skip: int, optional
+    :param column: Column to parse from the file (plain text files only). Defaults to 0.
+    :type column: int, optional
+    :param separator: Character for column separation (plain text files only). Defaults to "\t".
+    :type separator: str, optional
+    :yields: Sequence from the input file.
+    :rtype: str
+    """
     import gzip
 
     if type(f) is not str:
@@ -160,7 +224,15 @@ def read_with_tag(
 
 
 # TODO: use a partial function to pass args to not use global context
-def find_matches(f):
+def find_matches(f: str):
+    """
+    Find matches between query and target sequences.
+
+    :param f: Target file to compare against query sequences.
+    :type f: str
+    :returns: Tuple containing information about the target file, number of barcodes, number of matching barcodes, and the matching ratio.
+    :rtype: tuple
+    """
     global query_seqs, args
 
     start = time.time()
