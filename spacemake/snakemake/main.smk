@@ -391,8 +391,7 @@ rule create_dge:
         umi_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{UMI}']
-    # at most 8 dges will be created the same time
-    threads: max(workflow.cores * 0.125, 1)
+    threads: 1
     shell:
         """
         mkdir -p {params.dge_root}
@@ -545,8 +544,7 @@ rule create_automated_report:
     input:
         unpack(get_parsed_puck_file),
         **automated_analysis_processed_data_files,
-    # spawn at most 4 automated analyses
-    threads: max(workflow.cores / 8, 1)
+    threads: 1
     output:
         automated_report
     params:
