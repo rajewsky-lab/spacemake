@@ -44,9 +44,16 @@ def get_saturation_analysis_input(wildcards):
 
     run_modes = get_run_modes_from_sample(wildcards.project_id, wildcards.sample_id)
 
+    if project_df.is_spatial(project_id=wildcards.project_id,
+                             sample_id=wildcards.sample_id,
+                             puck_barcode_file_id=wildcards.puck_barcode_file_id):
+        puck_barcode_file_ids = [wildcards.puck_barcode_file_id, 'no_spatial_data']
+    else:
+        puck_barcode_file_ids = ['no_spatial_data']
+
     for run_mode in run_modes:
         for ratio in downsampled_ratios:
-            for puck_barcode_file_id in [wildcards.puck_barcode_file_id, 'no_spatial_data']:
+            for puck_barcode_file_id in puck_barcode_file_ids:
                 # dge_files contains dge/summary file paths per run_mode
                 files[f'downsampled_dge_summary.{run_mode}.{ratio}.{puck_barcode_file_id}'] = get_dge_from_run_mode(
                     project_id = wildcards.project_id,
@@ -56,7 +63,7 @@ def get_saturation_analysis_input(wildcards):
                     puck_barcode_file_id = puck_barcode_file_id,
                     downsampling_percentage = '/' + str(ratio))['dge_summary']
 
-        for puck_barcode_file_id in [wildcards.puck_barcode_file_id, 'no_spatial_data']:
+        for puck_barcode_file_id in puck_barcode_file_ids:
             files[f'downsampled_dge_summary.{run_mode}.100.{puck_barcode_file_id}'] = get_dge_from_run_mode(
                 project_id = wildcards.project_id,
                 sample_id = wildcards.sample_id,
