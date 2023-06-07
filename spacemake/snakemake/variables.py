@@ -239,11 +239,14 @@ final_bam_mm_included_pipe = complete_data_root + "/final" + bam_mm_included_pip
 downsampled_bam = (
     downsampled_data_root + "/final_downsampled{polyA_adapter_trimmed}.bam"
 )
+# downsampled_bam_mm_included_pipe = (
+#     downsampled_data_root + "/final_downsampled" + bam_mm_included_pipe_suffix
+# )
 downsampled_bam_mm_included_pipe = (
-    downsampled_data_root + "/final_downsampled" + bam_mm_included_pipe_suffix
+    downsampled_data_root + "/final_downsampled{polyA_adapter_trimmed}.bam"
 )
 downsample_saturation_analysis = (
-    downsampled_data_prefix + "/{project_id}_{sample_id}_saturation_analysis.html"
+    downsampled_data_prefix + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.html"
 )
 
 

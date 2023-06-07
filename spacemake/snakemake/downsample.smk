@@ -46,24 +46,24 @@ def get_saturation_analysis_input(wildcards):
 
     for run_mode in run_modes:
         for ratio in downsampled_ratios:
-        # dge_files contains dge/summary file paths per run_mode
-            dge_summary = get_dge_from_run_mode(
+            for puck_barcode_file_id in [wildcards.puck_barcode_file_id, 'no_spatial_data']:
+                # dge_files contains dge/summary file paths per run_mode
+                files[f'downsampled_dge_summary.{run_mode}.{ratio}.{puck_barcode_file_id}'] = get_dge_from_run_mode(
+                    project_id = wildcards.project_id,
+                    sample_id = wildcards.sample_id,
+                    run_mode = run_mode,
+                    data_root_type = 'downsampled_data',
+                    puck_barcode_file_id = puck_barcode_file_id,
+                    downsampling_percentage = '/' + str(ratio))['dge_summary']
+
+        for puck_barcode_file_id in [wildcards.puck_barcode_file_id, 'no_spatial_data']:
+            files[f'downsampled_dge_summary.{run_mode}.100.{puck_barcode_file_id}'] = get_dge_from_run_mode(
                 project_id = wildcards.project_id,
                 sample_id = wildcards.sample_id,
                 run_mode = run_mode,
-                data_root_type = 'downsampled_data',
-                puck_barcode_file_id = 'no_spatial_data',
-                downsampling_percentage = '/' + str(ratio))['dge_summary']
-
-            files[f'downsampled_dge_summary.{run_mode}.{ratio}'] = dge_summary
-
-        files[f'downsampled_dge_summary.{run_mode}.100'] = get_dge_from_run_mode(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id,
-            run_mode = run_mode,
-            data_root_type = 'complete_data',
-            puck_barcode_file_id = 'no_spatial_data',
-            downsampling_percentage = '')['dge_summary']
+                data_root_type = 'complete_data',
+                puck_barcode_file_id = puck_barcode_file_id,
+                downsampling_percentage = '')['dge_summary']
 
     return files
 
