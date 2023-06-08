@@ -30,7 +30,7 @@ rule downsampled_filter_mm_reads:
     input:
         downsampled_bam
     output:
-        pipe(downsampled_bam_mm_included_pipe)
+        temp(downsampled_bam_mm_included_pipe)
     shell:
         """
         python {repo_dir}/scripts/filter_mm_reads.py \
