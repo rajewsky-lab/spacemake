@@ -78,7 +78,7 @@ def setup_parser(parser):
         type=str,
         help='how to join pucks, can be "inner", "outer"',
         choices=["inner", "outer"],
-        default="inner",
+        default="outer",
     )
 
     parser.add_argument(
