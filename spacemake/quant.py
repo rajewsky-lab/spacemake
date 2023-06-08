@@ -113,6 +113,7 @@ class BaseCounter:
         intronic_tags = default_intronic_tags,
         X_counts=default_X_counts,
         X_reads=default_X_reads,
+        handle_multimappers=True,
 
         uniq=set(),
         stats=defaultdict(int),
@@ -127,6 +128,7 @@ class BaseCounter:
         self.count_X_channels = set(X_counts)
         # which channels shall contribute to the adata.layers['reads'] (main channel reads version)
         self.read_X_channels = set(X_reads)
+        self.handle_multimappers = handle_multimappers
   
         self.stats = stats
         self.uniq = uniq
@@ -195,7 +197,7 @@ class BaseCounter:
         if len(bundle) == 1:
             self.stats['N_aln_unique'] += 1
             selected = self.unique_alignment(bundle)
-        else:
+        elif self.handle_multimappers:
             self.stats['N_aln_multi'] += 1
             selected = self.select_alignment(bundle)
             if selected:
