@@ -192,6 +192,7 @@ def stitch_mRNA_and_miRNA(mdata_path, midata_path, mrna_umi_cutoff=1000, mirna_u
         ambient_mrna = 0
     mdata.var['ambient'] = ambient_mrna
     # print(f"initial mdata {mdata}")
+    mdata = add_common_metrics(mdata, protein_coding_genes_path=protein_coding_genes_path, mt_gene_pattern=mt_gene_pattern)
     
     midata = sc.read_h5ad(midata_path)
     # print(f"initial midata {midata}")
@@ -459,6 +460,12 @@ def add_common_metrics(adata, mt_gene_pattern="^mt-", protein_coding_genes_path=
 
     adata.obs['pct_coding'] = (100.0 * adata.obs['n_coding_counts']) / adata.obs['n_counts']
     adata.obs['pct_mt'] = (100.0 * adata.obs['n_mt_counts']) / adata.obs['n_counts']
+
+    if 'reference' in adata.var:
+        for ref in adata.var['reference'].drop_duplicates():
+            print(ref)
+            m = adata.var['reference'] == ref
+            adata.obs[f'n_{ref}_counts'] = adata[:, m].X.sum(axis=1)
 
     return adata
 
