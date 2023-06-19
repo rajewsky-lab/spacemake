@@ -392,8 +392,9 @@ def dict_merge(sources):
 
 def get_input_params(args):
     import pandas as pd
+    import csv
     if str(args.matrix) != "None":
-        df = pd.read_csv(args.matrix, sep=',', index_col=None)
+        df = pd.read_csv(args.matrix, sep=',', index_col=None, quoting=csv.QUOTE_NONE)
         if not 'R1' in df.columns:
             df['R1'] = 'None'
 
@@ -401,7 +402,6 @@ def get_input_params(args):
         R2 = df['R2'].to_list()
         # TODO extract other column values into a list of dictionaries (most importantly cell=...)
         # which can override how the formatter in the workers processes the raw reads
-
         if 'cell' in df.columns:
             # params = [{'cell': f'"{c}"'} for c in df['cell']]
             params = [{'cell': c} for c in df['cell']]
