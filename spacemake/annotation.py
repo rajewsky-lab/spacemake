@@ -349,30 +349,59 @@ class CompiledClassifier:
 
         return (gn, gf, gt)
 
-    def process(self, cidx):
+    def process(self, cidx, check_contained=False):
         # fast path
+        gene_contains = defaultdict(int)
+
+        if check_contained:
+            cidx, start_included, end_included = cidx
+            for idx, si, ei in zip(cidx, start_included, end_included):
+                c = self.classifications[self.cid_table[idx]]
+                for gene in c[0]:
+                    gene_contains[gene] |= si
+                    gene_contains[gene] |= 2*ei
+
         if len(cidx) == 1:
             # fast path
             idx = cidx.pop()
             ann = self.classifications[self.cid_table[idx]]
-            return ann
+        else:
+            ann = self.joiner(cidx)
 
-        return self.joiner(cidx)
+        if check_contained:
+            for gene, fcontains in gene_contains.items():
+                if fcontains < 3:
+                    ann[0].append(gene)
+                    ann[1].append('-')
+                    ann[2].append('-')
+
+        return ann
 
 
 ## Helper functions for working with NCLS
-def query_ncls(nc, x0, x1):
+def query_ncls(nc, x0, x1, check_contained=False):
     """
     report only the target_ids from the overlapping
     (start, end, id) tuples returned by NCLS.find_overlap().
     format is frozenset bc that can be hashed and used as a key.
     TODO: directly hook into NCLSIterator functionality to get rid of this overhead
     """
-    res = [o[2] for o in nc.find_overlap(x0, x1)]
+    
+    if check_contained:
+        keys = []
+        start_contained = []
+        end_contained = []
+        for start, end, key in nc.find_overlap(x0, x1):
+            start_contained.append(x0 >= start)
+            end_contained.append(x1 <= end)
+            keys.append(key)
 
-    # print(f"query ({x0} - {x1}) strand ={strand} -> {res}")
-    return res
-
+        # print(f"query ({x0} - {x1}) strand ={strand} -> {res}")
+        return keys, start_contained, end_contained
+    
+    else:
+        res = [o[2] for o in nc.find_overlap(x0, x1)]
+        return res
 
 def decompose(nc):
     """
@@ -532,29 +561,29 @@ class GenomeAnnotation:
 
     #         assert idx.max() < len(df)
 
-    def query_idx(self, chrom, start, end):
+    def query_idx(self, chrom, start, end, **kw):
         nested_list = self.chrom_ncls_map.get(chrom, [])
         # print(f"nested list for {chrom} -> {nested_list}")
         if nested_list:
-            return query_ncls(nested_list, start, end)
+            return query_ncls(nested_list, start, end, **kw)
         else:
             return self.empty
 
-    def query_idx_blocks(self, chrom, blocks):
+    def query_idx_blocks(self, chrom, blocks, **kw):
         idx = []
         for start, end in blocks:
-            idx.extend(self.query_idx(chrom, start, end))
+            idx.extend(self.query_idx(chrom, start, end, **kw))
 
         return idx
 
     # TODO: do we ever need query_idx_blocks separate from query?
-    def query(self, chrom, start, end):
-        idx = self.query_idx(chrom, start, end)
-        return self.classifier.process(idx)
+    def query(self, chrom, start, end, **kw):
+        idx = self.query_idx(chrom, start, end, **kw)
+        return self.classifier.process(idx, **kw)
 
-    def query_blocks(self, chrom, blocks):
-        idx = self.query_idx_blocks(chrom, blocks)
-        return self.classifier.process(idx)
+    def query_blocks(self, chrom, blocks, **kw):
+        idx = self.query_idx_blocks(chrom, blocks, **kw)
+        return self.classifier.process(idx, **kw)
 
     def compile(self, path=""):
         if self.is_compiled:
@@ -644,7 +673,7 @@ class GenomeAnnotation:
             else:
                 return values
 
-        gn, gf, gt = self.query_blocks(chrom, blocks)
+        gn, gf, gt = self.query_blocks(chrom, blocks, check_contained=False)  # True is experimental and breaks stuff
         if len(gf):
             gn = ",".join(collapse_tag_values(gn))
             gf = ",".join(gf)
