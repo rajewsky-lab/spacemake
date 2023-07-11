@@ -81,7 +81,6 @@ def get_output_files(
 
         for run_mode in row["run_mode"]:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
-
             if "polyA_adapter_trimmed" in kwargs:
                 polyA_adapter_trimmed = kwargs["polyA_adapter_trimmed"]
             else:
