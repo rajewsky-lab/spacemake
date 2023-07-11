@@ -19,11 +19,17 @@ class BCTree:
         self.root = None
 
     def load_tile_data(self, fnames):
+        import gzip
         t0 = time()
         n = 0
         for fname in fnames:
             tile = int(fname.split(".txt")[0].split('_')[-1])
-            n_read = bctree.read_txt_to_buf(open(fname), self.buf[n:], tile=tile)
+            if fname.endswith(".gz"):
+                src = gzip.open(fname, 'rt')
+            else:
+                src = open(fname)
+
+            n_read = bctree.read_txt_to_buf(src, self.buf[n:], tile=tile)
             n += n_read
         
         self.n = n
@@ -36,11 +42,21 @@ class BCTree:
     
     def sort(self):
         # TODO: replace with faster, parallel implementation (e.g. parallel numpy)
+        try:
+            import pnumpy as pn
+            pn.thread_setworkers(16)
+        except ImportError:
+            self.logger.warning("Can not import pnumpy. Sorting will be slow.")
+
         t0 = time()
         
-        # in-place sorting
-        self.buf[:self.n].sort()
+        ## in-place sorting is slow
+        #self.buf[:self.n].sort()
         
+        # faster to sort on the idx integers only and then re-order
+        I = self.buf['idx'][:self.n].argsort()
+        self.buf = self.buf[I]
+
         t1 = time()
         dt = t1 - t0
         self.logger.info(f"{1000 * dt:.2f} msec sorting {self.n} barcode records")
@@ -92,10 +108,21 @@ def compile(fnames, dbname='bctree.npy'):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    # bc = compile(["fc_010_L3_tile_2267.txt"])
-    # bc = compile(["fc_010_L3_tile_2267.txt", "fc_010_L3_tile_2268.txt", "fc_010_L3_tile_2269.txt"], 'bctree.npy')
-    # bc.check_contains_batch()
 
+    ## 2.4M smallest example. Should be very fast
+    # bc = compile(["fc_010_L3_tile_2267.txt"])
+
+    ## 8M barcodes
+    # bc = compile(["fc_010_L3_tile_2267.txt", "fc_010_L3_tile_2268.txt", "fc_010_L3_tile_2269.txt"], 'bctree.npy')
+    
+    ## 216M barcodes + testing gz input -> takes ~4.5 GB on disk
+    # from glob import glob
+    # fnames = glob("/data/rajewsky/projects/slide_seq/puck_data/seq_scope_inhouse_fc_sts_nova5_FC_010_230109/fc_010_L3_tile_22*.gz")
+    # print(fnames)
+    # bc = compile(fnames)
+
+    # bc.check_contains_batch()
+    
     bc = BCTree.from_disk('bctree.npy')
     bc.check_contains_batch()
 

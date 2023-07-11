@@ -46,8 +46,8 @@ cpdef inline seq_to_index(str py_str):
     cdef UINT32_t L = len(py_str)
     cdef UINT8_t x = 0
     cdef UINT8_t nt = 0
-    cdef bytes py_byte_str = py_str.encode('ascii')
-    cdef unsigned char *seq = py_byte_str
+    #cdef bytes py_byte_str = 
+    cdef const unsigned char[:] seq = py_str.encode('ascii')
     
     cdef UINT64_t idx = 0
     for x in range(L):
