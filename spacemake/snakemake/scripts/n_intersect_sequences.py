@@ -247,7 +247,7 @@ def find_matches(f: str):
     )
     n_matches = len(target.intersection(query_seqs))
     pct_matches_target = n_matches / len(target)
-    print(f"queried {f} in {(time.time()-start)} s")
+    print(f"queried {f} in {round(time.time()-start, 2)} s")
 
     return (f, len(target), n_matches, pct_matches_target)
 
