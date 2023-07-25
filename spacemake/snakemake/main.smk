@@ -180,7 +180,8 @@ rule downsample:
     input:
         get_output_files(downsample_saturation_analysis,
             samples = config['samples'],
-            projects = config['projects'])
+            projects = config['projects'],
+            puck_barcode_file_matching_type = "spatial_matching")
 
 #############
 # NOVOSPARC #
@@ -458,7 +459,6 @@ rule create_dge:
         umi_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{UMI}']
-    # at most 8 dges will be created the same time
     threads: 1
     shell:
         """
@@ -654,7 +654,6 @@ rule create_automated_analysis_processed_data_files:
 rule create_automated_report:
     input:
         **automated_analysis_processed_data_files,
-    # spawn at most 4 automated analyses
     threads: 1
     output:
         automated_report
