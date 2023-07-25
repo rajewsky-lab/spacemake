@@ -162,7 +162,8 @@ rule downsample:
     input:
         get_output_files(downsample_saturation_analysis,
             samples = config['samples'],
-            projects = config['projects'])
+            projects = config['projects'],
+            puck_barcode_file_matching_type = "spatial_matching")
 
 #############
 # NOVOSPARC #
