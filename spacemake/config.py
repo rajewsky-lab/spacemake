@@ -27,8 +27,15 @@ def get_puck_parser(required=True):
         "--barcodes",
         type=str,
         required=False,
-        help="path to barcode file. of not provided the --puck_barcode_file variable"
+        help="path to barcode file. if not provided, the --puck_barcode_file variable"
         + " of `spacemake projects add_sample` has to be set",
+    )
+    parser.add_argument(
+        "--coordinate_system",
+        type=str,
+        required=False,
+        help="path to coordinate system file. When specified, spacemake will 'stitch'"
+        + " pucks into a single file, with corresponding global coordinates",
     )
 
     return parser
@@ -136,6 +143,14 @@ def get_run_mode_parser(required=True):
         required=False,
         help="distance between mesh spots in um. to create a visium-style "
         + "mesh use 100um",
+    )
+    parser.add_argument(
+        "--spatial_barcode_min_matches",
+        type=float,
+        required=False,
+        default=0,
+        help="minimum ratio (0, 1] of spatial barcode matches to further consider a puck"
+        + "across the rest of the pipeline",
     )
 
     return parser
@@ -390,6 +405,7 @@ class RunMode(ConfigMainVariable):
         "mesh_type": str,
         "mesh_spot_diameter_um": int,
         "mesh_spot_distance_um": int,
+        "spatial_barcode_min_matches": float,
     }
 
     def has_parent(self):
@@ -407,7 +423,7 @@ class RunMode(ConfigMainVariable):
 
 
 class Puck(ConfigMainVariable):
-    variable_types = {"barcodes": str, "spot_diameter_um": float, "width_um": int}
+    variable_types = {"barcodes": str, "spot_diameter_um": float, "width_um": int, "coordinate_system": str}
 
     @property
     def has_barcodes(self):
@@ -415,6 +431,14 @@ class Puck(ConfigMainVariable):
             "barcodes" in self.variables
             and self.variables["barcodes"]
             and self.variables["barcodes"] != "None"
+        )
+    
+    @property
+    def has_coordinate_system(self):
+        return (
+            "coordinate_system" in self.variables
+            and self.variables["coordinate_system"]
+            and self.variables["coordinate_system"] != "None"
         )
 
 
@@ -720,8 +744,9 @@ class ConfigFile:
         self.variables["species"][name] = species_refs
         return species_refs
 
-    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None):
+    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None, coordinate_system=None):
         assert_file(barcodes, default_value=None, extension="all")
+        assert_file(coordinate_system, default_value=None, extension="all")
 
         puck = {}
 
@@ -733,6 +758,10 @@ class ConfigFile:
 
         if barcodes is not None:
             puck["barcodes"] = barcodes
+
+        if coordinate_system is not None:
+            puck["coordinate_system"] = coordinate_system
+
 
         return puck
 

@@ -8,6 +8,7 @@ import re
 import logging
 import time
 
+from spacemake.config import Puck
 from spacemake.errors import *
 from spacemake.config import ConfigFile
 from spacemake.util import message_aggregation, assert_file, str_to_list
@@ -688,6 +689,66 @@ class ProjectDF:
 
         self.logger = logging.getLogger(logger_name)
 
+    def assert_valid(self):
+        """assert_valid.
+
+        this function iterates over projects/samples in the project_df, and asserts
+        whether the specified variables are in accordance with the configuration file,
+        and whether the specified files (R1, R2, puck_barcode_files) exist at the
+        specified locations.
+        """
+
+        project_df_column_to_config_varname = {
+            "run_mode": "run_modes",
+            "species": "species",
+            "barcode_flavor": "barcode_flavors",
+            "puck": "pucks",
+        }
+        if not hasattr(self, 'df'):
+            raise SystemExit(ValueError("The 'project_df' does not exist in the ProjectDF object or is empty"))
+        elif self.df.empty:
+            logger.warn("The 'project_df' in the ProjectDF object is empty")
+
+        for index, row in self.df.iterrows():
+            # check that sample sheet file exists
+            if (row['sample_sheet'] is not None) and (not os.path.exists(row['sample_sheet'])):
+                raise SystemExit(FileNotFoundError(f"At {index}, the 'sample_sheet' file does not exist"))
+            
+            # checking that variables are what they're supposed to be (according to config file)
+            for pdf_col, config_var in project_df_column_to_config_varname.items():
+                if type(row[pdf_col]) is list:
+                    for _it_row in row[pdf_col]:
+                        self.config.assert_variable(f'{config_var}', _it_row)
+                elif type(row[pdf_col]) is str:
+                    self.config.assert_variable(f'{config_var}', row[pdf_col])
+            
+            # check that puck_barcode_file(s), R1 and R2 files exist
+            for n_col in ['puck_barcode_file', 'R1', 'R2']:
+                if type(row[n_col]) is list:
+                    for _it_row in row[n_col]:
+                        if not os.path.exists(_it_row):
+                            raise SystemExit(FileNotFoundError(f"At {index}, the {n_col} file does not exist"))
+                elif type(row[n_col]) is str and row[n_col] != '':
+                    if not os.path.exists(row[n_col]):
+                        raise SystemExit(FileNotFoundError(f"At {index}, the {n_col} file does not exist"))
+                    
+            # check that pucks are specified only if puck is spatial (or puck_collection is enabled)
+            _valid_puck_coordinate = True
+            if row['puck_barcode_file'] is None:
+                _valid_puck_coordinate = False
+            elif type(row['puck_barcode_file']) is list:
+                if len(row['puck_barcode_file']) == 0:
+                    _valid_puck_coordinate = False
+            elif type(row['puck_barcode_file']) is str and row['puck_barcode_file'] == '':
+                _valid_puck_coordinate = False
+                    
+            if not _valid_puck_coordinate:
+                _puck_vars = self.get_puck_variables(project_id = index[0], sample_id = index[1])
+                if _puck_vars['coordinate_system'] != '':
+                    raise SystemExit(SpacemakeError(f"At {index}, the selected puck '{row['puck']}' " + \
+                                                    "contains a coordinate_system " + \
+                                                    "but no 'puck_barcode_files' are specified"))
+
     def create_empty_df(self):
         index = pd.MultiIndex(
             names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
@@ -876,7 +937,9 @@ class ProjectDF:
         self, project_id: str, sample_id: str, puck_barcode_file_id: str
     ) -> bool:
         """Returns true if a sample with index (project_id, sample_id) is spatial,
-        meaning that it has spatial barcodes attached.
+        meaning that it has spatial barcodes attached. Or, if the puck_barcode_file_id
+        is 'puck_collection', meaning that the same is necessarily spatial (transformed
+        from local to global coordinates)
 
         :param project_id:
         :type project_id: str
@@ -891,7 +954,7 @@ class ProjectDF:
             puck_barcode_file_id=puck_barcode_file_id,
         )
 
-        if puck_barcode_file is not None:
+        if puck_barcode_file is not None or puck_barcode_file_id == "puck_collection":
             return True
         else:
             return False
@@ -1062,6 +1125,7 @@ class ProjectDF:
         sample_id: str,
         puck_barcode_file_id: str,
     ):
+        import numpy as np
         summary_file = puck_barcode_files_summary.format(
             project_id=project_id, sample_id=sample_id
         )
@@ -1071,12 +1135,51 @@ class ProjectDF:
 
         df = pd.read_csv(summary_file)
 
-        df = df.loc[df.puck_barcode_file_id == puck_barcode_file_id]
+        df_puck = df.loc[df.puck_barcode_file_id == puck_barcode_file_id]
 
-        if df.empty:
+        # we calculate the stats for the puck_collection here
+        # the max and min coordinates are not in global system
+        if puck_barcode_file_id == "puck_collection":
+            def multi_func(functions):
+                def f(col):
+                    return functions[col.name](col)
+                return f
+
+            df_pc = df._get_numeric_data() \
+                        .apply(multi_func({'x_pos_min_px': np.min, 
+                                          'x_pos_max_px': np.max, 
+                                          'y_pos_min_px': np.min,
+                                          'y_pos_max_px': np.max, 
+                                          'n_barcodes': np.mean,
+                                          'n_matching': np.mean,
+                                          'matching_ratio': np.mean,
+                                          'px_by_um': np.mean}))
+
+            return df_pc.to_dict()
+
+        if df_puck.empty:
             return None
         else:
-            return df.iloc[0].to_dict()
+            return df_puck.iloc[0].to_dict()
+        
+    def get_puck(
+            self, project_id: str, sample_id: str, return_empty=False
+    ) -> Puck:
+        """get_puck.
+
+        :param project_id: project_id of a sample
+        :type project_id: str
+        :param sample_id: sample_id of a sample
+        :type sample_id: str
+        :param return_empty:
+        :return: A Puck object containing puck object
+        :rtype: Puck
+        """
+        puck_name = self.get_metadata(
+            "puck", project_id=project_id, sample_id=sample_id
+        )
+
+        return self.config.get_puck(puck_name, return_empty=return_empty)
 
     def get_puck_variables(
         self, project_id: str, sample_id: str, return_empty=False

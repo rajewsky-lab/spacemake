@@ -350,6 +350,15 @@ def spacemake_init(args):
         dest_visium_path,
     )
 
+    # copy novaseq_S4_coordinate_system
+    dest_puck_collection_path = "puck_data/novaseq_S4_coordinate_system.csv"
+    logger.info(f"Moving puck collection coordinate system to {dest_puck_collection_path}")
+    os.makedirs(os.path.dirname(dest_puck_collection_path), exist_ok=True)
+    copyfile(
+        os.path.join(os.path.dirname(__file__), "data/puck_collection/novaseq_S4_coordinate_system.csv"),
+        dest_puck_collection_path,
+    )
+
     # save
     cf.dump()
 
@@ -424,6 +433,36 @@ def get_novosparc_variables(pdf, args):
 
     return ret
 
+def update_project_df_barcode_matches(prealigned=False):
+    from spacemake.snakemake.variables import puck_count_barcode_matches_summary, puck_count_prealigned_barcode_matches_summary
+
+    if prealigned:
+        _bc_file = puck_count_prealigned_barcode_matches_summary
+    else:
+        _bc_file = puck_count_barcode_matches_summary
+
+    for index, _ in pdf.df.iterrows():
+        project_id, sample_id = index
+
+        # check if barcodes have been filtered
+        _f_barcodes_df = _bc_file.format(project_id=project_id,
+                sample_id=sample_id)
+
+        # project_df is only updated if a prealignment barcode matching file is found
+        if os.path.exists(_f_barcodes_df):
+            barcodes_df = pd.read_csv(_f_barcodes_df)
+
+            if 'pass_threshold' not in barcodes_df.columns:
+                continue
+
+            above_threshold_mask = barcodes_df['pass_threshold'] == 1
+
+            _puck_barcode_files = barcodes_df[above_threshold_mask]['puck_barcode_file'].values.tolist().__str__()
+            _puck_barcode_files_id = barcodes_df[above_threshold_mask]['puck_barcode_file_id'].values.tolist().__str__()
+
+            pdf.df.loc[index, 'puck_barcode_file'] = _puck_barcode_files
+            pdf.df.loc[index, 'puck_barcode_file_id'] = _puck_barcode_files_id
+
 @message_aggregation(logger_name)
 def spacemake_run(pdf, args):
     """spacemake_run.
@@ -468,9 +507,35 @@ def spacemake_run(pdf, args):
     # to flatten the directory
     config_variables = {**config_variables, **novosparc_variables}
 
+    # assert that the project_df is valid before running the pipeline
+    pdf.assert_valid()
+
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
-    # run snakemake
+    # run snakemake with prealignment filter
+    # this one runs preprocessing/alignment/counting of matching barcodes before alignment
+    preprocess_finished = snakemake.snakemake(
+        snakefile,
+        configfiles=[config_path],
+        cores=args["cores"],
+        dryrun=args["dryrun"],
+        targets=['get_stats_prealigned_barcodes'],
+        touch=args["touch"],
+        force_incomplete=args["rerun_incomplete"],
+        keepgoing=args["keep_going"],
+        printshellcmds=args["printshellcmds"],
+        config=config_variables,
+    )
+    
+    if preprocess_finished is False:
+        raise SpacemakeError("an error occurred while snakemake() ran")
+
+    # update valid pucks (above threshold) before continuing to downstream
+    # this performs counting of matching barcodes after alignment
+    update_project_df_barcode_matches(prealigned=True)
+    pdf.dump()
+
+    # run snakemake after prealignment filter
     preprocess_finished = snakemake.snakemake(
         snakefile,
         configfiles=[config_path],
@@ -487,7 +552,12 @@ def spacemake_run(pdf, args):
     if preprocess_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
 
+    # update valid pucks (above threshold) before continuing to downstream
+    update_project_df_barcode_matches()
+    pdf.dump()
+
     # run spacemake downstream
+    # this performs the DGE calculation, h5ad conversion, automated analysis and QC
     analysis_finished = snakemake.snakemake(
         snakefile,
         configfiles=[config_path],
