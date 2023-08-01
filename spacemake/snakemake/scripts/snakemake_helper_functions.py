@@ -92,28 +92,17 @@ def get_output_files(
             if check_puck_collection:
                 puck_barcode_file_ids = "puck_collection"
 
-            if qc:
-                out_files = out_files + expand(
-                    pattern,
-                    project_id=project_id,
-                    sample_id=sample_id,
-                    puck_barcode_file_id=puck_barcode_file_ids,
-                    run_mode=run_mode,
-                    umi_cutoff=run_mode_variables["umi_cutoff"],
-                    polyA_adapter_trimmed=polyA_adapter_trimmed,
-                    **kwargs,
-                )
-            else:
-                out_files = out_files + expand(
-                    pattern,
-                    project_id=project_id,
-                    sample_id=sample_id,
-                    puck_barcode_file_id_qc=puck_barcode_file_ids,
-                    run_mode=run_mode,
-                    umi_cutoff=run_mode_variables["umi_cutoff"],
-                    polyA_adapter_trimmed=polyA_adapter_trimmed,
-                    **kwargs,
-                )
+            out_files = out_files + expand(
+                pattern,
+                project_id=project_id,
+                sample_id=sample_id,
+                puck_barcode_file_id=puck_barcode_file_ids,
+                puck_barcode_file_id_qc=puck_barcode_file_ids,
+                run_mode=run_mode,
+                umi_cutoff=run_mode_variables["umi_cutoff"],
+                polyA_adapter_trimmed=polyA_adapter_trimmed,
+                **kwargs,
+            )
 
     return out_files
 
