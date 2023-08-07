@@ -6,6 +6,7 @@ pucks:
     default:
         width_um: 3000
         spot_diameter_um: 10
+        coordinate_system: ''
     visium:
         barcodes: 'puck_data/visium_barcode_positions.csv'
         width_um: 6500
@@ -16,6 +17,10 @@ pucks:
     slide_seq:
         width_um: 3000
         spot_diameter_um: 10
+    novaseq_S4:
+        width_um: 1200
+        spot_diameter_um: 0.6
+        coordinate_system: 'puck_data/novaseq_S4_coordinate_system.csv'
 
 run_modes:
     default:
@@ -30,6 +35,7 @@ run_modes:
         mesh_type: 'circle'
         mesh_spot_diameter_um: 55
         mesh_spot_distance_um: 100
+        spatial_barcode_min_matches: 0
     visium:
         n_beads: 10000
         umi_cutoff: [1000]

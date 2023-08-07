@@ -204,7 +204,7 @@ def load_external_dge(dge_path):
 def parse_barcode_file(barcode_file):
     import pandas as pd
 
-    bc = pd.read_csv(barcode_file, sep="[,|\t]", engine="python")
+    bc = pd.read_csv(barcode_file, sep="[,|\t]", engine='python')
 
     # rename columns
     bc = (
@@ -259,5 +259,12 @@ def attach_puck_variables(adata, puck_variables):
 
     adata.uns["puck_variables"]["height_um"] = height_um
     adata.uns["puck_variables"]["coord_by_um"] = coord_by_um
+
+    return adata
+
+
+def attach_puck(adata, puck):
+    attach_puck_variables(adata, puck.variables)
+    adata.uns["puck_name"] = puck.name
 
     return adata
