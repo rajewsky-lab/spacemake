@@ -94,6 +94,8 @@ def read_to_queues(input_files, params, Qfq, args, Qerr, abort_flag):
 
 
 format_func_template = """
+import re
+
 def format_func(qname=None, r2_qname=None, r2_qual=None, r1=None, r2=None, R1=None, R2=None):
     qparts = r2_qname.split(':N:0:')
     if len(qparts) > 1:
@@ -124,10 +126,11 @@ def safety_check_eval(s, danger="();."):
 
 
 def make_formatter_from_args(args):
-    assert safety_check_eval(args.cell)
-    assert safety_check_eval(args.UMI)
-    assert safety_check_eval(args.seq)
-    assert safety_check_eval(args.qual)
+    if not args.disable_safety:
+        assert safety_check_eval(args.cell)
+        assert safety_check_eval(args.UMI)
+        assert safety_check_eval(args.seq)
+        assert safety_check_eval(args.qual)
 
     # This trickery here compiles a python function that
     # embeds the user-specified code for cell, UMI
@@ -585,6 +588,8 @@ def parse_args():
     parser.add_argument("--UMI", default="r1[0:8]")
     parser.add_argument("--seq", default="r2")
     parser.add_argument("--qual", default="r2_qual")
+    parser.add_argument("--disable-safety", default=False, type=bool)
+
     parser.add_argument(
         "--paired-end",
         default=None,
