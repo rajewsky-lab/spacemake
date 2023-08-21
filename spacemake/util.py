@@ -210,7 +210,7 @@ def make_header(bam, progname):
     pg = {
         "ID": progname,
         "PN": progname,
-        "CL": " ".join(sys.argv[1:]),
+        "CL": " ".join(sys.argv),
         "VN": __version__,
     }
     if len(pg_list):
@@ -218,6 +218,20 @@ def make_header(bam, progname):
 
     header["PG"] = pg_list + [pg]
     return header
+
+
+def header_dict_to_text(header):
+    buf = []
+    for group, data in header.items():
+        if type(data) is dict:
+            data = [data]
+
+        for d in data:
+            valstr = "\t".join([f"{key}:{value}" for key, value in d.items()])
+            buf.append(f"@{group}\t{valstr}")
+
+    return "\n".join(buf)
+
 
 
 def dge_to_sparse(dge_path):
