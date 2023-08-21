@@ -18,6 +18,9 @@ from spacemake.parallel import (
     log_qerr,
 )
 import spacemake.util as util
+import pyximport
+pyximport.install(setup_args={"include_dirs": np.get_include()}, reload_support=True)
+import spacemake.cython.fastread as fr
 
 # TODO:
 # * load params from YAML (code from opseq)
@@ -41,6 +44,7 @@ def read_to_queues(input_files, params, Qfq, args, Qerr, abort_flag):
                              unhandled exception somewhere
     """
     import gzip
+    from xopen import xopen
 
     chunk = []
     n_chunk = 0
@@ -53,6 +57,7 @@ def read_to_queues(input_files, params, Qfq, args, Qerr, abort_flag):
         nonlocal chunk, n_chunk, n_reads, T0
         # send this chunk to worker i
         # using round-robin
+        t0 = time()
         i = n_chunk % args.parallel
         logger.debug(f"putting chunk {n_chunk} onto queue {i}")
         Qfq[i].put((n_chunk, chunk, par))
@@ -67,25 +72,29 @@ def read_to_queues(input_files, params, Qfq, args, Qerr, abort_flag):
             )
             T0 = time()
             n_reads = 0
+        t1 = time()
+        logger.debug(f"dispatch took {1000 * (t1-t0):.2f} ms")
 
     with ExceptionLogging(
         f"spacemake.fastq_to_uBAM.read_to_queues {args.sample}",
         Qerr=Qerr,
         exc_flag=abort_flag,
-    ) as el:
+    ) as el:      
         for fname, par in zip(input_files, params):
             logger.info(f"iterating over reads from '{fname}' with special params={par}")
             if fname.endswith(".gz"):
-                src = gzip.open(fname, mode="rt")
+                #src = gzip.open(fname, mode="rt")
+                # logger.warning("using XOPEN")
+                # src = xopen(fname, mode='rt', threads=4)
+                from subprocess import Popen, PIPE
+                logger.warning("using igzip in subprocess")
+                p = Popen(["python", "-m", "isal.igzip", "-dc", fname], stdout=PIPE, text=True)
+                src = p.stdout
+                src._CHUNK_SIZE=int(2**19)
             else:
                 src = open(fname)
-
-            for line in src:
-                chunk.append(line)
-                if len(chunk) >= args.chunk_size:
-                    dispatch(par)
-
-            if len(chunk):
+            
+            for chunk in fr.read_txt_chunked(src, chunk_size=4*args.chunk_size):
                 dispatch(par)
 
         el.logger.info("finished! Closing down.")
@@ -208,7 +217,7 @@ class Formatter:
         # if self.count_cb:
         #     self.raw_cb_counts[kw["cell"]] += 1
 
-        return a.to_string()
+        return a.to_string() + '\n'
 
 
 def quality_trim(fq_src, min_qual=20, phred_base=33):
@@ -365,16 +374,22 @@ def collect_from_queues(Qres, args, Qerr, abort_flag):
         exc_flag=abort_flag,
     ) as el:
         header = make_BAM_header(args)
-        bam = pysam.AlignmentFile(args.out_bam, "wbu", header=header, threads=4)
+
+        out = open(args.out_bam, 'w')
+        out.write(util.header_dict_to_text(header) + '\n')
+
+        #bam = pysam.AlignmentFile(args.out_bam, "wbu", header=header, threads=8)
 
         for n_chunk, chunk in iter_queues_round_robin(
             Qres, abort_flag, logger=el.logger
         ):
             el.logger.debug(f"received chunk: {n_chunk}")
             for rec in chunk:
-                bam.write(pysam.AlignedSegment.fromstring(rec, header))
+                #bam.write(pysam.AlignedSegment.fromstring(rec, header))
+                out.write(rec)
 
-        bam.close()
+        out.close()
+        #bam.close()
 
 
 def count_dict_sum(sources):
@@ -424,12 +439,12 @@ def main_parallel(args):
 
     # queues for communication between processes
     if have_read1:
-        Qfq1 = [mp.JoinableQueue(5) for i in range(args.parallel)]
+        Qfq1 = [mp.JoinableQueue(1000) for i in range(args.parallel)]
     else:
         Qfq1 = [None for i in range(args.parallel)]
 
-    Qfq2 = [mp.JoinableQueue(5) for i in range(args.parallel)]
-    Qres = [mp.Queue(5) for i in range(args.parallel)]  # BAM records as string
+    Qfq2 = [mp.JoinableQueue(1000) for i in range(args.parallel)]
+    Qres = [mp.Queue(50) for i in range(args.parallel)]  # BAM records as string
     Qerr = mp.Queue()  # child-processes can report errors back to the main process here
 
     # Proxy objects to allow workers to report statistics about the run
@@ -639,9 +654,9 @@ def parse_args():
     )
     parser.add_argument(
         "--chunk-size",
-        default=10000,
+        default=100000,
         type=int,
-        help="how many reads (mate pairs) are grouped together for parallel processing (default=10000)",
+        help="how many reads (mate pairs) are grouped together for parallel processing (default=100000)",
     )
     # SAM standard now supports CB=corrected cell barcode, CR=original cell barcode, and MI=molecule identifier/UMI
     parser.add_argument(
