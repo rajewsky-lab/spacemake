@@ -650,7 +650,7 @@ rule create_automated_analysis_processed_data_files:
                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
     script:
         'scripts/automated_analysis_create_processed_data_files.py'
-        
+
 rule create_automated_report:
     input:
         **automated_analysis_processed_data_files,
@@ -658,21 +658,29 @@ rule create_automated_report:
     output:
         automated_report
     params:
-        run_mode_variables = lambda wildcards:
-            project_df.config.get_run_mode(wildcards.run_mode).variables,
-        puck_variables = lambda wildcards:
-            project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
-                return_empty=True),
-        pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id,
-            puck_barcode_file_id = wildcards.puck_barcode_file_id_qc),
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
-        r_shared_scripts= repo_dir + '/scripts/shared_functions.R'
-    script:
-        'scripts/automated_analysis_create_report.Rmd'
+    run:
+        from spacemake.report.classes.automated_analysis import generate_automat
+
+        template_file = os.path.join(spacemake_dir, "report/templates/automated_analysis.html")
+
+        report_metadata = generate_automated_analysis_metadata(
+            wildcards.project_id,
+            wildcards.sample_id,
+            wildcards.run_mode,
+            wildcards.puck_barcode_file_id_qc,
+            input['obs_df']',
+            input['var_df']',
+            input['nhood_enrichment'],
+            params['is_spatial'],
+            wildcards.umi_cutoff,
+        )
+        html_report = generate_html_report(report_metadata, template_file)
+
+        with open(output[0], "w") as output:
+            output.write(html_report)
 
 rule split_final_bam:
     input:
