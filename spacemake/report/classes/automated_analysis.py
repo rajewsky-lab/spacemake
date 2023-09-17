@@ -36,7 +36,7 @@ clrs = {
 }
 
 
-logger_name = "spacemake.snakemake.scripts.n_intersect_sequences"
+logger_name = "spacemake.report.automated_analysis"
 logger = logging.getLogger(logger_name)
 
 
@@ -343,11 +343,12 @@ def generate_automated_analysis_metadata(
             adata.obs[f"leiden_{resolution}"] = pd.Categorical(
                 adata.obs[f"leiden_{resolution}"]
             )
-            fig, axes = plt.subplots(1, 1, figsize=(5, 5))
+            fig, axes = plt.subplots(1, 1, figsize=(8, 5))
             sc.pl.umap(adata, color=f"leiden_{resolution}", ax=axes, show=False)
             axes.spines[["right", "top", "left", "bottom"]].set_visible(False)
             axes.set_ylabel("UMAP 0")
             axes.set_xlabel("UMAP 1")
+            plt.tight_layout()
             _current_analyzed_clustering_resolution["plots"]["umap"] = plot_to_base64(
                 fig
             )
@@ -355,7 +356,7 @@ def generate_automated_analysis_metadata(
             # Spatial plot and neighborhood enrichment (if spatial)
             if is_spatial:
                 # Plot Spatial clusters
-                fig, axes = plt.subplots(1, 1, figsize=(5, 5))
+                fig, axes = plt.subplots(1, 1, figsize=(8, 5))
                 sc.pl.spatial(
                     adata,
                     img_key=None,
@@ -372,6 +373,7 @@ def generate_automated_analysis_metadata(
                 axes.set_yticklabels(y_mm_breaks)
                 axes.set_ylabel("")
                 axes.set_xlabel("")
+                plt.tight_layout()
                 _current_analyzed_clustering_resolution["plots"][
                     "spatial"
                 ] = plot_to_base64(fig)
