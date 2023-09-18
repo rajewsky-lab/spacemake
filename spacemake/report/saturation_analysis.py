@@ -1,4 +1,5 @@
 import base64
+import datetime
 import io
 import logging
 import os
@@ -303,7 +304,7 @@ def generate_saturation_analysis_metadata(
     report = {
         "type": "saturation_analysis",
         "runinformation": [],
-        "date": None,
+        "date": datetime.date.today().strftime("%Y/%m/%d"),
         "plots": [],
     }
     main_plots = {
