@@ -3,12 +3,12 @@ import datetime
 import io
 import logging
 import os
+from itertools import cycle
 from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from itertools import cycle
 from jinja2 import Template
 from scipy.stats import gaussian_kde
 from spacemake.config import ConfigFile
@@ -43,7 +43,7 @@ SAMPLEINFO_VARS = [
     "experiment",
     "barcode_flavor",
     "sequencing_date",
-    "puck"
+    "puck",
 ]
 
 parula_dict = {
@@ -56,22 +56,11 @@ parula_dict = {
     7: "#aacca1",
     8: "#bbcc74",
     9: "#cbcc49",
-    10: "#e0d317"
+    10: "#e0d317",
 }
 
 PCT_DOWNSAMPLE_TO_PLOT = [20, 40, 60, 80, 100]
-DOWNSAMPLE_PCTS = list(range(10,110,10))
-
-# Run example:
-# python /home/dleonpe/spacemake_project/repos/spacemake/spacemake/report/saturation_analysis.py \
-#     --project-id fc_sts_76 \
-#     --sample-id fc_sts_76_3 \
-#     --run-modes fc_sts_novaseq_SP_mesh_7um fc_sts_novaseq_SP_mesh_7um fc_sts_novaseq_SP_mesh_7um fc_sts_novaseq_SP_mesh_7um fc_sts_novaseq_SP_mesh_7um fc_sts_novaseq_SP_mesh_7um fc_sts_novaseq_SP_mesh_7um fc_sts_novaseq_SP_mesh_7um fc_sts_novaseq_SP_mesh_7um fc_sts_novaseq_SP_mesh_7um \
-#     --downsampled-dge-summary /data/rajewsky/home/dleonpe/projects/openst_paper/data/1_spacemake_mouse_new/projects/fc_sts_76/processed_data/fc_sts_76_3/illumina/downsampled_data/*/dge/dge.all.polyA_adapter_trimmed.mm_included.spatial_beads.mesh_7_hexagon_fc_010_L3_tile_2157.obs.csv /home/dleonpe/spacemake_project/data/1_spacemake_mouse_new/projects/fc_sts_76/processed_data/fc_sts_76_3/illumina/complete_data/dge/dge.all.polyA_adapter_trimmed.mm_included.spatial_beads.mesh_7_hexagon_fc_010_L3_tile_2157.obs.csv \
-#     --out-html-report ~/Desktop/fc_sts_76_3_saturation_analysis.html \
-#     --puck-barcode-file-id fc_010_L3_tile_2157
-
-# .deciledmedian has the 'parula' color map
+DOWNSAMPLE_PCTS = list(range(10, 110, 10))
 
 logger_name = "spacemake.report.saturation_analysis"
 logger = logging.getLogger(logger_name)
@@ -132,65 +121,71 @@ def setup_parser(parser):
     return parser
 
 
-def plot_density_metric_faceted(values, metric, log_scale=True, color='#000000', title=''):
-    fig, axes = plt.subplots(len(PCT_DOWNSAMPLE_TO_PLOT), 1, figsize=(5, 0.5*len(PCT_DOWNSAMPLE_TO_PLOT)))
+def plot_density_metric_faceted(values, metric, log_scale=True, color="#000000", title=""):
+    fig, axes = plt.subplots(len(PCT_DOWNSAMPLE_TO_PLOT), 1, figsize=(5, 0.5 * len(PCT_DOWNSAMPLE_TO_PLOT)))
 
     i = 0
     for downsample_pct, value_density in values.groupby("_downsample_pct_report"):
         if int(downsample_pct) in PCT_DOWNSAMPLE_TO_PLOT:
             density_function = gaussian_kde(np.nan_to_num(value_density[metric]), bw_method=0.1)
             x = np.linspace(1, max(np.nan_to_num(values[metric])), 100)
-            
-            axes[i].plot(x, density_function(x), color='black', linewidth=1)
+
+            axes[i].plot(x, density_function(x), color="black", linewidth=1)
             axes[i].fill_between(x, density_function(x), color=color)
             axes[i].set_yticks([])
 
             if log_scale:
                 axes[i].set_xscale("log")
-            
+
             axes[i].spines[["right", "top", "bottom"]].set_visible(False)
-            axes[i].text(1.05, 0.5, f'{downsample_pct}%', transform=axes[i].transAxes, va='center')
+            axes[i].text(1.05, 0.5, f"{downsample_pct}%", transform=axes[i].transAxes, va="center")
             i += 1
 
         axes[-1].spines[["right", "top"]].set_visible(False)
         axes[-1].spines[["left", "bottom"]].set_visible(True)
         axes[-1].set_xlabel(title)
 
-    for i in range(i-1):
+    for i in range(i - 1):
         axes[i].set_xticks([])
 
-    fig.text(0.0, 0.6, 'density', va='center', rotation='vertical')
+    fig.text(0.0, 0.6, "density", va="center", rotation="vertical")
     plt.tight_layout()
 
     return fig, axes
 
 
-def plot_median_per_run_mode(values, metric, umi_cutoffs, color='#000000', title=''):
+def plot_median_per_run_mode(values, metric, umi_cutoffs, color="#000000", title=""):
     fig, axes = plt.subplots(1, 1, figsize=(5, 3))
 
-    lines = ["-","--","-.",":"]
+    lines = ["-", "--", "-.", ":"]
     linecycler = cycle(lines)
     handles, labels = [], []
 
     for umi_cutoff in umi_cutoffs:
-        _values = values[values['total_counts'] > umi_cutoff]
-        median_values = _values[[metric, '_downsample_pct_report']].groupby('_downsample_pct_report').median().reset_index()
+        _values = values[values["total_counts"] > umi_cutoff]
+        median_values = (
+            _values[[metric, "_downsample_pct_report"]].groupby("_downsample_pct_report").median().reset_index()
+        )
 
         linestyle = next(linecycler)
-    
-        line, = axes.plot(median_values['_downsample_pct_report'], median_values[metric], linestyle, color=color, label=umi_cutoff)
-        axes.scatter(median_values['_downsample_pct_report'], median_values[metric], s=20, color=color, edgecolors='black')
+
+        (line,) = axes.plot(
+            median_values["_downsample_pct_report"], median_values[metric], linestyle, color=color, label=umi_cutoff
+        )
+        axes.scatter(
+            median_values["_downsample_pct_report"], median_values[metric], s=20, color=color, edgecolors="black"
+        )
 
         handles.append(line)
         labels.append(umi_cutoff)
 
     axes.set_xticks(PCT_DOWNSAMPLE_TO_PLOT)
-    axes.set_xticklabels([f'{pct}%'for pct in PCT_DOWNSAMPLE_TO_PLOT])
+    axes.set_xticklabels([f"{pct}%" for pct in PCT_DOWNSAMPLE_TO_PLOT])
     axes.spines[["right", "top"]].set_visible(False)
     axes.set_xlabel("downsampling percentage")
     axes.set_ylabel(title)
 
-    legend = axes.legend(handles, labels, loc='lower right', title="UMI cutoff")
+    legend = axes.legend(handles, labels, loc="lower right", title="UMI cutoff")
     legend.set_frame_on(False)
 
     plt.tight_layout()
@@ -200,28 +195,46 @@ def plot_median_per_run_mode(values, metric, umi_cutoffs, color='#000000', title
 def generate_deciled_data(values):
     # Group by '_downsample_pct_report' and perform the necessary calculations
     def calculate_deciles(group):
-        group['cumsum_reads'] = group['n_reads'].cumsum()
-        group['decile_limit'] = group['n_reads'].sum() / 10
-        group['decile'] = (group['cumsum_reads'] / group['decile_limit']).floordiv(1) + 1
-        return group.loc[group['decile'] < 11]
+        group["cumsum_reads"] = group["n_reads"].cumsum()
+        group["decile_limit"] = group["n_reads"].sum() / 10
+        group["decile"] = (group["cumsum_reads"] / group["decile_limit"]).floordiv(1) + 1
+        return group.loc[group["decile"] < 11]
 
     # Group by '_downsample_pct_report' and apply the calculate_deciles function
-    decile_dat = values.groupby('_downsample_pct_report').apply(calculate_deciles).reset_index(drop=True)
+    decile_dat = values.groupby("_downsample_pct_report").apply(calculate_deciles).reset_index(drop=True)
 
     # Group by 'percentage' and 'decile' and calculate medians and counts
-    decile_dat = (decile_dat.groupby(['_downsample_pct_report', 'decile'])
-                .agg({'n_reads': 'median', 'n_genes_by_counts': 'median', 'reads_per_counts': 'median', 'total_counts': 'median', 'cell_bc': 'count'})
-                .reset_index())
+    decile_dat = (
+        decile_dat.groupby(["_downsample_pct_report", "decile"])
+        .agg(
+            {
+                "n_reads": "median",
+                "n_genes_by_counts": "median",
+                "reads_per_counts": "median",
+                "total_counts": "median",
+                "cell_bc": "count",
+            }
+        )
+        .reset_index()
+    )
 
     # Melt the DataFrame to long format
-    decile_dat = pd.melt(decile_dat, id_vars=['_downsample_pct_report', 'decile'], var_name='observation', value_name='value')
+    decile_dat = pd.melt(
+        decile_dat, id_vars=["_downsample_pct_report", "decile"], var_name="observation", value_name="value"
+    )
 
     # Convert 'decile' and '_downsample_pct_report' to appropriate data types
-    decile_dat['decile'] = decile_dat['decile'].astype('category')
-    decile_dat['_downsample_pct_report'] = decile_dat['_downsample_pct_report'].astype(int)
+    decile_dat["decile"] = decile_dat["decile"].astype("category")
+    decile_dat["_downsample_pct_report"] = decile_dat["_downsample_pct_report"].astype(int)
 
-    mapping_dict = {'n_reads': 'median_reads', 'n_genes_by_counts': 'median_genes', 'reads_per_counts': 'median_pcr', 'total_counts': 'median_umis', 'cell_bc': 'n_beads'}
-    decile_dat['observation'] = decile_dat['observation'].replace(mapping_dict)
+    mapping_dict = {
+        "n_reads": "median_reads",
+        "n_genes_by_counts": "median_genes",
+        "reads_per_counts": "median_pcr",
+        "total_counts": "median_umis",
+        "cell_bc": "n_beads",
+    }
+    decile_dat["observation"] = decile_dat["observation"].replace(mapping_dict)
 
     return decile_dat
 
@@ -230,15 +243,19 @@ def plot_deciled_median(decile_dat):
     fig, axes = plt.subplots(3, 2, figsize=(6, 4))
 
     # Iterate through each unique 'observation' for facetting
-    for i, (obs, data) in enumerate(decile_dat.groupby('observation')):
-        for _obs, _data in data.groupby('decile'):
-            axes.flatten()[i].plot(_data['_downsample_pct_report'], _data['value'], label=_obs, linewidth=0.6, color=parula_dict[_obs])
-            axes.flatten()[i].scatter(_data['_downsample_pct_report'], _data['value'], s=20, edgecolors='black', color=parula_dict[_obs])
+    for i, (obs, data) in enumerate(decile_dat.groupby("observation")):
+        for _obs, _data in data.groupby("decile"):
+            axes.flatten()[i].plot(
+                _data["_downsample_pct_report"], _data["value"], label=_obs, linewidth=0.6, color=parula_dict[_obs]
+            )
+            axes.flatten()[i].scatter(
+                _data["_downsample_pct_report"], _data["value"], s=20, edgecolors="black", color=parula_dict[_obs]
+            )
 
         axes.flatten()[i].set_xticks([0, 20, 40, 60, 80, 100])
-        axes.flatten()[i].set_xticklabels(['0', '20', '40', '60', '80', '100'])
+        axes.flatten()[i].set_xticklabels(["0", "20", "40", "60", "80", "100"])
         axes.flatten()[i].set_title(obs)
-        axes.flatten()[i].spines[['top', 'right']].set_visible(False)
+        axes.flatten()[i].spines[["top", "right"]].set_visible(False)
 
     axes.flatten()[i].set_xlabel("downsampling percentage")
     if i % 2 == 0:
@@ -247,10 +264,10 @@ def plot_deciled_median(decile_dat):
     # Create a single legend at the bottom
     handles, labels = [], []
     for obs in parula_dict:
-        handles.append(plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=parula_dict[obs], markersize=8))
+        handles.append(plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=parula_dict[obs], markersize=8))
         labels.append(str(obs))
 
-    fig.legend(handles, labels, title='Decile', loc='lower right', ncol=3, bbox_to_anchor=(0.95, 0.02))
+    fig.legend(handles, labels, title="Decile", loc="lower right", ncol=3, bbox_to_anchor=(0.95, 0.02))
 
     plt.tight_layout()
 
@@ -268,8 +285,10 @@ def plot_to_base64(fig):
 def load_dge_summary_downsampling(downsampled_dge_summary, run_mode, puck_barcode_file_id):
     obs_df = pd.DataFrame()
     for downsample_pct in DOWNSAMPLE_PCTS:
-        _obs_df = pd.read_csv(downsampled_dge_summary[f'downsampled_dge_summary.{run_mode}.{downsample_pct}.{puck_barcode_file_id}'])
-        _obs_df['_downsample_pct_report'] = downsample_pct
+        _obs_df = pd.read_csv(
+            downsampled_dge_summary[f"downsampled_dge_summary.{run_mode}.{downsample_pct}.{puck_barcode_file_id}"]
+        )
+        _obs_df["_downsample_pct_report"] = downsample_pct
         obs_df = pd.concat([obs_df, _obs_df])
 
     return obs_df
@@ -292,7 +311,8 @@ def generate_saturation_analysis_metadata(
         and len(run_modes) == len(downsampled_dge_summary)
     ):
         downsampled_dge_summary = {
-            f'downsampled_dge_summary.{run_mode}.{d_pct}.{puck_barcode_file_id}': d for run_mode, d, d_pct in zip(run_modes, downsampled_dge_summary, DOWNSAMPLE_PCTS)
+            f"downsampled_dge_summary.{run_mode}.{d_pct}.{puck_barcode_file_id}": d
+            for run_mode, d, d_pct in zip(run_modes, downsampled_dge_summary, DOWNSAMPLE_PCTS)
         }
     elif (
         isinstance(run_modes, list)
@@ -307,11 +327,7 @@ def generate_saturation_analysis_metadata(
         "date": datetime.date.today().strftime("%Y/%m/%d"),
         "plots": [],
     }
-    main_plots = {
-        "histostats": [],
-        "medianstats": [],
-        "deciledmedian": []
-    }
+    main_plots = {"histostats": [], "medianstats": [], "deciledmedian": []}
     report["plots"] = main_plots
 
     # Loading project_df for metadata
@@ -330,39 +346,56 @@ def generate_saturation_analysis_metadata(
     dge_summaries = {}
     for run_mode in run_modes:
         dge_summaries[run_mode] = {}
-        dge_summaries[run_mode] = load_dge_summary_downsampling(downsampled_dge_summary, run_mode, puck_barcode_file_id)
+        dge_summaries[run_mode] = load_dge_summary_downsampling(
+            downsampled_dge_summary, run_mode, puck_barcode_file_id
+        )
 
     # Plots
     # Histograms per run mode
     for run_mode, dge_summary in dge_summaries.items():
         umicutoff = {"name": run_mode, "umiplot": None, "readsplot": None, "readsumiplot": None}
-        fig, _ = plot_density_metric_faceted(dge_summary, "total_counts", log_scale=True, color=clrs['umis'], title='# of UMIs per spatial unit')
+        fig, _ = plot_density_metric_faceted(
+            dge_summary, "total_counts", log_scale=True, color=clrs["umis"], title="# of UMIs per spatial unit"
+        )
         umicutoff["umiplot"] = plot_to_base64(fig)
 
-        fig, _ = plot_density_metric_faceted(dge_summary, "n_reads", log_scale=True, color=clrs['reads'], title='# of reads per spatial unit')
+        fig, _ = plot_density_metric_faceted(
+            dge_summary, "n_reads", log_scale=True, color=clrs["reads"], title="# of reads per spatial unit"
+        )
         umicutoff["readsplot"] = plot_to_base64(fig)
 
-        fig, _ = plot_density_metric_faceted(dge_summary, "reads_per_counts", log_scale=False, color=clrs['pcr'], title='reads/UMI per spatial unit')
+        fig, _ = plot_density_metric_faceted(
+            dge_summary, "reads_per_counts", log_scale=False, color=clrs["pcr"], title="reads/UMI per spatial unit"
+        )
         umicutoff["readsumiplot"] = plot_to_base64(fig)
 
         report["plots"]["histostats"].append(umicutoff)
 
     # Median plots per run mode
     for run_mode, dge_summary in dge_summaries.items():
-        umi_cutoffs_values = project_df.config.get_run_mode(run_mode).variables['umi_cutoff']
+        umi_cutoffs_values = project_df.config.get_run_mode(run_mode).variables["umi_cutoff"]
         umi_cutoffs_values = list(sorted(list(set([int(u) for u in umi_cutoffs_values] + [1]))))
         medianstats = {"name": run_mode, "umiplot": None, "readsplot": None, "readsumiplot": None}
-        fig, _ = plot_median_per_run_mode(dge_summary, "total_counts", umi_cutoffs_values, color=clrs['umis'], title="median reads\nper spatial unit")
+        fig, _ = plot_median_per_run_mode(
+            dge_summary, "total_counts", umi_cutoffs_values, color=clrs["umis"], title="median reads\nper spatial unit"
+        )
         medianstats["umiplot"] = plot_to_base64(fig)
 
-        fig, _ = plot_median_per_run_mode(dge_summary, "n_reads", umi_cutoffs_values, color=clrs['reads'], title="median UMIs\nper spatial unit")
+        fig, _ = plot_median_per_run_mode(
+            dge_summary, "n_reads", umi_cutoffs_values, color=clrs["reads"], title="median UMIs\nper spatial unit"
+        )
         medianstats["readsplot"] = plot_to_base64(fig)
 
-        fig, _ = plot_median_per_run_mode(dge_summary, "reads_per_counts", umi_cutoffs_values, color=clrs['pcr'], title="median reads/UMI\nper spatial unit")
+        fig, _ = plot_median_per_run_mode(
+            dge_summary,
+            "reads_per_counts",
+            umi_cutoffs_values,
+            color=clrs["pcr"],
+            title="median reads/UMI\nper spatial unit",
+        )
         medianstats["readsumiplot"] = plot_to_base64(fig)
 
         report["plots"]["medianstats"].append(medianstats)
-
 
     # Deciled plots
     for run_mode, dge_summary in dge_summaries.items():
@@ -400,11 +433,7 @@ def cmdline():
     template_file = os.path.join(absolute_path, "templates/saturation_analysis.html")
 
     report_metadata = generate_saturation_analysis_metadata(
-        args.project_id,
-        args.sample_id,
-        args.run_modes,
-        args.downsampled_dge_summary,
-        args.puck_barcode_file_id
+        args.project_id, args.sample_id, args.run_modes, args.downsampled_dge_summary, args.puck_barcode_file_id
     )
 
     html_report = generate_html_report(report_metadata, template_file)
