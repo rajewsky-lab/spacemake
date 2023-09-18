@@ -608,6 +608,7 @@ def generate_table_mapping_statistics(complete_data_root: str, split_reads_read_
 
 def load_dge_summary(obs_df_path, with_adata=True):
     obs_df = pd.read_csv(obs_df_path)
+    obs_df['cell_bc'] = obs_df['cell_bc'].astype(str)
     obs_df = obs_df[obs_df['cell_bc'].str.contains('^[0-9]+|^[ACTGAN]+$', regex=True)]
     empty_ad = csr_matrix((len(obs_df), 1), dtype=int)
     adata = ad.AnnData(empty_ad)
