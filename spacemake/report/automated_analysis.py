@@ -307,7 +307,7 @@ def generate_automated_analysis_metadata(
             ax=axes,
             show=False,
             cmap="magma",
-            vmax=np.quantile(adata.obs["total_counts"], 0.9),
+            vmax=np.nanquantile(adata.obs["total_counts"], 0.9),
         )
         axes.spines[["right", "top"]].set_visible(False)
         axes.set_xticks(x_breaks)
