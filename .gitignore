@@ -9,6 +9,7 @@ samples.yaml
 *.png
 *.rds
 *.html
+!spacemake/report/templates/*.html
 *.csv
 *.pdf
 *.txt.gz
