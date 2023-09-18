@@ -240,10 +240,6 @@ def generate_automated_analysis_metadata(
 
         run_mode_vars = project_df.config.get_run_mode(run_mode).variables
 
-        print(puck_metrics)
-        print(puck_settings)
-        print(run_mode_vars)
-
         px_by_um = puck_metrics["px_by_um"]
         mesh_spot_diameter_um = run_mode_vars["mesh_spot_diameter_um"]
         meshed = run_mode_vars["mesh_data"]
@@ -287,7 +283,7 @@ def generate_automated_analysis_metadata(
             color="total_counts",
             ax=axes,
             show=False,
-            cmap="inferno",
+            cmap="magma",
         )
         axes.spines[["right", "top"]].set_visible(False)
         axes.set_xticks(x_breaks)
@@ -310,7 +306,7 @@ def generate_automated_analysis_metadata(
             color="total_counts",
             ax=axes,
             show=False,
-            cmap="inferno",
+            cmap="magma",
             vmax=np.quantile(adata.obs["total_counts"], 0.9),
         )
         axes.spines[["right", "top"]].set_visible(False)
@@ -396,7 +392,7 @@ def generate_automated_analysis_metadata(
 
                 fig, axes = plt.subplots(1, 1, figsize=(4, 4))
                 plmat = axes.matshow(
-                    ne_data, cmap="inferno", vmin=-50, vmax=100, origin="lower"
+                    ne_data, cmap="magma", vmin=-50, vmax=100, origin="lower"
                 )
                 cbar = plt.colorbar(plmat, fraction=0.046)
                 cbar.set_label("Neighbor enrichment score")

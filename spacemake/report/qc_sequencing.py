@@ -543,7 +543,8 @@ def plot_spatial_qc_metric(
         ax=axes,
         title=SPATIAL_METRICS_TITLES[metric],
         show=False,
-        cmap="inferno",
+        vmax=np.quantile(adata.obs[metric], 0.9),
+        cmap="magma",
     )
     axes.spines[["right", "top"]].set_visible(False)
     axes.set_xticks(x_breaks)
