@@ -824,6 +824,8 @@ def generate_qc_sequencing_metadata(
         # Plot spatial metrics
         spatialqc = {"name": run_mode, "plots": []}
         for spatial_metric in SPATIAL_METRICS:
+            if spatial_metric not in adata.obs.columns:
+                continue
             fig, axes = plot_spatial_qc_metric(
                 adata,
                 spatial_metric,
