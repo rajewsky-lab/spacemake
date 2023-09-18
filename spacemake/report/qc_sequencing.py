@@ -704,7 +704,7 @@ def generate_qc_sequencing_metadata(
         obs_df = dge_summaries[run_mode]["df"]
         metrics_beads = obs_df[["n_genes_by_counts", "reads_per_counts", "n_reads", "total_counts"]].median().to_dict()
         metrics_beads["n_beads"] = len(obs_df)
-        metrics_beads["sum_reads"] = obs_df["n_reads"].sum()
+        metrics_beads["sum_reads"] = f'{round(obs_df["n_reads"].sum()/1e6, 2)} (1e6)'
         summarised_metrics["variables"] = metrics_beads
         report["summarisedmetrics"].append(summarised_metrics)
 
