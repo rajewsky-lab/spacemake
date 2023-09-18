@@ -71,6 +71,13 @@ SPATIAL_METRICS_TITLES = {
     "exact_compression": "barcode length after compression per spatial unit",
 }
 
+
+STRTOBOOL = {
+    "False": False,
+    "True": True
+}
+
+
 logger_name = "spacemake.report.qc_sequencing"
 logger = logging.getLogger(logger_name)
 
@@ -600,6 +607,7 @@ def generate_table_mapping_statistics(complete_data_root: str, split_reads_read_
 
 def load_dge_summary(obs_df_path, with_adata=True):
     obs_df = pd.read_csv(obs_df_path)
+    obs_df = obs_df[obs_df['cell_bc'].str.contains('^[0-9]+|^[ACTGAN]+$', regex=True)]
     empty_ad = csr_matrix((len(obs_df), 1), dtype=int)
     adata = ad.AnnData(empty_ad)
     adata.obs = obs_df
@@ -873,7 +881,7 @@ def cmdline():
         args.complete_data_root,
         args.split_reads_read_type,
         args.puck_barcode_file_id_qc,
-        args.is_spatial,
+        STRTOBOOL[args.is_spatial],
         args.run_modes,
     )
 
