@@ -543,7 +543,7 @@ def plot_spatial_qc_metric(
         ax=axes,
         title=SPATIAL_METRICS_TITLES[metric],
         show=False,
-        vmax=np.quantile(adata.obs[metric], 0.9),
+        vmax=np.nanquantile(adata.obs[metric], 0.9),
         cmap="magma",
     )
     axes.spines[["right", "top"]].set_visible(False)
