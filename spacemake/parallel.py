@@ -585,3 +585,183 @@ def parallel_BAM_workflow(bam_inputs, worker_func, collector_func, log_domain="s
             return None
     
         return stats
+    
+
+
+def batched(iterable, n):
+    "Batch data into lists of length n. The last batch may be shorter."
+    from itertools import islice
+    # batched('ABCDEFG', 3) --> ABC DEF G
+    it = iter(iterable)
+    while True:
+        batch = list(islice(it, n))
+        if not batch:
+            return
+        yield batch
+
+
+from contextlib import contextmanager
+
+@contextmanager
+def create_named_pipes(names):
+    import os
+    import tempfile
+    with tempfile.TemporaryDirectory() as base:
+        paths = [os.path.join(base, name) for name in names]
+        #print(paths)
+        # create new fifos (named pipes)
+        [os.mkfifo(fname) for fname in paths]
+
+        try:
+            yield paths
+        finally:
+            # Clean up the named pipes
+            for fname in paths:
+                os.remove(fname)
+
+def open_named_pipe(path, mode='rt+', buffer_size=1000000):
+    import fcntl
+    F_SETPIPE_SZ = 1031  # Linux 2.6.35+
+    # F_GETPIPE_SZ = 1032  # Linux 2.6.35+
+
+    fifo_fd = open(path, mode)
+    fcntl.fcntl(fifo_fd, F_SETPIPE_SZ, buffer_size)
+    return fifo_fd
+
+
+def igzip_reader(input_files, pipe):
+    with ExceptionLogging("spacemake.parallel.igzip_reader") as el:
+        el.logger.info(f"writing to {pipe}")
+        from isal import igzip
+        out_file = open_named_pipe(pipe, mode='wb')
+
+        try:
+            for fname in input_files:
+                el.logger.info(f"reading from {fname}")
+                in_file = igzip.IGzipFile(fname, 'r')
+                while True:
+                    block = in_file.read(igzip.READ_BUFFER_SIZE)
+                    if block == b"":
+                        break
+
+                    out_file.write(block)
+                
+                in_file.close()
+        finally:
+            el.logger.info(f"closing down {pipe}")
+            out_file.close()
+
+import pyximport; pyximport.install()
+import spacemake.cython.fast_loop
+
+def fastq_distributor(in_pipe, worker_in_pipes):
+    with ExceptionLogging("spacemake.parallel.fastq_distributor") as el:
+        # from .fast_loop import distribute
+        el.logger.info(f"reading from {in_pipe}, writing to {worker_in_pipes} chunk_size=4")
+        fast_loop.distribute(in_pipe, worker_in_pipes, chunk_size=80)
+
+
+def fastq_to_sam_worker(w_in1, w_in2, w_out, args):
+    with ExceptionLogging("spacemake.parallel.fastq_to_SAM_worker") as el:
+
+        from spacemake.bin.fastq_to_uBAM import Formatter
+        formatter = Formatter(args)
+
+        fin1 = open_named_pipe(w_in1, mode='rt', buffer_size=2**19)
+        fin2 = open_named_pipe(w_in2, mode='rt', buffer_size=2**19)
+        fout = open_named_pipe(w_out, mode='wt', buffer_size=2**19)
+
+        from spacemake.util import FASTQ_src
+        for (qname, r1, r1_qual), (r2_qname, r2, r2_qual) in zip(FASTQ_src(fin1), FASTQ_src(fin2)):
+            # el.logger.warning(f"{w_in1} {w_in2} -> got read. writing to {w_out}")
+            #fout.write(f"{name1.rstrip()}\t{seq1.rstrip()}\t{seq2.rstrip()}\n")
+            kw = formatter.format(flags=4, qname=qname, r1=r1, r1_qual=r1_qual, r2_qname=r2_qname, r2=r2, r2_qual=r2_qual)
+            #fout.write(formatter.make_bam_record(**locals()))
+            # QNAME FLAG RNAME POS MAPQ CIGAR RNEXT PNEXT TLEN SEQ QUAL [ALIGNMENT SECTION]
+            fout.write("{qname}\t{flags}\t*\t0\t255\t*\t*\t0\t0\t{seq}\t{qual}\tRG:Z:{rg}\tCB:Z:{cell}\tUMI:Z:{UMI}\n".format(qname=qname, flags=4, rg='A', **kw))
+
+
+def collector(worker_out_pipes, out_pipe, args):
+    from time import time
+    with ExceptionLogging("spacemake.parallel.collector") as el:
+        # from spacemake.experiment.fast_loop import collect
+        el.logger.warning(f"collecting from {worker_out_pipes} into {out_pipe}")
+        
+        # make a BAM header and write it to a temporary file 
+        from spacemake.bin.fastq_to_uBAM import Formatter
+        header=str(Formatter(args).bam_header).rstrip()
+
+        print(f"header='{header}'")
+        import os
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as fhead:
+            fhead.write(header + '\n')
+            fhead.close()
+            t0 = time()
+            n = fast_loop.collect(worker_out_pipes, out_pipe, chunk_size=20, header_fifo=fhead.name)
+            dt = time() - t0
+            el.logger.info(f"collected {n:,.0f} records in {dt:.2f} seconds. Rate of {n/dt/1000:.2f}k rec/sec")
+            os.unlink(fhead.name)
+
+
+def fastq_to_ubam_main(input_files1, input_files2, args, n_workers=32):
+    import multiprocessing as mp
+    
+    pipe_names = (['igzip1', 'igzip2'] + 
+        [f'in_1_{n}' for n in range(n_workers)] + 
+        [f'in_2_{n}' for n in range(n_workers)] + 
+        [f'out_{n}' for n in range(n_workers)] +
+        ['out_sam'])
+
+
+    with create_named_pipes(pipe_names) as pipe_paths:
+        igzip_pipe1, igzip_pipe2 = pipe_paths[:2]
+        worker_inputs1 = pipe_paths[2:2+n_workers]
+        worker_inputs2 = pipe_paths[2+n_workers:2+2*n_workers]
+        worker_outputs = pipe_paths[2+2*n_workers:-1]
+
+        p_gzip1 = mp.Process(target=igzip_reader, args=(input_files1, igzip_pipe1,))
+        p_gzip2 = mp.Process(target=igzip_reader, args=(input_files2, igzip_pipe2,))
+                                   
+        p_dist1 = mp.Process(target=fastq_distributor, args=(igzip_pipe1, worker_inputs1))
+        p_dist2 = mp.Process(target=fastq_distributor, args=(igzip_pipe2, worker_inputs2))
+
+        workers = []
+        for w_in1, w_in2, w_out in zip(worker_inputs1, worker_inputs2, worker_outputs):
+            p = mp.Process(target=fastq_to_sam_worker, args=(w_in1, w_in2, w_out, args))
+            workers.append(p)
+
+        p_collect = mp.Process(target=collector, args=(worker_outputs, '/tmp/out', args))
+        p_collect.start()
+
+        for w in workers:
+            w.start()
+        
+        p_dist1.start()
+        p_dist2.start()
+        p_gzip1.start()
+        p_gzip2.start()
+
+        p_gzip1.join()
+        p_gzip2.join()
+        p_dist1.join()
+        p_dist2.join()
+
+        for w in workers:
+            w.join()
+        
+        p_collect.join()
+
+    
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    import spacemake.util as util
+    from spacemake.bin.fastq_to_uBAM import parse_args
+    args = parse_args()
+    util.setup_logging(args, name="spacemake.bin.fastq_to_uBAM")
+
+    fastq_to_ubam_main(
+        ['/data/rajewsky/sequencing/human/sc_smRNA_dss_69/dss_69-1-mRNA_S1_R1_001.fastq.gz'], 
+        ['/data/rajewsky/sequencing/human/sc_smRNA_dss_69/dss_69-1-mRNA_S1_R2_001.fastq.gz'],
+        args
+    )
