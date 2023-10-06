@@ -652,7 +652,7 @@ def igzip_reader(input_files, pipe):
             out_file.close()
 
 import pyximport; pyximport.install()
-import spacemake.cython.fast_loop
+import spacemake.cython.fast_loop as fast_loop
 
 def fastq_distributor(in_pipe, worker_in_pipes):
     with ExceptionLogging("spacemake.parallel.fastq_distributor") as el:
