@@ -105,12 +105,12 @@ def read_to_queues(input_files, params, Qfq, args, Qerr, abort_flag):
 format_func_template = """
 import re
 
-def format_func(qname=None, r2_qname=None, r2_qual=None, r1=None, r2=None, R1=None, R2=None):
-    qparts = r2_qname.split(':N:0:')
-    if len(qparts) > 1:
-        i5i7 = qparts[1].replace('+', '')
-    else:
-        i5i7 = None
+def format_func(qname=None, r2_qname=None, r2_qual=None, r1=None, r2=None, R1=None, R2=None, **kw):
+    #qparts = r2_qname.split(':N:0:')
+    #if len(qparts) > 1:
+    #    i5i7 = qparts[1].replace('+', '')
+    #else:
+    #    i5i7 = None
 
     cell = {cell}
 
@@ -165,7 +165,7 @@ def make_BAM_header(args):
             {
                 "ID": "fastq_to_uBAM",
                 "PN": prog,
-                "CL": " ".join(sys.argv[1:]),
+                "CL": " ".join(sys.argv),
                 "VN": __version__,
             },
         ],
