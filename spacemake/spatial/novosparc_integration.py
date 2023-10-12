@@ -1,6 +1,4 @@
 import logging
-# this matplotlib import is required if the system libc is old, because pots somehow messes with the dynamic loading paths
-import matplotlib._path
 import novosparc
 import anndata
 
