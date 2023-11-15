@@ -1,4 +1,4 @@
-[![docs](https://github.com/rajewsky-lab/spacemake/actions/workflows/docs.yml/badge.svg)](https://github.com/rajewsky-lab/spacemake/actions/workflows/docs.yml)
+[![docs](https://readthedocs.org/projects/spacemake/badge/?version=latest)](https://spacemake.readthedocs.io/)
 [![Downloads](https://pepy.tech/badge/spacemake)](https://pepy.tech/project/spacemake)
 [![PyPI Version](https://img.shields.io/pypi/v/spacemake.svg)](https://pypi.org/project/spacemake)
 [![PyPI License](https://img.shields.io/pypi/l/spacemake.svg)](https://pypi.org/project/spacemake)
