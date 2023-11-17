@@ -8,7 +8,7 @@ from libc cimport stdlib, stdio
 from libc.string cimport memcpy
 from typing import TextIO
 
-def distribute(str fin_name, list fifo_names, int chunk_size=10000, size_t in_buf_size=2**20, size_t out_buf_size=2**19, header_detect_func=None, header_fifo=None):
+def distribute(str fin_name, list fifo_names, int chunk_size=10000, size_t in_buf_size=2**20, size_t out_buf_size=2**19, header_detect_func=None, header_fifo=None, header_broadcast=False):
     cdef size_t i = 0
     cdef size_t j = 0
     cdef size_t n_outs = len(fifo_names)
@@ -28,29 +28,36 @@ def distribute(str fin_name, list fifo_names, int chunk_size=10000, size_t in_bu
     cdef stdio.FILE *fheader
     stdio.setvbuf(fin, stdin_buf, stdio._IOFBF, in_buf_size)
 
-
-    if header_detect_func and header_fifo:
-        # if the input stream contains some special header lines, allow to detect these and write them to a separate header-fifo
-        fheader = stdio.fopen(header_fifo.encode('utf-8'), 'w')
-        while(True):
-            n_read = stdio.getline(&buffer, &in_buf_size, fin) 
-            if n_read <= 0:
-                break
-            
-            if header_detect_func(str(buffer)):
-                stdio.fwrite(buffer, n_read, 1, fheader)
-            else:
-                # as soon as we see a non-header line, we break and enter the main loop
-                break
-
-        # close the header fifo
-        stdio.fclose(fheader)
-
     # set up output buffers for the main fifos
     for i in range(n_outs):
         fifo_buffers[i] = <char*>stdlib.malloc(out_buf_size)
         fifos[i] = stdio.fopen(fifo_names[i].encode('utf-8'), 'w')
         stdio.setvbuf(fifos[i], fifo_buffers[i], stdio._IOFBF, out_buf_size)
+
+    if header_detect_func:
+        # if the input stream contains some special header lines, allow to detect these and write them to a separate header-fifo
+        if header_fifo:
+            fheader = stdio.fopen(header_fifo.encode('utf-8'), 'w')
+
+        while(True):
+            n_read = stdio.getline(&buffer, &in_buf_size, fin) 
+            if n_read <= 0:
+                break
+            
+            if header_detect_func(bytes(buffer).decode("ascii")):
+                if header_fifo:
+                    stdio.fwrite(buffer, n_read, 1, fheader)
+                if header_broadcast:
+                    for i in range(n_outs):
+                        # print(f"writing header line to fifo {i} (n_read={n_read}) line={str(buffer)}")
+                        stdio.fwrite(buffer, n_read, 1, fifos[i])
+            else:
+                # as soon as we see a non-header line, we break and enter the main loop
+                break
+
+        if header_fifo:
+            # close the header fifo
+            stdio.fclose(fheader)
 
     # main distribute loop
     while(True):
