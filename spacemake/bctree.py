@@ -46,7 +46,7 @@ class BCTree:
             import pnumpy as pn
             pn.thread_setworkers(16)
         except ImportError:
-            self.logger.warning("Can not import pnumpy. Sorting will be slow.")
+            self.logger.warning("Can not import pnumpy (parallel numpy). Sorting will be slow.")
 
         t0 = time()
         
@@ -106,8 +106,8 @@ def compile(fnames, dbname='bctree.npy'):
     return bc
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+#if __name__ == "__main__":
+    #logging.basicConfig(level=logging.INFO)
 
     ## 2.4M smallest example. Should be very fast
     # bc = compile(["fc_010_L3_tile_2267.txt"])
@@ -123,24 +123,24 @@ if __name__ == "__main__":
 
     # bc.check_contains_batch()
     
-    bc = BCTree.from_disk('bctree.npy')
-    bc.check_contains_batch()
+    # bc = BCTree.from_disk('bctree.npy')
+    # bc.check_contains_batch()
 
-    t5 = time()
-    # edit distance 1 (aka "hull") generation benchmark
-    for idx in bc.buf['idx'][:bc.n]:
-        bctree.hull(idx, 24)
+    # t5 = time()
+    # # edit distance 1 (aka "hull") generation benchmark
+    # for idx in bc.buf['idx'][:bc.n]:
+    #     bctree.hull(idx, 24)
 
-    t6 = time()
-    dt = t6 - t5
-    print(f"{1000 * dt:.2f} msec hull generation for {bc.n} existing barcodes ({0.001 * bc.n/dt:.2f} kBC/sec)")
+    # t6 = time()
+    # dt = t6 - t5
+    # print(f"{1000 * dt:.2f} msec hull generation for {bc.n} existing barcodes ({0.001 * bc.n/dt:.2f} kBC/sec)")
 
 
-    t5 = time()
-    # edit distance 1 (aka "hull") generation benchmark
-    for idx in bc.buf['idx'][:bc.n]:
-        bctree.hull(idx, 24)
+    # t5 = time()
+    # # edit distance 1 (aka "hull") generation benchmark
+    # for idx in bc.buf['idx'][:bc.n]:
+    #     bctree.hull(idx, 24)
 
-    t6 = time()
-    dt = t6 - t5
-    print(f"{1000 * dt:.2f} msec hull generation for {bc.n} existing barcodes ({0.001 * bc.n/dt:.2f} kBC/sec)")
+    # t6 = time()
+    # dt = t6 - t5
+    # print(f"{1000 * dt:.2f} msec hull generation for {bc.n} existing barcodes ({0.001 * bc.n/dt:.2f} kBC/sec)")

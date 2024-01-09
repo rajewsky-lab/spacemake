@@ -18,8 +18,6 @@ from spacemake.parallel import (
     log_qerr,
 )
 import spacemake.util as util
-import pyximport
-pyximport.install(setup_args={"include_dirs": np.get_include()}, reload_support=True)
 import spacemake.cython.fastread as fr
 
 # TODO:
