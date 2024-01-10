@@ -67,6 +67,23 @@ run_modes:
         umi_cutoff:
         - 100
         - 300
+    openst:
+        clean_dge: false
+        count_intronic_reads: true
+        count_mm_reads: true
+        detect_tissue: false
+        mesh_data: true
+        mesh_spot_diameter_um: 7
+        mesh_spot_distance_um: 7
+        mesh_type: hexagon
+        n_beads: 100000
+        polyA_adapter_trimming: true
+        spatial_barcode_min_matches: 0.1
+        umi_cutoff:
+        - 100
+        - 250
+        - 500
+    
 
 adapters:
     smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'
@@ -97,3 +114,7 @@ barcode_flavors:
         UMI: "r2[0:9]"
         bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
         cell: "r1[0:20]"
+    openst:
+        UMI: r2[0:9]
+        bam_tags: CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}
+        cell: r1[2:27]
