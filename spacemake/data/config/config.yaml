@@ -86,7 +86,7 @@ run_modes:
     
 
 adapters:
-    smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'
+    smart: 'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTC'
     optical_primer: 'GAATCACGATACGTACACCA'
 
 barcode_flavors:
