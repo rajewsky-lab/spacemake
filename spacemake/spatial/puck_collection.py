@@ -288,7 +288,7 @@ def merge_pucks_to_collection(
     no_reset_index: bool = False,
     no_transform: bool = False,
     merge_output: str = "same",
-    join_output: str = "inner",
+    join_output: str = "outer",
 ) -> anndata.AnnData:
     """
     Merge multiple pucks into a single puck collection.
@@ -309,7 +309,7 @@ def merge_pucks_to_collection(
     :type no_transform: bool, optional
     :param merge_output: How to merge pucks, can be "same", "unique", "first", or "only", defaults to "same".
     :type merge_output: str, optional
-    :param join_output: How to join pucks, can be "inner" or "outer", defaults to "inner".
+    :param join_output: How to join pucks, can be "inner" or "outer", defaults to "outer".
     :type join_output: str, optional
     :returns: Merged puck collection as an AnnData object.
     :rtype: anndata.AnnData
