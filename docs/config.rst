@@ -294,14 +294,14 @@ Provided pucks
     slide_seq:
         width_um: 3000
         spot_diameter_um: 10
-    novaseq_S4:
+    openst:
         width_um: 1200
         spot_diameter_um: 0.6
-        coordinate_system: 'puck_data/novaseq_S4_coordinate_system.csv'
+        coordinate_system: 'puck_data/openst_coordinate_system.csv'
 
 as you can see, the ``visium`` puck comes with a ``barcodes`` variable, which points to
-``puck_data/visium_barcode_positions.csv``; similarly, the ``novaseq_S4`` puck comes with
-a ``coordinate_system`` variable, pointing to ``puck_data/novaseq_S4_coordinate_system.csv``.
+``puck_data/visium_barcode_positions.csv``; similarly, the ``openst`` puck comes with
+a ``coordinate_system`` variable, pointing to ``puck_data/openst_coordinate_system.csv``.
 
 Upon initiation, these files will automatically placed there by spacemake
 

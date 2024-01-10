@@ -17,10 +17,10 @@ pucks:
     slide_seq:
         width_um: 3000
         spot_diameter_um: 10
-    novaseq_S4:
+    openst:
         width_um: 1200
         spot_diameter_um: 0.6
-        coordinate_system: 'puck_data/novaseq_S4_coordinate_system.csv'
+        coordinate_system: 'puck_data/openst_coordinate_system.csv'
 
 run_modes:
     default:
