@@ -2,21 +2,21 @@ import argparse
 import pandas as pd
 
 """
-Global Coordinate System Generator for Novaseq S4 Flow Cell
+Global Coordinate System Generator for NovaSeq S4 Flow Cell
 
 This Python script is designed to create a global coordinate system 
-for a Novaseq S4 flow cell. 
+for a NovaSeq S4 flow cell. 
 
 It generates a DataFrame with puck names and their corresponding global 
 (x, y, z) coordinates and saves it to a CSV file.
 
 Usage:
-    python create_novaseq_S4_coordinate_system.py --output <output_file> [options]
+    python create_openst_coordinate_system.py --output <output_file> [options]
 
 Example:
-    python create_novaseq_S4_coordinate_system.py \
+    python create_openst_coordinate_system.py \
         --output output.csv \
-        --format-string fc_009_L{lane}{side_letter}_tile_{side_number}{column}{row:02d} \
+        --format-string fc_1_L{lane}{side_letter}_tile_{side_number}{column}{row:02d} \
         --x-offset 33739 \
         --y-offset 36282 \
         --swath-offset-odd 0 \
@@ -44,7 +44,7 @@ def setup_parser(parser):
         help="this the format for puck names. There are 4 attributes that can be chosen:"
         + "\{lane\} (int), \{column\} (int), \{row\} (int), \{side_letter\} (str), \{side_number\} (int).\n"
         + "For instance, a valid string format would be: \n"
-        + "fc_009_L{lane}{side_letter}_tile_{side_number}{column}{row:02d}\n"
+        + "fc_1_L{lane}{side_letter}_tile_{side_number}{column}{row:02d}\n"
         + "This name must be used, as is, when creating a new sample in spacemake.",
         default="L{lane}{side_letter}_tile_{side_number}{column}{row:02d}",
     )
@@ -120,7 +120,7 @@ def create_coordinate_system(
     format_string: str,
 ) -> pd.DataFrame:
     """
-    Create a global coordinate system for a Novaseq S4 flow cell.
+    Create a global coordinate system for a NovaSeq S4 flow cell.
 
     :param n_lanes: Number of lanes in the flow cell.
     :type n_lanes: int
@@ -189,7 +189,7 @@ def cmdline():
     """cmdline."""
     parser = argparse.ArgumentParser(
         allow_abbrev=False,
-        description="Global Coordinate System Generator for Novaseq S4 Flow Cell",
+        description="Global Coordinate System Generator for NovaSeq S4 Flow Cell",
     )
     parser = setup_parser(parser)
     args = parser.parse_args()
