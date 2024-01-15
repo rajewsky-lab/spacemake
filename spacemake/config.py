@@ -684,7 +684,7 @@ class ConfigFile:
 
         return kwargs
 
-    def process_barcode_flavor_args(self, cell_barcode=None, umi=None):
+    def process_barcode_flavor_args(self, cell_barcode=None, umi=None, name=None):
         bam_tags = "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
 
         # r(1|2) and then string slice
@@ -744,7 +744,7 @@ class ConfigFile:
         self.variables["species"][name] = species_refs
         return species_refs
 
-    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None, coordinate_system=None):
+    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None, coordinate_system=None, name=None):
         assert_file(barcodes, default_value=None, extension="all")
         assert_file(coordinate_system, default_value=None, extension="all")
 
