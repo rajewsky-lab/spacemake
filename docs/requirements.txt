@@ -19,3 +19,4 @@ spacemake
 novosparc
 ipython
 importlib-metadata
+Jinja2<3.1

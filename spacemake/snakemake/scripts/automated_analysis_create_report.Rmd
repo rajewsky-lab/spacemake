@@ -207,9 +207,8 @@ plot_umi_2d <- function(top_cutoff = FALSE){
 
 
     # calculate breaks and limits for the puck
-    puck_file <- read_csv(snakemake@input$puck_file)
-    x_limits <- puck_file$x_pos %>% {c(min(.), max(.))}
-    y_limits <- puck_file$y_pos %>% {c(min(.), max(.))}
+    x_limits <- obs_df$x_pos %>% {c(min(.), max(.))}
+    y_limits <- obs_df$y_pos %>% {c(min(.), max(.))}
 
     px_by_um <- snakemake@params$pbf_metrics$px_by_um
     puck_width_um <- (x_limits[2] - x_limits[1]) / px_by_um
@@ -326,9 +325,8 @@ for (i in obs_df %$% res %>% unique){
 
     if (is_spatial) {
         # calculate breaks and limits for the puck
-        puck_file <- read_csv(snakemake@input$puck_file)
-        x_limits <- puck_file$x_pos %>% {c(min(.), max(.))}
-        y_limits <- puck_file$y_pos %>% {c(min(.), max(.))}
+        x_limits <- obs_df$x_pos %>% {c(min(.), max(.))}
+        y_limits <- obs_df$y_pos %>% {c(min(.), max(.))}
 
         px_by_um <- snakemake@params$pbf_metrics$px_by_um
         puck_width_um <- (x_limits[2] - x_limits[1]) / px_by_um
