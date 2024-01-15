@@ -2,7 +2,7 @@ import errno
 import os
 import logging
 
-from contextlib import ContextDecorator, contextmanager
+#from contextlib import ContextDecorator, contextmanager
 from spacemake.errors import SpacemakeError, FileWrongExtensionError
 from spacemake.contrib import __version__, __license__, __author__, __email__
 
@@ -370,32 +370,67 @@ def fasta_chunks(lines, strip=True, fuse=True):
         yield chunk, "".join(data)
 
 
-@contextmanager
+# @contextmanager
+# def message_aggregation(log_listen="spacemake", print_logger=False, print_success=True):
+#     message_buffer = []
+
+#     log = logging.getLogger(log_listen)
+#     log.setLevel(logging.INFO)
+
+#     class MessageHandler(logging.NullHandler):
+#         def handle(this, record):
+#             if record.name == log_listen:
+#                 if print_logger:
+#                     print(f"{log_listen}: {record.msg}")
+#                 else:
+#                     print(record.msg)
+
+#     log.addHandler(MessageHandler())
+
+#     try:
+#         yield True
+
+#         if print_success:
+#             print(f"{LINE_SEPARATOR}SUCCESS!")
+
+#     except SpacemakeError as e:
+#         print(e)
+
 def message_aggregation(log_listen="spacemake", print_logger=False, print_success=True):
-    message_buffer = []
+    from functools import wraps
 
-    log = logging.getLogger(log_listen)
-    log.setLevel(logging.INFO)
+    def the_decorator(func):
+        @wraps(func)
+        def wrapper(*argc, **kw):
+            message_buffer = []
 
-    class MessageHandler(logging.NullHandler):
-        def handle(this, record):
-            if record.name == log_listen:
-                if print_logger:
-                    print(f"{log_listen}: {record.msg}")
-                else:
-                    print(record.msg)
+            log = logging.getLogger(log_listen)
+            log.setLevel(logging.INFO)
 
-    log.addHandler(MessageHandler())
+            class MessageHandler(logging.NullHandler):
+                def handle(this, record):
+                    if record.name == log_listen:
+                        if print_logger:
+                            print(f"{log_listen}: {record.msg}")
+                        else:
+                            print(record.msg)
 
-    try:
-        yield True
+            log.addHandler(MessageHandler())
 
-        if print_success:
-            print(f"{LINE_SEPARATOR}SUCCESS!")
+            try:
+                res = func(*argc, **kw)
+            except (SpacemakeError, NotImplementedError) as err:
+                print(f"CAUGHT A SPACEMAKE ERROR {err}")
+                # print(err)
+                return err
+            else:
+                if print_success:
+                    print(f"{LINE_SEPARATOR}SUCCESS!")
+                return res
 
-    except SpacemakeError as e:
-        print(e)
+        return wrapper        
 
+    return the_decorator
 
 def str_to_list(value):
     # if list in string representation, return the list

@@ -21,7 +21,7 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
     :return: a parser object
     :rtype: argparse.ArgumentParser
     """
-    logger.info(f"get_project_sample_parser(prepend={prepend}) called")
+    logger.debug(f"get_project_sample_parser(prepend={prepend}) called")
 
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     project_argument = "project_id"
@@ -65,7 +65,7 @@ def get_add_sample_sheet_parser():
     :return: parser
     :rtype: argparse.ArgumentParser
     """
-    logger.info("get_add_sample_sheet_parser() called")
+    logger.debug("get_add_sample_sheet_parser() called")
     parser = argparse.ArgumentParser(
         allow_abbrev=False,
         description="add a new sample sheet to the samples",
@@ -100,7 +100,7 @@ def get_sample_main_variables_parser(
     ],
 ):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-    logger.info(
+    logger.debug(
         f"get_sample_main_variables_parser called with main_variables={main_variables}"
     )
 
@@ -177,7 +177,7 @@ def get_sample_main_variables_parser(
 
 
 def get_sample_extra_info_parser():
-    logger.info("get_sample_extra_info_parser() called")
+    logger.debug("get_sample_extra_info_parser() called")
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
 
     parser.add_argument(
@@ -213,7 +213,7 @@ def get_data_parser(reads_required=False):
         required during parsing.
     """
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-    logger.info("get_data_parser() called")
+    logger.debug("get_data_parser() called")
     parser.add_argument(
         "--R1",
         type=str,
@@ -278,7 +278,7 @@ def get_set_remove_variable_subparsers(
     else:
         nargs = None
 
-    logger.info(f"get_set_remove_variable_subparsers(varname={variable_name}) called")
+    logger.debug(f"get_set_remove_variable_subparsers(varname={variable_name}) called")
 
     def get_action_parser(action):
         """get_action_parser.
@@ -313,7 +313,7 @@ def get_action_sample_parser(parent_parser, action, func):
     :param action:
     :param func:
     """
-    logger.info(f"get_action_sample_parser(action={action}) called")
+    logger.debug(f"get_action_sample_parser(action={action}) called")
     if action not in ["add", "update", "delete", "merge"]:
         raise ValueError(f"Invalid action: {action}")
 
@@ -1030,7 +1030,6 @@ def make_main_parser():
 
 def cmdline():
     # import importlib.metadata
-
     """cmdline."""
     parser_main, parser_dict = make_main_parser()
     args = parser_main.parse_args()
@@ -1059,7 +1058,7 @@ def cmdline():
     # pop also main,
     args.pop("subcommand", None)
 
-    func(args)
+    return func(args)
 
 
 if __name__ == "__main__":

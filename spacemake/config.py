@@ -357,7 +357,7 @@ def add_update_delete_variable_cmdline(config, args):
 def list_variables_cmdline(config, args):
     variable = args["variable"]
     del args["variable"]
-
+    import yaml
     config.logger.info(f"Listing {variable}")
     config.logger.info(yaml.dump(config.variables[variable]))
 
@@ -499,7 +499,6 @@ class ConfigFile:
 
             # correct variables to ensure backward compatibility
             cf.correct()
-
             # check which variables do not exist, if they dont,
             # copy them from initial config
             for main_variable in cf.main_variables_pl2sg:
@@ -715,7 +714,7 @@ class ConfigFile:
 
         return kwargs
 
-    def process_barcode_flavor_args(self, cell_barcode=None, umi=None):
+    def process_barcode_flavor_args(self, **kw):
         bam_tags = "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
         
         # r(1|2) and then string slice
@@ -723,7 +722,7 @@ class ConfigFile:
         # would be perfectly reasonable 
         # to_match = r"r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$"
 
-        umi = kw.get("umi", None)
+        UMI = kw.get("UMI", None)
         # if umi is not None and re.match(to_match, umi) is None:
         #     raise InvalidBarcodeStructureError("umi", to_match)
 
@@ -733,8 +732,8 @@ class ConfigFile:
 
         barcode_flavor = {"bam_tags": bam_tags}
 
-        if umi is not None:
-            barcode_flavor["UMI"] = umi
+        if UMI is not None:
+            barcode_flavor["UMI"] = UMI
 
         if cell_barcode is not None:
             barcode_flavor["cell"] = cell_barcode
@@ -833,7 +832,7 @@ class ConfigFile:
         self.variables["species"][name] = species_refs
         return species_refs
 
-    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None):
+    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None, coordinate_system=None, name=None):
         assert_file(barcodes, default_value=None, extension="all")
         assert_file(coordinate_system, default_value=None, extension="all")
 

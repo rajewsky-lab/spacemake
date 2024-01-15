@@ -1,7 +1,6 @@
 #########
 # about #
 #########
-__version__ = '0.1.1'
 __author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
 __license__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
@@ -110,20 +109,20 @@ if "custom_rules" in config:
 
 # global wildcard constraints
 wildcard_constraints:
-    umi_cutoff = '\d+',
-    dge_cleaned='|\.cleaned',
-    dge_type = '|'.join(dge_types),
-    pacbio_ext = 'fq|fastq|bam',
-    polyA_adapter_trimmed = '|\.polyA_adapter_trimmed',
-    mm_included = '|\.mm_included',
-    n_beads = '[0-9]+|spatial|external',
-    is_external = '|\.external',
-    spot_diameter_um = '[0-9]+',
-    spot_distance_um = '[0-9]+|hexagon',
-    data_root_type = 'complete_data|downsampled_data',
-    downsampling_percentage = '\/[0-9]+|',
-    puck_barcode_file_id = '(?!puck_collection)[^.]+',
-    puck_barcode_file_id_qc = '[^.]+'
+    umi_cutoff = r'\d+',
+    dge_cleaned=r'|\.cleaned',
+    dge_type = r'|'.join(dge_types),
+    pacbio_ext = r'fq|fastq|bam',
+    polyA_adapter_trimmed = r'|\.polyA_adapter_trimmed',
+    mm_included = r'|\.mm_included',
+    n_beads = r'[0-9]+|spatial|external',
+    is_external = r'|\.external',
+    spot_diameter_um = r'[0-9]+',
+    spot_distance_um = r'[0-9]+|hexagon',
+    data_root_type = r'complete_data|downsampled_data',
+    downsampling_percentage = r'\/[0-9]+|',
+    puck_barcode_file_id = r'(?!puck_collection)[^.]+',
+    puck_barcode_file_id_qc = r'[^.]+'
 
 #############
 # Main rule #
