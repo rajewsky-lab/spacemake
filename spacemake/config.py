@@ -12,15 +12,344 @@ from spacemake.util import check_star_index_compatibility
 logger_name = "spacemake.config"
 
 
-__global_config = None
+def get_puck_parser(required=True):
+    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
+    parser.add_argument("--name", help="name of the puck", type=str, required=True)
+    parser.add_argument(
+        "--width_um", type=float, required=required, help="width of the puck in microns"
+    )
+    parser.add_argument(
+        "--spot_diameter_um",
+        type=float,
+        required=required,
+        help="diameter of the spots in this puck, in microns",
+    )
+    parser.add_argument(
+        "--barcodes",
+        type=str,
+        required=False,
+        help="path to barcode file. of not provided the --puck_barcode_file variable"
+        + " of `spacemake projects add_sample` has to be set",
+    )
+
+    return parser
 
 
-def get_global_config(root="."):
-    global __global_config
-    if __global_config is None:
-        __global_config = ConfigFile.from_yaml(f"{root}/config.yaml")
+def get_run_mode_parser(required=True):
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False,
+        formatter_class=argparse.RawTextHelpFormatter,
+        description="add/update run_mode parent parser",
+        add_help=False,
+    )
+    parser.add_argument(
+        "--name", type=str, help="name of the run_mode to be added", required=True
+    )
+    parser.add_argument(
+        "--parent_run_mode",
+        type=str,
+        help="Name of the parent run_mode. All run_modes will fall back to 'default'",
+    )
+    parser.add_argument(
+        "--umi_cutoff",
+        type=int,
+        nargs="+",
+        help="umi_cutoff for this run_mode."
+        + "the automated analysis will be run with these cutoffs",
+    )
+    parser.add_argument(
+        "--n_beads", type=int, help="number of expected beads for this run_mode"
+    )
+    parser.add_argument(
+        "--clean_dge",
+        required=False,
+        choices=bool_in_str,
+        type=str,
+        help="if True, the DGE will be cleaned of barcodes which overlap with primers",
+    )
+    parser.add_argument(
+        "--detect_tissue",
+        required=False,
+        choices=bool_in_str,
+        type=str,
+        help="By default only beads having at least umi_cutoff UMI counts are analysed "
+        + "during the automated analysis, all other beads are filtered out. If this "
+        + "parameter is set, contiguous islands within umi_cutoff passing beads will "
+        + "also be included in the analysis",
+    )
+    # parser.add_argument(
+    #     "--polyA_adapter_trimming",
+    #     required=False,
+    #     choices=bool_in_str,
+    #     type=str,
+    #     help="if set, reads will have polyA stretches and adapter sequence overlaps trimmed "
+    #     + "BEFORE mapping.",
+    # )
+    parser.add_argument(
+        "--count_intronic_reads",
+        required=False,
+        choices=bool_in_str,
+        type=str,
+        help="if set, INTRONIC reads will also be countsed (apart from UTR and CDS)",
+    )
+    parser.add_argument(
+        "--count_mm_reads",
+        required=False,
+        choices=bool_in_str,
+        type=str,
+        help="if True, multi-mappers will also be counted. For every "
+        + "multimapper only reads which have one unique read mapped"
+        + "to a CDS or UTR region will be counted",
+    )
 
-    return __global_config
+    parser.add_argument(
+        "--mesh_data",
+        required=False,
+        choices=bool_in_str,
+        type=str,
+        help="if True, this data will be 'mehsed': a hexagonal structured "
+        + "meshgrid will be created, where each new spot will have diameter"
+        + " of --mesh_spot_diameter_um micron diameter and the spots will "
+        + "be spaced --mesh_spot_distance_um microns apart",
+    )
+    parser.add_argument(
+        "--mesh_type",
+        required=False,
+        choices=["circle", "hexagon"],
+        type=str,
+        help="circle: circles with diameter of --mesh_spot_diameter_um will be placed"
+        + " in a hex grid, where he distance between any two circles will be "
+        + "--mesh_spot_distance_um\n"
+        + "hexagon: a mesh of touching hexagons will be created, with their "
+        + "centers being --mesh_spot_distance_um apart. This will cover all "
+        + "the data without any holes",
+    )
+    parser.add_argument(
+        "--mesh_spot_diameter_um",
+        type=float,
+        required=False,
+        help="diameter of mesh spot, in microns. to create a visium-style "
+        + "mesh, use 55um",
+    )
+    parser.add_argument(
+        "--mesh_spot_distance_um",
+        type=float,
+        required=False,
+        help="distance between mesh spots in um. to create a visium-style "
+        + "mesh use 100um",
+    )
+
+    return parser
+
+
+def get_species_parser(required=True):
+    "a parser that allows to add a reference sequence and annotation, belonging to some species"
+    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
+    parser.add_argument(
+        "--reference",
+        help="name of the reference (default=genome)",
+        type=str,
+        default="genome",
+    )
+    parser.add_argument("--name", help="name of the species", type=str, required=True)
+    parser.add_argument(
+        "--sequence",
+        help="path to the sequence (.fa) file for the species/reference to be added (e.g. the genome)",
+        type=str,
+        required=required,
+    )
+    parser.add_argument(
+        "--genome",
+        help="[DEPRECATED] path to the genome (.fa) file for the species to be added. --genome=<arg> is a synonym for --reference=genome --sequence=<arg>",
+        type=str,
+        required=False,
+    )
+
+    parser.add_argument(
+        "--annotation",
+        help="path to the genome annotation (.gtf) file for the species to be added",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--STAR_index_dir",
+        help="path to STAR index directory",
+        type=str,
+        required=False,
+    )
+    parser.add_argument(
+        "--BT2_index",
+        help="path to BOWTIE2 index",
+        type=str,
+        required=False,
+    )
+    parser.add_argument(
+        "--BT2_flags",
+        help="bt2 mapping arguments for this reference (default=mapping.smk:default_BT2_MAP_FLAGS) ",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--STAR_flags",
+        help="STAR mapping arguments for this reference (default=mapping.smk:default_STAR_MAP_FLAGS)",
+        type=str,
+        default="",
+        required=False,
+    )
+
+    return parser
+
+
+def get_barcode_flavor_parser(required=True):
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False, description="add/update barcode_flavor", add_help=False
+    )
+    parser.add_argument(
+        "--name", help="name of the barcode flavor", type=str, required=True
+    )
+    parser.add_argument(
+        "--umi",
+        help="structure of UMI, using python's list syntax. Example: to set UMI to "
+        + "13-20 NT of Read1, use --umi r1[12:20]. It is also possible to use the first 8nt of "
+        + "Read2 as UMI: --umi r2[0:8]",
+        type=str,
+        required=required,
+    )
+    parser.add_argument(
+        "--cell_barcode",
+        help="structure of CELL BARCODE, using python's list syntax. Example: to set"
+        + " the cell_barcode to 1-12 nt of Read1, use --cell_barcode r1[0:12]. It is also possible "
+        + " to reverse the CELL BARCODE, for instance with r1[0:12][::-1] (reversing the first 12nt of"
+        + " Read1, and assigning them as CELL BARCODE).",
+        type=str,
+        required=required,
+    )
+
+    return parser
+
+
+def get_variable_action_subparsers(config, parent_parser, variable):
+    if variable == "barcode_flavors":
+        variable_singular = variable[:-1]
+        variable_add_update_parser = get_barcode_flavor_parser
+    elif variable == "pucks":
+        variable_singular = variable[:-1]
+        variable_add_update_parser = get_puck_parser
+    elif variable == "run_modes":
+        variable_singular = variable[:-1]
+        variable_add_update_parser = get_run_mode_parser
+    elif variable == "species":
+        variable_singular = variable
+        variable_add_update_parser = get_species_parser
+
+    command_help = {
+        "list": f"list {variable} and their settings",
+        "delete": f"delete {variable_singular}",
+        "add": f"add a new {variable_singular}",
+        "update": f"update an existing {variable_singular}",
+    }
+
+    # list command
+    list_parser = parent_parser.add_parser(
+        f"list_{variable}", description=command_help["list"], help=command_help["list"]
+    )
+    list_parser.set_defaults(
+        func=lambda args: list_variables_cmdline(config, args), variable=variable
+    )
+
+    func = lambda args: add_update_delete_variable_cmdline(config, args)
+
+    # delete command
+    delete_parser = parent_parser.add_parser(
+        f"delete_{variable_singular}",
+        description=command_help["delete"],
+        help=command_help["delete"],
+    )
+    delete_parser.add_argument(
+        "--name",
+        help=f"name of the {variable_singular} to be deleted",
+        type=str,
+        required=True,
+    )
+    if variable == "species":
+        delete_parser.add_argument(
+            "--reference",
+            help=f"name of the reference to be deleted (genome, rRNA, ...)",
+            type=str,
+            required=True,
+        )
+
+    delete_parser.set_defaults(func=func, action="delete", variable=variable)
+
+    # add command
+    add_parser = parent_parser.add_parser(
+        f"add_{variable_singular}",
+        parents=[variable_add_update_parser()],
+        description=command_help["add"],
+        help=command_help["add"],
+    )
+    add_parser.set_defaults(func=func, action="add", variable=variable)
+
+    # update command
+    update_parser = parent_parser.add_parser(
+        f"update_{variable_singular}",
+        parents=[variable_add_update_parser(False)],
+        description=command_help["update"],
+        help=command_help["update"],
+    )
+    update_parser.set_defaults(func=func, action="update", variable=variable)
+
+
+def setup_config_parser(config, parent_parser_subparsers):
+    parser_config = parent_parser_subparsers.add_parser(
+        "config", help="configure spacemake"
+    )
+    parser_config_subparsers = parser_config.add_subparsers(
+        help="config sub-command help"
+    )
+
+    for variable in ConfigFile.main_variables_pl2sg.keys():
+        get_variable_action_subparsers(config, parser_config_subparsers, variable)
+
+    return parser_config
+
+
+@message_aggregation(logger_name)
+def add_update_delete_variable_cmdline(config, args):
+    # set the name and delete from dictionary
+    name = args["name"]
+    variable = args["variable"]
+    action = args["action"]
+
+    config.assert_main_variable(variable)
+
+    # remove the args from the dict
+    del args["action"]
+    del args["variable"]
+    del args["name"]
+
+    if action == "add":
+        func = config.add_variable
+    elif action == "update":
+        func = config.update_variable
+    elif action == "delete":
+        func = config.delete_variable
+
+    var_variables = func(variable, name, **args)
+    # print and dump config file
+    config.logger.info(yaml.dump(var_variables, sort_keys=False))
+    config.dump()
+
+
+@message_aggregation(logger_name)
+def list_variables_cmdline(config, args):
+    variable = args["variable"]
+    del args["variable"]
+
+    config.logger.info(f"Listing {variable}")
+    config.logger.info(yaml.dump(config.variables[variable]))
 
 
 class ConfigMainVariable:
@@ -62,6 +391,7 @@ class RunMode(ConfigMainVariable):
         "mesh_type": str,
         "mesh_spot_diameter_um": int,
         "mesh_spot_distance_um": int,
+        "spatial_barcode_min_matches": float,
     }
 
     def has_parent(self):
@@ -79,7 +409,7 @@ class RunMode(ConfigMainVariable):
 
 
 class Puck(ConfigMainVariable):
-    variable_types = {"barcodes": str, "spot_diameter_um": float, "width_um": int}
+    variable_types = {"barcodes": str, "spot_diameter_um": float, "width_um": int, "coordinate_system": str}
 
     @property
     def has_barcodes(self):
@@ -87,6 +417,14 @@ class Puck(ConfigMainVariable):
             "barcodes" in self.variables
             and self.variables["barcodes"]
             and self.variables["barcodes"] != "None"
+        )
+    
+    @property
+    def has_coordinate_system(self):
+        return (
+            "coordinate_system" in self.variables
+            and self.variables["coordinate_system"]
+            and self.variables["coordinate_system"] != "None"
         )
 
 
@@ -366,7 +704,7 @@ class ConfigFile:
 
         return kwargs
 
-    def process_barcode_flavor_args(self, **kw):
+    def process_barcode_flavor_args(self, cell_barcode=None, umi=None):
         bam_tags = "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
         
         # r(1|2) and then string slice
@@ -484,11 +822,11 @@ class ConfigFile:
         self.variables["species"][name] = species_refs
         return species_refs
 
-    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None, **kw):
+    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None):
         assert_file(barcodes, default_value=None, extension="all")
+        assert_file(coordinate_system, default_value=None, extension="all")
 
         puck = {}
-
         if width_um is not None:
             puck["width_um"] = float(width_um)
 
@@ -497,6 +835,10 @@ class ConfigFile:
 
         if barcodes is not None:
             puck["barcodes"] = barcodes
+
+        if coordinate_system is not None:
+            puck["coordinate_system"] = coordinate_system
+
 
         return puck
 

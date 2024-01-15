@@ -706,6 +706,15 @@ def spacemake_init(args):
         dest_visium_path,
     )
 
+    # copy openst_coordinate_system
+    dest_puck_collection_path = "puck_data/openst_coordinate_system.csv"
+    logger.info(f"Moving puck collection coordinate system to {dest_puck_collection_path}")
+    os.makedirs(os.path.dirname(dest_puck_collection_path), exist_ok=True)
+    copyfile(
+        os.path.join(os.path.dirname(__file__), "data/puck_collection/openst_coordinate_system.csv"),
+        dest_puck_collection_path,
+    )
+
     # save
     cf.dump()
 
@@ -775,27 +784,35 @@ def spacemake_run(args):
     # to flatten the dictionary
     config_variables = {**config_variables, **novosparc_variables}
 
+    # assert that the project_df is valid before running the pipeline
+    pdf.assert_valid()
+
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
     # run snakemake
-    # preprocess_finished = snakemake.snakemake(
-    #     snakefile,
-    #     configfiles=[var.config_path],
-    #     cores=args["cores"],
-    #     dryrun=args["dryrun"],
-    #     targets=[],
-    #     touch=args["touch"],
-    #     force_incomplete=args["rerun_incomplete"],
-    #     keepgoing=args["keep_going"],
-    #     printshellcmds=args["printshellcmds"],
-    #     config=config_variables,
-    #     delete_temp_output=True,
-    # )
+    preprocess_finished = snakemake.snakemake(
+        snakefile,
+        configfiles=[var.config_path],
+        cores=args["cores"],
+        dryrun=args["dryrun"],
+        targets=[],
+        touch=args["touch"],
+        force_incomplete=args["rerun_incomplete"],
+        keepgoing=args["keep_going"],
+        printshellcmds=args["printshellcmds"],
+        config=config_variables,
+        delete_temp_output=True,
+    )
 
-    # if preprocess_finished is False:
-    #     raise SpacemakeError("an error occurred while snakemake() ran")
+    if preprocess_finished is False:
+        raise SpacemakeError("an error occurred while snakemake() ran")
 
-    # run spacemake downstream
+    # update valid pucks (above threshold) before continuing to downstream
+    # this performs counting of matching barcodes after alignment
+    pdf.update_project_df_barcode_matches(prealigned=True)
+    pdf.dump()
+
+    # run snakemake after prealignment filter
     analysis_finished = snakemake.snakemake(
         snakefile,
         configfiles=[var.config_path],
@@ -996,9 +1013,11 @@ def make_main_parser():
         #####################
         # SPACEMAKE SPATIAL #
         #####################
-        from .spatial.cmdline import setup_spatial_parser
+        from spacemake.spatial.cmdline import setup_spatial_parser
+        if os.path.isfile(config_path):
+            spmk = Spacemake('.')
 
-        parser_spatial = setup_spatial_parser(parser_main_subparsers)
+        parser_spatial = setup_spatial_parser(spmk, parser_main_subparsers)
 
     parser_dict = {
         "init": parser_init,
@@ -1020,7 +1039,7 @@ def cmdline():
     args = parser_main.parse_args()
 
     if args.version and args.subcommand is None:
-        print(__version__)
+        print(importlib.metadata.version('spacemake'))
         return 0
     else:
         del args.version

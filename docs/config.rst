@@ -154,6 +154,11 @@ Each ``run_mode`` can have the following variables:
 ``mesh_spot_distance_um`` (spatial only, only for circle mesh)
    distance between the meshed circles, in microns.
 
+``spatial_barcode_min_matches`` (spatial only)
+   ratio spatial barcode matches, expressed as 0-1 interval, used as a minimum threshold to
+   filter out pucks from DGE creation and subsequent steps of the pipeline. If set to 0, 
+   no pucks are excluded.
+
 ``parent_run_mode``
    Each ``run_mode`` can have a parent, to which it will fall back.
    If a one of the ``run_mode`` variables is missing, the variable of the parent will be used.
@@ -176,6 +181,7 @@ Provided run\_mode(s)
         mesh_type: 'circle'
         mesh_spot_diameter_um: 55
         mesh_spot_distance_um: 100
+        spatial_barcode_min_matches: 0
     visium:
         n_beads: 10000
         umi_cutoff: [1000]
@@ -264,6 +270,10 @@ Each puck has the following variables:
 - ``barcodes`` (optional): the path to the barcode file, containing the cell\_barcode
   and (x,y) position for each. This is handy, when several pucks have the same barcodes,
   such as for 10x visium.
+- ``coordinate_system`` (optional): the path to the coordinate system file, containing puck
+  IDs and the (x,y,z) position for each, in global coordinates. This coordinate system is analogous
+  to the global coordinate system for image stitching. When specified, this 'stitching' is
+  automatically performed on ``puck``-s with spatial information
 
 
 Provided pucks
@@ -284,10 +294,16 @@ Provided pucks
     slide_seq:
         width_um: 3000
         spot_diameter_um: 10
+    openst:
+        width_um: 1200
+        spot_diameter_um: 0.6
+        coordinate_system: 'puck_data/openst_coordinate_system.csv'
 
 as you can see, the ``visium`` puck comes with a ``barcodes`` variable, which points to
-``puck_data/visium_barcode_positions.csv``. Upon initiation, this file will automatically placed 
-there by spacemake
+``puck_data/visium_barcode_positions.csv``; similarly, the ``openst`` puck comes with
+a ``coordinate_system`` variable, pointing to ``puck_data/openst_coordinate_system.csv``.
+
+Upon initiation, these files will automatically placed there by spacemake
 
 To list the currently available ``puck``-s, type::
    
@@ -303,7 +319,8 @@ Add a new puck
       --name NAME \        # name of the puck
       --width_um WIDTH_UM \
       --spot_diameter_um SPOT_DIAMETER_UM \
-      --barcodes BARCODES # path to the barcode file, optional 
+      --barcodes BARCODES \ # path to the barcode file, optional 
+      --coordinate_system COORDINATE_SYSTEM # path to the coordinate system file, optional 
 
 
 Custom snakemake rules
