@@ -39,3 +39,4 @@ dependencies:
         - squidpy>=1.0.0
         - novosparc
         - opencv-python
+        - jinja2>=3.1.3
