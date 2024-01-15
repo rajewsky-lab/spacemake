@@ -1768,7 +1768,11 @@ class ProjectDF:
 
         consistent_variables = list(self.config.main_variables_sg2pl.keys())
         consistent_variables.remove("run_mode")
-
+        
+        # append variable "map_strategy" manually.
+        # TODO: consider moving "map_strategy" into the main_variables_sg2pl, needs additional parser etc.
+        consistent_variables.append("map_strategy")
+        
         ix_list = ix.to_list()
 
         if ix_list == []:

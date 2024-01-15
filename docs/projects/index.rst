@@ -299,10 +299,24 @@ Under ``additional_projects`` we define a list where each element will be a key:
    then modifies something in the ``samples.yaml``, and runs the command again, the ``project_df.csv``
    will contain the updated version of the settings.
 
-Add samples from illumina sample-sheet
+Add samples from an Illumina sample-sheet
 --------------------------------------
 
-Coming soon...
+You can add samples directly from an Illumina sample-sheet, assuming the sample-sheet is configured appropriately and a basecalls folder is available. Spacemake will then automatically process the sample-sheet, create the appropriate directories, and begin demultiplexing the data. Once the data is demultiplexed, spacemake will continue with the processing as described above.
+
+To use this functionality, type::
+
+   spacemake projects add_sample_sheet \
+       --sample_sheet <path_to_sample_sheet> \
+       --basecalls_dir <path_to_basecalls_folder>
+
+The sample-sheet columns have to obey certain conventions for spacemake to parse it properly:
+
+* ``Sample_ID`` contains the ``sample_id``s in the project.
+* ``Sample_Project`` contains the ``project_id``s in the project.
+* ``Description`` must end with ``_species``, where species is the one configured for the samples in the project, e.g. ``HEK293_wt_human``.
+
+Spacemake will also parse the fields ``Investigator``, ``Date``, and ``Experiment`` from the sample-sheet and add them to the project metadata.
 
 Listing projects
 ----------------
@@ -315,3 +329,15 @@ It will show the main variables for each project in the ``project_df.csv``.
 
 To view extra variables which are not shown, use the ``--variables`` option 
 to specify which extra variables to show.
+
+Merging samples
+----------------
+
+Spacemake can merge samples that have been resequenced to increase the number of quantified molecules in the data. To merge samples, first configure, add, and process the individual samples as they are. Make sure that the samples belong in the same project, e.g. have the same ``project_id``. Then merge them by typing::
+
+   spacemake projects merge_samples \
+       --merge_project_id <project_id> \
+       --merged_sample_id <sample_merged> \
+       --sample_id_list <sample_a> <sample_b>
+
+The above command will merge the two samples by creating a new sample with the same variables. Spacemake performs the merging at the level of the ``bam`` files, thus properly processing the merged sample by collapsing PCR duplicates. Processing will automatically run until the creation of the ``qc_sheets`` and the automated analyses.
