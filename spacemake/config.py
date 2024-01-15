@@ -749,7 +749,6 @@ class ConfigFile:
         assert_file(coordinate_system, default_value=None, extension="all")
 
         puck = {}
-
         if width_um is not None:
             puck["width_um"] = float(width_um)
 
