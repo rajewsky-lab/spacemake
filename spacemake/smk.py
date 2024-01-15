@@ -638,7 +638,7 @@ if os.path.isfile(config_path):
 #####################
 # SPACEMAKE SPATIAL #
 #####################
-from .spatial.cmdline import setup_spatial_parser
+from spacemake.spatial.cmdline import setup_spatial_parser
 
 if os.path.isfile(config_path):
     spmk = Spacemake('.')
