@@ -1014,10 +1014,7 @@ def make_main_parser():
         # SPACEMAKE SPATIAL #
         #####################
         from spacemake.spatial.cmdline import setup_spatial_parser
-        if os.path.isfile(config_path):
-            spmk = Spacemake('.')
-
-        parser_spatial = setup_spatial_parser(spmk, parser_main_subparsers)
+        parser_spatial = setup_spatial_parser(parser_main_subparsers)
 
     parser_dict = {
         "init": parser_init,

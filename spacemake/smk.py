@@ -22,7 +22,7 @@ class Spacemake:
 
         self.root = root
         self.config = get_global_config(root)
-        self.project_df = get_global_ProjectDF(f"{root}/project_df.csv")
+        self.project_df = get_global_ProjectDF(root)
 
     def load_processed_adata(
         self, project_id, sample_id, run_mode_name, umi_cutoff

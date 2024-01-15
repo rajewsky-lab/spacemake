@@ -739,6 +739,7 @@ class ProjectDF:
 
     def dump(self):
         """dump."""
+        self.logger.debug(f"writing project_df.csv to '{self.file_path}")
         self.df.to_csv(self.file_path)
 
     def add_sample_sheet(self, sample_sheet_path, basecalls_dir):
@@ -1412,7 +1413,6 @@ def get_global_ProjectDF(root="."):
     global __global_ProjectDF
     if __global_ProjectDF is None:
         from spacemake.config import get_global_config
-
         __global_ProjectDF = ProjectDF(
             f"{root}/project_df.csv", config=get_global_config()
         )

@@ -12,6 +12,16 @@ from spacemake.util import check_star_index_compatibility
 logger_name = "spacemake.config"
 
 
+__global_config = None
+
+
+def get_global_config(root="."):
+    global __global_config
+    if __global_config is None:
+        __global_config = ConfigFile.from_yaml(f"{root}/config.yaml")
+
+    return __global_config
+
 def get_puck_parser(required=True):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     parser.add_argument("--name", help="name of the puck", type=str, required=True)
@@ -648,6 +658,7 @@ class ConfigFile:
     def dump(self):
         import yaml
 
+        self.logger.debug(f"writing config.yaml to '{self.file_path}")
         with open(self.file_path, "w") as fo:
             fo.write(yaml.dump(self.variables))
 
