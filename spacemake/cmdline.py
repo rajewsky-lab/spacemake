@@ -1029,14 +1029,15 @@ def make_main_parser():
 
 
 def cmdline():
-    import importlib.metadata
+    # import importlib.metadata
 
     """cmdline."""
     parser_main, parser_dict = make_main_parser()
     args = parser_main.parse_args()
 
     if args.version and args.subcommand is None:
-        print(importlib.metadata.version('spacemake'))
+        import spacemake.contrib
+        print(spacemake.contrib.__version__)
         return 0
     else:
         del args.version
