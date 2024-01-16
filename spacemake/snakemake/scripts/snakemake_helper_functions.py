@@ -899,12 +899,12 @@ def get_qc_sheet_input_files(wildcards):
     return to_return
 
 
-def get_bam_tag_names(project_id, sample_id):
+def get_bam_tag_names(project_id, sample_id, default_tags="CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"):
     barcode_flavor = project_df.get_metadata(
         "barcode_flavor", project_id=project_id, sample_id=sample_id
     )
 
-    bam_tags = config["barcode_flavors"][barcode_flavor]["bam_tags"]
+    bam_tags = config["barcode_flavors"][barcode_flavor].get("bam_tags", default_tags)
 
     tag_names = {}
 
