@@ -473,13 +473,14 @@ def create_meshed_adata(
                 last_row=_last_row,
             )
 
-            new_ilocs = [[i] * len(accum[i]) for i in range(len(accum))]
-            new_ilocs = np.array([n for new_iloc in new_ilocs for n in new_iloc])
-            original_ilocs = np.array([a for acc in accum for a in acc])
+            new_ilocs = np.zeros(len(coords), dtype=int)
+            for i in range(len(accum)):
+                new_ilocs[accum[i]] = i
+            original_ilocs = np.arange(new_ilocs.shape[0])
 
             distance_filter = (
                 np.linalg.norm(
-                    np.array(coords[original_ilocs]) - np.array(mesh_px[new_ilocs]),
+                    np.array(coords) - np.array(mesh_px[new_ilocs]),
                     axis=1,
                 )
                 < max_distance_px
