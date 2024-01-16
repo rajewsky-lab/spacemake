@@ -1,4 +1,3 @@
-from anndata import AnnData
 from spacemake.preprocess import calculate_adata_metrics
 
 
