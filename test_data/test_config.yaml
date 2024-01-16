@@ -1,3 +1,7 @@
+root_dir: '.'
+temp_dir: './tmp'
+external_bin: 
+        dropseq_tools: './bin/dropseq'
 logging:
   level: INFO
   debug: "spacemake.util.read_fq"
@@ -20,6 +24,9 @@ pucks:
     slide_seq:
         width_um: 3000
         spot_diameter_um: 10
+    test_puck:
+        width_um: 4000
+        spot_diameter_um: 1 
 
 run_modes:
     default:
@@ -27,7 +34,6 @@ run_modes:
         umi_cutoff: [100, 300, 500]
         clean_dge: False
         detect_tissue: False
-        polyA_adapter_trimming: True
         count_intronic_reads: True
         count_mm_reads: False
         mesh_data: False
@@ -39,7 +45,6 @@ run_modes:
         umi_cutoff: [1000]
         clean_dge: False
         detect_tissue: True
-        polyA_adapter_trimming: False
         count_intronic_reads: False
         count_mm_reads: True
     slide_seq:
@@ -51,7 +56,6 @@ run_modes:
         n_beads: 10000
         umi_cutoff: [500]
         detect_tissue: False
-        polyA_adapter_trimming: True
         count_intronic_reads: True
         count_mm_reads: False
     seq_scope:
@@ -67,6 +71,20 @@ run_modes:
         umi_cutoff:
         - 100
         - 300
+    spatial_rm:
+        clean_dge: false
+        count_intronic_reads: false
+        count_mm_reads: false
+        detect_tissue: false
+        mesh_data: true
+        mesh_spot_diameter_um: 10
+        mesh_spot_distance_um: 15
+        mesh_type: hexagon
+        n_beads: 1000
+        umi_cutoff:
+        - 500
+        - 1000
+
 
 barcode_flavors:
     default:
@@ -102,6 +120,7 @@ adapters:
   optical_primer: GAATCACGATACGTACACCA
   TSO_SMART: AAGCAGTGGTATCAACGCAGAGTGAATGGG
   SMART: AAGCAGTGGTATCAACGCAGAGTG
+  smart: AAGCAGTGGTATCAACGCAGAGTG
   TSO_10x: AAGCAGTGGTATCAACGCAGAGTACATGGG
   chromium_bead: CTACACGACGCTCTTCCGATCT
   dropseq_bead: AAGCAGTGGTATCAACGCAGAGTAC
