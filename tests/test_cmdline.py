@@ -3,38 +3,8 @@ import sys
 import os
 from spacemake.cmdline import *
 
+from fixtures import initialized_root, with_species, configured_root, sm, spacemake_dir
 
-spacemake_dir = os.path.dirname(__file__) + '/../'
-
-from fixtures import tmp_root, configured_root
-
-
-def sm(*argc, expect_fail=False):
-    sys.argv = ["spacemake",] + list(argc)
-    import spacemake.config
-    import spacemake.project_df
-    spacemake.config.__global_config = None
-    spacemake.project_df.__global_ProjectDF = None
-    res = cmdline()
-    from spacemake.errors import SpacemakeError
-    if expect_fail:
-        assert isinstance(res, Exception) == True
-    else:
-        assert isinstance(res, Exception) == False
-
-
-@pytest.fixture
-def initialized_root(tmp_path_factory):
-    tmp = tmp_path_factory.mktemp("root_initialized")
-    os.chdir(tmp.as_posix())
-
-    # just get the version
-    sm("--version")
-
-    # test the init parser
-    sm("init", "--dropseq_tools", "/data/rajewsky/shared_bins/Drop-seq_tools-2.5.1/")
-
-    return tmp
 
 def test_init(initialized_root):
     assert os.path.exists(initialized_root.as_posix() + '/config.yaml')
@@ -62,7 +32,7 @@ def test_subcommands(configured_root):
     sm("config", "list_adapter_flavors")
 
 
-def test_1_config_barcodes(initialized_root):
+def test_config_barcodes(initialized_root):
     os.chdir(initialized_root.as_posix())
 
     # add
@@ -97,7 +67,7 @@ def test_1_config_barcodes(initialized_root):
     )
 
 
-def test_2_config_adapters(initialized_root):
+def test_config_adapters(initialized_root):
     os.chdir(initialized_root.as_posix())
     # add
     sm(
@@ -126,7 +96,7 @@ def test_2_config_adapters(initialized_root):
     )
 
 
-def test_3_config_adapter_flavors(initialized_root):
+def test_config_adapter_flavors(initialized_root):
     os.chdir(initialized_root.as_posix())
 
     test_flavor = (
@@ -149,45 +119,12 @@ def test_3_config_adapter_flavors(initialized_root):
     # re-add
     sm("config", "add_adapter_flavor", *test_flavor)
 
-@pytest.fixture
-def with_species(initialized_root):
-    os.chdir(initialized_root.as_posix())
-    # # test old way
-    # sm(
-    #     "config", "add_species",
-    #     "--name=hsa_test",
-    #     f"--genome={spacemake_dir}/test_data/test_genome.fa.gz",
-    #     f"--annotation={spacemake_dir}/test_data/test_annotation.gtf.gz",
-    # )
-    # test new way
-    sm(
-        "config", "add_species",
-        "--name=test_hsa",
-        "--reference=genome",
-        f"--sequence={spacemake_dir}/test_data/test_genome.fa.gz",
-        f"--annotation={spacemake_dir}/test_data/test_annotation.gtf.gz",
-    )
-    # add a second reference
-    sm(
-        "config", "add_species",
-        "--name=test_hsa",
-        "--reference=rRNA",
-        f"--sequence={spacemake_dir}/test_data/rRNA_hsa.fa.gz",
-    )
-    # add a third reference
-    sm(
-        "config", "add_species",
-        "--name=test_hsa",
-        "--reference=miRNA",
-        f"--sequence={spacemake_dir}/test_data/mirgenedb.hsa.mature.fa.gz",
-    )
-    return initialized_root
 
 def test_species(with_species):
     pass
 
 
-def test_5_puck(initialized_root):
+def test_puck(initialized_root):
     os.chdir(initialized_root.as_posix())
     test_puck = (
         "--name=test_puck",
@@ -205,7 +142,7 @@ def test_5_puck(initialized_root):
     sm("config", "add_puck", *test_puck)
 
 
-def test_6_runmode(initialized_root):
+def test_runmode(initialized_root):
     os.chdir(initialized_root.as_posix())
     # add
     sm("config", "add_run_mode", "--name=spatial_rm", "--umi_cutoff=10")
@@ -218,7 +155,7 @@ def test_6_runmode(initialized_root):
     config = get_global_config()
     config.dump()
 
-def test_7_sample(configured_root):
+def test_sample(configured_root):
     os.chdir(configured_root.as_posix())
     test_sample = (
         f'--R1={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz', 
@@ -226,7 +163,6 @@ def test_7_sample(configured_root):
         '--map_strategy=genome:STAR:final',
         '--species=test_hsa'
     )
-
 
     # add
     sm(
@@ -252,7 +188,7 @@ def test_7_sample(configured_root):
         '--map_strategy=rRNA:bowtie2->genome:STAR'
     )
 
-def test_8_fill_project_df(with_species):
+def test_fill_project_df(with_species):
     os.chdir(with_species.as_posix())
     test_project_data = [
         (
@@ -335,7 +271,7 @@ def test_8_fill_project_df(with_species):
         )
 
 
-# def test_run(test_root):
-#     # test everything after init
-#     # os.chdir(test_root.as_posix())
-#     sm("run", "-np", "--cores=8")
+def test_run(configured_root):
+    # test everything after init
+    os.chdir(configured_root.as_posix())
+    sm("run", "-np", "--cores=8")
