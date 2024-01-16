@@ -38,12 +38,18 @@ def get_puck_parser(required=True):
         "--barcodes",
         type=str,
         required=False,
-        help="path to barcode file. of not provided the --puck_barcode_file variable"
+        help="path to barcode file. if not provided, the --puck_barcode_file variable"
         + " of `spacemake projects add_sample` has to be set",
+    )
+    parser.add_argument(
+        "--coordinate_system",
+        type=str,
+        required=False,
+        help="path to coordinate system file. When specified, spacemake will 'stitch'"
+        + " pucks into a single file, with corresponding global coordinates",
     )
 
     return parser
-
 
 def get_run_mode_parser(required=True):
     parser = argparse.ArgumentParser(
@@ -986,29 +992,6 @@ class ConfigFile:
                     )
 
         return af
-
-
-def get_puck_parser(required=True):
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-    parser.add_argument("--name", help="name of the puck", type=str, required=True)
-    parser.add_argument(
-        "--width_um", type=float, required=required, help="width of the puck in microns"
-    )
-    parser.add_argument(
-        "--spot_diameter_um",
-        type=float,
-        required=required,
-        help="diameter of the spots in this puck, in microns",
-    )
-    parser.add_argument(
-        "--barcodes",
-        type=str,
-        required=False,
-        help="path to barcode file. of not provided the --puck_barcode_file variable"
-        + " of `spacemake projects add_sample` has to be set",
-    )
-
-    return parser
 
 
 def get_run_mode_parser(required=True):
