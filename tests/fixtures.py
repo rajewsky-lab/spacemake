@@ -25,38 +25,15 @@ def sm(*argc, expect_fail=False):
 
     return res
 
-@pytest.fixture
-def tmp_root(tmp_path_factory):
-    tmp = tmp_path_factory.mktemp("root_blank")
-
-    return tmp
-
-
-@pytest.fixture
-def initialized_root(tmp_path_factory):
-    tmp = tmp_path_factory.mktemp("root_initialized")
-    os.chdir(tmp.as_posix())
-
+def _init():
     # just get the version
     sm("--version")
 
     # test the init parser
     sm("init", "--dropseq_tools", "/data/rajewsky/shared_bins/Drop-seq_tools-2.5.1/")
 
-    return tmp
 
-
-@pytest.fixture
-def with_species(initialized_root):
-    os.chdir(initialized_root.as_posix())
-    # # test old way
-    # sm(
-    #     "config", "add_species",
-    #     "--name=hsa_test",
-    #     f"--genome={spacemake_dir}/test_data/test_genome.fa.gz",
-    #     f"--annotation={spacemake_dir}/test_data/test_annotation.gtf.gz",
-    # )
-    # test new way
+def _add_species():
     sm(
         "config", "add_species",
         "--name=test_hsa",
@@ -78,6 +55,58 @@ def with_species(initialized_root):
         "--reference=miRNA",
         f"--sequence={spacemake_dir}/test_data/mirgenedb.hsa.mature.fa.gz",
     )
+    # pretend we have mouse as well
+    # TODO: place some actual mouse genome and/or phiX genomes in test-data repository
+    sm(
+        "config", "add_species",
+        "--name=mouse",
+        "--reference=genome",
+        f"--sequence={spacemake_dir}/test_data/test_genome.fa.gz",
+        f"--annotation={spacemake_dir}/test_data/test_annotation.gtf.gz",
+    )
+    sm(
+        "config", "add_species",
+        "--name=mouse",
+        "--reference=phiX",
+        f"--sequence={spacemake_dir}/test_data/test_genome.fa.gz",
+        f"--annotation={spacemake_dir}/test_data/test_annotation.gtf.gz",
+    )
+    sm(
+        "config", "add_species",
+        "--name=mouse",
+        "--reference=rRNA",
+        f"--sequence={spacemake_dir}/test_data/rRNA_hsa.fa.gz",
+    )
+
+
+@pytest.fixture
+def tmp_root(tmp_path_factory):
+    tmp = tmp_path_factory.mktemp("root_blank")
+
+    return tmp
+
+
+@pytest.fixture
+def initialized_root(tmp_path_factory):
+    tmp = tmp_path_factory.mktemp("root_initialized")
+    os.chdir(tmp.as_posix())
+
+    _init()
+    return tmp
+
+
+@pytest.fixture
+def with_species(initialized_root):
+    os.chdir(initialized_root.as_posix())
+    # # test old way
+    # sm(
+    #     "config", "add_species",
+    #     "--name=hsa_test",
+    #     f"--genome={spacemake_dir}/test_data/test_genome.fa.gz",
+    #     f"--annotation={spacemake_dir}/test_data/test_annotation.gtf.gz",
+    # )
+    # test new way
+    _add_species()
     return initialized_root
 
 
@@ -94,3 +123,15 @@ def configured_root(tmp_path_factory):
     os.system(f"cp {test_pdf} {tmp_root / 'project_df.csv'}")
 
     return tmp_root
+
+
+@pytest.fixture(scope="session")
+def with_tile_test_data(tmp_path_factory):
+    tmp = tmp_path_factory.mktemp("root_tile_test")
+    os.chdir(tmp.as_posix())
+    _init()
+    _add_species()
+    print("return code", os.system("wget https://bimsbstatic.mdc-berlin.de/rajewsky/spacemake-test-data/spacemake_tile_test_data.tar.gz -O /dev/stdout | tar -xz"))
+    print(os.listdir('.'))
+
+    return tmp

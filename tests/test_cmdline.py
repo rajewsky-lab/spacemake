@@ -3,7 +3,7 @@ import sys
 import os
 from spacemake.cmdline import *
 
-from fixtures import initialized_root, with_species, configured_root, sm, spacemake_dir
+from fixtures import initialized_root, with_species, with_tile_test_data, configured_root, sm, spacemake_dir
 
 
 def test_init(initialized_root):
@@ -270,8 +270,50 @@ def test_fill_project_df(with_species):
             f"--R1={R1}", f"--R2={R2}", *extra.split(' ')
         )
 
-
 def test_run(configured_root):
     # test everything after init
     os.chdir(configured_root.as_posix())
     sm("run", "-np", "--cores=8")
+
+@pytest.mark.big_download
+def test_tiles(with_tile_test_data):
+    os.chdir(with_tile_test_data.as_posix())
+    sm(
+        "config", "add_puck",
+        "--name=openst_fc_010",
+        "--coordinate_system=fc_010_coordinate_system.csv",
+        "--width_um=1200",
+        "--spot_diameter_um=0.6"
+    )
+    sm(
+        "projects", "add_sample",
+        "--project_id=fc_sts_75",
+        "--sample_id=fc_sts_75_1b",
+        "--R1=fc_sts_75_1b_S1_R1_001_subsampled.fastq.gz",
+        "--R2=fc_sts_75_1b_S1_R2_001_subsampled.fastq.gz",
+        "--species=mouse",
+        "--puck=openst_fc_010",
+        "--run_mode=openst",
+        "--barcode_flavor=openst",
+        "--puck_barcode_file",
+        "fc_010_L2_tile_2558.txt.gz",
+        "fc_010_L2_tile_2559.txt.gz",
+        "fc_010_L4_tile_2505.txt.gz",
+        '--map_strategy=phiX:bowtie2->rRNA:bowtie2->genome:STAR'
+    )
+
+def test_merge(configured_root):
+    os.chdir(configured_root.as_posix())
+    sm(
+        "projects", "merge_samples",
+        "--merged_project_id=test",
+        "--merged_sample_id=test_merged",
+        "--sample_id_list", "test_01", "test_02",
+        expect_fail=True # different map_strategies
+    )
+    sm(
+        "projects", "merge_samples",
+        "--merged_project_id=test",
+        "--merged_sample_id=test_merged",
+        "--sample_id_list", "test_01", "test_01b",
+    )    
