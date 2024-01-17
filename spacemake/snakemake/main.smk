@@ -1,7 +1,6 @@
 #########
 # about #
 #########
-__version__ = '0.1.1'
 __author__ = ['Nikos Karaiskos', 'Tamas Ryszard Sztanka-Toth']
 __license__ = 'GPL'
 __email__ = ['nikolaos.karaiskos@mdc-berlin.de', 'tamasryszard.sztanka-toth@mdc-berlin.de']
@@ -15,9 +14,10 @@ import numpy as np
 import math
 import scanpy as sc
 
-from spacemake.preprocess import dge_to_sparse_adata, attach_barcode_file,\
-    parse_barcode_file, load_external_dge, attach_puck_variables, attach_puck
-from spacemake.spatial import create_meshed_adata, puck_collection
+from spacemake.preprocess.dge import dge_to_sparse_adata, attach_barcode_file,\
+    parse_barcode_file, load_external_dge, attach_puck_variables
+from spacemake.spatial.util import create_meshed_adata
+import spacemake.spatial.puck_collection as puck_collection
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
 from spacemake.errors import SpacemakeError
@@ -44,6 +44,9 @@ config['projects'] = config.get('projects', [])
 global_tmp = config['temp_dir']
 repo_dir = os.path.dirname(workflow.snakefile)
 spacemake_dir = os.path.dirname(os.path.dirname(workflow.snakefile))
+
+import logging
+smk_logger = logging.getLogger("spacemake.main.smk")
 
 #######################
 # DIRECTORY STRUCTURE #
@@ -78,8 +81,8 @@ def register_module_output_hook(hook, module="built-in"):
 def get_module_outputs():
     outputs = []
     for hook, module in _module_output_hooks:
-        for out in hook():
-            print(f"output provided by '{module}' module (via '{hook.__name__}'): '{out}'")
+        for out in hook(project_df=project_df, config=config):
+            smk_logger.debug(f"output provided by '{module}' module (via '{hook.__name__}'): '{out}'")
             outputs.append(out)
     
     return outputs
@@ -106,20 +109,20 @@ if "custom_rules" in config:
 
 # global wildcard constraints
 wildcard_constraints:
-    umi_cutoff = '\d+',
-    dge_cleaned='|\.cleaned',
-    dge_type = '|'.join(dge_types),
-    pacbio_ext = 'fq|fastq|bam',
-    polyA_adapter_trimmed = '|\.polyA_adapter_trimmed',
-    mm_included = '|\.mm_included',
-    n_beads = '[0-9]+|spatial|external',
-    is_external = '|\.external',
-    spot_diameter_um = '[0-9]+',
-    spot_distance_um = '[0-9]+|hexagon',
-    data_root_type = 'complete_data|downsampled_data',
-    downsampling_percentage = '\/[0-9]+|',
-    puck_barcode_file_id = '(?!puck_collection)[^.]+',
-    puck_barcode_file_id_qc = '[^.]+'
+    umi_cutoff = r'\d+',
+    dge_cleaned=r'|\.cleaned',
+    dge_type = r'|'.join(dge_types),
+    pacbio_ext = r'fq|fastq|bam',
+    polyA_adapter_trimmed = r'|\.polyA_adapter_trimmed',
+    mm_included = r'|\.mm_included',
+    n_beads = r'[0-9]+|spatial|external',
+    is_external = r'|\.external',
+    spot_diameter_um = r'[0-9]+',
+    spot_distance_um = r'[0-9]+|hexagon',
+    data_root_type = r'complete_data|downsampled_data',
+    downsampling_percentage = r'\/[0-9]+|',
+    puck_barcode_file_id = r'(?!puck_collection)[^.]+',
+    puck_barcode_file_id_qc = r'[^.]+'
 
 #############
 # Main rule #
