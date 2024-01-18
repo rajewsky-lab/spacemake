@@ -790,7 +790,8 @@ rule count_barcode_matches:
                     'matching_ratio': [matching_ratio],
                 })], ignore_index=True, sort=False)
 
-            above_threshold_mask = out_df.matching_ratio >= params['run_mode_variables']['spatial_barcode_min_matches']
+            # we use > so whenever default: 0 we exclude empty pucks
+            above_threshold_mask = out_df.matching_ratio > params['run_mode_variables']['spatial_barcode_min_matches']
             out_df['pass_threshold'] = 0
             out_df['pass_threshold'][above_threshold_mask] = 1
 
