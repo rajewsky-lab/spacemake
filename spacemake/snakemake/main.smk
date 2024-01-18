@@ -546,6 +546,47 @@ rule puck_collection_stitching:
         # the puck_barcode_files_summary is required for puck_metadata
         puck_barcode_files_summary
     output:
+        dge_spatial_collection,
+        dge_spatial_collection_obs
+    params:
+        puck_data = lambda wildcards: project_df.get_puck_variables(
+                                project_id = wildcards.project_id,
+                                sample_id = wildcards.sample_id),
+        puck_metadata = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
+            project_id=wildcards.project_id, sample_id=wildcards.sample_id
+        ),
+    run:
+        _pc = puck_collection.merge_pucks_to_collection(
+            # takes all input except the puck_barcode_files
+            input[:-1],
+            params['puck_metadata'][0],
+            params['puck_data']['coordinate_system'],
+            "",
+            "puck_id",
+        )
+        
+        # x_pos and y_pos to be global coordinates
+        _pc.obs['x_pos'] = _pc.obsm['spatial'][..., 0]
+        _pc.obs['y_pos'] = _pc.obsm['spatial'][..., 1]
+
+        _pc.write_h5ad(output[0])
+        # add 'cell_bc' name to index for same format as individual pucks
+        # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
+        df = _pc.obs
+        df.index.name = "cell_bc"
+        # only get numeric columns, to avoid problems during summarisation
+        # we could implement sth like df.A.str.extract('(\d+)')
+        # to avoid losing information from columns that are not numeric
+        df._get_numeric_data().to_csv(output[1])
+
+
+# TODO: collapse this with previous rule so we have a single point where we create the dge_spatial_collection
+rule puck_collection_stitching_meshed:
+    input:
+        unpack(get_puck_collection_stitching_input),
+        # the puck_barcode_files_summary is required for puck_metadata
+        puck_barcode_files_summary
+    output:
         dge_spatial_collection_mesh,
         dge_spatial_collection_mesh_obs
     params:
