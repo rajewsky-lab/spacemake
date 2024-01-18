@@ -436,11 +436,11 @@ def get_novosparc_variables(pdf, args):
 def consolidate_pucks_merged_samples():
     for index, row in pdf.df.iterrows():
         project_id, sample_id = index
-
+        puck_ids = row['puck_barcode_file_id']
+        
         if (not row['is_merged']) or (not pdf.is_spatial(project_id, sample_id, puck_ids)):
             continue
 
-        puck_ids = row['puck_barcode_file_id']
         if len(puck_ids) >= 1:
             puck_ids = puck_ids[0]
         elif len(puck_ids):
