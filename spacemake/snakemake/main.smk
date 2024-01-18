@@ -145,10 +145,10 @@ rule run_analysis:
             check_puck_collection=True,
             puck_barcode_file_matching_type='spatial_matching'),
         get_output_files(qc_sheet, 
-            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
+            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False, filter_merged=True,
             puck_barcode_file_matching_type='spatial_matching'),
         get_output_files(qc_sheet, 
-            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
+            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False, filter_merged=True,
             check_puck_collection=True,
             puck_barcode_file_matching_type='spatial_matching'),
         # finally, everything registered via register_module_output_hook()
@@ -161,8 +161,9 @@ rule get_stats_prealigned_barcodes:
             data_root_type='complete_data',
             downsampling_percentage='',
             run_on_external=False,
+            filter_merged=False
         ),
-        get_prealignment_files(puck_count_prealigned_barcode_matches_summary)
+        get_prealignment_files(puck_count_prealigned_barcode_matches_summary, filter_merged=True)
 
 rule get_whitelist_barcodes:
     input:
