@@ -724,6 +724,9 @@ class ProjectDF:
             
             # check that puck_barcode_file(s), R1 and R2 files exist
             for n_col in ['puck_barcode_file', 'R1', 'R2']:
+                if n_col in ['R1', 'R2'] and row['is_merged']:
+                    continue
+
                 if type(row[n_col]) is list:
                     for _it_row in row[n_col]:
                         if not os.path.exists(_it_row):
