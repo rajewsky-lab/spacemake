@@ -437,8 +437,14 @@ def consolidate_pucks_merged_samples():
     for index, row in pdf.df.iterrows():
         project_id, sample_id = index
 
-        if (not row['is_merged']) or (not pdf.is_spatial(project_id, sample_id, row['puck_barcode_file_id'][0])):
+        if (not row['is_merged']) or (not pdf.is_spatial(project_id, sample_id, puck_ids)):
             continue
+
+        puck_ids = row['puck_barcode_file_id']
+        if len(puck_ids) >= 1:
+            puck_ids = puck_ids[0]
+        elif len(puck_ids):
+            puck_ids = pdf.project_df_default_values['puck_barcode_file_id']
 
         merged_from = row['merged_from']
         puck_id_file = set()
@@ -449,7 +455,7 @@ def consolidate_pucks_merged_samples():
             _tuple = [(id, bf) for id, bf in zip(pid, pbf)]
             
             puck_id_file.update([ tuple(t) for t in _tuple ])
-    
+
         pid, pbf = list(zip(*list(puck_id_file)))
         pdf.df.loc[index, 'puck_barcode_file_id'] = list(pid)
         pdf.df.loc[index, 'puck_barcode_file'] = list(pbf)
@@ -466,7 +472,13 @@ def update_project_df_barcode_matches(prealigned=False):
     for index, row in pdf.df.iterrows():
         project_id, sample_id = index
 
-        if (row['is_merged'] is True and prealigned) or (not pdf.is_spatial(project_id, sample_id, row['puck_barcode_file_id'][0])):
+        puck_ids = row['puck_barcode_file_id']
+        if len(puck_ids) >= 1:
+            puck_ids = puck_ids[0]
+        elif len(puck_ids):
+            puck_ids = pdf.project_df_default_values['puck_barcode_file_id']
+
+        if (row['is_merged'] and prealigned) or (not pdf.is_spatial(project_id, sample_id, puck_ids)):
             continue
 
         # check if barcodes have been filtered
