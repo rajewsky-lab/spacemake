@@ -89,6 +89,7 @@ def get_add_sample_sheet_parser():
 
 
 def get_sample_main_variables_parser(
+    defaults=False,
     species_required=False,
     main_variables=[
         "barcode_flavor",
@@ -108,7 +109,7 @@ def get_sample_main_variables_parser(
         parser.add_argument(
             "--barcode_flavor",
             type=str,
-            default="dropseq",
+            default="dropseq" if defaults else None,
             help="barcode flavor for this sample",
         )
 
@@ -116,7 +117,7 @@ def get_sample_main_variables_parser(
         parser.add_argument(
             "--adapter_flavor",
             type=str,
-            default="dropseq",
+            default="dropseq" if defaults else None,
             help="barcode flavor for this sample",
         )
 
@@ -337,6 +338,7 @@ def get_action_sample_parser(parent_parser, action, func):
         # add arguments for species, run_mode, barcode_flavor and puck
         parents.append(
             get_sample_main_variables_parser(
+                defaults=True,
                 species_required=True,
             )
         )
@@ -347,7 +349,8 @@ def get_action_sample_parser(parent_parser, action, func):
     elif action == "update":
         # add main variables parser
         parents.append(get_sample_main_variables_parser())
-
+        # add arguments for R1/R1, dge, longread
+        parents.append(get_data_parser())
         # add possibility to add extra info
         parents.append(get_sample_extra_info_parser())
     elif action == "merge":
