@@ -307,6 +307,7 @@ class ProjectDF:
 
     def update_project_df_barcode_matches(self, prealigned=False):
         from spacemake.snakemake.variables import puck_count_barcode_matches_summary, puck_count_prealigned_barcode_matches_summary
+        import pandas as pd
 
         if prealigned:
             _bc_file = puck_count_prealigned_barcode_matches_summary
