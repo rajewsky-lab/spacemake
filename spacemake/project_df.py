@@ -277,6 +277,34 @@ class ProjectDF:
         else:
             return self.project_df_default_values["puck_barcode_file"]
 
+    def consolidate_pucks_merged_samples(self):
+        for index, row in self.df.iterrows():
+            project_id, sample_id = index
+            puck_ids = row['puck_barcode_file_id']
+            
+            if (not row['is_merged']) or (not self.is_spatial(project_id, sample_id, puck_ids)):
+                continue
+
+            if len(puck_ids) >= 1:
+                puck_ids = puck_ids[0]
+            elif len(puck_ids):
+                puck_ids = self.project_df_default_values['puck_barcode_file_id']
+
+            merged_from = row['merged_from']
+            puck_id_file = set()
+
+            for sample_tuple in merged_from:
+                pid = self.df.loc[sample_tuple]['puck_barcode_file_id']
+                pbf = self.df.loc[sample_tuple]['puck_barcode_file']
+                _tuple = [(id, bf) for id, bf in zip(pid, pbf)]
+                
+                puck_id_file.update([ tuple(t) for t in _tuple ])
+
+            pid, pbf = list(zip(*list(puck_id_file)))
+            self.df.loc[index, 'puck_barcode_file_id'] = list(pid)
+            self.df.loc[index, 'puck_barcode_file'] = list(pbf)
+
+
     def update_project_df_barcode_matches(self, prealigned=False):
         from spacemake.snakemake.variables import puck_count_barcode_matches_summary, puck_count_prealigned_barcode_matches_summary
 
@@ -285,8 +313,17 @@ class ProjectDF:
         else:
             _bc_file = puck_count_barcode_matches_summary
 
-        for index, _ in self.df.iterrows():
+        for index, row in self.df.iterrows():
             project_id, sample_id = index
+
+            puck_ids = row['puck_barcode_file_id']
+            if len(puck_ids) >= 1:
+                puck_ids = puck_ids[0]
+            elif len(puck_ids):
+                puck_ids = self.project_df_default_values['puck_barcode_file_id']
+
+            if (row['is_merged'] and prealigned) or (not self.is_spatial(project_id, sample_id, puck_ids)):
+                continue
 
             # check if barcodes have been filtered
             _f_barcodes_df = _bc_file.format(project_id=project_id,
@@ -301,11 +338,12 @@ class ProjectDF:
 
                 above_threshold_mask = barcodes_df['pass_threshold'] == 1
 
-                _puck_barcode_files = barcodes_df[above_threshold_mask]['puck_barcode_file'].values.tolist().__str__()
-                _puck_barcode_files_id = barcodes_df[above_threshold_mask]['puck_barcode_file_id'].values.tolist().__str__()
+                _puck_barcode_files = barcodes_df[above_threshold_mask]['puck_barcode_file'].values.tolist()
+                _puck_barcode_files_id = barcodes_df[above_threshold_mask]['puck_barcode_file_id'].values.tolist()
 
-                self.df.df.loc[index, 'puck_barcode_file'] = _puck_barcode_files
-                self.df.loc[index, 'puck_barcode_file_id'] = _puck_barcode_files_id
+                self.df.at[index, 'puck_barcode_file'] = _puck_barcode_files
+                self.df.at[index, 'puck_barcode_file_id'] = _puck_barcode_files_id
+
 
     def get_sample_info(self, project_id: str, sample_id: str) -> Dict:
         """get_sample_info.

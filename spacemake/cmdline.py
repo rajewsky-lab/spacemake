@@ -795,7 +795,7 @@ def spacemake_run(args):
         configfiles=[var.config_path],
         cores=args["cores"],
         dryrun=args["dryrun"],
-        targets=[],
+        targets=['get_stats_prealigned_barcodes'],
         touch=args["touch"],
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
@@ -810,9 +810,27 @@ def spacemake_run(args):
     # update valid pucks (above threshold) before continuing to downstream
     # this performs counting of matching barcodes after alignment
     pdf.update_project_df_barcode_matches(prealigned=True)
+    pdf.consolidate_pucks_merged_samples()
     pdf.dump()
 
-    # run snakemake after prealignment filter
+    # whitelisting of barcodes
+    preprocess_finished = snakemake.snakemake(
+        snakefile,
+        configfiles=[var.config_path],
+        cores=args["cores"],
+        dryrun=args["dryrun"],
+        targets=['get_whitelist_barcodes'],
+        touch=args["touch"],
+        force_incomplete=args["rerun_incomplete"],
+        keepgoing=args["keep_going"],
+        printshellcmds=args["printshellcmds"],
+        config=config_variables,
+    )
+
+    pdf.update_project_df_barcode_matches()
+    pdf.dump()
+
+    # run snakemake quantification and reports
     analysis_finished = snakemake.snakemake(
         snakefile,
         configfiles=[var.config_path],
@@ -824,7 +842,6 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
-        rerun_triggers=["mtime"],
     )
 
     if analysis_finished is False:
