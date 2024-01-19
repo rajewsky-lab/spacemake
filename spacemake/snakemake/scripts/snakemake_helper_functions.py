@@ -144,8 +144,11 @@ def get_output_files_qc(
     return _out_files
 
 
-def get_prealignment_files(pattern):
+def get_prealignment_files(pattern, filter_merged=False):
     df = project_df.df
+
+    if filter_merged:
+        df = df.loc[~df.is_merged]
 
     prealignment_files = []
 
@@ -827,7 +830,7 @@ def get_all_barcode_readcounts(wildcards, prealigned=False):
         "polyA_adapter_trimmed": polyA_adapter_trimmed_wildcard,
     }
 
-    if prealigned:
+    if prealigned or is_merged:
         return {"bc_readcounts": expand(barcode_readcounts, **extra_args)}
     else:
         return {"bc_readcounts": expand(barcode_readcounts_prealigned, **extra_args)}
