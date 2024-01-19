@@ -161,6 +161,7 @@ def validate_mapstr(mapstr, config={}, species=None):
         elif len(parts) == 3:
             ref, mapper, link_name = parts
         else:
+            # TODO: spacemake error
             raise ValueError(f"map_strategy contains a map-rule with unexpected number of parameters: {parts}")
 
         if ref in ['bowtie2', 'STAR']:
@@ -168,6 +169,7 @@ def validate_mapstr(mapstr, config={}, species=None):
 
         if species_d:
             if not ref in species_d:
+                # TODO: spacemake error
                 raise ValueError(f"reference name {ref} is not among the refs registered for {species}: {sorted(species_d.keys())}")
 
         if '@' in mapper:

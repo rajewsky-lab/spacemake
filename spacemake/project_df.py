@@ -1062,7 +1062,17 @@ class ProjectDF:
                 )
             )
 
-        kwargs["map_strategy"] = map_strategy
+        # validate and correct map_strategies
+        from spacemake.map_strategy import validate_mapstr
+        corrected_map_strategies = []
+        # TODO: parse species from the current sample
+        corrected_map_strategies.append(
+            validate_mapstr(map_strategy, config=self.config, species=self.df.loc[ix]['species'])
+        )
+        kwargs['map_strategy'] = corrected_map_strategies
+
+        # TODO: remove
+        # kwargs["map_strategy"] = map_strategy
 
         # populate puck_barcode_file
         if puck_barcode_file is not None:
