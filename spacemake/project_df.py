@@ -113,6 +113,9 @@ class ProjectDF:
                 except pd.errors.EmptyDataError as e:
                     if attempts < 5:
                         # wait 5 seconds before retrying
+                        self.logger.warning(
+                            f"The file '{self.file_path}' seems to be empty. Trying again ({attempts}/5) in 5 seconds"
+                        )
                         time.sleep(5)
                         attempts = attempts + 1
                         continue
