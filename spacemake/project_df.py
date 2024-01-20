@@ -99,9 +99,9 @@ class ProjectDF:
 
         if os.path.isfile(file_path):
             attempts = 0
-            failed = False
+            df_loaded_flag = False
 
-            while not failed:
+            while not df_loaded_flag:
                 try:
                     self.df = pd.read_csv(
                         file_path,
@@ -109,7 +109,7 @@ class ProjectDF:
                         na_values=["None", "none"],
                         dtype=self.project_df_dtypes,
                     )
-                    failed = True
+                    df_loaded_flag = True
                 except pd.errors.EmptyDataError as e:
                     if attempts < 5:
                         # wait 5 seconds before retrying
@@ -118,7 +118,6 @@ class ProjectDF:
                         continue
                     else:
                         raise e
-                        failed = True
 
             if self.df.empty:
                 self.create_empty_df()
@@ -127,6 +126,8 @@ class ProjectDF:
                 self.fix()
         else:
             self.create_empty_df()
+
+        self.assert_valid()
 
         self.logger = logging.getLogger(logger_name)
 

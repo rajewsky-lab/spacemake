@@ -787,9 +787,6 @@ def spacemake_run(args):
     # to flatten the dictionary
     config_variables = {**config_variables, **novosparc_variables}
 
-    # assert that the project_df is valid before running the pipeline
-    pdf.assert_valid()
-
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
     # run snakemake
