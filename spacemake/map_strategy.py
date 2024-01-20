@@ -1,5 +1,6 @@
 import os
 from collections import defaultdict
+from spacemake.errors import *
 from spacemake.util import dotdict, wc_fill
 from spacemake.snakemake.variables import (
     complete_data_root,
@@ -161,16 +162,14 @@ def validate_mapstr(mapstr, config={}, species=None):
         elif len(parts) == 3:
             ref, mapper, link_name = parts
         else:
-            # TODO: spacemake error
-            raise ValueError(f"map_strategy contains a map-rule with unexpected number of parameters: {parts}")
+            raise ConfigVariableError(f"map_strategy contains a map-rule with unexpected number of parameters: {parts}")
 
         if ref in ['bowtie2', 'STAR']:
             ref, mapper = mapper, ref
 
         if species_d:
             if not ref in species_d:
-                # TODO: spacemake error
-                raise ValueError(f"reference name {ref} is not among the refs registered for {species}: {sorted(species_d.keys())}")
+                raise ConfigVariableNotFoundError(f"reference name {ref} is not among the refs registered for {species}: {sorted(species_d.keys())}")
 
         if '@' in mapper:
             # we have a counting-flavor directive
