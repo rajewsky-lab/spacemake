@@ -239,6 +239,12 @@ def get_all_dges(wildcards, puck_barcode_file_ids):
     for index, row in df.iterrows():
         project_id, sample_id = index
 
+        puck_barcode_file_ids = list(set(puck_barcode_file_ids).intersection(
+            project_df.get_puck_barcode_ids_and_files(
+                        project_id, sample_id
+                    )[0])
+            )
+
         for run_mode in row["run_mode"]:
             if project_df.has_dge(project_id=project_id, sample_id=sample_id):
                 for pbf_id in puck_barcode_file_ids:
