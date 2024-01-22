@@ -154,6 +154,10 @@ class ProjectDF:
         elif self.df.empty:
             logger.warn("The 'project_df' in the ProjectDF object is empty")
 
+        _unique_samples = self._check_unique_samples()
+        if _unique_samples is not None:
+            raise SampleAlreadyExistsError(_unique_samples)
+
         for index, row in self.df.iterrows():
             # check that sample sheet file exists
             if (row['sample_sheet'] is not None) and (not os.path.exists(row['sample_sheet'])):
@@ -196,6 +200,13 @@ class ProjectDF:
                     raise SystemExit(SpacemakeError(f"At {index}, the selected puck '{row['puck']}' " + \
                                                     "contains a coordinate_system " + \
                                                     "but no 'puck_barcode_files' are specified"))
+                
+    def _check_unique_samples(self):
+        for index, _ in self.df.iterrows():
+            if len(self.df[self.df.index.isin([index])]) > 1:
+                return index
+        
+        return None
 
     def create_empty_df(self):
         import pandas as pd
