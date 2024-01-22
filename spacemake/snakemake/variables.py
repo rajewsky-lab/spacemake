@@ -122,6 +122,9 @@ dge_out_summary = (
     + ".{n_beads}_beads_{puck_barcode_file_id}.summary.txt"
 )
 
+dge_chk = data_root + "/.dge_chk"
+dge_chk_created = data_root + "/.dge_chk/{puck_barcode_file_id}.chk2"
+
 # processed dge
 h5ad_dge_suffix = "{is_external}.h5ad"
 h5ad_dge_obs_suffix = "{is_external}.obs.csv"
