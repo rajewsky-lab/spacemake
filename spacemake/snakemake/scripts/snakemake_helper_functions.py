@@ -2,21 +2,128 @@
 # Final output file generation #
 ################################
 
-def get_expanded_pattern_project_sample(pattern):
-    agg_files = []
+def get_expanded_pattern_project_sample(
+        pattern,
+        projects=[],
+        samples=[],
+        filter_merged=False,
+        run_on_external=True):
+
+    out_files = []
     df = project_df.df
 
-    for index, _ in df.iterrows():
-        project_id, sample_id = index
-        agg_files.append(
-            expand(
-                pattern,
-                project_id=project_id,
-                sample_id=sample_id,
-            ),
+    if projects != [] or samples != []:
+        project_df.assert_index_value(projects, "project_id")
+        project_df.assert_index_value(samples, "sample_id")
+
+        ix = project_df.get_ix_from_project_sample_list(
+            project_id_list=projects, sample_id_list=samples
         )
 
-    return agg_files
+        df = df.loc[ix]
+
+    if filter_merged:
+        df = df.loc[~df.is_merged]
+
+    for index, row in df.iterrows():
+        project_id, sample_id = index
+
+        is_external = project_df.is_external(project_id=project_id, sample_id=sample_id)
+
+        has_dge = project_df.has_dge(project_id=project_id, sample_id=sample_id)
+
+        if not has_dge:
+            continue
+
+        if not run_on_external and is_external:
+            continue
+
+        for run_mode in row["run_mode"]:
+            if project_df.has_dge(project_id=project_id, sample_id=sample_id):
+                out_files = out_files + get_dge_flag_from_run_mode(
+                    pattern,
+                    project_id=project_id,
+                    sample_id=sample_id,
+                    run_mode=run_mode,
+                    data_root_type="complete_data",
+                    downsampling_percentage="",
+                    puck_barcode_file_id="",
+                    is_spatial=True
+                )
+
+    return out_files
+
+
+def get_dge_flag_from_run_mode(
+    pattern,
+    project_id,
+    sample_id,
+    run_mode,
+    data_root_type,
+    downsampling_percentage,
+    puck_barcode_file_id="",
+    is_spatial=True
+):
+    is_external = project_df.is_external(project_id=project_id, sample_id=sample_id)
+
+    run_mode_variables = project_df.config.get_run_mode(run_mode).variables
+
+    dge_type = ""
+    dge_cleaned = ""
+    polyA_adapter_trimmed = ""
+    mm_included = ""
+
+    # assign wildcards only for internal samples
+    if not is_external:
+        if run_mode_variables["polyA_adapter_trimming"]:
+            polyA_adapter_trimmed = ".polyA_adapter_trimmed"
+
+        if run_mode_variables["count_intronic_reads"]:
+            dge_type = ".all"
+        else:
+            dge_type = ".exon"
+
+        if run_mode_variables["count_mm_reads"]:
+            mm_included = ".mm_included"
+
+        if run_mode_variables["clean_dge"]:
+            dge_cleaned = ".cleaned"
+
+    if run_mode_variables["mesh_type"] == "hexagon":
+        spot_diameter_um = run_mode_variables["mesh_spot_diameter_um"]
+        spot_distance_um = "hexagon"
+    elif run_mode_variables["mesh_type"] == "circle":
+        spot_diameter_um = run_mode_variables["mesh_spot_diameter_um"]
+        spot_distance_um = run_mode_variables["mesh_spot_distance_um"]
+
+    external_wildcard = ""
+
+    n_beads = run_mode_variables["n_beads"]
+
+    if is_external:
+        n_beads = "external"
+        external_wildcard = ".external"
+
+    if is_spatial:
+        n_beads = "spatial"
+
+    return expand(
+            pattern,
+            project_id=project_id,
+            sample_id=sample_id,
+            dge_type=dge_type,
+            dge_cleaned=dge_cleaned,
+            polyA_adapter_trimmed=polyA_adapter_trimmed,
+            mm_included=mm_included,
+            spot_diameter_um=spot_diameter_um,
+            spot_distance_um=spot_distance_um,
+            n_beads=n_beads,
+            is_external=external_wildcard,
+            data_root_type=data_root_type,
+            downsampling_percentage=downsampling_percentage,
+            puck_barcode_file_id=puck_barcode_file_id
+    )
+
 
 class GetOutputFile:
     def __init__(
@@ -209,6 +316,7 @@ class GetAllDGEs:
             project_id, sample_id = index
 
             checkpoint_output = checkpoints.create_dge_chk.get(**wildcards).output[0]
+            glob_wildcards(os.path.join(checkpoint_output, "{p}.chk"))
             dges.append(
                 expand(dge_chk_created,
                     project_id=project_id,
@@ -823,14 +931,10 @@ def get_dge_collection_from_run_mode(
     return out_files
 
 
-def get_all_barcode_readcounts(wildcards, prealigned=False):
+def get_all_barcode_readcounts(wildcards):
     # returns all available barcode readcounts
     project_id = wildcards.project_id
     sample_id = wildcards.sample_id
-
-    is_merged = project_df.get_metadata(
-        "is_merged", project_id=wildcards.project_id, sample_id=wildcards.sample_id
-    )
 
     run_modes = get_run_modes_from_sample(wildcards.project_id, wildcards.sample_id)
 
@@ -852,10 +956,7 @@ def get_all_barcode_readcounts(wildcards, prealigned=False):
         "polyA_adapter_trimmed": polyA_adapter_trimmed_wildcard,
     }
 
-    if prealigned or is_merged:
-        return {"bc_readcounts": expand(barcode_readcounts, **extra_args)}
-    else:
-        return {"bc_readcounts": expand(barcode_readcounts_prealigned, **extra_args)}
+    return {"bc_readcounts": expand(barcode_readcounts, **extra_args)}
 
 
 def get_qc_sheet_input_files(wildcards):

@@ -105,9 +105,9 @@ stats_prealigned_spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/stats_prealigned_spatial_barcodes_{puck_barcode_file_id}.csv"
 )
-puck_barcode_files_summary = complete_data_root + "/puck_barcode_files_summary.csv"
-puck_count_barcode_matches_summary = complete_data_root + "/puck_count_barcode_matches.csv"
-puck_count_prealigned_barcode_matches_summary = complete_data_root + "/puck_count_prealigned_barcode_matches.csv"
+puck_barcode_files_summary = complete_data_root + "/puck_barcode_files_summary{polyA_adapter_trimmed}.csv"
+puck_count_barcode_matches_summary = complete_data_root + "/puck_count_barcode_matches{polyA_adapter_trimmed}.csv"
+puck_count_prealigned_barcode_matches_summary = complete_data_root + "/puck_count_prealigned_barcode_matches{polyA_adapter_trimmed}.csv"
 
 # dge creation
 dge_root = data_root + "/dge"

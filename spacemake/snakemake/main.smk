@@ -127,28 +127,45 @@ wildcard_constraints:
 ###################
 # Puck checkpoint #
 ###################
-rule barcode_readcounts:
-    input:
-        bc_summary_file=puck_count_prealigned_barcode_matches_summary
-    output:
-        puck_count_barcode_matches_summary
-    run:
-        barcodes_df = pd.read_csv(bc_summary_file)
-        if 'pass_threshold' not in barcodes_df.columns:
-            barcodes_df['pass_threshold'] = 0
-        above_threshold_mask = barcodes_df['pass_threshold'] == 1
-        barcodes_df = barcodes_df[above_threshold_mask]
-        barcodes_df.to_csv(output[0], index=False)
+dge_out_dir = dge_out_prefix + "/{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}"
+dge_out_done = dge_out_prefix + "/{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}.done"
 
 checkpoint create_dge_chk:
     input:
-        bc_summary_file=puck_count_barcode_matches_summary
+        bc_summary_file=puck_count_prealigned_barcode_matches_summary
     output:
-        dge_pointers=directory(dge_chk)
+        dge_pointers=directory(dge_out_dir)
     run:
-        barcodes_df = pd.read_csv(bc_summary_file)
+        os.mkdir(output.dge_pointers)
+        barcodes_df = pd.read_csv(input.bc_summary_file)
         for p in barcodes_df['puck_barcode_file_id'].tolist():
-            touch(dge_chk + f"{p}.chk")
+            print("create " + output.dge_pointers + f"/{p}.chk")
+            with open(output.dge_pointers + f"/{p}.chk", "w") as out:
+                out.write("")
+
+def create_dge_chk_files(wildcards):
+    checkpoint_output = checkpoints.create_dge_chk.get(**wildcards).output[0]
+    out_files = expand(os.path.join(checkpoint_output, "{p}.chk"),
+                p=glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p)
+    return out_files
+
+rule aggregate:
+    input:
+        create_dge_chk_files
+    output:
+        touch(dge_out_done)
+
+#############
+# Main rule #
+#############
+rule run_analysis:
+    input:
+        get_module_outputs(),
+        get_expanded_pattern_project_sample(barcode_readcounts),
+        get_expanded_pattern_project_sample(puck_count_prealigned_barcode_matches_summary),
+        get_expanded_pattern_project_sample(puck_barcode_files_summary),
+        get_expanded_pattern_project_sample(dge_out_done),
+
 
 # rule aggregate:
 #     input:
@@ -180,15 +197,7 @@ checkpoint create_dge_chk:
 #             puck_barcode_file_matching_type='spatial_matching')
 #     output:
 #         touch(aggregated_complete)
-    
 
-#############
-# Main rule #
-#############
-rule run_analysis:
-    input:
-        get_module_outputs(),
-        GetAllDGEs()
 
 
 ##############
@@ -748,7 +757,7 @@ rule split_reads_sam_to_bam:
 rule create_barcode_files_matching_summary:
     input:
         unpack(get_barcode_files_matching_summary_input),
-        puck_count_barcode_matches_summary
+        puck_count_prealigned_barcode_matches_summary
     output:
         puck_barcode_files_summary
     params:
