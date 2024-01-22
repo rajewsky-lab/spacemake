@@ -127,8 +127,12 @@ wildcard_constraints:
 ###################
 # Puck checkpoint #
 ###################
+<<<<<<< Updated upstream
 dge_out_dir = dge_out_prefix + "/{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}"
 dge_out_done = dge_out_prefix + "/{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}.done"
+=======
+
+>>>>>>> Stashed changes
 
 checkpoint create_dge_chk:
     input:
@@ -145,13 +149,29 @@ checkpoint create_dge_chk:
 
 def create_dge_chk_files(wildcards):
     checkpoint_output = checkpoints.create_dge_chk.get(**wildcards).output[0]
+<<<<<<< Updated upstream
     out_files = expand(os.path.join(checkpoint_output, "{p}.chk"),
                 p=glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p)
+=======
+    out_files = {"dge": expand(dge_out_h5ad,
+                puck_barcode_file_id=glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p, **wildcards),
+                "dge_obs": expand(dge_out_h5ad_obs,
+                puck_barcode_file_id=glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p, **wildcards),
+                "automated_report": expand(automated_report,
+                puck_barcode_file_id=glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p, **wildcards),
+                "qc_sheet": expand(qc_sheet,
+                puck_barcode_file_id=glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p, **wildcards),}
+                # TODO: we need to add here the puck collection!
+>>>>>>> Stashed changes
     return out_files
 
 rule aggregate:
     input:
+<<<<<<< Updated upstream
         create_dge_chk_files
+=======
+        unpack(create_dge_chk_files)
+>>>>>>> Stashed changes
     output:
         touch(dge_out_done)
 
@@ -161,11 +181,25 @@ rule aggregate:
 rule run_analysis:
     input:
         get_module_outputs(),
+<<<<<<< Updated upstream
         get_expanded_pattern_project_sample(barcode_readcounts),
         get_expanded_pattern_project_sample(puck_count_prealigned_barcode_matches_summary),
         get_expanded_pattern_project_sample(puck_barcode_files_summary),
         get_expanded_pattern_project_sample(dge_out_done),
 
+=======
+        unpack(
+            get_output_files(
+                    fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
+                    data_root_type = 'complete_data', downsampling_percentage = '',
+                    filter_merged=True) 
+                if config['with_fastqc'] else []
+        ),
+        get_expanded_pattern_project_sample(barcode_readcounts),
+        get_expanded_pattern_project_sample(puck_count_prealigned_barcode_matches_summary),
+        get_expanded_pattern_project_sample(puck_barcode_files_summary),
+        get_expanded_pattern_project_sample(dge_out_done), # TODO: remove before creating
+>>>>>>> Stashed changes
 
 # rule aggregate:
 #     input:
@@ -203,12 +237,22 @@ rule run_analysis:
 ##############
 # DOWNSAMPLE #
 ##############
+<<<<<<< Updated upstream
 rule downsample:
     input:
         GetOutputFile(downsample_saturation_analysis,
             samples = config['samples'],
             projects = config['projects'],
             puck_barcode_file_matching_type = "spatial_matching")
+=======
+# TODO: enable saturation analysis with checkpoint
+# rule downsample:
+#     input:
+#         get_output_files(downsample_saturation_analysis,
+#             samples = config['samples'],
+#             projects = config['projects'],
+#             puck_barcode_file_matching_type = "spatial_matching")
+>>>>>>> Stashed changes
 
 #############
 # NOVOSPARC #
