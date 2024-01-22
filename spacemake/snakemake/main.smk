@@ -140,6 +140,7 @@ checkpoint checkpoint_pucks:
                 out.write("")
 
 def checkpoint_puck_files(wildcards):
+    import shutil
     checkpoint_output = checkpoints.checkpoint_pucks.get(**wildcards).output[0]
 
     non_spatial_pbf_id = project_df.project_df_default_values["puck_barcode_file_id"][0]
@@ -156,12 +157,18 @@ def checkpoint_puck_files(wildcards):
                  "automated_report": expand(automated_report,
                   puck_barcode_file_id=puck_barcode_file_ids, 
                   puck_barcode_file_id_qc=puck_barcode_file_ids, **wildcards),
-                  # TODO: automated analysis with puck_collection
+                 "automated_report_collection": get_output_files(automated_report, 
+                  data_root_type = 'complete_data', downsampling_percentage='', 
+                  check_puck_collection=True,
+                  puck_barcode_file_matching_type='spatial_matching'),
                  "qc_report": expand(qc_sheet,
                   puck_barcode_file_id=puck_barcode_file_ids, 
-                  puck_barcode_file_id_qc=puck_barcode_file_ids, **wildcards),}
-                  # TODO: QC report with puck_collection
-    print(out_files)
+                  puck_barcode_file_id_qc=puck_barcode_file_ids, **wildcards),
+                 "qc_report_collection": get_output_files(qc_sheet, 
+                  data_root_type = 'complete_data', downsampling_percentage='', 
+                  check_puck_collection=True,
+                  puck_barcode_file_matching_type='spatial_matching'),}
+
     return out_files
 
 rule aggregate:
