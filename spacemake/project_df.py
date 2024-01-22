@@ -1411,6 +1411,7 @@ class ProjectDF:
                     variable_name=variable, variable_value=variable_val, ix=ix
                 )
             else:
+                # TODO: here, might be why the map strategy is not formatted properly
                 # attach the deduced, consisten variable
                 kwargs[variable] = variable_val[0]
 

@@ -142,7 +142,6 @@ rule run_analysis:
         ),
 
         # get flag for DGE (based on checkpoint, i.e., not explicitly generating files)
-        # TODO: when merging, issue: map strategy as list, should not be like that!
         get_expanded_pattern_project_sample(dge_out_done),
 
 
