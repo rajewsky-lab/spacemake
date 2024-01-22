@@ -414,13 +414,6 @@ def get_demux_indicator(wildcards):
     return expand(demux_indicator, demux_dir=demux_dir)
 
 
-def get_star_input_bam(wildcards):
-    if wildcards.polyA_adapter_trimmed == ".polyA_adapter_trimmed":
-        return {"reads": tagged_polyA_adapter_trimmed_bam}
-    else:
-        return {"reads": tagged_bam}
-
-
 def get_final_bam(wildcards):
     is_merged = project_df.get_metadata(
         "is_merged", project_id=wildcards.project_id, sample_id=wildcards.sample_id
@@ -467,6 +460,7 @@ def get_species_genome(wildcards, ref="genome"):
     return [files[ref]["sequence"]]
 
 
+# FLAG: unused
 def get_species_annotation(wildcards, ref="genome"):
     # This function will return the genome of a sample
     #    - annotation (.gtf file)
@@ -520,7 +514,7 @@ def get_rRNA_genome(wildcards):
 
     return [files["rRNA_genome"]]
 
-
+# FLAG: unused
 # TODO: refactor into map_strategy and/or delete
 def get_bt2_rRNA_index(wildcards):
     species = project_df.get_metadata(
@@ -615,7 +609,7 @@ def get_files_to_merge_snakemake(pattern):
 
     return get_merged_pattern
 
-
+# FLAG: unused
 def get_ribo_depletion_log(wildcards):
     is_merged = project_df.get_metadata(
         "is_merged", sample_id=wildcards.sample_id, project_id=wildcards.project_id
@@ -635,7 +629,7 @@ def get_top_barcodes(wildcards):
     else:
         return {"top_barcodes": top_barcodes_clean}
 
-
+# FLAG: unused
 def get_parsed_puck_file(wildcards):
     is_spatial = project_df.is_spatial(
         project_id=wildcards.project_id,
@@ -1051,6 +1045,7 @@ def get_automated_analysis_dge_input(wildcards):
             )["dge"]
         ]
 
+# FLAG: unused
 def get_novosparc_input_files(config):
     if (
         "reference_project_id" in config
