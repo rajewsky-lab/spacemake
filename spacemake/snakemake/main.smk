@@ -476,7 +476,7 @@ rule create_mesh_spatial_dge:
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id,
             puck_barcode_file_id = wildcards.puck_barcode_file_id,
-            **wildcards)
+            polyA_adapter_trimmed = wildcards.polyA_adapter_trimmed)
     run:
         adata = sc.read(input[0])
         if wildcards.spot_distance_um == 'hexagon':
