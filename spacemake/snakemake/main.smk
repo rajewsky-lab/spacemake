@@ -131,7 +131,7 @@ checkpoint checkpoint_pucks:
     input:
         bc_summary_file=puck_count_prealigned_barcode_matches_summary
     output:
-        dge_pointers=directory(dge_out_dir)
+        dge_pointers=temp(directory(dge_out_dir))
     run:
         os.mkdir(output.dge_pointers)
         barcodes_df = pd.read_csv(input.bc_summary_file)
@@ -168,7 +168,7 @@ rule aggregate:
     input:
         unpack(checkpoint_puck_files)
     output:
-        touch(dge_out_done)
+        temp(touch(dge_out_done))
 
 #############
 # Main rule #
@@ -193,7 +193,9 @@ rule run_analysis:
         # get_expanded_pattern_project_sample(puck_barcode_files_summary),
 
         # get flag for DGE (based on checkpoint, i.e., not explicitly generating files)
-        # TODO: remove upon running spacemake - recheck the intermediate files instead of the flag
+        # TODO: do not generate the files that have been generated already (especially DGEs and reports)
+        # TODO: check if the number of processed tiles is a subset of the puck_barcode_files_summary
+        # else, it means we've probably added some more tiles, and it would be convenient to recompute!
         get_expanded_pattern_project_sample(dge_out_done),
 
 
