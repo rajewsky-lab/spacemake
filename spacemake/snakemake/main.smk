@@ -142,9 +142,7 @@ rule run_analysis:
         ),
 
         # get flag for DGE (based on checkpoint, i.e., not explicitly generating files)
-        # TODO: do not generate the files that have been generated already (especially DGEs and reports)
-        # TODO: check if the number of processed tiles is a subset of the puck_barcode_files_summary
-        # else, it means we've probably added some more tiles, and it would be convenient to recompute!
+        # TODO: when merging, issue: map strategy as list, should not be like that!
         get_expanded_pattern_project_sample(dge_out_done),
 
 
