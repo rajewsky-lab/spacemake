@@ -801,7 +801,6 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
-        rerun_triggers=["mtime"],
     )
 
     if analysis_finished is False:

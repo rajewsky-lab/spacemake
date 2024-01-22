@@ -131,6 +131,7 @@ def get_output_files(
     run_on_external=True,
     puck_barcode_file_matching_type="none",
     check_puck_collection=False,
+    puck_barcode_file_ids=[],
     qc=False,
     **kwargs,
 ):
@@ -166,18 +167,19 @@ def get_output_files(
             # and sample is external, skip
             continue
 
-        if puck_barcode_file_matching_type == "none":
-            # reset to empty string
-            puck_barcode_file_ids = []
-        elif puck_barcode_file_matching_type == "spatial":
-            # get only spatial
-            puck_barcode_file_ids = project_df.get_puck_barcode_ids_and_files(
-                project_id, sample_id
-            )[0]
-        elif puck_barcode_file_matching_type == "spatial_matching":
-            puck_barcode_file_ids = project_df.get_matching_puck_barcode_file_ids(
-                project_id=project_id, sample_id=sample_id
-            )
+        if puck_barcode_file_ids == []:
+            if puck_barcode_file_matching_type == "none":
+                # reset to empty string
+                puck_barcode_file_ids = []
+            elif puck_barcode_file_matching_type == "spatial":
+                # get only spatial
+                puck_barcode_file_ids = project_df.get_puck_barcode_ids_and_files(
+                    project_id, sample_id
+                )[0]
+            elif puck_barcode_file_matching_type == "spatial_matching":
+                puck_barcode_file_ids = project_df.get_matching_puck_barcode_file_ids(
+                    project_id=project_id, sample_id=sample_id
+                )
 
         if check_puck_collection:
             puck_vars = project_df.get_puck_variables(

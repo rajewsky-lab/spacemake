@@ -652,24 +652,21 @@ class ProjectDF:
         self,
         project_id: str,
         sample_id: str,
+        polyA_adapter_trimmed: str = "",
     ):
         import pandas as pd
 
         summary_file = puck_barcode_files_summary.format(
-            project_id=project_id, sample_id=sample_id
+            project_id=project_id, sample_id=sample_id, polyA_adapter_trimmed=polyA_adapter_trimmed
         )
 
+        # will return all the pucks in the project_df for a (project, sample),
+        # if it cannot find the summary file (i.e., after n_intersect_sequences)
         if not os.path.isfile(summary_file):
             # print(f"looking for summary file: '{summary_file}'")
             return self.project_df_default_values["puck_barcode_file_id"]
 
         df = pd.read_csv(summary_file)
-
-        # Comment the following line that restricts the analysis of some tiles.
-        # All tiles provided will now be processed -- it's up to the user to
-        # provide a meaningful list of tiles.
-        #
-        # df = df.loc[(df.n_matching > 500) & (df.matching_ratio > 0.1)]
 
         pdf_ids = df.puck_barcode_file_id.to_list()
 

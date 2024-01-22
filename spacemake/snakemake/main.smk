@@ -152,12 +152,15 @@ def checkpoint_puck_files(wildcards):
     puck_barcode_file_ids = list(set(puck_barcode_file_ids))
 
     out_files = {"dge": get_all_dges(wildcards, puck_barcode_file_ids),
-                 "dge_collection": get_all_dges_collection(wildcards, puck_barcode_file_ids)}
-                # "automated_report": expand(automated_report,
-                # puck_barcode_file_id=puck_barcode_file_ids, 
-                # puck_barcode_file_id_qc=puck_barcode_file_ids, **wildcards),
-                # TODO: we need to add here the puck collection!
-                # TODO: qc sheet creation does not work
+                 "dge_collection": get_all_dges_collection(wildcards, puck_barcode_file_ids),
+                 "automated_report": expand(automated_report,
+                  puck_barcode_file_id=puck_barcode_file_ids, 
+                  puck_barcode_file_id_qc=puck_barcode_file_ids, **wildcards),
+                  # TODO: automated analysis with puck_collection
+                 "qc_report": expand(qc_sheet,
+                  puck_barcode_file_id=puck_barcode_file_ids, 
+                  puck_barcode_file_id_qc=puck_barcode_file_ids, **wildcards),}
+                  # TODO: QC report with puck_collection
     print(out_files)
     return out_files
 
@@ -197,13 +200,12 @@ rule run_analysis:
 ##############
 # DOWNSAMPLE #
 ##############
-# TODO: enable saturation analysis with checkpoint
-# rule downsample:
-#     input:
-#         get_output_files(downsample_saturation_analysis,
-#             samples = config['samples'],
-#             projects = config['projects'],
-#             puck_barcode_file_matching_type = "spatial_matching")
+rule downsample:
+    input:
+        get_output_files(downsample_saturation_analysis,
+            samples = config['samples'],
+            projects = config['projects'],
+            puck_barcode_file_matching_type = "spatial_matching")
 
 #################
 # MERGE SAMPLES #
@@ -635,7 +637,8 @@ rule create_qc_sheet:
         pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id,
-            puck_barcode_file_id = wildcards.puck_barcode_file_id_qc),
+            puck_barcode_file_id = wildcards.puck_barcode_file_id_qc,
+            polyA_adapter_trimmed=wildcards.polyA_adapter_trimmed),
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
@@ -710,7 +713,8 @@ rule create_automated_report:
         pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id,
-            puck_barcode_file_id = wildcards.puck_barcode_file_id_qc),
+            puck_barcode_file_id = wildcards.puck_barcode_file_id_qc,
+            polyA_adapter_trimmed=wildcards.polyA_adapter_trimmed),
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),

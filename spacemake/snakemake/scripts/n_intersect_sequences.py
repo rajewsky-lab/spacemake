@@ -267,10 +267,10 @@ def cmdline():
 
     args = parser.parse_args()
 
-    df = pd.DataFrame(
-        columns=["puck_barcode_file", "n_barcodes", "n_matching", "matching_ratio"],
-    )
     if len(args.target) == 0:
+        df = pd.DataFrame(
+            columns=["puck_barcode_file", "n_barcodes", "n_matching", "matching_ratio"],
+        )
         df.to_csv(args.summary_output, index=False)
 
     if len(args.target_id) != len(args.target):
@@ -297,6 +297,10 @@ def cmdline():
     with mp.Pool(args.n_jobs) as pool:
         results = pool.map(find_matches, args.target)
 
+    df = pd.DataFrame(
+        results,
+        columns=["puck_barcode_file", "n_barcodes", "n_matching", "matching_ratio"],
+    )
     df["puck_barcode_file_id"] = args.target_id
     df['pass_threshold'] = 0
     df['pass_threshold'][df['matching_ratio'] > args.min_threshold] = 1
