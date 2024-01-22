@@ -1079,17 +1079,13 @@ class ProjectDF:
 
         # validate and correct map_strategies
         from spacemake.map_strategy import validate_mapstr
-        corrected_map_strategies = []
-
         if action == "add":
             _i_species = kwargs["species"]
         elif action == "update":
             _i_species = self.df.loc[ix]['species']
 
-        corrected_map_strategies.append(
-            validate_mapstr(map_strategy, config=self.config, species=_i_species)
-        )
-        kwargs['map_strategy'] = corrected_map_strategies
+        map_strategy = validate_mapstr(map_strategy, config=self.config, species=_i_species)
+        kwargs['map_strategy'] = map_strategy
 
         # TODO: remove
         # kwargs["map_strategy"] = map_strategy
