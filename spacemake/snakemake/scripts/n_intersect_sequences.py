@@ -73,7 +73,7 @@ def setup_parser(parser):
     parser.add_argument(
         "--target",
         type=str,
-        nargs="+",
+        nargs="*",
         help="target puck files against which search is performed",
         required=True,
     )
@@ -81,7 +81,7 @@ def setup_parser(parser):
     parser.add_argument(
         "--target-id",
         type=str,
-        nargs="+",
+        nargs="*",
         help="target puck ids for summary output",
         required=True,
     )
@@ -267,6 +267,12 @@ def cmdline():
 
     args = parser.parse_args()
 
+    df = pd.DataFrame(
+        columns=["puck_barcode_file", "n_barcodes", "n_matching", "matching_ratio"],
+    )
+    if len(args.target) == 0:
+        df.to_csv(args.summary_output, index=False)
+
     if len(args.target_id) != len(args.target):
         raise ValueError(
             f"target_id ({len(args.target_id)}) and target ({len(args.target)}) are different in size"
@@ -291,10 +297,6 @@ def cmdline():
     with mp.Pool(args.n_jobs) as pool:
         results = pool.map(find_matches, args.target)
 
-    df = pd.DataFrame(
-        results,
-        columns=["puck_barcode_file", "n_barcodes", "n_matching", "matching_ratio"],
-    )
     df["puck_barcode_file_id"] = args.target_id
     df['pass_threshold'] = 0
     df['pass_threshold'][df['matching_ratio'] > args.min_threshold] = 1

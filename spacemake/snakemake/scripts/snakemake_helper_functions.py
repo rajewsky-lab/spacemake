@@ -48,7 +48,7 @@ def get_expanded_pattern_project_sample(
                     data_root_type="complete_data",
                     downsampling_percentage="",
                     is_spatial=True
-                ) # TODO: add the non spatial also! specially if single cell!
+                )
 
     return out_files
 
@@ -118,7 +118,9 @@ def get_dge_flag_from_run_mode(
             n_beads=n_beads,
             is_external=external_wildcard,
             data_root_type=data_root_type,
-            downsampling_percentage=downsampling_percentage
+            downsampling_percentage=downsampling_percentage,
+            run_mode=run_mode,
+            umi_cutoff=run_mode_variables["umi_cutoff"]
     )
 
 def get_output_files(
@@ -226,49 +228,30 @@ def get_output_files(
 
     return out_files
 
-# class GetAllDGEs:
-#     def __init__(self):
-#         pass
-#     def __call__(self, wildcards):
-#         import pandas as pd
 
-#         global checkpoints
-#         global project_df
+def get_all_dges(wildcards, puck_barcode_file_ids):
+    df = project_df.df
 
-#         # we do it with the checkpoints!
-#         df = project_df.df
+    dges = []
 
-#         dges = []
+    for index, row in df.iterrows():
+        project_id, sample_id = index
 
-#         for index, row in df.iterrows():
-#             project_id, sample_id = index
+        for run_mode in row["run_mode"]:
+            if project_df.has_dge(project_id=project_id, sample_id=sample_id):
+                for pbf_id in puck_barcode_file_ids:
+                    dges += get_dge_from_run_mode(
+                                project_id=project_id,
+                                sample_id=sample_id,
+                                run_mode=run_mode,
+                                data_root_type="complete_data",
+                                downsampling_percentage="",
+                                puck_barcode_file_id=pbf_id,
+                            )["dge"]
+    return dges
 
-#             with checkpoints.barcode_readcounts_chk.get(**wildcards).output[0] as f:
-#                 _puck_matched_info = pd.read_csv(f)
-#                 puck_barcode_file_ids = set(_puck_matched_info['puck_barcode_file_id'].tolist())
 
-#             puck_barcode_file_ids = list(puck_barcode_file_ids.intersection(set(project_df.get_matching_puck_barcode_file_ids(
-#                 project_id=project_id, sample_id=sample_id
-#             ))))
-
-#             for run_mode in row["run_mode"]:
-#                 if project_df.has_dge(project_id=project_id, sample_id=sample_id):
-#                     for pbf_id in puck_barcode_file_ids:
-#                         dges.append(
-#                             get_dge_from_run_mode(
-#                                 project_id=project_id,
-#                                 sample_id=sample_id,
-#                                 run_mode=run_mode,
-#                                 data_root_type="complete_data",
-#                                 downsampling_percentage="",
-#                                 puck_barcode_file_id=pbf_id,
-#                             )["dge"],
-#                         )
-
-#         return dges
-    
-
-def get_all_dges_collection(wildcards):
+def get_all_dges_collection(wildcards, puck_barcode_file_ids):
     import os
     df = project_df.df
 
@@ -287,29 +270,25 @@ def get_all_dges_collection(wildcards):
 
         coordinate_system = puck_vars["coordinate_system"]
 
-        if coordinate_system == '':
+        # no coordinate system is provided, or no multiple tiles to stitch
+        if coordinate_system == '' or len(puck_barcode_file_ids) < 2:
             continue
 
-        # TODO: add `continue` statement if only one puck_barcode
-
         if not os.path.exists(coordinate_system):
-            raise FileNotFoundError(f"at project {project_id} sample {sample_id} "+
-                                    f"'coordinate_system' file {coordinate_system} could not be found")
-
-        # will consider puck_collection within all dges if a coordinate system is specified in the puck
-        with_puck_collection = False if not coordinate_system else True
+            # TODO: logging
+            print(f"""at ({project_id}, {sample_id}),
+                  'coordinate_system' file {coordinate_system} could not be found""")
+            continue
 
         for run_mode in row["run_mode"]:
-            if project_df.has_dge(project_id=project_id, sample_id=sample_id):                
-                if with_puck_collection:
-                    dges.append(get_dge_collection_from_run_mode(
-                            project_id=project_id,
-                            sample_id=sample_id,
-                            run_mode=run_mode,
-                            data_root_type="complete_data",
-                            downsampling_percentage="",
-                        )["dge"]
-                    )
+            if project_df.has_dge(project_id=project_id, sample_id=sample_id):
+                dges += get_dge_collection_from_run_mode(
+                        project_id=project_id,
+                        sample_id=sample_id,
+                        run_mode=run_mode,
+                        data_root_type="complete_data",
+                        downsampling_percentage="",
+                    )["dge"]
 
     return dges
 

@@ -122,10 +122,9 @@ dge_out_summary = (
     + ".{n_beads}_beads_{puck_barcode_file_id}.summary.txt"
 )
 
-
 # dge checkpoint
-dge_out_dir = dge_root + "/.flag.{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}"
-dge_out_done = dge_root + "/.flag.{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}.done"
+dge_out_dir = dge_root + "/.flag{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}"
+dge_out_done = dge_root + "/.flag{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}.{run_mode}.{umi_cutoff}.done"
 
 # processed dge
 h5ad_dge_suffix = "{is_external}.h5ad"

@@ -682,10 +682,11 @@ class ProjectDF:
         project_id: str,
         sample_id: str,
         puck_barcode_file_id: str,
+        **kwargs
     ):
         import numpy as np
         summary_file = puck_barcode_files_summary.format(
-            project_id=project_id, sample_id=sample_id
+            project_id=project_id, sample_id=sample_id, **kwargs
         )
 
         if not os.path.isfile(summary_file):
