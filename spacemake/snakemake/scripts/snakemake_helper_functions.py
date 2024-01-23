@@ -232,35 +232,8 @@ def get_output_files(
 
 
 def get_all_dges(wildcards, puck_barcode_file_ids):
-    df = project_df.df
-
-    dges = []
-
-    for index, row in df.iterrows():
-        project_id, sample_id = index
-
-        puck_barcode_file_ids = list(set(puck_barcode_file_ids).intersection(
-            project_df.get_puck_barcode_ids_and_files(
-                        project_id, sample_id
-                    )[0])
-            )
-
-        for run_mode in row["run_mode"]:
-            if project_df.has_dge(project_id=project_id, sample_id=sample_id):
-                for pbf_id in puck_barcode_file_ids:
-                    dges += get_dge_from_run_mode(
-                                project_id=project_id,
-                                sample_id=sample_id,
-                                run_mode=run_mode,
-                                data_root_type="complete_data",
-                                downsampling_percentage="",
-                                puck_barcode_file_id=pbf_id,
-                            )["dge"]
-    return dges
-
-
-def get_all_dges_collection(wildcards, puck_barcode_file_ids):
     import os
+
     df = project_df.df
 
     dges = []
@@ -273,30 +246,27 @@ def get_all_dges_collection(wildcards, puck_barcode_file_ids):
             sample_id = sample_id
         )
 
-        if "coordinate_system" not in puck_vars.keys():
-            continue
+        # add the default so we account for "no_spatial_data"
+        puck_barcode_file_ids = list(set(puck_barcode_file_ids).union(
+            set([project_df.project_df_default_values['puck_barcode_file_id'][0]]))
+        )
 
-        coordinate_system = puck_vars["coordinate_system"]
-
-        # no coordinate system is provided, or no multiple tiles to stitch
-        if coordinate_system == '' or len(puck_barcode_file_ids) < 2:
-            continue
-
-        if not os.path.exists(coordinate_system):
-            # TODO: logging
-            print(f"""at ({project_id}, {sample_id}),
-                  'coordinate_system' file {coordinate_system} could not be found""")
-            continue
+        if "coordinate_system" in puck_vars.keys():
+            coordinate_system = puck_vars["coordinate_system"]
+            if (coordinate_system != '') and (len(puck_barcode_file_ids) > 1) and (os.path.exists(coordinate_system)):
+                puck_barcode_file_ids += ['puck_collection']
 
         for run_mode in row["run_mode"]:
             if project_df.has_dge(project_id=project_id, sample_id=sample_id):
-                dges += get_dge_collection_from_run_mode(
-                        project_id=project_id,
-                        sample_id=sample_id,
-                        run_mode=run_mode,
-                        data_root_type="complete_data",
-                        downsampling_percentage="",
-                    )["dge"]
+                for pbf_id in puck_barcode_file_ids:
+                    dges += get_dge_from_run_mode(
+                                project_id=project_id,
+                                sample_id=sample_id,
+                                run_mode=run_mode,
+                                data_root_type="complete_data",
+                                downsampling_percentage="",
+                                puck_barcode_file_id=pbf_id,
+                            )["dge"]
 
     return dges
 
@@ -661,6 +631,7 @@ def get_dge_from_run_mode(
     downsampling_percentage,
     puck_barcode_file_id,
     only_spatial=False,
+    to_mesh=None,
 ):
     has_dge = project_df.has_dge(project_id=project_id, sample_id=sample_id)
 
@@ -727,9 +698,12 @@ def get_dge_from_run_mode(
     if not is_spatial and not only_spatial:
         dge_out_pattern = dge_out_h5ad
         dge_out_summary_pattern = dge_out_h5ad_obs
-    elif run_mode_variables["mesh_data"]:
+    elif run_mode_variables["mesh_data"] or to_mesh:
         dge_out_pattern = dge_spatial_mesh
         dge_out_summary_pattern = dge_spatial_mesh_obs
+    elif to_mesh is not None and to_mesh == False:
+        dge_out_pattern = dge_spatial
+        dge_out_summary_pattern = dge_spatial_obs
     else:
         dge_out_pattern = dge_spatial
         dge_out_summary_pattern = dge_spatial_obs
@@ -971,26 +945,31 @@ def get_puck_file(wildcards):
         return {"barcode_file": puck_barcode_file}
 
 
-def get_puck_collection_stitching_input(wildcards):
+def get_puck_collection_stitching_input(wildcards, to_mesh=False):
     # there are three options:
     # 1) no spatial dge
     # 2) spatial dge, no mesh
     # 3) spatial dge with a mesh
+    _r = []
     run_mode = list(get_run_modes_from_sample(wildcards.project_id, wildcards.sample_id).keys())[0]
 
-    puck_barcode_file_ids = project_df.get_puck_barcode_ids_and_files(
-                wildcards.project_id, wildcards.sample_id
-            )[0]
+    puck_barcode_file_ids = project_df.get_matching_puck_barcode_file_ids(
+                wildcards.project_id, wildcards.sample_id, polyA_adapter_trimmed=wildcards.polyA_adapter_trimmed
+            )[:-1]
+    
+    for p in puck_barcode_file_ids:
+        _r += [get_dge_from_run_mode(
+                    project_id=wildcards.project_id,
+                    sample_id=wildcards.sample_id,
+                    run_mode=run_mode,
+                    data_root_type=wildcards.data_root_type,
+                    downsampling_percentage=wildcards.downsampling_percentage,
+                    puck_barcode_file_id=p,
+                    only_spatial=True,
+                    to_mesh=to_mesh
+                )["dge"]][0]
 
-    return [get_dge_from_run_mode(
-                project_id=wildcards.project_id,
-                sample_id=wildcards.sample_id,
-                run_mode=run_mode,
-                data_root_type=wildcards.data_root_type,
-                downsampling_percentage=wildcards.downsampling_percentage,
-                puck_barcode_file_id=puck_barcode_file_ids,
-                only_spatial=True,
-            )["dge"]][0]
+    return _r
 
 
 def get_barcode_files_matching_summary_input(wildcards):

@@ -77,7 +77,7 @@ split_reads_read_type = split_reads_root + "read_type_num.txt"
 # post dropseq and QC #
 #######################
 
-qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}{polyA_adapter_trimmed}.html"
+qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{run_mode}_{puck_barcode_file_id_qc}{polyA_adapter_trimmed}.html"
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = "{polyA_adapter_trimmed}.txt.gz"
 barcode_readcounts = complete_data_root + "/out_readcounts" + barcode_readcounts_suffix

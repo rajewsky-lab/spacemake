@@ -494,7 +494,7 @@ rule create_mesh_spatial_dge:
 
 rule puck_collection_stitching:
     input:
-        unpack(get_puck_collection_stitching_input),
+        unpack(lambda wc: get_puck_collection_stitching_input(wc, to_mesh=False)),
         # the puck_barcode_files_summary is required for puck_metadata
         puck_barcode_files_summary
     output:
@@ -535,7 +535,7 @@ rule puck_collection_stitching:
 # TODO: collapse this with previous rule so we have a single point where we create the dge_spatial_collection
 rule puck_collection_stitching_meshed:
     input:
-        unpack(get_puck_collection_stitching_input),
+        unpack(lambda wc: get_puck_collection_stitching_input(wc, to_mesh=True)),
         # the puck_barcode_files_summary is required for puck_metadata
         puck_barcode_files_summary
     output:
@@ -791,8 +791,8 @@ def checkpoint_puck_files(wildcards):
     # deduplicate
     puck_barcode_file_ids = list(set(puck_barcode_file_ids))
 
+    # TODO: disabled the generation of puck collection
     out_files = {"dge": get_all_dges(wildcards, puck_barcode_file_ids),
-                 "dge_collection": get_all_dges_collection(wildcards, puck_barcode_file_ids),
                  "automated_report": expand(automated_report,
                   puck_barcode_file_id=puck_barcode_file_ids, 
                   puck_barcode_file_id_qc=puck_barcode_file_ids, **wildcards),
