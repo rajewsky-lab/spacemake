@@ -92,7 +92,6 @@ def get_module_outputs():
 ######################
 def checkpoint_puck_collection(wildcards):
     import shutil
-    print(wildcards)
     checkpoint_output = checkpoints.checkpoint_pucks.get(**wildcards).output[0]
     puck_barcode_file_ids = glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p
     puck_barcode_file_ids = list(set(puck_barcode_file_ids))
