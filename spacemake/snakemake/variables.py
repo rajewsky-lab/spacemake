@@ -77,7 +77,7 @@ split_reads_read_type = split_reads_root + "read_type_num.txt"
 # post dropseq and QC #
 #######################
 
-qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{run_mode}_{puck_barcode_file_id_qc}{polyA_adapter_trimmed}.html"
+qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}{polyA_adapter_trimmed}.html"
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = "{polyA_adapter_trimmed}.txt.gz"
 barcode_readcounts = complete_data_root + "/out_readcounts" + barcode_readcounts_suffix
@@ -124,7 +124,7 @@ dge_out_summary = (
 
 # dge checkpoint
 dge_out_dir = dge_root + "/.flag{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}"
-dge_out_done = dge_root + "/.flag{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}.{run_mode}.{umi_cutoff}.done"
+dge_out_done = dge_root + "/.flag{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}.{run_mode}.{umi_cutoff}.dge.done"
 
 # processed dge
 h5ad_dge_suffix = "{is_external}.h5ad"
@@ -160,19 +160,19 @@ dge_spatial_obs = (
 dge_spatial_collection = (
     dge_out_prefix
     + dge_out_suffix
-    + ".spatial_beads_puck_collection"
+    + ".{n_beads}_beads_puck_collection"
     + h5ad_dge_suffix
 )
 dge_spatial_collection_obs = (
     dge_out_prefix
     + dge_out_suffix
-    + ".spatial_beads_puck_collection"
+    + ".{n_beads}_beads_puck_collection"
     + h5ad_dge_obs_suffix
 )
 
 # spatial + meshed dge
 dge_spatial_mesh_suffix = (
-    ".spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}_{puck_barcode_file_id}"
+    ".{n_beads}_beads.mesh_{spot_diameter_um}_{spot_distance_um}_{puck_barcode_file_id}"
 )
 dge_spatial_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_mesh_suffix
 dge_spatial_mesh = dge_spatial_mesh_prefix + h5ad_dge_suffix
@@ -180,7 +180,7 @@ dge_spatial_mesh_obs = dge_spatial_mesh_prefix + h5ad_dge_obs_suffix
 
 # spatial + collection + meshed dge
 dge_spatial_collection_mesh_suffix = (
-    ".spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}_puck_collection"
+    ".{n_beads}_beads.mesh_{spot_diameter_um}_{spot_distance_um}_puck_collection"
 )
 dge_spatial_collection_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_collection_mesh_suffix
 dge_spatial_collection_mesh = dge_spatial_collection_mesh_prefix + h5ad_dge_suffix

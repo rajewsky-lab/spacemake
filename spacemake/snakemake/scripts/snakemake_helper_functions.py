@@ -28,6 +28,18 @@ def get_expanded_pattern_project_sample(
     for index, row in df.iterrows():
         project_id, sample_id = index
 
+        is_spatial = True
+        puck_barcode_file_ids = project_df.get_puck_barcode_ids_and_files(
+                    project_id, sample_id
+                )[0]
+        
+        _nonspatial = project_df.project_df_default_values[
+            "puck_barcode_file_id"
+        ][0]
+    
+        if len(puck_barcode_file_ids) <= 1 or _nonspatial in puck_barcode_file_ids:
+            is_spatial = False
+
         is_external = project_df.is_external(project_id=project_id, sample_id=sample_id)
 
         has_dge = project_df.has_dge(project_id=project_id, sample_id=sample_id)
@@ -47,7 +59,7 @@ def get_expanded_pattern_project_sample(
                     run_mode=run_mode,
                     data_root_type="complete_data",
                     downsampling_percentage="",
-                    is_spatial=True
+                    is_spatial=is_spatial
                 )
 
     return out_files
@@ -134,7 +146,7 @@ def get_output_files(
     puck_barcode_file_ids=[],
     qc=False,
     **kwargs,
-):
+): 
     out_files = []
     df = project_df.df
 
@@ -167,7 +179,7 @@ def get_output_files(
             # and sample is external, skip
             continue
 
-        if puck_barcode_file_ids == []:
+        if puck_barcode_file_ids == [] or puck_barcode_file_ids is None:
             if puck_barcode_file_matching_type == "none":
                 # reset to empty string
                 puck_barcode_file_ids = []
@@ -180,31 +192,33 @@ def get_output_files(
                 puck_barcode_file_ids = project_df.get_matching_puck_barcode_file_ids(
                     project_id=project_id, sample_id=sample_id
                 )
+        else:
+            _sample_pucks = project_df.get_puck_barcode_ids_and_files(
+                                project_id=project_id, sample_id=sample_id
+                            )[0]
 
-        if check_puck_collection:
-            puck_vars = project_df.get_puck_variables(
-                project_id = project_id,
-                sample_id = sample_id
-            )
-
-            if "coordinate_system" not in puck_vars.keys():
-                continue
-
-            coordinate_system = puck_vars["coordinate_system"]
-
-            if coordinate_system == '':
-                continue
+            _default_non_spatial = project_df.project_df_default_values['puck_barcode_file_id'][0]
+            if _sample_pucks != [] and puck_barcode_file_ids is not None:
+                puck_barcode_file_ids = list(set(puck_barcode_file_ids).intersection(
+                    set(_sample_pucks))
+                )
+                
+            else:
+                puck_barcode_file_ids = []
+            
+            puck_barcode_file_ids = list(set(puck_barcode_file_ids).union(
+                    set([_default_non_spatial]))
+                )
 
         # add the non spatial barcode by default
         non_spatial_pbf_id = project_df.project_df_default_values[
             "puck_barcode_file_id"
         ][0]
 
-        if check_puck_collection:
-            puck_barcode_file_ids = "puck_collection"
-        else:
-            if non_spatial_pbf_id not in puck_barcode_file_ids:
-                puck_barcode_file_ids.append(non_spatial_pbf_id)
+        if check_puck_collection and len(puck_barcode_file_ids) > 1:
+            puck_barcode_file_ids.append("puck_collection")
+        if non_spatial_pbf_id not in puck_barcode_file_ids:
+            puck_barcode_file_ids.append(non_spatial_pbf_id)
 
         for run_mode in row["run_mode"]:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
@@ -231,42 +245,46 @@ def get_output_files(
     return out_files
 
 
-def get_all_dges(wildcards, puck_barcode_file_ids):
-    import os
-
-    df = project_df.df
-
+def get_all_dges(wc, puck_barcode_file_ids):
     dges = []
+    df = project_df.df
 
     for index, row in df.iterrows():
         project_id, sample_id = index
+        # only intersect sample pucks when spatial
+        if type(puck_barcode_file_ids) is not list:
+            puck_barcode_file_ids = []
 
-        puck_vars = project_df.get_puck_variables(
-            project_id = project_id,
-            sample_id = sample_id
-        )
+        _sample_pucks = project_df.get_puck_barcode_ids_and_files(
+                            project_id=project_id, sample_id=sample_id
+                        )[0]
 
-        # only pucks that are present in the sample
-        puck_barcode_file_ids = list(set(puck_barcode_file_ids).intersection(
-            set(project_df.get_puck_barcode_ids_and_files(
-                    project_id=project_id, sample_id=sample_id
-                )[0]))
-        )
-
-        # add the default so we account for "no_spatial_data"
         _default_non_spatial = project_df.project_df_default_values['puck_barcode_file_id'][0]
+        if _sample_pucks != [] and puck_barcode_file_ids is not None:
+            puck_barcode_file_ids = list(set(puck_barcode_file_ids).intersection(
+                set(_sample_pucks))
+            )
+            
+        else:
+            puck_barcode_file_ids = []
+        
         puck_barcode_file_ids = list(set(puck_barcode_file_ids).union(
-            set([_default_non_spatial]))
-        )
+                set([_default_non_spatial]))
+            )
 
-        if "coordinate_system" in puck_vars.keys():
-            coordinate_system = puck_vars["coordinate_system"]
-            if (coordinate_system != '') and (len(puck_barcode_file_ids) > 1) and (os.path.exists(coordinate_system)):
-                puck_barcode_file_ids += ['puck_collection']
+        # TODO: check this do not add the puck collection
+        # puck_vars = project_df.get_puck_variables(
+        #     project_id = project_id,
+        #     sample_id = sample_id
+        # )
+        # if "coordinate_system" in puck_vars.keys():
+        #     coordinate_system = puck_vars["coordinate_system"]
+        #     if (coordinate_system != '') and (len(puck_barcode_file_ids) > 1) and (os.path.exists(coordinate_system)):
+        #         puck_barcode_file_ids += ['puck_collection']
 
-        for run_mode in row["run_mode"]:
-            if project_df.has_dge(project_id=project_id, sample_id=sample_id):
-                for pbf_id in puck_barcode_file_ids:
+        if project_df.has_dge(project_id=project_id, sample_id=sample_id):
+            for pbf_id in puck_barcode_file_ids:
+                for run_mode in row["run_mode"]:
                     dges += get_dge_from_run_mode(
                                 project_id=project_id,
                                 sample_id=sample_id,
@@ -822,6 +840,7 @@ def get_dge_collection_from_run_mode(
             is_external=external_wildcard,
             data_root_type=data_root_type,
             downsampling_percentage=downsampling_percentage,
+            run_mode=run_mode
         )
         for key, pattern in out_files_pattern.items()
     }
@@ -953,17 +972,23 @@ def get_puck_file(wildcards):
         return {"barcode_file": puck_barcode_file}
 
 
-def get_puck_collection_stitching_input(wildcards, to_mesh=False):
+def get_puck_collection_stitching_input(wildcards, puck_barcode_file_ids, to_mesh=False):
     # there are three options:
     # 1) no spatial dge
     # 2) spatial dge, no mesh
     # 3) spatial dge with a mesh
     _r = []
     run_mode = list(get_run_modes_from_sample(wildcards.project_id, wildcards.sample_id).keys())[0]
-
-    puck_barcode_file_ids = project_df.get_matching_puck_barcode_file_ids(
-                wildcards.project_id, wildcards.sample_id, polyA_adapter_trimmed=wildcards.polyA_adapter_trimmed
-            )[:-1]
+    
+    if puck_barcode_file_ids is not None:
+        # only pucks that are present in the sample
+        puck_barcode_file_ids = list(set(puck_barcode_file_ids).intersection(
+            set(project_df.get_puck_barcode_ids_and_files(
+                    project_id=wildcards.project_id, sample_id=wildcards.sample_id
+                )[0]))
+        )
+    else:
+        puck_barcode_file_ids = []
     
     for p in puck_barcode_file_ids:
         _r += [get_dge_from_run_mode(
