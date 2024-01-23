@@ -200,8 +200,11 @@ def get_output_files(
             "puck_barcode_file_id"
         ][0]
 
-        if non_spatial_pbf_id not in puck_barcode_file_ids:
-            puck_barcode_file_ids.append(non_spatial_pbf_id)
+        if check_puck_collection:
+            puck_barcode_file_ids = "puck_collection"
+        else:
+            if non_spatial_pbf_id not in puck_barcode_file_ids:
+                puck_barcode_file_ids.append(non_spatial_pbf_id)
 
         for run_mode in row["run_mode"]:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
@@ -212,9 +215,6 @@ def get_output_files(
                     polyA_adapter_trimmed = ".polyA_adapter_trimmed"
                 else:
                     polyA_adapter_trimmed = ""
-
-            if check_puck_collection:
-                puck_barcode_file_ids = "puck_collection"
 
             out_files = out_files + expand(
                 pattern,
