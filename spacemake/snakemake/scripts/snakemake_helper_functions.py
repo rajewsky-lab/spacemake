@@ -147,6 +147,7 @@ def get_output_files(
     qc=False,
     **kwargs,
 ): 
+    import os
     out_files = []
     df = project_df.df
 
@@ -216,7 +217,11 @@ def get_output_files(
         ][0]
 
         if check_puck_collection and len(puck_barcode_file_ids) > 1:
-            puck_barcode_file_ids.append("puck_collection")
+            _puck_vars = project_df.get_puck_variables(project_id = project_id, sample_id = sample_id)
+            _coord_system = _puck_vars['coordinate_system']
+            if _coord_system != '' and os.path.exists(_coord_system):
+                puck_barcode_file_ids.append("puck_collection")
+
         if non_spatial_pbf_id not in puck_barcode_file_ids:
             puck_barcode_file_ids.append(non_spatial_pbf_id)
 

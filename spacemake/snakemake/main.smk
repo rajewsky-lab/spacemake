@@ -541,7 +541,7 @@ rule puck_collection_stitching:
         puck_metadata = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
             project_id=wildcards.project_id, sample_id=wildcards.sample_id
         ),
-    run:
+    run:   
         _pc = puck_collection.merge_pucks_to_collection(
             # takes all input except the dge_out_done and puck_barcode_files
             input[:-1],
