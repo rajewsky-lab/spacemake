@@ -251,6 +251,13 @@ def get_all_dges(wildcards, puck_barcode_file_ids):
             set([project_df.project_df_default_values['puck_barcode_file_id'][0]]))
         )
 
+        # subset to the pucks for that sample
+        puck_barcode_file_ids = list(set(puck_barcode_file_ids).intersection(
+            set(project_df.get_matching_puck_barcode_file_ids(
+                    project_id=project_id, sample_id=sample_id
+                )))
+        )
+
         if "coordinate_system" in puck_vars.keys():
             coordinate_system = puck_vars["coordinate_system"]
             if (coordinate_system != '') and (len(puck_barcode_file_ids) > 1) and (os.path.exists(coordinate_system)):
