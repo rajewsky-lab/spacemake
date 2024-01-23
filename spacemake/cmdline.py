@@ -89,6 +89,7 @@ def get_add_sample_sheet_parser():
 
 
 def get_sample_main_variables_parser(
+    defaults=False,
     species_required=False,
     main_variables=[
         "barcode_flavor",
@@ -108,7 +109,7 @@ def get_sample_main_variables_parser(
         parser.add_argument(
             "--barcode_flavor",
             type=str,
-            default="dropseq",
+            default="dropseq" if defaults else None,
             help="barcode flavor for this sample",
         )
 
@@ -116,7 +117,7 @@ def get_sample_main_variables_parser(
         parser.add_argument(
             "--adapter_flavor",
             type=str,
-            default="dropseq",
+            default="dropseq" if defaults else None,
             help="barcode flavor for this sample",
         )
 
@@ -337,6 +338,7 @@ def get_action_sample_parser(parent_parser, action, func):
         # add arguments for species, run_mode, barcode_flavor and puck
         parents.append(
             get_sample_main_variables_parser(
+                defaults=True,
                 species_required=True,
             )
         )
@@ -347,7 +349,8 @@ def get_action_sample_parser(parent_parser, action, func):
     elif action == "update":
         # add main variables parser
         parents.append(get_sample_main_variables_parser())
-
+        # add arguments for R1/R1, dge, longread
+        parents.append(get_data_parser())
         # add possibility to add extra info
         parents.append(get_sample_extra_info_parser())
     elif action == "merge":
@@ -784,9 +787,6 @@ def spacemake_run(args):
     # to flatten the dictionary
     config_variables = {**config_variables, **novosparc_variables}
 
-    # assert that the project_df is valid before running the pipeline
-    pdf.assert_valid()
-
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
     # run snakemake
@@ -795,7 +795,7 @@ def spacemake_run(args):
         configfiles=[var.config_path],
         cores=args["cores"],
         dryrun=args["dryrun"],
-        targets=[],
+        targets=['get_stats_prealigned_barcodes'],
         touch=args["touch"],
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
@@ -810,9 +810,27 @@ def spacemake_run(args):
     # update valid pucks (above threshold) before continuing to downstream
     # this performs counting of matching barcodes after alignment
     pdf.update_project_df_barcode_matches(prealigned=True)
+    pdf.consolidate_pucks_merged_samples()
     pdf.dump()
 
-    # run snakemake after prealignment filter
+    # whitelisting of barcodes
+    preprocess_finished = snakemake.snakemake(
+        snakefile,
+        configfiles=[var.config_path],
+        cores=args["cores"],
+        dryrun=args["dryrun"],
+        targets=['get_whitelist_barcodes'],
+        touch=args["touch"],
+        force_incomplete=args["rerun_incomplete"],
+        keepgoing=args["keep_going"],
+        printshellcmds=args["printshellcmds"],
+        config=config_variables,
+    )
+
+    pdf.update_project_df_barcode_matches()
+    pdf.dump()
+
+    # run snakemake quantification and reports
     analysis_finished = snakemake.snakemake(
         snakefile,
         configfiles=[var.config_path],
