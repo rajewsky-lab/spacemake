@@ -246,16 +246,17 @@ def get_all_dges(wildcards, puck_barcode_file_ids):
             sample_id = sample_id
         )
 
-        # add the default so we account for "no_spatial_data"
-        puck_barcode_file_ids = list(set(puck_barcode_file_ids).union(
-            set([project_df.project_df_default_values['puck_barcode_file_id'][0]]))
+        # only pucks that are present in the sample
+        puck_barcode_file_ids = list(set(puck_barcode_file_ids).intersection(
+            set(project_df.get_puck_barcode_ids_and_files(
+                    project_id=project_id, sample_id=sample_id
+                )[0]))
         )
 
-        # subset to the pucks for that sample
-        puck_barcode_file_ids = list(set(puck_barcode_file_ids).intersection(
-            set(project_df.get_matching_puck_barcode_file_ids(
-                    project_id=project_id, sample_id=sample_id
-                )))
+        # add the default so we account for "no_spatial_data"
+        _default_non_spatial = project_df.project_df_default_values['puck_barcode_file_id'][0]
+        puck_barcode_file_ids = list(set(puck_barcode_file_ids).union(
+            set([_default_non_spatial]))
         )
 
         if "coordinate_system" in puck_vars.keys():
