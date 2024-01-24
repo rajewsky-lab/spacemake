@@ -561,32 +561,6 @@ rule load_genome:
         STAR --genomeLoad LoadAndExit --genomeDir {input[0]}
         """
 
-def get_final_mapped_bam():
-    out_files = []
-    df = project_df.df
-
-    # merged is ignored bc it does not come from mapping
-    df = df.loc[~df.is_merged]
-
-    for index, row in df.iterrows():
-        project_id, sample_id = index
-
-        for run_mode in row["run_mode"]:
-            run_mode_variables = project_df.config.get_run_mode(run_mode).variables
-            if run_mode_variables["polyA_adapter_trimming"]:
-                polyA_adapter_trimmed = ".polyA_adapter_trimmed"
-            else:
-                polyA_adapter_trimmed = ""
-
-            out_files = out_files + expand(
-                final_bam,
-                project_id=project_id,
-                sample_id=sample_id,
-                polyA_adapter_trimmed=polyA_adapter_trimmed,
-            )
-
-    return out_files
-
 def get_star_unloaded_flag(default_strategy="STAR:genome:final"):
     out_files = []
 
