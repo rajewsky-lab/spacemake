@@ -594,5 +594,5 @@ rule unload_genome:
         temp(directory(star_index_log_location))
     shell:
         """
-        STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {output[1]}
+        STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {output[1]}/
         """
