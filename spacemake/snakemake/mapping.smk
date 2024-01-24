@@ -39,6 +39,7 @@ star_index_param = star_index
 star_index_file = star_index + '/SAindex'
 star_index_loaded = star_index + '/genomeLoad.done'
 star_index_unloaded = star_index + '/genomeUnload.done'
+star_index_log_location = 'species_data/{species}/{ref_name}/.star_index_logs'
 
 bt2_index = 'species_data/{species}/{ref_name}/bt2_index'
 bt2_index_param = bt2_index + '/{ref_name}'
@@ -556,9 +557,10 @@ rule load_genome:
         star_index_file
     output:
         temp(touch(star_index_loaded)),
+        temp(directory(star_index_log_location))
     shell:
         """
-        STAR --genomeLoad LoadAndExit --genomeDir {input[0]}
+        STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/
         """
 
 def get_star_unloaded_flag(default_strategy="STAR:genome:final"):
@@ -588,8 +590,9 @@ rule unload_genome:
         loaded_flag=star_index_loaded,
         index_dir=star_index, # we put last so it is accessible
     output:
-        temp(touch(star_index_unloaded))
+        temp(touch(star_index_unloaded)),
+        temp(directory(star_index_log_location))
     shell:
         """
-        STAR --genomeLoad Remove --genomeDir {input.index_dir}
+        STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {output[1]}
         """
