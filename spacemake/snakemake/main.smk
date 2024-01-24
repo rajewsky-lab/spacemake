@@ -559,7 +559,9 @@ rule puck_collection_stitching:
         # add 'cell_bc' name to index for same format as individual pucks
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         df = _pc.obs
+        df.index = np.arange(len(df))
         df.index.name = "cell_bc"
+
         # only get numeric columns, to avoid problems during summarisation
         # we could implement sth like df.A.str.extract('(\d+)')
         # to avoid losing information from columns that are not numeric
@@ -600,7 +602,9 @@ rule puck_collection_stitching_meshed:
         # add 'cell_bc' name to index for same format as individual pucks
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         df = _pc.obs
+        df.index = np.arange(len(df))
         df.index.name = "cell_bc"
+
         # only get numeric columns, to avoid problems during summarisation
         # we could implement sth like df.A.str.extract('(\d+)')
         # to avoid losing information from columns that are not numeric
