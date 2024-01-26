@@ -710,7 +710,7 @@ class ConfigFile:
 
         return variable_data
 
-    def process_run_mode_args(self, **kwargs):
+    def process_run_mode_args(self, name=None, **kwargs):
         # typeset boolean values of run_mode
         default_run_mode = self.get_variable("run_modes", "default")
 
