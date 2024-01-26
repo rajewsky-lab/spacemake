@@ -49,7 +49,7 @@ def test_get_mapped_BAM_output(configured_root):
     print(out_files)
 
 
-def test_validation_cmdline(configured_root):
+def test_validation_cmdline_issue_54(configured_root):
     os.chdir(configured_root.as_posix())
     data = [
         ("flipped", "bowtie2:rRNA->STAR:genome", 'test_hsa', True),
