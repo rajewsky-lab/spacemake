@@ -335,10 +335,8 @@ def aggregate_adata_by_indices(
     )
 
     aggregated_adata.obs["n_joined"] = [len(x) for x in ix_array]
-    
-    mesh_bc_ilocs = np.arange(len(idx_to_aggregate))[idx_to_aggregate]
 
-    joined_dict = {i: mesh_bc_ilocs[x] for i, x in enumerate(ix_array)}
+    joined_dict = {i: idx_to_aggregate[x] for i, x in enumerate(ix_array)}
 
     indices_joined_spatial_units = dok_matrix(
         (len(joined_dict), len(adata.obs_names)), dtype=np.int8
@@ -475,7 +473,7 @@ def create_meshed_adata(
 
             new_ilocs = [[i] * len(accum[i]) for i in range(len(accum))]
             new_ilocs = np.array([n for new_iloc in new_ilocs for n in new_iloc])
-            original_ilocs = np.array([a for acc in accum for a in acc])
+            original_ilocs = np.concatenate(accum).astype(int)
 
             distance_filter = (
                 np.linalg.norm(

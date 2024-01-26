@@ -99,9 +99,9 @@ class ProjectDF:
 
         if os.path.isfile(file_path):
             attempts = 0
-            failed = False
+            df_loaded_flag = False
 
-            while not failed:
+            while not df_loaded_flag:
                 try:
                     self.df = pd.read_csv(
                         file_path,
@@ -109,16 +109,18 @@ class ProjectDF:
                         na_values=["None", "none"],
                         dtype=self.project_df_dtypes,
                     )
-                    failed = True
+                    df_loaded_flag = True
                 except pd.errors.EmptyDataError as e:
                     if attempts < 5:
                         # wait 5 seconds before retrying
+                        self.logger.warning(
+                            f"The file '{self.file_path}' seems to be empty. Trying again ({attempts}/5) in 5 seconds"
+                        )
                         time.sleep(5)
                         attempts = attempts + 1
                         continue
                     else:
                         raise e
-                        failed = True
 
             if self.df.empty:
                 self.create_empty_df()
@@ -127,6 +129,8 @@ class ProjectDF:
                 self.fix()
         else:
             self.create_empty_df()
+
+        self.assert_valid()
 
         self.logger = logging.getLogger(logger_name)
 
@@ -150,6 +154,10 @@ class ProjectDF:
         elif self.df.empty:
             logger.warn("The 'project_df' in the ProjectDF object is empty")
 
+        _unique_samples = self._check_unique_samples()
+        if _unique_samples is not None:
+            raise SampleAlreadyExistsError(_unique_samples)
+
         for index, row in self.df.iterrows():
             # check that sample sheet file exists
             if (row['sample_sheet'] is not None) and (not os.path.exists(row['sample_sheet'])):
@@ -165,6 +173,9 @@ class ProjectDF:
             
             # check that puck_barcode_file(s), R1 and R2 files exist
             for n_col in ['puck_barcode_file', 'R1', 'R2']:
+                if n_col in ['R1', 'R2'] and row['is_merged']:
+                    continue
+
                 if type(row[n_col]) is list:
                     for _it_row in row[n_col]:
                         if not os.path.exists(_it_row):
@@ -189,6 +200,13 @@ class ProjectDF:
                     raise SystemExit(SpacemakeError(f"At {index}, the selected puck '{row['puck']}' " + \
                                                     "contains a coordinate_system " + \
                                                     "but no 'puck_barcode_files' are specified"))
+                
+    def _check_unique_samples(self):
+        for index, _ in self.df.iterrows():
+            if len(self.df[self.df.index.isin([index])]) > 1:
+                return index
+        
+        return None
 
     def create_empty_df(self):
         import pandas as pd
@@ -274,16 +292,54 @@ class ProjectDF:
         else:
             return self.project_df_default_values["puck_barcode_file"]
 
+    def consolidate_pucks_merged_samples(self):
+        for index, row in self.df.iterrows():
+            project_id, sample_id = index
+            puck_ids = row['puck_barcode_file_id']
+            
+            if (not row['is_merged']) or (not self.is_spatial(project_id, sample_id, puck_ids)):
+                continue
+
+            if len(puck_ids) >= 1:
+                puck_ids = puck_ids[0]
+            elif len(puck_ids):
+                puck_ids = self.project_df_default_values['puck_barcode_file_id']
+
+            merged_from = row['merged_from']
+            puck_id_file = set()
+
+            for sample_tuple in merged_from:
+                pid = self.df.loc[sample_tuple]['puck_barcode_file_id']
+                pbf = self.df.loc[sample_tuple]['puck_barcode_file']
+                _tuple = [(id, bf) for id, bf in zip(pid, pbf)]
+                
+                puck_id_file.update([ tuple(t) for t in _tuple ])
+
+            pid, pbf = list(zip(*list(puck_id_file)))
+            self.df.loc[index, 'puck_barcode_file_id'] = list(pid)
+            self.df.loc[index, 'puck_barcode_file'] = list(pbf)
+
+
     def update_project_df_barcode_matches(self, prealigned=False):
         from spacemake.snakemake.variables import puck_count_barcode_matches_summary, puck_count_prealigned_barcode_matches_summary
+        import pandas as pd
 
         if prealigned:
             _bc_file = puck_count_prealigned_barcode_matches_summary
         else:
             _bc_file = puck_count_barcode_matches_summary
 
-        for index, _ in self.df.iterrows():
+        for index, row in self.df.iterrows():
             project_id, sample_id = index
+
+            puck_ids = row['puck_barcode_file_id']
+            if len(puck_ids) >= 1:
+                puck_ids = puck_ids[0]
+            elif len(puck_ids):
+                puck_ids = self.project_df_default_values['puck_barcode_file_id']
+
+            if (row['is_merged'] and prealigned) or (not self.is_spatial(project_id, sample_id, puck_ids)):
+                continue
 
             # check if barcodes have been filtered
             _f_barcodes_df = _bc_file.format(project_id=project_id,
@@ -298,11 +354,12 @@ class ProjectDF:
 
                 above_threshold_mask = barcodes_df['pass_threshold'] == 1
 
-                _puck_barcode_files = barcodes_df[above_threshold_mask]['puck_barcode_file'].values.tolist().__str__()
-                _puck_barcode_files_id = barcodes_df[above_threshold_mask]['puck_barcode_file_id'].values.tolist().__str__()
+                _puck_barcode_files = barcodes_df[above_threshold_mask]['puck_barcode_file'].values.tolist()
+                _puck_barcode_files_id = barcodes_df[above_threshold_mask]['puck_barcode_file_id'].values.tolist()
 
-                self.df.df.loc[index, 'puck_barcode_file'] = _puck_barcode_files
-                self.df.loc[index, 'puck_barcode_file_id'] = _puck_barcode_files_id
+                self.df.at[index, 'puck_barcode_file'] = _puck_barcode_files
+                self.df.at[index, 'puck_barcode_file_id'] = _puck_barcode_files_id
+
 
     def get_sample_info(self, project_id: str, sample_id: str) -> Dict:
         """get_sample_info.
@@ -1020,7 +1077,22 @@ class ProjectDF:
                 )
             )
 
-        kwargs["map_strategy"] = map_strategy
+        # validate and correct map_strategies
+        from spacemake.map_strategy import validate_mapstr
+        corrected_map_strategies = []
+
+        if action == "add":
+            _i_species = kwargs["species"]
+        elif action == "update":
+            _i_species = self.df.loc[ix]['species']
+
+        corrected_map_strategies.append(
+            validate_mapstr(map_strategy, config=self.config, species=_i_species)
+        )
+        kwargs['map_strategy'] = corrected_map_strategies
+
+        # TODO: remove
+        # kwargs["map_strategy"] = map_strategy
 
         # populate puck_barcode_file
         if puck_barcode_file is not None:
