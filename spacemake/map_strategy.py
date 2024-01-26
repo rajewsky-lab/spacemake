@@ -143,6 +143,7 @@ def get_count_flavor_str(wc):
 ##########################
 
 def validate_mapstr(mapstr, config={}, species=None):
+    # print(f"validate_mapstr(mapstr={mapstr}, config={config}, species={species})")
     if species and config:
         species_d = config.get_variable("species", name=species)
     else:
