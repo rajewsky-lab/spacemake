@@ -155,6 +155,19 @@ def test_runmode(initialized_root):
     config = get_global_config()
     config.dump()
 
+def test_issue_88(initialized_root):
+    os.chdir(initialized_root.as_posix())
+    # name added to config.yaml when creating a new run mode #88
+    # add
+    sm("config", "add_run_mode", "--name", "newrunmode")
+    from spacemake.config import get_global_config
+    config = get_global_config()
+    config.dump()
+    inserted = config.variables['run_modes']['newrunmode']
+    print("here's what we inserted", inserted)
+    assert "name" not in inserted
+
+
 def test_sample(configured_root):
     os.chdir(configured_root.as_posix())
     test_sample = (

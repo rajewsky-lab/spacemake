@@ -2,6 +2,7 @@ import pytest
 import os
 
 spacemake_dir = os.path.abspath(os.path.dirname(__file__) + '/../')
+print("SPACEMAKE_DIR", spacemake_dir)
 
 def sm(*argc, expect_fail=False):
     # construct the desired cmdline
@@ -120,7 +121,10 @@ def configured_root(tmp_path_factory):
     os.system(f"cp {def_config} {tmp_root / 'config.yaml'}")
 
     test_pdf =  os.path.join(sm_path, "../test_data/test_project_df.csv")
-    os.system(f"cp {test_pdf} {tmp_root / 'project_df.csv'}")
+    open(f"{tmp_root / 'project_df.csv'}", 'w').write(
+        open(test_pdf, 'r').read().format(spacemake_dir=spacemake_dir)
+    )
+    #os.system(f"cp {test_pdf} {tmp_root / 'project_df.csv'}")
 
     return tmp_root
 
