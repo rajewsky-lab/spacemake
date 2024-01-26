@@ -19,6 +19,7 @@ def sm(*argc, expect_fail=False):
     # execute spacemake cmdline code
     from spacemake.cmdline import cmdline
     res = cmdline()
+    # print("res", res)
     if expect_fail:
         assert isinstance(res, Exception) == True
     else:
