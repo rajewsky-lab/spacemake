@@ -81,7 +81,6 @@ qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = "{polyA_adapter_trimmed}.txt.gz"
 barcode_readcounts = complete_data_root + "/out_readcounts" + barcode_readcounts_suffix
-barcode_readcounts_prealigned = complete_data_root + "/out_readcounts_prealigned.txt.gz"
 strand_info = split_reads_strand_type
 
 # united final.bam
@@ -91,11 +90,11 @@ top_barcodes_clean = complete_data_root + "/topBarcodesClean" + top_barcodes_suf
 
 spatial_barcodes = (
     complete_data_root
-    + "/puck_barcode_files/spatialBarcodes_{puck_barcode_file_id}.txt"
+    + "/puck_barcode_files/spatialBarcodes_{puck_barcode_file_id}{polyA_adapter_trimmed}.txt"
 )
 parsed_spatial_barcodes = (
     complete_data_root
-    + "/puck_barcode_files/spatial_barcodes_{puck_barcode_file_id}.csv"
+    + "/puck_barcode_files/spatial_barcodes_{puck_barcode_file_id}{polyA_adapter_trimmed}.csv"
 )
 parsed_spatial_barcodes_pc = (
     complete_data_root
@@ -105,8 +104,10 @@ stats_prealigned_spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/stats_prealigned_spatial_barcodes_{puck_barcode_file_id}.csv"
 )
+bc_out_dir = complete_data_root + "/puck_barcode_files/.flag{polyA_adapter_trimmed}"
+
+puck_barcode_files_filtered = complete_data_root + "/puck_barcode_files_filtered{polyA_adapter_trimmed}.csv"
 puck_barcode_files_summary = complete_data_root + "/puck_barcode_files_summary{polyA_adapter_trimmed}.csv"
-puck_count_barcode_matches_summary = complete_data_root + "/puck_count_barcode_matches{polyA_adapter_trimmed}.csv"
 puck_count_prealigned_barcode_matches_summary = complete_data_root + "/puck_count_prealigned_barcode_matches{polyA_adapter_trimmed}.csv"
 
 # dge creation

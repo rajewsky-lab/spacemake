@@ -1009,18 +1009,22 @@ def get_puck_collection_stitching_input(wildcards, puck_barcode_file_ids, to_mes
 
     return _r
 
+def get_barcode_files_matching_summary_input(wildcards, pbf_ids):
+    import numpy as np
 
-def get_barcode_files_matching_summary_input(wildcards):
-    pbf_ids, pbfs = project_df.get_puck_barcode_ids_and_files(
+    pbf_ids_all, pbfs_all = project_df.get_puck_barcode_ids_and_files(
         project_id=wildcards.project_id, sample_id=wildcards.sample_id
     )
 
+    pbfs = np.array(pbfs_all)[np.isin(pbf_ids_all, pbf_ids)].tolist()
+    
     parsed_spatial_barcode_files = [
         expand(
             parsed_spatial_barcodes,
             project_id=wildcards.project_id,
             sample_id=wildcards.sample_id,
             puck_barcode_file_id=pbf_id,
+            polyA_adapter_trimmed=wildcards.polyA_adapter_trimmed
         )[0]
         for pbf_id in pbf_ids
     ]
@@ -1029,6 +1033,7 @@ def get_barcode_files_matching_summary_input(wildcards):
         "puck_barcode_files": pbfs,
         "parsed_spatial_barcode_files": parsed_spatial_barcode_files,
     }
+
 
 
 def get_barcode_files(wildcards):
