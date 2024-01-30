@@ -179,10 +179,10 @@ class ProjectDF:
                 if type(row[n_col]) is list:
                     for _it_row in row[n_col]:
                         if not os.path.exists(_it_row):
-                            raise SystemExit(FileNotFoundError(f"At {index}, the {n_col} file does not exist"))
+                            raise SystemExit(FileNotFoundError(f"At {index}, the {n_col} file does not exist: '{os.path.abspath(_it_row)}'"))
                 elif type(row[n_col]) is str and row[n_col] != '':
                     if not os.path.exists(row[n_col]):
-                        raise SystemExit(FileNotFoundError(f"At {index}, the {n_col} file does not exist"))
+                        raise SystemExit(FileNotFoundError(f"At {index}, the {n_col} file does not exist: '{os.path.abspath(_it_row)}'"))
                     
             # check that pucks are specified only if puck is spatial (or puck_collection is enabled)
             _valid_puck_coordinate = True
@@ -1075,15 +1075,14 @@ class ProjectDF:
                 )
             )
 
-        # validate and correct map_strategies
-        from spacemake.map_strategy import validate_mapstr
         if action == "add":
             _i_species = kwargs["species"]
         elif action == "update":
             _i_species = self.df.loc[ix]['species']
 
-        map_strategy = validate_mapstr(map_strategy, config=self.config, species=_i_species)
-        kwargs['map_strategy'] = map_strategy
+        # validate and correct map_strategies
+        from spacemake.map_strategy import validate_mapstr
+        kwargs['map_strategy'] = validate_mapstr(map_strategy, config=self.config, species=_i_species)
 
         # TODO: remove
         # kwargs["map_strategy"] = map_strategy

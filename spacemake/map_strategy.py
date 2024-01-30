@@ -143,6 +143,7 @@ def get_count_flavor_str(wc):
 ##########################
 
 def validate_mapstr(mapstr, config={}, species=None):
+    # print(f"validate_mapstr(mapstr={mapstr}, config={config}, species={species})")
     if species and config:
         species_d = config.get_variable("species", name=species)
     else:
@@ -169,7 +170,7 @@ def validate_mapstr(mapstr, config={}, species=None):
 
         if species_d:
             if not ref in species_d:
-                raise ConfigVariableNotFoundError(f"reference name {ref} is not among the refs registered for {species}: {sorted(species_d.keys())}")
+                raise ConfigVariableNotFoundError(ref, f"reference name '{ref}' is not among the refs registered for {species}: {sorted(species_d.keys())}. Entire map-rule: {mapstr}")
 
         if '@' in mapper:
             # we have a counting-flavor directive
