@@ -175,14 +175,13 @@ rule run_analysis:
         get_module_outputs(),
 
         # get FastQC reports
-        unpack(
+        (
             get_output_files(
                     fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
                     data_root_type = 'complete_data', downsampling_percentage = '',
                     filter_merged=True) 
                 if config['with_fastqc'] else []
         ),
-
         # get flag for DGE (based on checkpoint, i.e., not explicitly generating files)
         get_expanded_pattern_project_sample(dge_out_done),
 
