@@ -73,7 +73,7 @@ def setup_parser(parser):
     parser.add_argument(
         "--target",
         type=str,
-        nargs="+",
+        nargs="*",
         help="target puck files against which search is performed",
         required=True,
     )
@@ -81,7 +81,7 @@ def setup_parser(parser):
     parser.add_argument(
         "--target-id",
         type=str,
-        nargs="+",
+        nargs="*",
         help="target puck ids for summary output",
         required=True,
     )
@@ -266,6 +266,12 @@ def cmdline():
     parser = setup_parser(parser)
 
     args = parser.parse_args()
+
+    if len(args.target) == 0:
+        df = pd.DataFrame(
+            columns=["puck_barcode_file", "n_barcodes", "n_matching", "matching_ratio"],
+        )
+        df.to_csv(args.summary_output, index=False)
 
     if len(args.target_id) != len(args.target):
         raise ValueError(
