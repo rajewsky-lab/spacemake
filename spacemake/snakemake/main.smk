@@ -90,28 +90,27 @@ def get_module_outputs():
 ######################
 # CHECKPOINT PARSERS #
 ######################
-def checkpoint_puck_collection(wildcards):
-    import shutil
+def get_pbf_from_checkpoint_pucks(wildcards):
     checkpoint_output = checkpoints.checkpoint_pucks.get(**wildcards).output[0]
     puck_barcode_file_ids = glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p
     puck_barcode_file_ids = list(set(puck_barcode_file_ids))
+    return puck_barcode_file_ids
+
+
+def checkpoint_puck_collection(wildcards):
+    puck_barcode_file_ids = get_pbf_from_checkpoint_pucks(wildcards)
     out_files = get_puck_collection_stitching_input(wildcards, puck_barcode_file_ids, to_mesh=False)
     return out_files
 
 
 def checkpoint_puck_collection_mesh(wildcards):
-    import shutil
-    checkpoint_output = checkpoints.checkpoint_pucks.get(**wildcards).output[0]
-    puck_barcode_file_ids = glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p
-    puck_barcode_file_ids = list(set(puck_barcode_file_ids))
+    puck_barcode_file_ids = get_pbf_from_checkpoint_pucks(wildcards)
     out_files = get_puck_collection_stitching_input(wildcards, puck_barcode_file_ids, to_mesh=True)
     return out_files
 
+
 def checkpoint_puck_files(wildcards):
-    import shutil
-    checkpoint_output = checkpoints.checkpoint_pucks.get(**wildcards).output[0]
-    puck_barcode_file_ids = glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p
-    puck_barcode_file_ids = list(set(puck_barcode_file_ids))
+    puck_barcode_file_ids = get_pbf_from_checkpoint_pucks(wildcards)
     out_files = {"dge": get_all_dges(wildcards, puck_barcode_file_ids),
                  "automated_report": get_output_files(automated_report,
                   data_root_type = 'complete_data', downsampling_percentage='', 
@@ -121,13 +120,14 @@ def checkpoint_puck_files(wildcards):
                    puck_barcode_file_ids=puck_barcode_file_ids, check_puck_collection=True),}
     return out_files
 
+
 def checkpoint_barcode_files(wildcards):
-    import shutil
     checkpoint_output = checkpoints.checkpoint_barcodes.get(**wildcards).output[0]
     puck_barcode_file_ids = glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p
     puck_barcode_file_ids = list(set(puck_barcode_file_ids))
     out_files = get_barcode_files_matching_summary_input(wildcards, puck_barcode_file_ids)
     return out_files
+
 
 ######################### 
 # INCLUDE OTHER MODULES #
@@ -560,11 +560,14 @@ rule puck_collection_stitching:
         puck_metadata = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
             project_id=wildcards.project_id, sample_id=wildcards.sample_id
         ),
-    run:   
+    run:
+        # get the compatible puck_ids for the puck_files
+        puck_barcode_file_ids = get_pbf_from_checkpoint_pucks(wildcards)
+
         _pc = puck_collection.merge_pucks_to_collection(
             # takes all input except the dge_out_done and puck_barcode_files
             input[:-1],
-            params['puck_metadata'][0],
+            puck_barcode_file_ids,
             params['puck_data']['coordinate_system'],
             "",
             "puck_id",
@@ -603,10 +606,12 @@ rule puck_collection_stitching_meshed:
             project_id=wildcards.project_id, sample_id=wildcards.sample_id
         ),
     run:
+        puck_barcode_file_ids = get_pbf_from_checkpoint_pucks(wildcards)
+
         _pc = puck_collection.merge_pucks_to_collection(
             # takes all input except the dge_out_done and puck_barcode_files
             input[:-1],
-            params['puck_metadata'][0],
+            puck_barcode_file_ids,
             params['puck_data']['coordinate_system'],
             "",
             "puck_id",
