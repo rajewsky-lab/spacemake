@@ -27,6 +27,9 @@ dependencies:
     - openjdk==11.0.15
     - pigz
     - pip:
+        - mrfifo
+        - pytest
+        - pytest-cov
         - pandas>=1.3.0,<=1.5.1
         - scanpy>=1.8.1
         - leidenalg>=0.8.1
