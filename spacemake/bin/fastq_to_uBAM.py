@@ -145,10 +145,20 @@ def render_to_sam(fq1, fq2, sam_out, args, **kwargs):
 
         return zip(fq_src1, fq_src2)
 
+    def iter_single(fq2):
+        fq_src2 = util.FASTQ_src(fq2)
+        if args.min_qual_trim:
+            fq_src2 = quality_trim(
+                fq_src2, min_qual=args.min_qual_trim, phred_base=args.phred_base
+            )
+        
+        for fqid, seq, qual in fq_src2:
+            yield (fqid, "NA", "NA"), (fqid, seq, qual)
+
     if fq1:
         ingress = iter_paired(fq1, fq2)
-    # else:
-    #     ingress = iter_single(fq2)
+    else:
+        ingress = iter_single(fq2)
 
     # TODO: 
     # decide how we want to handle multiple input files
@@ -212,21 +222,8 @@ def main(args):
     have_read1 = set([str(r1) != "None" for r1 in input_reads1]) == set([True])
 
     # queues for communication between processes
-    if not have_read1:
-        raise NotImplementedError("single end currently not supported")
-
     w = (
         mf.Workflow("fastq_to_uBAM")
-        # open reads1.fastq.gz
-        .gz_reader(
-            inputs=input_reads1,
-            output=mf.FIFO("read1", "wb")
-        )
-        .distribute(
-            input=mf.FIFO("read1", "rt"),
-            outputs=mf.FIFO("r1_{n}", "wt", n=args.parallel),
-            chunk_size=args.chunk_size*4
-        )
         # open reads2.fastq.gz
         .gz_reader(
             inputs=input_reads2,
@@ -237,40 +234,62 @@ def main(args):
             outputs=mf.FIFO("r2_{n}", "wt", n=args.parallel),
             chunk_size=args.chunk_size*4
         )
+    )
+
+    if have_read1:
+        # open reads1.fastq.gz
+        w.gz_reader(
+            inputs=input_reads1,
+            output=mf.FIFO("read1", "wb")
+        )
+        w.distribute(
+            input=mf.FIFO("read1", "rt"),
+            outputs=mf.FIFO("r1_{n}", "wt", n=args.parallel),
+            chunk_size=args.chunk_size*4
+        )
         # process in parallel workers
-        .workers(
+        w.workers(
             func=render_to_sam,
             fq1=mf.FIFO("r1_{n}", "rt"),
             fq2=mf.FIFO("r2_{n}", "rt"),
             sam_out=mf.FIFO("sam_{n}", "wt"),
             args=args, n=args.parallel
         )
-        # combine output streams
-        .collect(
-            inputs=mf.FIFO("sam_{n}", "rt", n=args.parallel),
-            chunk_size=args.chunk_size,
-            custom_header=mf.util.make_SAM_header(
-                prog_id="fastq_to_uBAM",
-                prog_name="fastq_to_uBAM.py",
-                prog_version=__version__,
-                rg_name=args.sample
-            ),
-            # output="/dev/stdout"
-        # )
-            output=mf.FIFO("sam_combined", "wt"),
+    else:
+        # process in parallel workers
+        w.workers(
+            func=render_to_sam,
+            fq1=None,
+            fq2=mf.FIFO("r2_{n}", "rt"),
+            sam_out=mf.FIFO("sam_{n}", "wt"),
+            args=args, n=args.parallel
         )
-        # compress to BAM 
-        .funnel(
-            func=mf.parts.bam_writer, #mf.parts.null_writer, #
-            input=mf.FIFO("sam_combined", "rt"),
-            output=args.out_bam,
-            _manage_fifos=False,
-            fmt="Sbh",
-            threads=16
-        )
-        .run()
 
+        
+    # combine output streams
+    w.collect(
+        inputs=mf.FIFO("sam_{n}", "rt", n=args.parallel),
+        chunk_size=args.chunk_size,
+        custom_header=mf.util.make_SAM_header(
+            prog_id="fastq_to_uBAM",
+            prog_name="fastq_to_uBAM.py",
+            prog_version=__version__,
+            rg_name=args.sample
+        ),
+        # output="/dev/stdout"
+    # )
+        output=mf.FIFO("sam_combined", "wt"),
     )
+    # compress to BAM 
+    w.funnel(
+        func=mf.parts.bam_writer, #mf.parts.null_writer, #
+        input=mf.FIFO("sam_combined", "rt"),
+        output=args.out_bam,
+        _manage_fifos=False,
+        fmt="Sbh",
+        threads=16
+    )
+    return w.run()
 
 
 def get_input_params(args):
