@@ -104,7 +104,7 @@ cdef packed struct bc_info_t:
 
 ctypedef bc_info_t bc_info
 
-cpdef UINT32_t LEAF = 0xFFFFFFFE
+cdef UINT32_t LEAF = 0xFFFFFFFE
 
 cpdef UINT32_t read_txt_to_buf(src, bc_info_t [:] buf, UINT16_t tile=0):
     #cdef bc_info_t [::1] buf = _buf # fast memoryview into the buffer
