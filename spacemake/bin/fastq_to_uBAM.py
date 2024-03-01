@@ -39,12 +39,14 @@ def format_func(qname=None, r2_qname=None, r2_qual=None, r1=None, r2=None, R1=No
     return attrs
 """
 
+
 def safety_check_eval(s, danger="();."):
     chars = set(list(s))
     if chars & set(list(danger)):
         return False
     else:
         return True
+
 
 def make_formatter_from_args(args):
     if not args.disable_safety:
@@ -68,13 +70,21 @@ def make_formatter_from_args(args):
     func = d["format_func"]
     return func
 
-def make_sam_record(fqid, seq, qual, flag=4, tags=[("CB", "{cell}"), ("MI", "{UMI}"), ("CR", "{raw}"), ("RG", "A")], **kw):
-        tag_str = "\t".join([f"{tag}:Z:{tstr.format(**kw)}" for tag, tstr in tags])
-        return f"{fqid}\t{flag}\t*\t0\t0\t*\t*\t0\t0\t{seq}\t{qual}\t{tag_str}\n"
-        
+
+def make_sam_record(
+    fqid,
+    seq,
+    qual,
+    flag=4,
+    tags=[("CB", "{cell}"), ("MI", "{UMI}"), ("CR", "{raw}"), ("RG", "A")],
+    **kw,
+):
+    tag_str = "\t".join([f"{tag}:Z:{tstr.format(**kw)}" for tag, tstr in tags])
+    return f"{fqid}\t{flag}\t*\t0\t0\t*\t*\t0\t0\t{seq}\t{qual}\t{tag_str}\n"
+
 
 def quality_trim(fq_src, min_qual=20, phred_base=33):
-    for (name, seq, qual) in fq_src:
+    for name, seq, qual in fq_src:
         end = len(seq)
         q = np.array(bytearray(qual.encode("ASCII"))) - phred_base
         qtrim = q >= min_qual
@@ -87,46 +97,6 @@ def quality_trim(fq_src, min_qual=20, phred_base=33):
             seq = seq[:new_end]
 
         yield (name, seq, qual)
-
-
-    # def iter_paired(Qfq1, Qfq2):
-    #     src1 = queue_iter(Qfq1, abort_flag)
-    #     src2 = queue_iter(Qfq2, abort_flag)
-    #     for (n1, chunk1, par1), (n2, chunk2, par2) in zip(src1, src2):
-    #         logger.debug(
-    #             f"received chunk {n1} {n2} of paired {len(chunk1)} {len(chunk2)} raw FASTQ lines"
-    #         )
-    #         assert n1 == n2
-    #         assert par1 == par2
-
-    #         fq_src1 = util.FASTQ_src(chunk1)
-    #         fq_src2 = util.FASTQ_src(chunk2)
-    #         if args.min_qual_trim:
-    #             fq_src2 = quality_trim(
-    #                 fq_src2, min_qual=args.min_qual_trim, phred_base=args.phred_base
-    #             )
-
-    #         out = []
-    #         for (_, seq1, qual1), (name2, seq2, qual2) in zip(fq_src1, fq_src2):
-    #             out.append((name2, seq1, qual1, seq2, qual2))
-
-    #         yield n1, out, par1
-
-    # def iter_single(Qfq2):
-    #     for n, chunk, par in queue_iter(Qfq2, abort_flag):
-    #         logger.debug(
-    #             f"received chunk {n} of single-end {len(chunk)} raw FASTQ lines"
-    #         )
-
-    #         fq_src2 = util.FASTQ_src(chunk)
-    #         if args.min_qual_trim:
-    #             fq_src2 = quality_trim(
-    #                 fq_src2, min_qual=args.min_qual_trim, phred_base=args.phred_base
-    #             )
-
-    #         out = [(name2, "NA", "NA", seq2, qual2) for name2, seq2, qual2 in fq_src2]
-    #         yield n, out, par
-
 
 
 def render_to_sam(fq1, fq2, sam_out, args, **kwargs):
@@ -151,7 +121,7 @@ def render_to_sam(fq1, fq2, sam_out, args, **kwargs):
             fq_src2 = quality_trim(
                 fq_src2, min_qual=args.min_qual_trim, phred_base=args.phred_base
             )
-        
+
         for fqid, seq, qual in fq_src2:
             yield (fqid, "NA", "NA"), (fqid, seq, qual)
 
@@ -160,7 +130,7 @@ def render_to_sam(fq1, fq2, sam_out, args, **kwargs):
     else:
         ingress = iter_single(fq2)
 
-    # TODO: 
+    # TODO:
     # decide how we want to handle multiple input files
     # somehow I prefer sequential processing over complicated state-change
     # question is, how do we keep the output sam from being closed?
@@ -181,41 +151,42 @@ def render_to_sam(fq1, fq2, sam_out, args, **kwargs):
         sam_out.write(make_sam_record(flag=4, **attrs))
 
     return N
-        # if args.paired_end: 
-        #             # if args.paired_end[0] == 'r':
-        #             #     # rev_comp R1 and reverse qual1
-        #             #     q1 = q1[::-1]
-        #             #     r1 = util.rev_comp(r1)
+    # if args.paired_end:
+    #             # if args.paired_end[0] == 'r':
+    #             #     # rev_comp R1 and reverse qual1
+    #             #     q1 = q1[::-1]
+    #             #     r1 = util.rev_comp(r1)
 
-        #             # if args.paired_end[1] == 'r':
-        #             #     # rev_comp R2 and reverse qual2
-        #             #     q2 = q2[::-1]
-        #             #     r2 = util.rev_comp(r2)
+    #             # if args.paired_end[1] == 'r':
+    #             #     # rev_comp R2 and reverse qual2
+    #             #     q2 = q2[::-1]
+    #             #     r2 = util.rev_comp(r2)
 
-        #             rec1 = fmt.make_bam_record(
-        #                 qname=fqid,
-        #                 r1="THISSHOULDNEVERBEREFERENCED",
-        #                 r2=r1,
-        #                 R1=r1,
-        #                 R2=r2,
-        #                 r2_qual=q1,
-        #                 r2_qname=fqid,
-        #                 flag=69,  # unmapped, paired, first in pair
-        #             )
-        #             rec2 = fmt.make_bam_record(
-        #                 qname=fqid,
-        #                 r1="THISSHOULDNEVERBEREFERENCED",
-        #                 r2=r2,
-        #                 R1=r1,
-        #                 R2=r2,
-        #                 r2_qual=q2,
-        #                 r2_qname=fqid,
-        #                 flag=133,  # unmapped, paired, second in pair
-        #             )
-        #             results.append(rec1)
-        #             results.append(rec2)
+    #             rec1 = fmt.make_bam_record(
+    #                 qname=fqid,
+    #                 r1="THISSHOULDNEVERBEREFERENCED",
+    #                 r2=r1,
+    #                 R1=r1,
+    #                 R2=r2,
+    #                 r2_qual=q1,
+    #                 r2_qname=fqid,
+    #                 flag=69,  # unmapped, paired, first in pair
+    #             )
+    #             rec2 = fmt.make_bam_record(
+    #                 qname=fqid,
+    #                 r1="THISSHOULDNEVERBEREFERENCED",
+    #                 r2=r2,
+    #                 R1=r1,
+    #                 R2=r2,
+    #                 r2_qual=q2,
+    #                 r2_qname=fqid,
+    #                 flag=133,  # unmapped, paired, second in pair
+    #             )
+    #             results.append(rec1)
+    #             results.append(rec2)
 
-        #         else:
+    #         else:
+
 
 def main(args):
     input_reads1, input_reads2, input_params = get_input_params(args)
@@ -225,27 +196,20 @@ def main(args):
     w = (
         mf.Workflow("fastq_to_uBAM")
         # open reads2.fastq.gz
-        .gz_reader(
-            inputs=input_reads2,
-            output=mf.FIFO("read2", "wb")
-        )
-        .distribute(
+        .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
             input=mf.FIFO("read2", "rt"),
             outputs=mf.FIFO("r2_{n}", "wt", n=args.parallel),
-            chunk_size=args.chunk_size*4
+            chunk_size=args.chunk_size * 4,
         )
     )
 
     if have_read1:
         # open reads1.fastq.gz
-        w.gz_reader(
-            inputs=input_reads1,
-            output=mf.FIFO("read1", "wb")
-        )
+        w.gz_reader(inputs=input_reads1, output=mf.FIFO("read1", "wb"))
         w.distribute(
             input=mf.FIFO("read1", "rt"),
             outputs=mf.FIFO("r1_{n}", "wt", n=args.parallel),
-            chunk_size=args.chunk_size*4
+            chunk_size=args.chunk_size * 4,
         )
         # process in parallel workers
         w.workers(
@@ -253,7 +217,8 @@ def main(args):
             fq1=mf.FIFO("r1_{n}", "rt"),
             fq2=mf.FIFO("r2_{n}", "rt"),
             sam_out=mf.FIFO("sam_{n}", "wt"),
-            args=args, n=args.parallel
+            args=args,
+            n=args.parallel,
         )
     else:
         # process in parallel workers
@@ -262,10 +227,10 @@ def main(args):
             fq1=None,
             fq2=mf.FIFO("r2_{n}", "rt"),
             sam_out=mf.FIFO("sam_{n}", "wt"),
-            args=args, n=args.parallel
+            args=args,
+            n=args.parallel,
         )
 
-        
     # combine output streams
     w.collect(
         inputs=mf.FIFO("sam_{n}", "rt", n=args.parallel),
@@ -274,20 +239,20 @@ def main(args):
             prog_id="fastq_to_uBAM",
             prog_name="fastq_to_uBAM.py",
             prog_version=__version__,
-            rg_name=args.sample
+            rg_name=args.sample,
         ),
         # output="/dev/stdout"
-    # )
+        # )
         output=mf.FIFO("sam_combined", "wt"),
     )
-    # compress to BAM 
+    # compress to BAM
     w.funnel(
-        func=mf.parts.bam_writer, #mf.parts.null_writer, #
+        func=mf.parts.bam_writer,  # mf.parts.null_writer, #
         input=mf.FIFO("sam_combined", "rt"),
         output=args.out_bam,
         _manage_fifos=False,
         fmt="Sbh",
-        threads=16
+        threads=16,
     )
     return w.run()
 
@@ -295,27 +260,37 @@ def main(args):
 def get_input_params(args):
     import pandas as pd
     import csv
-    if str(args.matrix) != "None":
-        df = pd.read_csv(args.matrix, sep=',', index_col=None, quoting=csv.QUOTE_NONE)
-        if not 'R1' in df.columns:
-            df['R1'] = 'None'
 
-        R1 = df['R1'].to_list()
-        R2 = df['R2'].to_list()
+    if str(args.matrix) != "None":
+        df = pd.read_csv(args.matrix, sep=",", index_col=None, quoting=csv.QUOTE_NONE)
+        if not "R1" in df.columns:
+            df["R1"] = "None"
+
+        R1 = df["R1"].to_list()
+        R2 = df["R2"].to_list()
         # TODO extract other column values into a list of dictionaries (most importantly cell=...)
         # which can override how the formatter in the workers processes the raw reads
-        if 'cell' in df.columns:
+        if "cell" in df.columns:
             # params = [{'cell': f'"{c}"'} for c in df['cell']]
-            params = [{'cell': c} for c in df['cell']]
+            params = [{"cell": c} for c in df["cell"]]
         else:
-            params = [{},] * len(R1)
+            params = [
+                {},
+            ] * len(R1)
 
     else:
-        R1 = [args.read1,]
-        R2 = [args.read2,]
-        params = [{},]
+        R1 = [
+            args.read1,
+        ]
+        R2 = [
+            args.read2,
+        ]
+        params = [
+            {},
+        ]
 
     return R1, R2, params
+
 
 def parse_args():
     import spacemake.util as util
@@ -349,7 +324,7 @@ def parse_args():
     parser.add_argument(
         "--paired-end",
         default=None,
-        choices=['fr', 'ff', 'rf', 'rr'],
+        choices=["fr", "ff", "rf", "rr"],
         help="read1 and read2 are paired end mates and store both in the BAM",
     )
     parser.add_argument(
@@ -423,14 +398,4 @@ def cmdline():
 
 
 if __name__ == "__main__":
-    import os, sys
-
-    ## We catch errors in the workers, but somehow
-    # multiprocessing masks our non-zero exit code.
-    # I think this is a bug...
-    # sys.stderr.write("running that shit\n")
     res = cmdline()
-    # sys.stderr.write(f"calling sys.exit({res})\n")
-    # os._exit(1)
-    # sys.exit(1)
-    sys.exit(res)
