@@ -6,7 +6,7 @@ import os
 from spacemake.bin.fastq_to_uBAM import *
 
 
-spacemake_dir = os.path.dirname(__file__) + '/../../'
+spacemake_dir = os.path.dirname(__file__) + "/../"
 
 
 @pytest.fixture(scope="session")
@@ -24,14 +24,18 @@ def test_root(tmp_path_factory):
 
 
 def sm(*argc, expect_fail=False):
-    sys.argv = ["fastq_to_uBAM.py",] + list(argc)
+    sys.argv = [
+        "fastq_to_uBAM.py",
+    ] + list(argc)
     res = cmdline()
     print("got result", res)
     from spacemake.errors import SpacemakeError
+
     if expect_fail:
         assert isinstance(res, SpacemakeError) == True
     else:
         assert isinstance(res, Exception) == False
+
 
 def test_help():
     try:
@@ -39,12 +43,35 @@ def test_help():
     except SystemExit:
         pass
 
+
 def test_dropseq():
     sm(
-        "--read1", spacemake_dir + 'test_data/reads_chr22_R1.fastq.gz',
-        "--read2", spacemake_dir + 'test_data/reads_chr22_R2.fastq.gz',
-        "--out-bam", "/dev/null"
+        "--read1",
+        spacemake_dir + "test_data/reads_chr22_R1.fastq.gz",
+        "--read2",
+        spacemake_dir + "test_data/reads_chr22_R2.fastq.gz",
+        "--out-bam",
+        "/dev/null",
     )
 
 
+def test_single():
+    sm(
+        "--read2",
+        spacemake_dir + "test_data/reads_chr22_R2.fastq.gz",
+        "--out-bam",
+        "/dev/null",
+        """--cell='"A"'""",
+    )
 
+
+def test_minqual():
+    sm(
+        "--read2",
+        spacemake_dir + "test_data/reads_chr22_R2.fastq.gz",
+        "--out-bam",
+        "/dev/null",
+        "--min-qual",
+        "30",
+        """--cell='"A"'""",
+    )
