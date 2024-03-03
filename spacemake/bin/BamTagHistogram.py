@@ -41,7 +41,7 @@ def CB_distributor(
     "ensure that the FIFOs are not managed"
     assert type(input) is str
     logger = logging.getLogger("mrfifo.parts.CB_distributor")
-    logger.info(
+    logger.debug(
         f"reading from {input}, writing to {outputs} "
         f"tag={tag} prefix_size={prefix_size} prefix_alphabet={prefix_alphabet} "
         f"kw={kw}"
@@ -73,7 +73,7 @@ def CB_distributor(
         sub_lead=tag_lead,
         # **kw,
     )
-    logger.info("distribution complete")
+    logger.debug("distribution complete")
     return res
 
 
@@ -123,7 +123,6 @@ def sort_function(input, output, n=8, sort_mem_gigs=8, header=None):
 
     import subprocess
 
-    print(f"executing cmd '{cmd}'")
     subprocess.call(cmd, shell=True)
 
 
@@ -133,6 +132,7 @@ def main(args):
         .BAM_reader(
             input=args.input,
             mode="S",
+            threads=4,
         )
         .distribute(
             input=mf.FIFO("input_sam", "rt"),
@@ -164,7 +164,14 @@ def main(args):
         )
         .run()
     )
-    print(w.result_dict)
+    stats = mf.util.CountDict()
+    for jobname, d in w.result_dict.items():
+        if "worker" in jobname:
+            stats.add_other_stats(d)
+
+    df = stats.get_stats_df()
+    df["input"] = args.input
+    print(df.set_index("input"))
     return w
 
 
