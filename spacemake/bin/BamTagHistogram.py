@@ -81,37 +81,50 @@ def tag_counter(input, output, tag="CB", min_count=10):
     from collections import defaultdict
 
     counter = defaultdict(int)
+    stats = defaultdict(int)
     import re
 
-    n_lines = 0
-    n_tags = 0
     pattern = re.compile(f"{tag}:Z:(\S+)")
     for sam_line in input:
-        n_lines += 1
+        stats["n_records"] += 1
+        flags = int(sam_line.split("\t")[1])
+        if flags & 256:
+            # 'not primary alignment' bit is set
+            stats["n_secondary"] += 1
+            continue
+
         if m := re.search(pattern, sam_line):
-            n_tags += 1
+            stats["n_tagged"] += 1
             tag_val = m.groups(0)[0]
             counter[tag_val] += 1
 
-    n_above_cut = 0
+    stats["n_values"] = len(counter)
     for value, count in counter.items():
         if count >= min_count:
-            n_above_cut += 1
-            output.write(f"{value}\t{count}\n")
+            stats["n_above_cut"] += 1
+            output.write(f"{count}\t{value}\n")
 
-    return n_lines, n_tags, len(counter), n_above_cut
+    return stats
 
 
-def sort_function(input, output, n=8, sort_mem_gigs=8):
+def sort_function(input, output, n=8, sort_mem_gigs=8, header=None):
     import os
 
+    if header is None:
+        header = rf"# INPUT={args.input} TAG={args.tag} FILTER_PCR_DUPLICATES=false READ_QUALITY=0\n"
+
     if output.endswith(".gz"):
-        os.system(
-            f"sort -rnk 2 -S {sort_mem_gigs}G --parallel={n} {input} "
+        cmd = (
+            f'{{ printf "{header}"; sort -rnk 1 -S {sort_mem_gigs}G --parallel={n} {input}; }}'
             f"| python -m isal.igzip -c > {output}"
         )
     else:
-        os.system(f"sort -rnk 2 -S {sort_mem_gigs}G --parallel={n} {input} > {output}")
+        cmd = f'{{ printf "{header}"; sort -rnk 1 -S {sort_mem_gigs}G --parallel={n} {input}; }} > {output}'
+
+    import subprocess
+
+    print(f"executing cmd '{cmd}'")
+    subprocess.call(cmd, shell=True)
 
 
 def main(args):
