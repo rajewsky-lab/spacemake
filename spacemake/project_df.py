@@ -196,7 +196,7 @@ class ProjectDF:
                     
             if not _valid_puck_coordinate:
                 _puck_vars = self.get_puck_variables(project_id = index[0], sample_id = index[1])
-                if _puck_vars['coordinate_system'] != '':
+                if _puck_vars.get('coordinate_system', '') != '':
                     raise SystemExit(SpacemakeError(f"At {index}, the selected puck '{row['puck']}' " + \
                                                     "contains a coordinate_system " + \
                                                     "but no 'puck_barcode_files' are specified"))
