@@ -334,13 +334,14 @@ rule get_barcode_readcounts:
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{cell}']
     shell:
+        # {dropseq_tools}/BamTagHistogram -m 32g 
         """
-        {dropseq_tools}/BamTagHistogram -m 32g \
-        I= {input} \
-        O= {output} \
-        TAG={params.cell_barcode_tag} \
-        READ_MQ=0
+        python {spacemake_dir}/bin/BamTagHistogram.py \
+        --input {input} \
+        --output {output} \
+        --tag {params.cell_barcode_tag} \
         """
+        #READ_MQ=0
 
 rule get_barcode_readcounts_prealigned:
     # we perform some preliminary counting on the prealigned reads
@@ -353,13 +354,14 @@ rule get_barcode_readcounts_prealigned:
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{cell}']
     shell:
+        # {dropseq_tools}/BamTagHistogram -m 32g 
         """
-        {dropseq_tools}/BamTagHistogram -m 32g \
-        I= {input} \
-        O= {output} \
-        TAG={params.cell_barcode_tag} \
-        READ_MQ=0
+        python {spacemake_dir}/bin/BamTagHistogram.py \
+        --input {input} \
+        --output {output} \
+        --tag {params.cell_barcode_tag} \
         """
+        # READ_MQ=0
 
 rule merge_stats_prealigned_spatial_barcodes:
     input:
