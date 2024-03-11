@@ -315,7 +315,7 @@ def parse_barcode_flavors(
         cell_raw="None",
         score_threshold=0.0,
         min_opseq_score=22,
-        bam_tags="CR:{cell},MI:{UMI}",
+        bam_tags="CR:{cell},CB:{cell},MI:{UMI}",
     ),
 ):
     """
