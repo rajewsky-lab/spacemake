@@ -51,10 +51,10 @@ def create_tile_adjacency(coordinate_system: pd.DataFrame):
 
     for (lane, side), group_df in grouped:
         knn_graph = kneighbors_graph(group_df[['x_offset', 'y_offset']],
-                                    n_neighbors=6, mode='connectivity', include_self=False)
-
+                                     n_neighbors=6, mode='connectivity', include_self=False)
+        
         tile_adjacency = nx.Graph(knn_graph)
-        puck_names = coordinate_system['puck_id'].tolist()
+        puck_names = group_df['puck_id'].tolist()
         node_mapping = {i: puck_names[i] for i in range(len(puck_names))}
         tile_adjacency = nx.relabel_nodes(tile_adjacency, node_mapping)
         final_graph = nx.compose(final_graph, tile_adjacency)
