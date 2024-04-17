@@ -151,7 +151,7 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
                 "need to add mt-missing because no mitochondrial stuff was among the genes for annotation"
             )
             gene_names.append("mt-missing")
-            X = vstack([X, np.zeros(X.shape[1])]).tocsr()
+            X = vstack([X, np.zeros((1, X.get_shape()[1]))]).tocsr()
 
         # create anndata object, but we get the transpose of X, so matrix will
         # be in CSC format
