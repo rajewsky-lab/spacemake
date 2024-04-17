@@ -330,7 +330,8 @@ def get_action_sample_parser(parent_parser, action, func):
     elif action == "update":
         # add main variables parser
         parents.append(get_sample_main_variables_parser())
-
+        # add arguments for R1/R1, dge, longread
+        parents.append(get_data_parser())
         # add possibility to add extra info
         parents.append(get_sample_extra_info_parser())
     elif action == "merge":
