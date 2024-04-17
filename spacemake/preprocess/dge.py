@@ -258,7 +258,10 @@ def attach_puck_variables(adata, puck_variables):
     coord_by_um = (x_pos_max - x_pos_min) / width_um
 
     # this can be NaN if only one coordinate (only one cell, will fail)
-    height_um = int((y_pos_max - y_pos_min) / coord_by_um)
+    if coord_by_um > 0:
+        height_um = int((y_pos_max - y_pos_min) / coord_by_um)
+    else:
+        height_um = 0 # avoid division by zero
 
     adata.uns["puck_variables"]["height_um"] = height_um
     adata.uns["puck_variables"]["coord_by_um"] = coord_by_um
