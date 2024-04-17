@@ -145,10 +145,10 @@ rule run_analysis:
             check_puck_collection=True,
             puck_barcode_file_matching_type='spatial_matching'),
         get_output_files(qc_sheet, 
-            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False, filter_merged=True,
+            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
             puck_barcode_file_matching_type='spatial_matching'),
         get_output_files(qc_sheet, 
-            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False, filter_merged=True,
+            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
             check_puck_collection=True,
             puck_barcode_file_matching_type='spatial_matching'),
         # finally, everything registered via register_module_output_hook()
