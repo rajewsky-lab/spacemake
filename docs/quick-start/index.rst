@@ -41,6 +41,97 @@ More info :ref:`here <configure-species>`.
     index provided has the same version of STAR as the command-line STAR. If this is
     not the case, an error will be raised.
 
+Open-ST quick start
+-------------------
+
+Step 1: add an Open-ST sample
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+After :ref:`spacemake has been initialized <initialization>`, an `Open-ST` sample can be added.
+
+To add an `Open-ST` sample, type in the terminal:
+
+.. code-block:: console
+
+   spacemake projects add_sample \
+      --project_id <project_id> \
+      --sample_id <sample_id> \
+      --R1 <path_to_R1.fastq.gz> \ # single R1 or several R1 files
+      --R2 <path_to_R2.fastq.gz> \ # single R2 or several R2 files
+      --species <species> \
+      --puck openst \
+      --puck_barcode_file <path_to_puck_barcode_file.tsv.gz> \
+      --run_mode openst \
+      --barcode_flavor openst
+
+.. note::
+
+   With the ``--R1`` and ``--R2`` it is possible to provide a single ``.fastq.gz`` file (one per mate) or several files per mate.
+   For example, if the result of a demultiplexing run is as follows:
+   
+   ``sample_1a_R1.fastq.gz``, ``sample_1b_R1.fastq.gz``, ``sample_1a_R2.fastq.gz``, ``sample_1b_R2.fastq.gz``, meaning that
+   R1 and R2 are both split into two, one can simply call spacemake with the following command::
+      
+      spacemake projects add_sample \
+         ...
+         --R1 sample_1a_R1.fastq.gz sample_1b_R1.fastq.gz \
+         --R2 sample_1a_R2.fastq.gz sample_1b_R2.fastq.gz \
+
+   The important thing is to always keep the order consistent between the two mates.
+
+.. note::
+   With Open-ST data, each sample covers a *piece* of capture area,
+   which contains at least one tile (``puck``).
+
+   Thus, we need to provide ``--puck_barcode_file`` (since each puck has different barcodes, unlike for visium samples).
+   This file should be a comma or tab separated, containing column names as first row. Acceptable column names are:
+
+   - ``cell_bc``, ``barcodes``  or ``barcode`` for cell-barcode
+   - ``xcoord`` or ``x_pos`` for x-positions
+   - ``ycoord`` or ``y_pos`` for y-positions
+
+   These can be generated using the `openst package <https://rajewsky-lab.github.io/openst/latest/computational/preprocessing_sequencing/>`_.
+
+   It is typically unknown *a priori* which tiles fall under a sample, so in principle all available
+   ``puck_barcode_files`` would need to be specified under ``--puck_barcode_file``. To generate output files
+   and reports only for the relevant tiles per sample, we provide the variable ``spatial_barcode_min_matches``
+   under ``run_mode``, as the minimum proportion of spatial barcodes that a tile has in common with 
+   the sample reads to be considered during quantification and downstream analysis.
+
+   The default threshold (0.1, i.e., at least 10% of barcodes per tile are present in the sample) was chosen
+   empirically, and typically keeps all relevant tiles. Spacemake will modify the ``project_df`` for each sample
+   to keep only those tiles that passed filters. So, if you see that some tiles might be missing
+   because this threshold was too high, you can update the sample to add missing tiles, and then rerun
+   spacemake using a lower ``spatial_barcode_min_matches``.
+
+The above will add a new Open-ST project with ``barcode_flavor, run_mode, puck`` all
+set to ``openst``.
+
+The structure in ``barcode_flavor`` assumes that sequencing of the library is paired-end,
+with Read1 having the spot barcodes, and Read2 containing the UMI (first 9 nucleotides) and
+the sequence to be aligned to the genome. You can see the details by running
+``spacemake config list_barcode_flavors``.
+
+The ``run_mode`` is tailored to Open-ST samples and it
+(i) counts intronic reads, (ii) includes multi-mappers, (iii) bins the data
+into regular hexagons of a 7 um side, and (iv) performs automated analyses for
+three UMI thresholds [100, 250, 500]. You can see the details by running
+``spacemake config list_run_modes``.
+
+The ``puck`` variable is used to correctly set the size of the capture area. This
+is required for accurately plotting the QC sheets and the results of the automated
+analyses, but also for binning the data from the spot level into regular hexagons.
+The ``openst`` is set to have a ``spot_diameter`` of 0.6 um and ``width`` of 1,200 um.
+The ``coordinate_system`` that ships with ``spacemake`` is used for stitching 
+multiple tiles into a single area. To adapt the file for your data, rename the 
+tile names found in the ``puck_id`` column (default value: ``fc_1_L*_tile_*``) to the
+prefix of your data.
+
+Step 2: running spacemake
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. include:: run_spacemake.rst 
+   
 Visium quick start
 ------------------
 
@@ -68,21 +159,6 @@ Above we add a new visium project with ``puck, run_mode, barcode_flavor`` all se
 This is possible as spacemake comes with pre-defined variables, all suited for visium. The visium ``run_mode`` will process the 
 sample in the same way as `spaceranger <https://support.10xgenomics.com/spatial-gene-expression/software/pipelines/latest/what-is-space-ranger>`_ would: intronic reads will not be counted, multi-mappers (where the multi-mapping read maps only to one CDS or UTR region) will be counted,
 3' polyA stretches will not be trimmed from Read2.
-
-.. note::
-
-   With the ``--R1`` and ``--R2`` it is possible to provide a single ``.fastq.gz`` file (one per mate) or several files per mate.
-   For example, if the result of a demultiplexing run is as follows:
-   
-   ``sample_1a_R1.fastq.gz``, ``sample_1b_R1.fastq.gz``, ``sample_1a_R2.fastq.gz``, ``sample_1b_R2.fastq.gz``, meaning that
-   R1 and R2 are both split into two, one can simply call spacemake with the following command::
-      
-      spacemake projects add_sample \
-         ...
-         --R1 sample_1a_R1.fastq.gz sample_1b_R1.fastq.gz \
-         --R2 sample_1a_R2.fastq.gz sample_1b_R2.fastq.gz \
-
-   The important thing is to always keep the order consistent between the two mates.
 
 To see the values of these predefined variables checkout the :ref:`configuration <Configuration>` docs.
 

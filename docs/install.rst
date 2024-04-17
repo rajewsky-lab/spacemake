@@ -4,7 +4,7 @@ Installation
 Step 1: create conda environment
 --------------------------------
 
-The most straightforward way of installing spacemake, is first creating a conda environment with the above packages.
+The most straightforward way to install spacemake, is to first create conda environment with the above packages.
 
 To do this, we highly recommend using `mamba <https://github.com/mamba-org/mamba>`_, a much faster conda package manager than conda itself.
 
