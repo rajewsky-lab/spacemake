@@ -745,6 +745,22 @@ class ProjectDF:
                     _valid_puck_coordinate = False
             elif type(row['puck_barcode_file']) is str and row['puck_barcode_file'] == '':
                 _valid_puck_coordinate = False
+            
+            # check that merging variables are properly specified
+            # otherwise, this throws 'MissingInputException' because it cannot find the bam files
+            if row['is_merged']:
+                if len(row['merged_from']) < 2:
+                    raise SystemExit(SpacemakeError(f"At {index}, there is <2 samples under 'merged_from'"))
+                for merged_i in row['merged_from']:
+                    if (not isinstance(merged_i, tuple) and not isinstance(merged_i, list)) or len(merged_i) != 2:
+                        raise SystemExit(SpacemakeError(f"At {index}, wrong format for 'merged_from'.\n"+
+                                                        "It must be something like "+
+                                                        "[('project', 'sample_a'), ('project', 'sample_b')]"))
+                    try:
+                        self.assert_sample(merged_i[0], merged_i[1])
+                    except ProjectSampleNotFoundError as e:
+                        self.logger.error(f"Merging error at {index}")
+                        raise e
                     
             if not _valid_puck_coordinate:
                 _puck_vars = self.get_puck_variables(project_id = index[0], sample_id = index[1])
