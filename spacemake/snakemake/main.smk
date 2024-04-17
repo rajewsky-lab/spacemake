@@ -503,12 +503,6 @@ rule create_h5ad_dge:
                 )
             )
 
-        if adata.X.sum() == 0:
-            raise SpacemakeError(f"""The h5ad file for {wildcards} is empty (adata.X.sum() == 0).
-                                 This will not be further processed.
-                                 
-                                 To avoid this error from further processing other samples, 
-                                 run spacemake with --keep-going""")
         # add 'cell_bc' name to index for same format as individual pucks
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         adata.write(output[0])
