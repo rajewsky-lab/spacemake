@@ -359,6 +359,15 @@ def spacemake_init(args):
         dest_puck_collection_path,
     )
 
+    # copy openst_puck_adjacency.edgelist
+    dest_puck_collection_path = "puck_data/openst_puck_adjacency.csv"
+    logger.info(f"Moving puck adjacency edgelist {dest_puck_collection_path}")
+    os.makedirs(os.path.dirname(dest_puck_collection_path), exist_ok=True)
+    copyfile(
+        os.path.join(os.path.dirname(__file__), "data/puck_collection/openst_puck_adjacency.csv"),
+        dest_puck_collection_path,
+    )
+
     # save
     cf.dump()
 
@@ -454,8 +463,9 @@ def update_project_df_barcode_matches(prealigned=False):
 
             if 'pass_threshold' not in barcodes_df.columns:
                 continue
-
-            above_threshold_mask = barcodes_df['pass_threshold'] == 1
+            
+            _pass_col = 'pass_adjacency' if 'pass_adjacency' in barcodes_df.columns else 'pass_threshold'
+            above_threshold_mask = barcodes_df[_pass_col] == 1
 
             _puck_barcode_files = barcodes_df[above_threshold_mask]['puck_barcode_file'].values.tolist().__str__()
             _puck_barcode_files_id = barcodes_df[above_threshold_mask]['puck_barcode_file_id'].values.tolist().__str__()
