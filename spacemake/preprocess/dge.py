@@ -1,3 +1,8 @@
+import logging
+
+logger_name = "spacemake.preprocess.dge"
+logger = logging.getLogger(logger_name)
+
 def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
     import scanpy as sc
     import pandas as pd
@@ -169,6 +174,9 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
         # calculate per shannon_entropy and string_compression per bead
         calculate_shannon_entropy_scompression(adata)
 
+        if adata.X.sum() == 0:
+            logger.warn(f"The DGE from {dge_path} is empty")
+
         return adata
 
 
@@ -261,7 +269,8 @@ def attach_puck_variables(adata, puck_variables):
     if coord_by_um > 0:
         height_um = int((y_pos_max - y_pos_min) / coord_by_um)
     else:
-        height_um = 0 # avoid division by zero
+        height_um = 1 # avoid division by zero and error in reports
+        coord_by_um = 1
 
     adata.uns["puck_variables"]["height_um"] = height_um
     adata.uns["puck_variables"]["coord_by_um"] = coord_by_um
