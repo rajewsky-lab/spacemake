@@ -1,3 +1,5 @@
+import tempfile
+
 """
 This module implements the mapping-strategy feature. This gives the freedom to define 
 - for each sample - how reads should be mapped in detail: which mapper to use (currently
@@ -37,6 +39,10 @@ bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
 star_index = 'species_data/{species}/{ref_name}/star_index'
 star_index_param = star_index
 star_index_file = star_index + '/SAindex'
+temp_star_index_flag = tempfile.mkdtemp()
+star_index_loaded = star_index + temp_star_index_flag + '/genomeLoad.done'
+star_index_unloaded = star_index + temp_star_index_flag + '/genomeUnload.done'
+star_index_log_location = 'species_data/{species}/{ref_name}/.star_index_logs'
 
 bt2_index = 'species_data/{species}/{ref_name}/bt2_index'
 bt2_index_param = bt2_index + '/{ref_name}'
@@ -73,7 +79,11 @@ default_BT2_MAP_FLAGS = (
 # original rRNA mapping code used --very-fast-local and that was that.
 
 default_STAR_MAP_FLAGS = (
-    " --genomeLoad NoSharedMemory"
+    # before shared memory
+    # " --genomeLoad NoSharedMemory"
+    # with shared memory
+    " --genomeLoad LoadAndKeep"
+    " --limitBAMsortRAM 5000000000"
     " --outSAMprimaryFlag AllBestScore"
     " --outSAMattributes All"
     " --outSAMunmapped Within"
@@ -326,8 +336,10 @@ def get_map_inputs(wc, mapper="STAR"):
     mr = get_map_rule(wc)
     d = {
         'bam' : mr.input_path,
-        'index_file' : mr.map_index_file
+        'index_file' : mr.map_index_file,
     }
+    if mapper == 'STAR':
+        d['index_loaded'] = expand(star_index_loaded, species=mr.species, ref_name=mr.ref_name)
     if hasattr(mr, "ann_final"):
         d['annotation'] = mr.ann_final
 
@@ -465,7 +477,8 @@ rule map_reads_STAR:
         " --readFilesIn {input.bam}"
         " --readFilesCommand samtools view -f 4"
         " --readFilesType SAM SE"
-        " --sjdbGTFfile {params.auto[annotation]}"
+        # this needs to be removed for memory sharing
+        # " --sjdbGTFfile {params.auto[annotation]}"
         " --outFileNamePrefix {params.star_prefix}"
         " --runThreadN {threads}"
         " "
@@ -539,4 +552,50 @@ rule create_star_index:
              --genomeDir {output.index_dir} \
              --genomeFastaFiles {input.sequence} \
              --sjdbGTFfile {input.annotation}
+        """
+
+rule load_genome:
+    input:
+        star_index,
+        star_index_file
+    output:
+        temp(touch(star_index_loaded)),
+        temp(directory(star_index_log_location))
+    shell:
+        """
+        STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/
+        """
+
+def get_star_unloaded_flag(default_strategy="STAR:genome:final"):
+    out_files = []
+
+    for index, row in project_df.df.iterrows():
+        map_strategy = getattr(row, "map_strategy", default_strategy)
+        map_rules, _ = mapstr_to_targets(map_strategy, left=ubam_input, final=final_target)
+        is_merged = project_df.get_metadata(
+            "is_merged", project_id=index[0], sample_id=index[1]
+        )
+        if is_merged:
+            continue
+
+        for mr in map_rules:
+            if mr.mapper == "STAR":
+                out_files += expand(star_index_unloaded, species=row.species, ref_name=mr.ref_name)
+
+    return set(out_files)
+
+register_module_output_hook(get_star_unloaded_flag, "mapping.smk")
+
+
+rule unload_genome:
+    input:
+        bams=get_mapped_BAM_output(),
+        loaded_flag=star_index_loaded,
+        index_dir=star_index, # we put last so it is accessible
+    output:
+        temp(touch(star_index_unloaded)),
+        temp(directory(star_index_log_location))
+    shell:
+        """
+        STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {output[1]}/
         """
