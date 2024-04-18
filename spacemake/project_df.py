@@ -330,7 +330,8 @@ def get_action_sample_parser(parent_parser, action, func):
     elif action == "update":
         # add main variables parser
         parents.append(get_sample_main_variables_parser())
-
+        # add arguments for R1/R1, dge, longread
+        parents.append(get_data_parser())
         # add possibility to add extra info
         parents.append(get_sample_extra_info_parser())
     elif action == "merge":
@@ -724,6 +725,9 @@ class ProjectDF:
             
             # check that puck_barcode_file(s), R1 and R2 files exist
             for n_col in ['puck_barcode_file', 'R1', 'R2']:
+                if n_col in ['R1', 'R2'] and row['is_merged']:
+                    continue
+
                 if type(row[n_col]) is list:
                     for _it_row in row[n_col]:
                         if not os.path.exists(_it_row):
@@ -741,6 +745,22 @@ class ProjectDF:
                     _valid_puck_coordinate = False
             elif type(row['puck_barcode_file']) is str and row['puck_barcode_file'] == '':
                 _valid_puck_coordinate = False
+            
+            # check that merging variables are properly specified
+            # otherwise, this throws 'MissingInputException' because it cannot find the bam files
+            if row['is_merged']:
+                if len(row['merged_from']) < 2:
+                    raise SystemExit(SpacemakeError(f"At {index}, there is <2 samples under 'merged_from'"))
+                for merged_i in row['merged_from']:
+                    if (not isinstance(merged_i, tuple) and not isinstance(merged_i, list)) or len(merged_i) != 2:
+                        raise SystemExit(SpacemakeError(f"At {index}, wrong format for 'merged_from'.\n"+
+                                                        "It must be something like "+
+                                                        "[('project', 'sample_a'), ('project', 'sample_b')]"))
+                    try:
+                        self.assert_sample(merged_i[0], merged_i[1])
+                    except ProjectSampleNotFoundError as e:
+                        self.logger.error(f"Merging error at {index}")
+                        raise e
                     
             if not _valid_puck_coordinate:
                 _puck_vars = self.get_puck_variables(project_id = index[0], sample_id = index[1])
