@@ -139,6 +139,7 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
             X = hstack([X, np.zeros(X.shape[0])[:, None]])
 
         X = X.tocsr()
+        X = X.astype(np.float32)
         adata = anndata.AnnData(
             X, obs=pd.DataFrame(index=barcodes), var=pd.DataFrame(index=gene_names)
         )
