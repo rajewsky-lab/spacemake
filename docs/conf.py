@@ -6,7 +6,7 @@ project = 'spacemake'
 copyright = '2021-2023, Rajewsky lab'
 author = 'Tamas Ryszard Sztanka-Toth, Marvin Jens, Nikos Karaiskos, Nikolaus Rajewsky'
 
-version = '0.7.5'
+version = '0.7.6'
 release = version
 
 # -- General configuration
