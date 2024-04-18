@@ -540,7 +540,9 @@ def main_combinatorial(args):
     Qfq = mp.Queue(
         args.parallel * 5
     )  # FASTQ reads from process_fastq->process_combinatorial
-    Qres = mp.Queue()  # extracted BCs from process_combinatorial->collector
+    Qres = mp.Queue(
+        args.parallel * 25
+    )  # extracted BCs from process_combinatorial->collector
     Qerr = mp.Queue()  # child-processes can report errors back to the main process here
 
     # Proxy objects to allow workers to report statistics about the run
@@ -690,7 +692,9 @@ def main_dropseq(args):
     Qfq = mp.Queue(
         args.parallel * 5
     )  # FASTQ reads from process_fastq->process_combinatorial
-    Qres = mp.Queue()  # extracted BCs from process_combinatorial->collector
+    Qres = mp.Queue(
+        args.parallel * 25
+    )  # extracted BCs from process_combinatorial->collector
     Qerr = mp.Queue()  # child-processes can report errors back to the main process here
 
     # Proxy objects to allow workers to report statistics about the run
