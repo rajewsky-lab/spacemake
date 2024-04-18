@@ -62,22 +62,25 @@ def get_output_files(
                 project_id = project_id,
                 sample_id = sample_id
             )
-
-            if "coordinate_system" not in puck_vars.keys():
+        
+            if (len(puck_barcode_file_ids) == 0) \
+                or ("coordinate_system" not in puck_vars.keys()):
                 continue
 
             coordinate_system = puck_vars["coordinate_system"]
-
             if coordinate_system == '':
                 continue
 
-        # add the non spatial barcode by default
-        non_spatial_pbf_id = project_df.project_df_default_values[
-            "puck_barcode_file_id"
-        ][0]
+            puck_barcode_file_ids = "puck_collection"
 
-        if non_spatial_pbf_id not in puck_barcode_file_ids:
-            puck_barcode_file_ids.append(non_spatial_pbf_id)
+        else:
+            # add the non spatial barcode by default
+            non_spatial_pbf_id = project_df.project_df_default_values[
+                "puck_barcode_file_id"
+            ][0]
+
+            if non_spatial_pbf_id not in puck_barcode_file_ids:
+                puck_barcode_file_ids.append(non_spatial_pbf_id)
 
         for run_mode in row["run_mode"]:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
@@ -88,10 +91,7 @@ def get_output_files(
                     polyA_adapter_trimmed = ".polyA_adapter_trimmed"
                 else:
                     polyA_adapter_trimmed = ""
-
-            if check_puck_collection:
-                puck_barcode_file_ids = "puck_collection"
-
+                
             out_files = out_files + expand(
                 pattern,
                 project_id=project_id,
@@ -144,8 +144,11 @@ def get_output_files_qc(
     return _out_files
 
 
-def get_prealignment_files(pattern):
+def get_prealignment_files(pattern, filter_merged=False):
     df = project_df.df
+
+    if filter_merged:
+        df = df.loc[~df.is_merged]
 
     prealignment_files = []
 
@@ -216,17 +219,21 @@ def get_all_dges_collection(wildcards):
             sample_id = sample_id
         )
 
-        if "coordinate_system" not in puck_vars.keys():
+        puck_barcode_file_ids = project_df.get_puck_barcode_ids_and_files(
+                project_id, sample_id
+            )[0]
+        
+        if (len(puck_barcode_file_ids) == 0) \
+            or ("coordinate_system" not in puck_vars.keys()):
             continue
 
         coordinate_system = puck_vars["coordinate_system"]
-
         if coordinate_system == '':
             continue
 
         if not os.path.exists(coordinate_system):
             raise FileNotFoundError(f"at project {project_id} sample {sample_id} "+
-                                    f"'coordinate_system' file {coordinate_system} could not be found")
+                                    f"'coordinate_system' file {coordinate_system} cannot be found")
 
         # will consider puck_collection within all dges if a coordinate system is specified in the puck
         with_puck_collection = False if not coordinate_system else True
@@ -612,6 +619,7 @@ def get_dge_from_run_mode(
     downsampling_percentage,
     puck_barcode_file_id,
     only_spatial=False,
+    to_mesh=None
 ):
     has_dge = project_df.has_dge(project_id=project_id, sample_id=sample_id)
 
@@ -678,9 +686,12 @@ def get_dge_from_run_mode(
     if not is_spatial and not only_spatial:
         dge_out_pattern = dge_out_h5ad
         dge_out_summary_pattern = dge_out_h5ad_obs
-    elif run_mode_variables["mesh_data"]:
+    elif run_mode_variables["mesh_data"] or to_mesh:
         dge_out_pattern = dge_spatial_mesh
         dge_out_summary_pattern = dge_spatial_mesh_obs
+    elif to_mesh is not None and to_mesh == False:
+        dge_out_pattern = dge_spatial
+        dge_out_summary_pattern = dge_spatial_obs
     else:
         dge_out_pattern = dge_spatial
         dge_out_summary_pattern = dge_spatial_obs
@@ -827,7 +838,7 @@ def get_all_barcode_readcounts(wildcards, prealigned=False):
         "polyA_adapter_trimmed": polyA_adapter_trimmed_wildcard,
     }
 
-    if prealigned:
+    if prealigned or is_merged:
         return {"bc_readcounts": expand(barcode_readcounts, **extra_args)}
     else:
         return {"bc_readcounts": expand(barcode_readcounts_prealigned, **extra_args)}
@@ -929,7 +940,7 @@ def get_puck_file(wildcards):
         return {"barcode_file": puck_barcode_file}
 
 
-def get_puck_collection_stitching_input(wildcards):
+def get_puck_collection_stitching_input(wildcards, to_mesh=False):
     # there are three options:
     # 1) no spatial dge
     # 2) spatial dge, no mesh
@@ -948,6 +959,7 @@ def get_puck_collection_stitching_input(wildcards):
                 downsampling_percentage=wildcards.downsampling_percentage,
                 puck_barcode_file_id=puck_barcode_file_ids,
                 only_spatial=True,
+                to_mesh=to_mesh
             )["dge"]][0]
 
 
