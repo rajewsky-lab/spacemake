@@ -28,6 +28,7 @@ dependencies:
     - pigz
     - pip:
         - cython
+        - setproctitle
         - mrfifo>=0.3
         - pytest
         - pytest-cov
