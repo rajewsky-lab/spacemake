@@ -270,12 +270,8 @@ def attach_puck_variables(adata, puck_variables):
     if coord_by_um > 0:
         height_um = int((y_pos_max - y_pos_min) / coord_by_um)
     else:
-<<<<<<< HEAD
-        height_um = 0 # avoid division by zero
-=======
         height_um = 1 # avoid division by zero and error in reports
         coord_by_um = 1
->>>>>>> origin
 
     adata.uns["puck_variables"]["height_um"] = height_um
     adata.uns["puck_variables"]["coord_by_um"] = coord_by_um
