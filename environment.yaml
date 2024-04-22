@@ -27,6 +27,7 @@ dependencies:
     - openjdk==11.0.15
     - pigz
     - pip:
+        - cython
         - mrfifo>=0.3
         - pytest
         - pytest-cov
