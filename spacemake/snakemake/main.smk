@@ -148,10 +148,10 @@ rule run_analysis:
             check_puck_collection=True,
             puck_barcode_file_matching_type='spatial_matching'),
         get_output_files(qc_sheet, 
-            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False, filter_merged=True,
+            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
             puck_barcode_file_matching_type='spatial_matching'),
         get_output_files(qc_sheet, 
-            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False, filter_merged=True,
+            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
             check_puck_collection=True,
             puck_barcode_file_matching_type='spatial_matching'),
         # finally, everything registered via register_module_output_hook()
@@ -508,12 +508,6 @@ rule create_h5ad_dge:
                 )
             )
 
-        if adata.X.sum() == 0:
-            raise SpacemakeError(f"""The h5ad file for {wildcards} is empty (adata.X.sum() == 0).
-                                 This will not be further processed.
-                                 
-                                 To avoid this error from further processing other samples, 
-                                 run spacemake with --keep-going""")
         # add 'cell_bc' name to index for same format as individual pucks
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         adata.write(output[0])
@@ -553,7 +547,7 @@ rule create_mesh_spatial_dge:
 
 rule puck_collection_stitching:
     input:
-        unpack(get_puck_collection_stitching_input),
+        unpack(lambda wc: get_puck_collection_stitching_input(wc, to_mesh=False)),
         # the puck_barcode_files_summary is required for puck_metadata
         puck_barcode_files_summary
     output:
@@ -581,10 +575,13 @@ rule puck_collection_stitching:
         _pc.obs['y_pos'] = _pc.obsm['spatial'][..., 1]
 
         _pc.write_h5ad(output[0])
+    
         # add 'cell_bc' name to index for same format as individual pucks
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         df = _pc.obs
+        df.index = np.arange(len(df))
         df.index.name = "cell_bc"
+        
         # only get numeric columns, to avoid problems during summarisation
         # we could implement sth like df.A.str.extract('(\d+)')
         # to avoid losing information from columns that are not numeric
@@ -594,7 +591,7 @@ rule puck_collection_stitching:
 # TODO: collapse this with previous rule so we have a single point where we create the dge_spatial_collection
 rule puck_collection_stitching_meshed:
     input:
-        unpack(get_puck_collection_stitching_input),
+        unpack(lambda wc: get_puck_collection_stitching_input(wc, to_mesh=True)),
         # the puck_barcode_files_summary is required for puck_metadata
         puck_barcode_files_summary
     output:
@@ -622,10 +619,13 @@ rule puck_collection_stitching_meshed:
         _pc.obs['y_pos'] = _pc.obsm['spatial'][..., 1]
 
         _pc.write_h5ad(output[0])
+
         # add 'cell_bc' name to index for same format as individual pucks
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         df = _pc.obs
+        df.index = np.arange(len(df))
         df.index.name = "cell_bc"
+
         # only get numeric columns, to avoid problems during summarisation
         # we could implement sth like df.A.str.extract('(\d+)')
         # to avoid losing information from columns that are not numeric
