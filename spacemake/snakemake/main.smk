@@ -340,6 +340,7 @@ rule get_barcode_readcounts:
         --input {input} \
         --output {output} \
         --tag {params.cell_barcode_tag} \
+        --min-count 1 \
         """
         #READ_MQ=0
 
@@ -360,6 +361,7 @@ rule get_barcode_readcounts_prealigned:
         --input {input} \
         --output {output} \
         --tag {params.cell_barcode_tag} \
+        --min-count 1 \
         """
         # READ_MQ=0
 
