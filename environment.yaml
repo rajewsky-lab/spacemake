@@ -5,7 +5,7 @@ channels:
     - bioconda
     - defaults
 dependencies:
-    - python>=3.6
+    - python>=3.6,<3.12
     - snakemake>=5.32.0,<6.4.0
     - star>=2.7.1a
     - samtools>=1.13
