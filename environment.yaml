@@ -29,6 +29,7 @@ dependencies:
     - pip:
         - cython
         - setproctitle
+        - isal
         - mrfifo>=0.3
         - pytest
         - pytest-cov
