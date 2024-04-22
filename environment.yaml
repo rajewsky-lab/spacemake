@@ -27,7 +27,6 @@ dependencies:
     - openjdk==11.0.15
     - pigz
     - pip:
-        - cython
         - setproctitle
         - isal
         - mrfifo>=0.3
