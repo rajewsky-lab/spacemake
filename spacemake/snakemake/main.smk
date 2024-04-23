@@ -175,7 +175,10 @@ rule get_whitelist_barcodes:
             downsampling_percentage='', run_on_external=False),
         get_output_files(puck_barcode_files_summary,
             data_root_type = 'complete_data',
-            downsampling_percentage='', run_on_external=False)
+            downsampling_percentage='', run_on_external=False),
+        # get_output_files(parsed_spatial_barcodes,
+        #     data_root_type = 'complete_data',
+        #     downsampling_percentage='', run_on_external=False)
 
 ##############
 # DOWNSAMPLE #
@@ -286,7 +289,7 @@ rule tag_reads_bc_umi:
         "--read1={input.R1} "
         "--read2={input.R2} "
         "--parallel={threads} "
-	"--out-bam={output.assigned} "
+	    "--out-bam={output.assigned} "
         "--cell='{params.bc.cell}' "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
@@ -375,7 +378,7 @@ rule merge_stats_prealigned_spatial_barcodes:
         " --query-plain-column 1"
         " --target {input.puck_barcode_files}"
         " --target-id {params.pbc_id}"
-        " --target-plain-column 0"
+        " --target-column 'cell_bc'"
         " --summary-output {output}"
         " --min-threshold {params.min_threshold}"
         " --n-jobs {threads}"   
@@ -401,28 +404,19 @@ rule create_spatial_barcode_file:
         unpack(get_puck_file),
         unpack(get_all_barcode_readcounts)
     output:
-        parsed_spatial_barcodes
-    run:
-        # TODO: benchmark this rule - set+np index instead of merge?
-        # load all readcounts
-        bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
-            names=['read_n', 'cell_bc']) for bc_rc in input['bc_readcounts']]
-
-        # join them together
-        bc_readcounts = pd.concat(bc_readcounts)
-
-        # remove duplicates
-        bc_readcounts.drop_duplicates(subset='cell_bc', keep='first',
-            inplace=True)
-
-        # load barcode file and parse it
-        bc = parse_barcode_file(input[0])
-        bc.reset_index(level=0, inplace=True)
-        # inner join to get rid of barcode without any data
-        bc = pd.merge(bc, bc_readcounts, how='inner', on='cell_bc')
-        bc = bc[['cell_bc', 'x_pos', 'y_pos']]
-
-        bc.to_csv(output[0], index=False)
+        barcode_files=expand(get_all_puck_files, puck_barcode_file_id=['tile_1', 'tile_2'])
+    threads: max(workflow.cores * 0.5, 1)
+    shell:
+        "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
+        " --query {input.bc_prealign}"
+        " --query-plain-skip 1"
+        " --query-plain-column 1"
+        " --target {input.puck_barcode_files}"
+        " --target-id {params.pbc_id}"
+        " --target-column 'cell_bc'"
+        " --output {output.barcode_file}"
+        " --min-threshold {params.min_threshold}"
+        " --n-jobs {threads}"   
 
 rule create_spatial_barcode_whitelist:
     input: parsed_spatial_barcodes
