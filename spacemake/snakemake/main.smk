@@ -371,7 +371,7 @@ rule merge_stats_prealigned_spatial_barcodes:
     shell:
         "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
         " --query {input.bc_prealign}"
-        " --query-plain-skip 0"
+        " --query-plain-skip 1"
         " --query-plain-column 1"
         " --target {input.puck_barcode_files}"
         " --target-id {params.pbc_id}"
