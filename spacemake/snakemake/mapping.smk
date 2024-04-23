@@ -359,7 +359,7 @@ rule load_genome:
         STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/
         """
 
-def get_star_unloaded_flag(default_strategy="STAR:genome:final"):
+def get_star_unloaded_flag(default_strategy="STAR:genome:final", *args, **kwargs):
     out_files = []
 
     for index, row in project_df.df.iterrows():
