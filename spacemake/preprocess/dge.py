@@ -131,9 +131,7 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
                  X = hstack([X, gene_sp])
 
         if X is None:
-            X = coo_matrix((0, 0), dtype=np.int32)
-            barcodes = []
-            gene_names = []
+            X = coo_matrix((len(barcodes), 0), dtype=np.int32)
     
         if not has_mt:
             # ensure we have an entry for mitochondrial transcripts even if it's just all zeros
