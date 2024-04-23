@@ -563,7 +563,7 @@ rule load_genome:
         temp(directory(star_index_log_location))
     shell:
         """
-        STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/
+        STAR --genomeLoad LoadAndKeep --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/
         """
 
 def get_star_unloaded_flag(default_strategy="STAR:genome:final"):
