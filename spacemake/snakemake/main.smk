@@ -282,7 +282,7 @@ rule tag_reads_bc_umi:
         assigned = tagged_bam,
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: max(workflow.cores * 0.5, 1)
+    threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
         "python {spacemake_dir}/bin/fastq_to_uBAM.py "
         "--sample={wildcards.sample_id} "
