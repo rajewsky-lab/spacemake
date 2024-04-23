@@ -233,7 +233,7 @@ def cmdline():
     
     if args.summary_output != "":
         # group per puck_barcode_file, and compute sum
-        result_df = result_df.groupby(['puck_barcode_file_id']).sum().reset_index()
+        result_df = result_df.groupby(['puck_barcode_file', 'puck_barcode_file_id']).sum().reset_index()
         result_df['matching_ratio'] = result_df['n_matching']/result_df['n_barcodes']
         result_df['pass_threshold'] = 0
         result_df['pass_threshold'][result_df['matching_ratio'] > args.min_threshold] = 1
