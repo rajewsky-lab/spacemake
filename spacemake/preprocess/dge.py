@@ -130,6 +130,11 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
             else:
                  X = hstack([X, gene_sp])
 
+        if X is None:
+            X = coo_matrix((0, 0), dtype=np.int32)
+            barcodes = []
+            gene_names = []
+    
         if not has_mt:
             # ensure we have an entry for mitochondrial transcripts even if it's just all zeros
             print(
@@ -161,7 +166,6 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
 
 
 def load_external_dge(dge_path):
-    import anndata
     import scanpy as sc
 
     from scanpy._utils import check_nonnegative_integers
@@ -216,8 +220,6 @@ def parse_barcode_file(barcode_file):
 
 
 def attach_barcode_file(adata, barcode_file):
-    import pandas as pd
-
     bc = parse_barcode_file(barcode_file)
 
     # new obs has only the indices of the exact barcode matches
