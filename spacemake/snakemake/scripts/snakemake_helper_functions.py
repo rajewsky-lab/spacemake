@@ -940,23 +940,11 @@ def get_puck_file(wildcards):
         return {"barcode_file": puck_barcode_file}
     
 def get_all_puck_files(wildcards):
-    pbf_ids, _ = project_df.get_puck_barcode_ids_and_files(
+    _, pbf = project_df.get_puck_barcode_ids_and_files(
         project_id=wildcards.project_id, sample_id=wildcards.sample_id
     )
 
-    parsed_spatial_barcode_files = [
-        expand(
-            parsed_spatial_barcodes,
-            project_id=wildcards.project_id,
-            sample_id=wildcards.sample_id,
-            puck_barcode_file_id=pbf_id,
-        )[0]
-        for pbf_id in pbf_ids
-    ]
-
-    print(parsed_spatial_barcode_files  )
-
-    return {"barcode_file": parsed_spatial_barcode_files}
+    return {"barcode_file": pbf}
 
 
 def get_puck_collection_stitching_input(wildcards, to_mesh=False):

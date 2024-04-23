@@ -401,21 +401,24 @@ rule clean_top_barcodes:
 
 rule create_spatial_barcode_file:
     input:
-        unpack(get_puck_file),
+        unpack(get_all_puck_files),
         unpack(get_all_barcode_readcounts)
     output:
-        barcode_files=expand(get_all_puck_files, puck_barcode_file_id=['tile_1', 'tile_2'])
+        parsed_spatial_barcodes
+    params:
+        pbc_id = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
+            project_id=wildcards.project_id, sample_id=wildcards.sample_id
+        )[0]
     threads: max(workflow.cores * 0.5, 1)
     shell:
         "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
-        " --query {input.bc_prealign}"
+        " --query {input.bc_readcounts}"
         " --query-plain-skip 1"
         " --query-plain-column 1"
-        " --target {input.puck_barcode_files}"
+        " --target {input.barcode_file}"
         " --target-id {params.pbc_id}"
         " --target-column 'cell_bc'"
-        " --output {output.barcode_file}"
-        " --min-threshold {params.min_threshold}"
+        " --output {output}"
         " --n-jobs {threads}"   
 
 rule create_spatial_barcode_whitelist:

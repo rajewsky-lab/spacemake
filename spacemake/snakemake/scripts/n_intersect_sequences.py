@@ -161,7 +161,7 @@ def find_matches(i: str):
     f_in = args.target[i]
 
     df = pd.read_csv(f_in, sep=args.target_separator)
-    reads = df.iloc[:, args.target_column]
+    reads = df[args.target_column]
 
     start = time.time()
     target = set(reads)
@@ -171,20 +171,19 @@ def find_matches(i: str):
 
     if args.output != "":
         f_out = args.output[i]
-        df_matched = df[df.iloc[:, args.target_column].isin(list(_intersection))]
+        df_matched = df[df[args.target_column].isin(list(_intersection))]
         df_matched = df_matched[['cell_bc', 'x_pos', 'y_pos']]
         df_matched.to_csv(f_out, mode='a', header=not os.path.exists(f_out), index=False)
         print(f"saved puck file into {f_out}")
 
     return (f_in, len(target), n_matches)
 
-# TODO: implement chunked so it only reads 100M reads every time
 @message_aggregation(logger_name)
 def cmdline():
     """cmdline."""
     import argparse
 
-    global args, query_reads
+    global args, query_seqs
 
     parser = argparse.ArgumentParser(
         allow_abbrev=False,
@@ -212,8 +211,8 @@ def cmdline():
 
     # Process in chunks
     for query_df_chunk in query_df:
-        query_reads = query_df_chunk.iloc[:, args.query_plain_column]
-        logger.info(f"read chunk of {round(len(query_reads)/1e6, 2)}M sequences from query file at '{args.query}'")
+        query_seqs = query_df_chunk.iloc[:, args.query_plain_column]
+        logger.info(f"read chunk of {round(len(query_seqs)/1e6, 2)}M sequences from query file at '{args.query}'")
 
         # get unique reads into a global context
         query_seqs = set(query_seqs)
@@ -230,14 +229,15 @@ def cmdline():
             columns=["puck_barcode_file", "n_barcodes", "n_matching"],
         )
         result_df_chunk["puck_barcode_file_id"] = args.target_id
-        result_df_chunk['pass_threshold'] = 0
-        result_df_chunk['pass_threshold'][result_df_chunk['matching_ratio'] > args.min_threshold] = 1
         result_df = pd.concat([result_df, result_df_chunk])
     
-    # group per puck_barcode_file, and compute sum
-    result_df = result_df.groupby(['puck_barcode_file_id']).sum().reset_index()
-    result_df['matching_ratio'] = result_df['n_matching']/result_df['n_barcodes']
-    result_df.to_csv(args.summary_output, index=False)
+    if args.summary_output != "":
+        # group per puck_barcode_file, and compute sum
+        result_df = result_df.groupby(['puck_barcode_file_id']).sum().reset_index()
+        result_df['matching_ratio'] = result_df['n_matching']/result_df['n_barcodes']
+        result_df['pass_threshold'] = 0
+        result_df['pass_threshold'][result_df['matching_ratio'] > args.min_threshold] = 1
+        result_df.to_csv(args.summary_output, index=False)
 
 
 if __name__ == "__main__":
