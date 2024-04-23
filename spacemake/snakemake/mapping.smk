@@ -563,7 +563,7 @@ rule load_genome:
         temp(directory(star_index_log_location))
     shell:
         """
-        {{STAR --genomeLoad Remove --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/ && }} || {{ echo "Could not remove shared memory genome for {input[0]}" }}
+        STAR --genomeLoad Remove --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/  || echo "Could not remove shared memory genome for {input[0]}"
         STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/
         """
 
