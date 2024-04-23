@@ -382,7 +382,7 @@ register_module_output_hook(get_star_unloaded_flag, "mapping.smk")
 
 rule unload_genome:
     input:
-        bams=get_mapped_BAM_output(),
+        bams=get_mapped_BAM_output(project_df),
         loaded_flag=star_index_loaded,
         index_dir=star_index, # we put last so it is accessible
     output:
