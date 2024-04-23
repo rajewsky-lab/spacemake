@@ -277,33 +277,19 @@ rule tag_reads_bc_umi:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
         assigned = tagged_bam,
-        unassigned = unassigned,
-        bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 4
+    threads: max(workflow.cores * 0.5, 1)
     shell:
-        "python {spacemake_dir}/preprocess/cmdline.py "
+        "python {spacemake_dir}/bin/fastq_to_uBAM.py "
         "--sample={wildcards.sample_id} "
         "--read1={input.R1} "
         "--read2={input.R2} "
         "--parallel={threads} "
-        "--save-stats={output.bc_stats} "
-        "--log-file={log} "
-        "--bc1-ref={params.bc.bc1_ref} "
-        "--bc2-ref={params.bc.bc2_ref} "
-        "--bc1-cache={params.bc.bc1_cache} "
-        "--bc2-cache={params.bc.bc2_cache} "
-        "--threshold={params.bc.score_threshold} "
+	"--out-bam={output.assigned} "
         "--cell='{params.bc.cell}' "
-        "--cell-raw='{params.bc.cell_raw}' "
-        "--out-format=bam "
-        "--out-unassigned={output.unassigned} "
-        "--out-assigned=/dev/stdout "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
-        "--min-opseq-score={params.bc.min_opseq_score} "
-        "| samtools view -bh /dev/stdin > {output.assigned} "
 
 rule run_fastqc:
     input:
