@@ -21,5 +21,6 @@ analysis, and analysis of long reads as separate modules.
     projects/index
     run
     tutorials/index
+    troubleshooting
     api/index
 

@@ -129,20 +129,6 @@ prefix of your data.
 
 Step 2: running spacemake
 ^^^^^^^^^^^^^^^^^^^^^^^^^
-.. warning::
-   In certain environments you might run into the following error during the
-   ``merge_stats_prealigned_spatial_barcodes`` rule:
-   
-   ``ImportError: /lib/x86_64-linux-gnu/libstdc++.so.6: version `GLIBCXX_3.4.29' not found
-   (required by /.../envs/spacemake/lib/python3.10/site-packages/matplotlib/_path.cpython-310-
-   x86_64-linux-gnu.so)``
-
-   Certain dependencies (e.g. scipy) might affect this. To overcome it, try
-   the following:
-
-   ``export LD_LIBRARY_PATH=/conda_installation_folder/envs/spacemake/lib:$LD_LIBRARY_PATH``
-
-   For more details and further troubleshooting visit `stackoverflow <https://stackoverflow.com/questions/72540359/glibcxx-3-4-30-not-found-for-librosa-in-conda-virtual-environment-after-tryin>`_.
 
 .. include:: run_spacemake.rst 
    
