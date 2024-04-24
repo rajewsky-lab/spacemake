@@ -342,7 +342,7 @@ rule get_barcode_readcounts_prealigned:
     input:
         tagged_bam
     output:
-        barcode_readcounts_prealigned
+        barcode_readcounts_prealigned,
         barcode_readcounts_prealigned_log
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
