@@ -459,7 +459,8 @@ rule map_reads_STAR:
     input: 
         # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
-        unpack(get_map_inputs)
+        unpack(get_map_inputs),
+        loaded_flag=star_index_loaded
         # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
@@ -595,12 +596,11 @@ rule unload_genome_flag:
 
 rule unload_genome:
     input:
-        bams=get_mapped_BAM_output(),
-        loaded_flag=star_index_loaded,
+        bams=ancient(get_mapped_BAM_output()),
         index_dir=star_index, # we put last so it is accessible
     output:
-        temp(touch(star_index_unloaded)),
-        temp(directory(star_index_log_location))
+        touch(star_index_unloaded),
+        directory(star_index_log_location)
     params:
         f_locked=lambda wc: expand(star_index_locked, ref_name=wc.ref_name, species=wc.species),
         f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species)
