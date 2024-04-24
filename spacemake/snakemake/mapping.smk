@@ -40,10 +40,10 @@ bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
 star_index = 'species_data/{species}/{ref_name}/star_index'
 star_index_param = star_index
 star_index_file = star_index + '/SAindex'
-star_index_locked = star_index + '/smk.indexlocked'
+star_index_locked = star_index + '/smk.indexlocked.{species}.{ref_name}'
 star_index_locked_current = star_index_locked + f'.{uuid.uuid4()}'
-star_index_loaded = complete_data_root + '/genomeLoad.done'
-star_index_unloaded = complete_data_root + '/genomeUnload.done'
+star_index_loaded = '{species}.{ref_name}.genomeLoad.done'
+star_index_unloaded = '{species}.{ref_name}.genomeUnload.done'
 star_index_log_location = 'species_data/{species}/{ref_name}/.star_index_logs'
 
 bt2_index = 'species_data/{species}/{ref_name}/bt2_index'
@@ -563,10 +563,12 @@ rule load_genome:
     output:
         temp(touch(star_index_loaded)),
         temp(directory(star_index_log_location))
+    params:
+        f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species)
     shell:
         """
         STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/ || echo "Could not load genome into shared memory for {input[0]} - maybe already loaded"
-        touch {star_index_locked_current}
+        touch {params.f_locked_current}
         """
 
 def get_star_unloaded_flag(default_strategy="STAR:genome:final"):
@@ -587,8 +589,9 @@ def get_star_unloaded_flag(default_strategy="STAR:genome:final"):
 
     return set(out_files)
 
-register_module_output_hook(get_star_unloaded_flag, "mapping.smk")
-
+rule unload_genome_flag:
+    input:
+        get_star_unloaded_flag
 
 rule unload_genome:
     input:
@@ -598,13 +601,16 @@ rule unload_genome:
     output:
         temp(touch(star_index_unloaded)),
         temp(directory(star_index_log_location))
+    params:
+        f_locked=lambda wc: expand(star_index_locked, ref_name=wc.ref_name, species=wc.species),
+        f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species)
     shell:
         """
-        if ls {star_index_locked}* 1> /dev/null 2>&1;
+        rm {params.f_locked_current}
+        if ls {params.f_locked}* 1> /dev/null 2>&1;
         then
-            echo 'There are other tasks waiting for the STAR shared memory index. Not removing from {star_index_locked_current}'
+            echo 'There are other tasks waiting for the STAR shared memory index. Not removing from {params.f_locked_current}'
         else
-            STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {output[1]}/
+            STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {output[1]}/ || echo "Could not remove genome from shared memory for {input[0]}"
         fi
-        rm {star_index_locked_current}
         """
