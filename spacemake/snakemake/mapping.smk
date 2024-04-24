@@ -583,13 +583,13 @@ rule load_genome:
         star_index_file
     output:
         temp(touch(star_index_loaded)),
-        temp(directory(star_index_log_location))
     params:
         f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species)
+        log_dir=lambda wc: expand(star_index_log_location, ref_name=wc.ref_name, species=wc.species)
     shell:
         """
         touch {params.f_locked_current}
-        STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/ || echo "Could not load genome into shared memory for {input[0]} - maybe already loaded"
+        STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {params.log_dir}/ || echo "Could not load genome into shared memory for {input[0]} - maybe already loaded"
         """
 
 rule unload_genome_flag:
@@ -602,10 +602,10 @@ rule unload_genome:
         index_dir=star_index, # we put last so it is accessible
     output:
         temp(touch(star_index_unloaded)),
-        temp(directory(star_index_log_location))
     params:
         f_locked=lambda wc: expand(star_index_locked, ref_name=wc.ref_name, species=wc.species),
         f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species)
+        log_dir=lambda wc: expand(star_index_log_location, ref_name=wc.ref_name, species=wc.species)
     shell:
         """
         rm {params.f_locked_current}
@@ -613,6 +613,6 @@ rule unload_genome:
         then
             echo 'There are other tasks waiting for the STAR shared memory index. Not removing from {params.f_locked_current}'
         else
-            STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {output[1]}/ || echo "Could not remove genome from shared memory for {input[0]}"
+            STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {params.log_dir}/ || echo "Could not remove genome from shared memory for {input[0]}"
         fi
         """
