@@ -319,7 +319,7 @@ rule get_barcode_readcounts:
     input:
         unpack(get_final_bam)
     output:
-        barcode_readcounts
+        barcode_readcounts,
         barcode_readcounts_log
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
