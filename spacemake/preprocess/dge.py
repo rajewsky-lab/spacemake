@@ -241,6 +241,7 @@ def attach_puck_variables(adata, puck_variables):
 
     x_pos_max, y_pos_max = tuple(adata.obsm["spatial"].max(axis=0))
     x_pos_min, y_pos_min = tuple(adata.obsm["spatial"].min(axis=0))
+    #print(f"PUCK VARS {puck_variables} X MIN {x_pos_min} X MAX {x_pos_max} Y MIN {y_pos_min} Y MAX {y_pos_max}")
 
     width_um = adata.uns["puck_variables"]["width_um"]
     coord_by_um = (x_pos_max - x_pos_min) / width_um
