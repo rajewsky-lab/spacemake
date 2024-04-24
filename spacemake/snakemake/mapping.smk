@@ -231,6 +231,26 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
     return map_rules, link_rules
 
 
+def get_star_flag(flag, default_strategy="STAR:genome:final"):
+    out_files = []
+
+    for index, row in project_df.df.iterrows():
+        map_strategy = getattr(row, "map_strategy", default_strategy)
+        map_rules, _ = mapstr_to_targets(map_strategy, left=ubam_input, final=final_target)
+        is_merged = project_df.get_metadata(
+            "is_merged", project_id=index[0], sample_id=index[1]
+        )
+        if is_merged:
+            continue
+
+        for mr in map_rules:
+            if mr.mapper == "STAR":
+                out_files += expand(flag, species=row.species, ref_name=mr.ref_name)
+
+    return set(out_files)
+
+
+
 def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
     """
     This function is called from main.smk at least once 
@@ -460,7 +480,7 @@ rule map_reads_STAR:
         # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
         unpack(get_map_inputs),
-        loaded_flag=star_index_loaded
+        loaded_flag=get_star_flag(star_index_loaded)
         # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
@@ -572,27 +592,9 @@ rule load_genome:
         STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/ || echo "Could not load genome into shared memory for {input[0]} - maybe already loaded"
         """
 
-def get_star_unloaded_flag(default_strategy="STAR:genome:final"):
-    out_files = []
-
-    for index, row in project_df.df.iterrows():
-        map_strategy = getattr(row, "map_strategy", default_strategy)
-        map_rules, _ = mapstr_to_targets(map_strategy, left=ubam_input, final=final_target)
-        is_merged = project_df.get_metadata(
-            "is_merged", project_id=index[0], sample_id=index[1]
-        )
-        if is_merged:
-            continue
-
-        for mr in map_rules:
-            if mr.mapper == "STAR":
-                out_files += expand(star_index_unloaded, species=row.species, ref_name=mr.ref_name)
-
-    return set(out_files)
-
 rule unload_genome_flag:
     input:
-        get_star_unloaded_flag
+        get_star_flag(star_index_unloaded)
 
 rule unload_genome:
     input:
