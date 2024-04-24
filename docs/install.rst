@@ -45,7 +45,8 @@ This will install spacemake, you should be good to go :)
     to install spacemake, this option has not been tested, and one can quickly run into
     dependency issues and errors.
 
-To install the developmental version of spacemake (``dev`` branch from github) type the following command::
+To make sure spacemake has been properly installed, run::
 
-   pip install git+https://github.com/rajewsky-lab/spacemake.git@dev
+   spacemake --version
 
+This should output the latest spacemake version available in pip.

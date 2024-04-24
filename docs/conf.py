@@ -3,7 +3,7 @@
 # -- Project information
 
 project = 'spacemake'
-copyright = '2021-2023, Rajewsky lab'
+copyright = '2021-2024, Rajewsky Lab'
 author = 'Tamas Ryszard Sztanka-Toth, Marvin Jens, Nikos Karaiskos, Nikolaus Rajewsky'
 
 version = '0.8.0'
