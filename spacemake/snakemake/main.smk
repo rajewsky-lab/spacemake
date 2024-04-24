@@ -411,10 +411,6 @@ rule create_spatial_barcode_file:
         unpack(get_all_barcode_readcounts)
     output:
         parsed_spatial_barcodes
-    params:
-        pbc_id = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
-            project_id=wildcards.project_id, sample_id=wildcards.sample_id
-        )[0]
     threads: 1
     shell:
         "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
@@ -422,7 +418,7 @@ rule create_spatial_barcode_file:
         " --query-plain-skip 1"
         " --query-plain-column 1"
         " --target {input.barcode_file}"
-        " --target-id {params.pbc_id}"
+        " --target-id {wildcards.sample_id}"
         " --target-column 'cell_bc'"
         " --output {output}"
         " --n-jobs {threads}"   
