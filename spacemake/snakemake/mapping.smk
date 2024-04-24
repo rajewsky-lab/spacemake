@@ -1,4 +1,5 @@
 import tempfile
+import uuid
 
 """
 This module implements the mapping-strategy feature. This gives the freedom to define 
@@ -39,8 +40,10 @@ bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
 star_index = 'species_data/{species}/{ref_name}/star_index'
 star_index_param = star_index
 star_index_file = star_index + '/SAindex'
-star_index_loaded = star_index + '/genomeLoad.done'
-star_index_unloaded = star_index + '/genomeUnload.done'
+star_index_locked = star_index + '/smk.indexlocked'
+star_index_locked_current = star_index_locked + f'.{uuid.uuid4()}'
+star_index_loaded = complete_data_root + '/genomeLoad.done'
+star_index_unloaded = complete_data_root + '/genomeUnload.done'
 star_index_log_location = 'species_data/{species}/{ref_name}/.star_index_logs'
 
 bt2_index = 'species_data/{species}/{ref_name}/bt2_index'
@@ -562,8 +565,8 @@ rule load_genome:
         temp(directory(star_index_log_location))
     shell:
         """
-        STAR --genomeLoad Remove --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/  || echo "Could not remove shared memory genome for {input[0]}"
-        STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/
+        STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {output[1]}/ || echo "Could not load genome into shared memory for {input[0]} - maybe already loaded"
+        touch {star_index_locked_current}
         """
 
 def get_star_unloaded_flag(default_strategy="STAR:genome:final"):
@@ -597,5 +600,11 @@ rule unload_genome:
         temp(directory(star_index_log_location))
     shell:
         """
-        STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {output[1]}/
+        if ls {star_index_locked}* 1> /dev/null 2>&1;
+        then
+            echo 'There are other tasks waiting for the STAR shared memory index. Not removing from {star_index_locked_current}'
+        else
+            STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {output[1]}/
+        fi
+        rm {star_index_locked_current}
         """
