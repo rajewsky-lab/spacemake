@@ -584,7 +584,7 @@ rule load_genome:
     output:
         temp(touch(star_index_loaded)),
     params:
-        f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species)
+        f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species),
         log_dir=lambda wc: expand(star_index_log_location, ref_name=wc.ref_name, species=wc.species)
     shell:
         """
@@ -604,7 +604,7 @@ rule unload_genome:
         temp(touch(star_index_unloaded)),
     params:
         f_locked=lambda wc: expand(star_index_locked, ref_name=wc.ref_name, species=wc.species),
-        f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species)
+        f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species),
         log_dir=lambda wc: expand(star_index_log_location, ref_name=wc.ref_name, species=wc.species)
     shell:
         """
