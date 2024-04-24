@@ -280,6 +280,7 @@ rule tag_reads_bc_umi:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
         assigned = tagged_bam,
+        log = tagged_bam_log
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
     threads: max(min(workflow.cores * 0.5, 16), 1)
@@ -293,6 +294,7 @@ rule tag_reads_bc_umi:
         "--cell='{params.bc.cell}' "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
+        "--log-file='{output.log}' "
 
 rule run_fastqc:
     input:
@@ -318,6 +320,7 @@ rule get_barcode_readcounts:
         unpack(get_final_bam)
     output:
         barcode_readcounts
+        barcode_readcounts_log
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
@@ -327,9 +330,10 @@ rule get_barcode_readcounts:
         """
         python {spacemake_dir}/bin/BamTagHistogram.py \
         --input {input} \
-        --output {output} \
+        --output {output[0]} \
         --tag {params.cell_barcode_tag} \
         --min-count 1 \
+        --log-file {output[1]} \
         """
         #READ_MQ=0
 
@@ -339,6 +343,7 @@ rule get_barcode_readcounts_prealigned:
         tagged_bam
     output:
         barcode_readcounts_prealigned
+        barcode_readcounts_prealigned_log
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
@@ -348,9 +353,10 @@ rule get_barcode_readcounts_prealigned:
         """
         python {spacemake_dir}/bin/BamTagHistogram.py \
         --input {input} \
-        --output {output} \
+        --output {output[0]} \
         --tag {params.cell_barcode_tag} \
         --min-count 1 \
+        --log-file {output[1]} \
         """
         # READ_MQ=0
 

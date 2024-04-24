@@ -296,7 +296,7 @@ def parse_args():
     import spacemake.util as util
 
     parser = util.make_minimal_parser(
-        "fastq_to_uBAM.py",
+        "fastq_to_uBAM",
         description="Convert raw reads1 and reads2 FASTQ into a single BAM file with cell barcode and UMI as BAM-tags",
     )
     parser.add_argument(

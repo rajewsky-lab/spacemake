@@ -81,7 +81,9 @@ qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = "{polyA_adapter_trimmed}.txt.gz"
 barcode_readcounts = complete_data_root + "/out_readcounts" + barcode_readcounts_suffix
+barcode_readcounts_log = barcode_readcounts + ".log"
 barcode_readcounts_prealigned = complete_data_root + "/out_readcounts_prealigned.txt.gz"
+barcode_readcounts_prealigned_log = barcode_readcounts_prealigned + ".log"
 strand_info = split_reads_strand_type
 
 # united final.bam
@@ -249,6 +251,7 @@ parsed_ribo_depletion_log = complete_data_root + "/parsed_ribo_depletion_log.txt
 #  dropseq rules and vars #
 # #########################
 tagged_bam = complete_data_root + "/unaligned_bc_tagged.bam"
+tagged_bam_log = tagged_bam + ".log"
 unassigned = complete_data_root + "/unaligned_bc_unassigned.bam"
 
 # trim smart adapter from the reads
