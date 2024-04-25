@@ -1,11 +1,12 @@
 Manage projects and samples
 ===========================
 
-In spacemake each sample, and it's settings, are stored in the ``project_df.csv`` under the root
+In spacemake, each sample and its settings are stored in the ``project_df.csv`` under the root
 directory of the spacemake project.
 
-Each sample will have exactly one row in this ``project_df.csv`` file. In the back-end, spacemake uses a ``pandas.DataFrame`` to load, and save this ``.csv`` file on disk. This data-frame
-will be indexed by key ``(project_id, sample_id)``
+Each sample has exactly one row in this ``project_df.csv`` file. In the back-end, spacemake uses 
+a ``pandas.DataFrame`` to load and save this ``.csv`` file on disk. This data frame
+is indexed by key ``(project_id, sample_id)``
 
 The spacemake class responsible for this back-end logic is the :ref:`ProjectDF<ProjectDF>` class.
 
@@ -312,8 +313,8 @@ To use this functionality, type::
 
 The sample-sheet columns have to obey certain conventions for spacemake to parse it properly:
 
-* ``Sample_ID`` contains the ``sample_id``s in the project.
-* ``Sample_Project`` contains the ``project_id``s in the project.
+* ``Sample_ID`` contains the ``sample_id`` in the project.
+* ``Sample_Project`` contains the ``project_id`` in the project.
 * ``Description`` must end with ``_species``, where species is the one configured for the samples in the project, e.g. ``HEK293_wt_human``.
 
 Spacemake will also parse the fields ``Investigator``, ``Date``, and ``Experiment`` from the sample-sheet and add them to the project metadata.

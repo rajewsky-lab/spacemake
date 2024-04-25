@@ -1,13 +1,7 @@
 Configuration
 =============
 
-Once installed, spacemake needs to be configured.
-
-.. include:: shared/spacemake_init.rst
-
-Optionally, you can also provide the ``--download_species`` flag, which will download Gencode genomes and
-annotations for ``mouse`` and ``human``, and place them under ``project\_root/species\_data/<species>``,
-where <species> is either mouse or human.
+Once installed and initialized, spacemake needs to be configured.
 
 .. include:: shared/shared_sample_variables.rst
 
@@ -167,7 +161,7 @@ Each ``run_mode`` can have the following variables:
    If a one of the ``run_mode`` variables is missing, the variable of the parent will be used.
    If parent is not provided, the ``default`` ``run_mode`` will be the parent. 
 
-Provided run\_mode(s)
+Provided run\_modes
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: yaml
