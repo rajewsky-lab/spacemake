@@ -192,7 +192,6 @@ def generate_puck_barcode_summary(df):
         'y_pos_min_px': [df.y_pos.min()],
         'y_pos_max_px': [df.y_pos.max()]
     })
-    df_summary['puck_width'] = (df_summary['x_pos_max_px'] - df_summary['x_pos_min_px']) 
 
     return df_summary
 

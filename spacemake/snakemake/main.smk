@@ -769,8 +769,7 @@ rule count_barcode_matches:
             # we use > so whenever default: 0 we exclude empty pucks
             above_threshold_mask = out_df.matching_ratio > params['run_mode_variables']['spatial_barcode_min_matches']
             out_df['pass_threshold'] = 0
-            out_df['px_by_um'] = out_df['puck_width'] / params['puck_variables']['width_um']
-            out_df = out_df.drop('puck_width')
+            out_df['px_by_um'] = (out_df['x_pos_max_px'] - out_df['x_pos_min_px'])  / params['puck_variables']['width_um']
             out_df['pass_threshold'][above_threshold_mask] = 1
 
         out_df[['puck_barcode_file_id', 'puck_barcode_file', 'parsed_barcode_file', 'n_barcodes', 'n_matching', 'matching_ratio', 'pass_threshold']].to_csv(output[0], index=False)
