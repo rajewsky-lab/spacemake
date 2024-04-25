@@ -795,7 +795,7 @@ def spacemake_run(args):
         configfiles=[var.config_path],
         cores=args["cores"],
         dryrun=args["dryrun"],
-        targets=['get_stats_prealigned_barcodes'],
+        targets=['get_stats_prealigned_barcodes', 'unload_genome_flag'],
         touch=args["touch"],
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
