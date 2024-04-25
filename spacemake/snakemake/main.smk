@@ -325,6 +325,7 @@ rule get_barcode_readcounts:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{cell}']
+    threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
         # {dropseq_tools}/BamTagHistogram -m 32g 
         """
@@ -348,6 +349,7 @@ rule get_barcode_readcounts_prealigned:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{cell}']
+    threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
         # {dropseq_tools}/BamTagHistogram -m 32g 
         """
