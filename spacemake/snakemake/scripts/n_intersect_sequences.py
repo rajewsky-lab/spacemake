@@ -163,7 +163,8 @@ def find_matches(_target, df=None):
         df = pd.read_csv(f_in, sep=args.target_separator)
         reads = df[args.target_column]
         target = set(reads)
-        f_out = args.output[_target]
+        if args.output != "":
+            f_out = args.output[_target]
     elif isinstance(_target, set):
         f_in = None
         target = _target
