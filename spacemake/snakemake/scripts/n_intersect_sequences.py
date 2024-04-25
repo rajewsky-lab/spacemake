@@ -184,6 +184,17 @@ def find_matches(_target, df=None):
 
     return (f_in, len(target), n_matches)
 
+def generate_puck_barcode_summary(df):
+    df_summary = pd.DataFrame({
+        'x_pos_min_px': [df.x_pos.min()],
+        'x_pos_max_px': [df.x_pos.max()],
+        'y_pos_min_px': [df.y_pos.min()],
+        'y_pos_max_px': [df.y_pos.max()]
+    })
+    df_summary['puck_width'] = (df_summary['x_pos_max_px'] - df_summary['x_pos_min_px']) 
+
+    return df_summary
+
 @message_aggregation(logger_name)
 def cmdline():
     """cmdline."""
@@ -229,10 +240,10 @@ def cmdline():
         query_seqs = set(query_seqs)
         logger.info(f"hashed unique query reads")
 
-        if len(args.output) == 1:
+        if len(args.target) == 1:
             _, n_barcodes, n_matches = find_matches(target, df)
             results = [(args.target[0], n_barcodes, n_matches)]
-        elif len(args.output) > 1:
+        elif len(args.target) > 1:
             logger.info(
                 f"querying against {len(args.target)} targets with {args.n_jobs} parallel jobs"
             )
@@ -246,7 +257,18 @@ def cmdline():
         result_df_chunk["puck_barcode_file_id"] = args.target_id
         result_df = pd.concat([result_df, result_df_chunk])
     
-    if args.summary_output != "":
+    if len(args.output) == 1 and args.summary_output != "":
+        df_summary = generate_puck_barcode_summary(df)
+        result_df = result_df.groupby(['puck_barcode_file', 'puck_barcode_file_id', 'n_barcodes']).sum().reset_index()
+        df_summary['puck_barcode_file'] = result_df['puck_barcode_file']
+        df_summary['puck_barcode_file_id'] = result_df['puck_barcode_file_id']
+        df_summary['n_barcodes'] = result_df['n_barcodes']
+        df_summary['n_matching'] = result_df['n_matching']
+        df_summary['matching_ratio'] = df_summary['n_matching']/df_summary['n_barcodes']
+        df_summary['parsed_barcode_file'] = args.output
+        df_summary.to_csv(args.summary_output, index=False)
+    
+    elif args.summary_output != "":
         # group per puck_barcode_file, and compute sum
         result_df = result_df.groupby(['puck_barcode_file', 'puck_barcode_file_id', 'n_barcodes']).sum().reset_index()
         result_df['matching_ratio'] = result_df['n_matching']/result_df['n_barcodes']
