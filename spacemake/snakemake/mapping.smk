@@ -389,7 +389,7 @@ rule unload_genome_flag:
 
 rule unload_genome:
     input:
-        bams=ancient(get_mapped_BAM_output()),
+        bams=ancient(get_mapped_BAM_output(project_df)),
         index_dir=star_index, # we put last so it is accessible
     output:
         temp(touch(star_index_unloaded)),
