@@ -773,4 +773,5 @@ rule count_barcode_matches:
             out_df['pass_threshold'][above_threshold_mask] = 1
 
         out_df[['puck_barcode_file_id', 'puck_barcode_file', 'parsed_barcode_file', 'n_barcodes', 'n_matching', 'matching_ratio', 'pass_threshold']].to_csv(output[0], index=False)
+        out_df = out_df.drop(index='pass_threshold')
         out_df.to_csv(output[1], index=False)
