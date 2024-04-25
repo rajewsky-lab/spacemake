@@ -175,7 +175,10 @@ rule get_whitelist_barcodes:
             downsampling_percentage='', run_on_external=False),
         get_output_files(puck_barcode_files_summary,
             data_root_type = 'complete_data',
-            downsampling_percentage='', run_on_external=False)
+            downsampling_percentage='', run_on_external=False),
+        # get_output_files(parsed_spatial_barcodes,
+        #     data_root_type = 'complete_data',
+        #     downsampling_percentage='', run_on_external=False)
 
 ##############
 # DOWNSAMPLE #
@@ -277,33 +280,21 @@ rule tag_reads_bc_umi:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
         assigned = tagged_bam,
-        unassigned = unassigned,
-        bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
+        log = tagged_bam_log
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 4
+    threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
-        "python {spacemake_dir}/preprocess/cmdline.py "
+        "python {spacemake_dir}/bin/fastq_to_uBAM.py "
         "--sample={wildcards.sample_id} "
         "--read1={input.R1} "
         "--read2={input.R2} "
         "--parallel={threads} "
-        "--save-stats={output.bc_stats} "
-        "--log-file={log} "
-        "--bc1-ref={params.bc.bc1_ref} "
-        "--bc2-ref={params.bc.bc2_ref} "
-        "--bc1-cache={params.bc.bc1_cache} "
-        "--bc2-cache={params.bc.bc2_cache} "
-        "--threshold={params.bc.score_threshold} "
+	    "--out-bam={output.assigned} "
         "--cell='{params.bc.cell}' "
-        "--cell-raw='{params.bc.cell_raw}' "
-        "--out-format=bam "
-        "--out-unassigned={output.unassigned} "
-        "--out-assigned=/dev/stdout "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
-        "--min-opseq-score={params.bc.min_opseq_score} "
-        "| samtools view -bh /dev/stdin > {output.assigned} "
+        "--log-file='{output.log}' "
 
 rule run_fastqc:
     input:
@@ -328,38 +319,48 @@ rule get_barcode_readcounts:
     input:
         unpack(get_final_bam)
     output:
-        barcode_readcounts
+        barcode_readcounts,
+        barcode_readcounts_log
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{cell}']
+    threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
+        # {dropseq_tools}/BamTagHistogram -m 32g 
         """
-        {dropseq_tools}/BamTagHistogram -m 32g \
-        I= {input} \
-        O= {output} \
-        TAG={params.cell_barcode_tag} \
-        READ_MQ=0
+        python {spacemake_dir}/bin/BamTagHistogram.py \
+        --input {input} \
+        --output {output[0]} \
+        --tag {params.cell_barcode_tag} \
+        --min-count 1 \
+        --log-file {output[1]} \
         """
+        #READ_MQ=0
 
 rule get_barcode_readcounts_prealigned:
     # we perform some preliminary counting on the prealigned reads
     input:
         tagged_bam
     output:
-        barcode_readcounts_prealigned
+        barcode_readcounts_prealigned,
+        barcode_readcounts_prealigned_log
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{cell}']
+    threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
+        # {dropseq_tools}/BamTagHistogram -m 32g 
         """
-        {dropseq_tools}/BamTagHistogram -m 32g \
-        I= {input} \
-        O= {output} \
-        TAG={params.cell_barcode_tag} \
-        READ_MQ=0
+        python {spacemake_dir}/bin/BamTagHistogram.py \
+        --input {input} \
+        --output {output[0]} \
+        --tag {params.cell_barcode_tag} \
+        --min-count 1 \
+        --log-file {output[1]} \
         """
+        # READ_MQ=0
 
 rule merge_stats_prealigned_spatial_barcodes:
     input:
@@ -381,11 +382,11 @@ rule merge_stats_prealigned_spatial_barcodes:
     shell:
         "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
         " --query {input.bc_prealign}"
-        " --query-plain-skip 0"
+        " --query-plain-skip 1"
         " --query-plain-column 1"
         " --target {input.puck_barcode_files}"
         " --target-id {params.pbc_id}"
-        " --target-plain-column 0"
+        " --target-column 'cell_bc'"
         " --summary-output {output}"
         " --min-threshold {params.min_threshold}"
         " --n-jobs {threads}"   
@@ -411,28 +412,20 @@ rule create_spatial_barcode_file:
         unpack(get_puck_file),
         unpack(get_all_barcode_readcounts)
     output:
-        parsed_spatial_barcodes
-    run:
-        # TODO: benchmark this rule - set+np index instead of merge?
-        # load all readcounts
-        bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
-            names=['read_n', 'cell_bc']) for bc_rc in input['bc_readcounts']]
-
-        # join them together
-        bc_readcounts = pd.concat(bc_readcounts)
-
-        # remove duplicates
-        bc_readcounts.drop_duplicates(subset='cell_bc', keep='first',
-            inplace=True)
-
-        # load barcode file and parse it
-        bc = parse_barcode_file(input[0])
-        bc.reset_index(level=0, inplace=True)
-        # inner join to get rid of barcode without any data
-        bc = pd.merge(bc, bc_readcounts, how='inner', on='cell_bc')
-        bc = bc[['cell_bc', 'x_pos', 'y_pos']]
-
-        bc.to_csv(output[0], index=False)
+        parsed_spatial_barcodes,
+        temp(parsed_spatial_barcodes_summary)
+    shell:
+        "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
+        " --query {input.bc_readcounts}"
+        " --query-plain-skip 1"
+        " --query-plain-column 1"
+        " --target {input.barcode_file}"
+        " --target-id {wildcards.puck_barcode_file_id}"
+        " --target-column 'cell_bc'"
+        " --output {output[0]}"
+        " --summary-output {output[1]}"
+        " --n-jobs {threads}"   
+        " --chunksize 10000000"
 
 rule create_spatial_barcode_whitelist:
     input: parsed_spatial_barcodes
@@ -750,121 +743,34 @@ rule split_reads_sam_to_bam:
     shell:
         "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
 
+
 rule count_barcode_matches:
     input:
-        unpack(get_barcode_files_matching_summary_input)
+        unpack(get_barcode_summary_files_matching_summary_input)
     output:
-        puck_count_barcode_matches_summary
+        puck_count_barcode_matches_summary,
+        puck_barcode_files_summary
     params:
-        pbf_ids = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)[0],
         run_mode_variables = lambda wildcards:
             project_df.config.get_run_mode(list(get_run_modes_from_sample(
-            wildcards.project_id, wildcards.sample_id).keys())[0]).variables
+            wildcards.project_id, wildcards.sample_id).keys())[0]).variables,
+        puck_variables = lambda wildcards:
+            project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
+            return_empty=True)
     run:
         import os
-        out_df = pd.DataFrame(columns=[
-            'puck_barcode_file_id',
-            'puck_barcode_file',
-            'parsed_barcode_file',
-            'n_barcodes',
-            'n_matching',
-            'matching_ratio'
-            ])
+        out_df = pd.DataFrame()
 
-        if ('puck_barcode_files' in input.keys() and
-            'parsed_spatial_barcode_files' in input.keys()):
-            for pbf_id, pbf, parsed_barcode_file in zip(
-                    params['pbf_ids'],
-                    input['puck_barcode_files'],
-                    input['parsed_spatial_barcode_files'],
-                ):
-                n_barcodes = pd.read_csv(pbf).shape[0]
-                n_matching = pd.read_csv(parsed_barcode_file).shape[0]
-                matching_ratio = round(float(n_matching)/n_barcodes, 2)
-                
-                out_df = pd.concat([out_df, pd.DataFrame({
-                    'puck_barcode_file_id': [pbf_id],
-                    'puck_barcode_file': [pbf],
-                    'parsed_barcode_file': [parsed_barcode_file],
-                    'n_barcodes': [n_barcodes],
-                    'n_matching': [n_matching],
-                    'matching_ratio': [matching_ratio],
-                })], ignore_index=True, sort=False)
+        if 'matched_barcode_files_summary' in input.keys():
+            for matched_barcode_file_summary in input['matched_barcode_files_summary']:
+                pbf_df = pd.read_csv(matched_barcode_file_summary)
+                out_df = pd.concat([out_df, pbf_df])
 
             # we use > so whenever default: 0 we exclude empty pucks
             above_threshold_mask = out_df.matching_ratio > params['run_mode_variables']['spatial_barcode_min_matches']
             out_df['pass_threshold'] = 0
+            out_df['px_by_um'] = (out_df['x_pos_max_px'] - out_df['x_pos_min_px'])  / params['puck_variables']['width_um']
             out_df['pass_threshold'][above_threshold_mask] = 1
 
-        out_df.to_csv(output[0], index=False)
-
-
-rule create_barcode_files_matching_summary:
-    input:
-        unpack(get_barcode_files_matching_summary_input),
-        puck_count_barcode_matches_summary
-    output:
-        puck_barcode_files_summary
-    params:
-        pbf_ids = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)[0],
-        puck_variables = lambda wildcards:
-            project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
-                return_empty=True),
-        run_mode_variables = lambda wildcards:
-            project_df.config.get_run_mode(list(get_run_modes_from_sample(
-            wildcards.project_id, wildcards.sample_id).keys())[0]).variables
-    run:
-        import os
-        out_df = pd.DataFrame(columns=[
-            'puck_barcode_file_id',
-            'puck_barcode_file',
-            'parsed_barcode_file',
-            'n_barcodes',
-            'n_matching',
-            'matching_ratio', 
-            'x_pos_min_px',
-            'x_pos_max_px',
-            'y_pos_min_px',
-            'y_pos_max_px',
-            'px_by_um'])
-
-        if ('puck_barcode_files' in input.keys() and
-            'parsed_spatial_barcode_files' in input.keys()):
-            for pbf_id, pbf, parsed_barcode_file in zip(
-                    params['pbf_ids'],
-                    input['puck_barcode_files'],
-                    input['parsed_spatial_barcode_files'],
-                ):
-                pbf_df = parse_barcode_file(pbf)
-                n_barcodes = pbf_df.shape[0]
-                n_matching = pd.read_csv(parsed_barcode_file).shape[0]
-                matching_ratio = round(float(n_matching)/n_barcodes, 2)
-
-                # calculate puck metrics
-                x_pos_min_px = pbf_df.x_pos.min()
-                x_pos_max_px = pbf_df.x_pos.max()
-                y_pos_min_px = pbf_df.y_pos.min()
-                y_pos_max_px = pbf_df.y_pos.max()
-
-                px_by_um = (x_pos_max_px - x_pos_min_px) 
-                px_by_um = px_by_um / params['puck_variables']['width_um']
-                
-                out_df = pd.concat([out_df, pd.DataFrame({
-                    'puck_barcode_file_id': [pbf_id],
-                    'puck_barcode_file': [pbf],
-                    'parsed_barcode_file': [parsed_barcode_file],
-                    'n_barcodes': [n_barcodes],
-                    'n_matching': [n_matching],
-                    'matching_ratio': [matching_ratio],
-                    'x_pos_min_px': [x_pos_min_px],
-                    'x_pos_max_px': [x_pos_max_px],
-                    'y_pos_min_px': [y_pos_min_px],
-                    'y_pos_max_px': [y_pos_max_px],
-                    'px_by_um': [px_by_um],
-                })], ignore_index=True, sort=False)
-
-        out_df.to_csv(output[0], index=False)
+        out_df[['puck_barcode_file_id', 'puck_barcode_file', 'parsed_barcode_file', 'n_barcodes', 'n_matching', 'matching_ratio', 'pass_threshold']].to_csv(output[0], index=False)
+        out_df[['puck_barcode_file_id','puck_barcode_file','parsed_barcode_file','n_barcodes','n_matching','matching_ratio','x_pos_min_px','x_pos_max_px','y_pos_min_px','y_pos_max_px','px_by_um']].to_csv(output[1], index=False)
