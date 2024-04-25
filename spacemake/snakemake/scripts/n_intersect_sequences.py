@@ -147,7 +147,7 @@ def setup_parser(parser):
     return parser
 
 # TODO: use a partial function to pass args to not use global context
-def find_matches(i: str):
+def find_matches(_target, df=None):
     """
     Find matches between query and target sequences.
 
@@ -158,19 +158,25 @@ def find_matches(i: str):
     """
     global query_seqs, args
 
-    f_in = args.target[i]
-
-    df = pd.read_csv(f_in, sep=args.target_separator)
-    reads = df[args.target_column]
+    if isinstance(_target, int):
+        f_in = args.target[_target]
+        df = pd.read_csv(f_in, sep=args.target_separator)
+        reads = df[args.target_column]
+        target = set(reads)
+        f_out = args.output[_target]
+    elif isinstance(_target, set):
+        f_in = None
+        target = _target
+        f_out = args.output[0]
+    else:
+        raise ValueError("_target must be either integer (will use as index for 'args.target' or set of unique reads")
 
     start = time.time()
-    target = set(reads)
     _intersection = target.intersection(query_seqs)
     n_matches = len(_intersection)
-    print(f"queried {f_in} in {round(time.time()-start, 2)} s")
+    print(f"queried {len(target)} barcodes in {round(time.time()-start, 2)} s")
 
     if args.output != "":
-        f_out = args.output[i]
         df_matched = df[df[args.target_column].isin(list(_intersection))]
         df_matched = df_matched[['cell_bc', 'x_pos', 'y_pos']]
         df_matched.to_csv(f_out, mode='a', header=not os.path.exists(f_out), index=False)
@@ -209,6 +215,11 @@ def cmdline():
     # Load the query file as chunks
     query_df = pd.read_csv(args.query, sep=args.query_separator, skiprows=args.query_plain_skip, chunksize=args.chunksize)
 
+    if len(args.output) == 1:
+        df = pd.read_csv(args.target[0], sep=args.target_separator)
+        reads = df[args.target_column]
+        target = set(reads)
+
     # Process in chunks
     for query_df_chunk in query_df:
         query_seqs = query_df_chunk.iloc[:, args.query_plain_column]
@@ -217,12 +228,16 @@ def cmdline():
         # get unique reads into a global context
         query_seqs = set(query_seqs)
         logger.info(f"hashed unique query reads")
-        logger.info(
-            f"querying against {len(args.target)} targets with {args.n_jobs} parallel jobs"
-        )
 
-        with mp.Pool(args.n_jobs) as pool:
-            results = pool.map(find_matches, range(len(args.target)))
+        if len(args.output) == 1:
+            _, n_barcodes, n_matches = find_matches(target, df)
+            results = [(args.target[0], n_barcodes, n_matches)]
+        elif len(args.output) > 1:
+            logger.info(
+                f"querying against {len(args.target)} targets with {args.n_jobs} parallel jobs"
+            )
+            with mp.Pool(args.n_jobs) as pool:
+                results = pool.map(find_matches, range(len(args.target)))
 
         result_df_chunk = pd.DataFrame(
             results,

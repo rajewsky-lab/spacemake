@@ -411,7 +411,6 @@ rule create_spatial_barcode_file:
         unpack(get_all_barcode_readcounts)
     output:
         parsed_spatial_barcodes
-    threads: 1
     shell:
         "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
         " --query {input.bc_readcounts}"
@@ -422,6 +421,7 @@ rule create_spatial_barcode_file:
         " --target-column 'cell_bc'"
         " --output {output}"
         " --n-jobs {threads}"   
+        " --chunksize 10000000"
 
 rule create_spatial_barcode_whitelist:
     input: parsed_spatial_barcodes
