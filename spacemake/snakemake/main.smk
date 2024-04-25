@@ -418,7 +418,7 @@ rule create_spatial_barcode_file:
         " --query-plain-skip 1"
         " --query-plain-column 1"
         " --target {input.barcode_file}"
-        " --target-id {wildcards.sample_id}"
+        " --target-id {wildcards.puck_barcode_file_id}"
         " --target-column 'cell_bc'"
         " --output {output[0]}"
         " --summary-output {output[1]}"
