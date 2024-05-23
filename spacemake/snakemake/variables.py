@@ -1,5 +1,7 @@
 # set root dir where the processed_data goes
 project_dir = "projects/{project_id}"
+config_path = "config.yaml"
+project_df = "project_df.csv"
 
 #################
 # DIRECTORY STR #
@@ -16,6 +18,10 @@ complete_data_root = illumina_root + "/complete_data"
 data_root = illumina_root + "/{data_root_type}{downsampling_percentage}"
 downsampled_data_prefix = illumina_root + "/downsampled_data"
 downsampled_data_root = downsampled_data_prefix + "{downsampling_percentage}"
+
+log_dir = complete_data_root + '/logs'
+stats_dir = complete_data_root + '/stats'
+plots_dir = complete_data_root + '/plots'
 
 ##############
 # Demux vars #
@@ -75,7 +81,9 @@ qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = "{polyA_adapter_trimmed}.txt.gz"
 barcode_readcounts = complete_data_root + "/out_readcounts" + barcode_readcounts_suffix
+barcode_readcounts_log = barcode_readcounts + ".log"
 barcode_readcounts_prealigned = complete_data_root + "/out_readcounts_prealigned.txt.gz"
+barcode_readcounts_prealigned_log = barcode_readcounts_prealigned + ".log"
 strand_info = split_reads_strand_type
 
 # united final.bam
@@ -90,6 +98,10 @@ spatial_barcodes = (
 parsed_spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/spatial_barcodes_{puck_barcode_file_id}.csv"
+)
+parsed_spatial_barcodes_summary = (
+    complete_data_root
+    + "/puck_barcode_files/spatial_barcodes_summary_{puck_barcode_file_id}.csv"
 )
 parsed_spatial_barcodes_pc = (
     complete_data_root
@@ -243,6 +255,7 @@ parsed_ribo_depletion_log = complete_data_root + "/parsed_ribo_depletion_log.txt
 #  dropseq rules and vars #
 # #########################
 tagged_bam = complete_data_root + "/unaligned_bc_tagged.bam"
+tagged_bam_log = tagged_bam + ".log"
 unassigned = complete_data_root + "/unaligned_bc_unassigned.bam"
 
 # trim smart adapter from the reads
