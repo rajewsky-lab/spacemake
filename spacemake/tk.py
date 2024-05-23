@@ -6,6 +6,7 @@ import scanpy as sc
 import numpy as np
 import pandas as pd
 
+
 def bootstrap(adata, cell_mask=None, genes=[], n_bootstrap=100):
     if cell_mask is not None:
         barcodes = adata.obs_names[cell_mask]
@@ -13,23 +14,24 @@ def bootstrap(adata, cell_mask=None, genes=[], n_bootstrap=100):
         barcodes = adata.obs_names
     if not len(genes):
         genes = adata.var_names
-    
+
     counts = []
-    raw = adata.raw[barcodes, genes].X #.copy()
+    raw = adata.raw[barcodes, genes].X  # .copy()
     for i in range(n_bootstrap):
         bootstrap = np.random.randint(0, high=len(barcodes), size=len(barcodes))
         counts.append(np.array(raw[bootstrap, :].sum(axis=0), dtype=int)[0])
-    
+
     counts = np.array(counts)
     return counts
 
-def pseudo_bulk(adata, cell_mask=None, genes=[], n_bootstrap=100, q=[2.5,50,97.5]):
+
+def pseudo_bulk(adata, cell_mask=None, genes=[], n_bootstrap=100, q=[2.5, 50, 97.5]):
     """
-    samples cells from the adata object n_bootstrap times with replacement. 
+    samples cells from the adata object n_bootstrap times with replacement.
     Then determines mean, sum and low, mid, and upper quantiles (default=[2.5, 50, 97.5])
     across the bootstraps. With the default values hi - low will give 95% confidence interval
     and the main value is the median.
-    
+
     The results are returned as a DataFrame.
     """
     if not len(genes):
@@ -40,20 +42,20 @@ def pseudo_bulk(adata, cell_mask=None, genes=[], n_bootstrap=100, q=[2.5,50,97.5
 
     # print(counts.shape, raw.shape, quantiles.shape)
     d = {
-        'name': genes,
+        "name": genes,
         # 'sum': np.array(raw.sum(axis=0), dtype=int)[0],
-        'mean': np.mean(counts, axis=0),
-        'lo': quantiles[0],
-        'med': quantiles[1],
-        'hi': quantiles[2]
+        "mean": np.mean(counts, axis=0),
+        "lo": quantiles[0],
+        "med": quantiles[1],
+        "hi": quantiles[2],
     }
     # for k, v in d.items():
     #     print(k, len(v))
 
-    return pd.DataFrame(d).set_index('name').sort_values('mean', ascending=False)
+    return pd.DataFrame(d).set_index("name").sort_values("mean", ascending=False)
 
 
-def pseudo_bulk_clusters(adata, genes=[], groupby='leiden', **kw):
+def pseudo_bulk_clusters(adata, genes=[], groupby="leiden", **kw):
     """
     runs pseudo_bulk on cells grouped by a clustering method (default='leiden'),
     but can also be used for user-defined labels. Just change groupby=... to
@@ -64,84 +66,148 @@ def pseudo_bulk_clusters(adata, genes=[], groupby='leiden', **kw):
     data = {}
     print(f"sampling all")
     df = pseudo_bulk(adata, genes=genes, **kw)
-    data['all'] = df['med']
-    data['all_lo'] = df['lo']
-    data['all_hi'] = df['hi']
+    data["all"] = df["med"]
+    data["all_lo"] = df["lo"]
+    data["all_hi"] = df["hi"]
 
     for clst in set(adata.obs[groupby]):
         print(f"sampling {clst}")
-        df = pseudo_bulk(adata, cell_mask=(adata.obs[groupby] == clst), genes=genes, **kw)
-        data[f"cluster_{clst}"] = df['med']
-        data[f"cluster_{clst}_lo"] = df['lo']
-        data[f"cluster_{clst}_hi"] = df['hi']
+        df = pseudo_bulk(
+            adata, cell_mask=(adata.obs[groupby] == clst), genes=genes, **kw
+        )
+        data[f"cluster_{clst}"] = df["med"]
+        data[f"cluster_{clst}_lo"] = df["lo"]
+        data[f"cluster_{clst}_hi"] = df["hi"]
 
     df = pd.DataFrame(data)
     return df
 
 
-def sample_from_clusters(adata, clusters=['15'], groupby='leiden', n_cells=1):
+def sample_from_clusters(adata, clusters=["15"], groupby="leiden", n_cells=1):
     barcodes = []
     for clst in clusters:
         m = adata.obs[groupby] == clst
         clst_cells = adata.obs_names[m]
         cbs = np.random.choice(clst_cells, replace=False, size=n_cells)
-        #print(cbs)
+        # print(cbs)
         barcodes.extend(cbs)
-    
-    data = {'name': mirnames}
+
+    data = {"name": mirnames}
     for cb in barcodes:
         counts = np.array(raw[cb, mirnames].X.todense(), dtype=int)[0]
         data[cb] = counts
-    
-    return pd.DataFrame(data).set_index('name').sort_values(cb, ascending=False)
-        
 
-def merge_adata_objects_on_cells(adata1, adata2, genes1=None, genes2=None):
+    return pd.DataFrame(data).set_index("name").sort_values(cb, ascending=False)
+
+
+def merge_adata_objects_on_cells(
+    adata1, adata2, genes1=None, genes2=None, suffixes=["_1", "_2"]
+):
     obs1 = set(adata1.obs_names)
     obs2 = set(adata2.obs_names)
     obs_both = obs1 & obs2
-    obs_both -= set(['NA'])
+    obs_both -= set(["NA"])
 
     n1 = len(obs1)
     n2 = len(obs2)
     n_both = len(obs_both)
 
-    f = n_both/min(n1, n2)
+    f = n_both / min(n1, n2)
     print(f"Fraction of shared cell barcodes between adata1 and adata2 is {f:.3f}")
+
+    v1 = set(adata1.var_names)
+    v2 = set(adata2.var_names)
+    v_both = v1 & v2
+    v1_exc = v1 - v_both
+    v2_exc = v2 - v_both
+
+    v1_names = sorted(v1_exc)
+    v2_names = sorted(v2_exc)
+    v_names = sorted(v_both)
+    fg = len(v_names) / min(len(v1), len(v2))
+    print(
+        f"{len(v1_names)} exclusive adata1 genes, {len(v2_names)} exclusive adata2 genes, "
+        f"{len(v_names)} shared genes. Fraction of shared genes "
+        f"between adata1 and adata2 is {fg:.3f}"
+    )
 
     # create aligned copies of the data
     obs_names = sorted(obs_both)
-    _1 = adata1[obs_names,:].copy()
-    _2 = adata2[obs_names,:].copy()
+    print("1")
+    _1 = adata1[obs_names, v1_names].copy().X
+    print("2")
+    _2 = adata2[obs_names, v2_names].copy().X
+    print("b1")
+    _both1 = adata1[obs_names, v_names].copy().X
+    print("b1")
+    _both2 = adata2[obs_names, v_names].copy().X
+    _B = _both1 + _both2
+
+    var_names = v1_names + v2_names + v_names
 
     print("about to merge")
-    print(_1.X.shape)
-    print(_2.X.shape)
+    print(_1.shape)
+    print(_2.shape)
+    print(_B.shape)
 
     # make a new AnnData object, concatenated along the var (genes) axis
     import scipy.sparse
 
-    adata = sc.AnnData(X=scipy.sparse.hstack([
-        scipy.sparse.csr_matrix(_1.X), 
-        scipy.sparse.csr_matrix(_2.X)
-        ]), dtype=np.float32)
+    to_stack = [scipy.sparse.csr_matrix(_1), scipy.sparse.csr_matrix(_2)]
+    if len(v_names) > 0:
+        to_stack.append(scipy.sparse.csr_matrix(_B))
 
+    adata = sc.AnnData(
+        X=scipy.sparse.hstack(to_stack),
+        dtype=np.float32,
+    )
+
+    print(
+        f"{len(obs_names)} obs_names, {len(var_names)} var_names, shape of adata = {adata.X.shape}"
+    )
     adata.obs_names = obs_names
-    adata.var_names = _1.var_names.tolist() + _2.var_names.tolist()
+    adata.var_names = var_names
 
-    adata.uns['merge_barcode_overlap'] = f
+    adata.obs = (
+        adata1.obs.loc[obs_names]
+        .copy()
+        .merge(
+            adata2.obs.loc[obs_names],
+            suffixes=suffixes,
+            left_index=True,
+            right_index=True,
+        )
+    )
+
+    to_concat = [adata1.var.loc[v1_names], adata2.var.loc[v2_names]]
+
+    if len(v_names) > 0:
+        to_concat.append(
+            adata1.var.loc[v_names].merge(
+                adata2.var.loc[v_names],
+                suffixes=suffixes,
+                left_index=True,
+                right_index=True,
+            )
+        )
+
+    adata.var = pd.concat(to_concat, axis=0)
+    # adata.var =
+
+    adata.uns["merge_barcode_overlap"] = f
     return adata
 
 
 def simplify_mirname(mirname):
     """
     Remove the precursor name and modification id from the miRNA name.
-    Example: 
-    
+    Example:
+
         Mir-124-P1-v1_3p -> Mir-124_3p
 
     """
     import re
+
     M = re.search(r"^(\w+)-(\w+)\-(\d+)(.*?)_(5|3)p", mirname)
     if not M:
         return mirname
@@ -152,18 +218,20 @@ def simplify_mirname(mirname):
 
 def aggregate_gene_counts(adata, func=None):
 
-
     if func is None:
         func = simplify_mirname
 
-    df = pd.DataFrame({'full': adata.var_names, 'short': [func(m) for m in adata.var_names]})
+    df = pd.DataFrame(
+        {"full": adata.var_names, "short": [func(m) for m in adata.var_names]}
+    )
     new_counts = {}
-    for name, group in df.groupby('short'):
-        #print(name)
-        new_counts[name] = adata[:, group['full']].X.sum(axis=1)
+    for name, group in df.groupby("short"):
+        # print(name)
+        new_counts[name] = adata[:, group["full"]].X.sum(axis=1)
 
-    simpler_names = df['short'].drop_duplicates().sort_values()
+    simpler_names = df["short"].drop_duplicates().sort_values()
     import scipy.sparse
+
     X = scipy.sparse.csr_matrix(np.array([new_counts[s] for s in simpler_names]).T[0])
 
     agg_data = sc.AnnData(X=X, dtype=int)
@@ -171,51 +239,70 @@ def aggregate_gene_counts(adata, func=None):
     agg_data.var_names = simpler_names
 
     agg_data.uns = adata.uns.copy()
-    agg_data.uns['name_map'] = df
+    agg_data.uns["name_map"] = df
     agg_data.obs = adata.obs.copy()
     agg_data.obsm = adata.obsm.copy()
     agg_data.obsp = adata.obsp.copy()
 
-    adata.uns['name_map'] = df
+    adata.uns["name_map"] = df
 
-    print(f"aggregated counts. We started with {adata.X.shape} and now we have {agg_data.X.shape}")
+    print(
+        f"aggregated counts. We started with {adata.X.shape} and now we have {agg_data.X.shape}"
+    )
     return agg_data
 
 
-def stitch_mRNA_and_miRNA(mdata_path, midata_path, mrna_umi_cutoff=1000, mirna_umi_cutoff=25, simplify_mirnames=True, protein_coding_genes_path='', normalize=True, mt_gene_pattern="^mt-", mrna_umi_cutoff_key="genome_counts"):
+def stitch_mRNA_and_miRNA(
+    mdata_path,
+    midata_path,
+    mrna_umi_cutoff=1000,
+    mirna_umi_cutoff=25,
+    simplify_mirnames=True,
+    protein_coding_genes_path="",
+    normalize=True,
+    mt_gene_pattern="^mt-",
+    mrna_umi_cutoff_key="genome_counts",
+):
     # load
     import re
+
     mdata = sc.read_h5ad(mdata_path)
-    if 'NA' in mdata.obs_names:
-        ambient_mrna = mdata['NA'].to_df().T['NA']
+    if "NA" in mdata.obs_names:
+        ambient_mrna = mdata["NA"].to_df().T["NA"]
     else:
         ambient_mrna = 0
-    mdata.var['ambient'] = ambient_mrna
+    mdata.var["ambient"] = ambient_mrna
     # print(f"initial mdata {mdata}")
-    mdata = add_common_metrics(mdata, protein_coding_genes_path=protein_coding_genes_path, mt_gene_pattern=mt_gene_pattern)
-    
+    mdata = add_common_metrics(
+        mdata,
+        protein_coding_genes_path=protein_coding_genes_path,
+        mt_gene_pattern=mt_gene_pattern,
+    )
+
     midata = sc.read_h5ad(midata_path)
     # print(f"initial midata {midata}")
-    if 'NA' in midata.obs_names:
-        ambient_mirna = midata['NA', :].to_df().T['NA']
+    if "NA" in midata.obs_names:
+        ambient_mirna = midata["NA", :].to_df().T["NA"]
     else:
         ambient_mirna = 0
 
-    midata.var['ambient'] = ambient_mirna
+    midata.var["ambient"] = ambient_mirna
 
     # pre-filter miRNA -> apply UMI cutoff and select only miRNA genes
-    mirna_genes = midata.var['reference'] == 'miRNA'
+    mirna_genes = midata.var["reference"] == "miRNA"
     print(f"found {mirna_genes.sum()} miRNA genes")
-    midata.obs['miRNA_counts'] = midata[:,mirna_genes].X.sum(axis=1)
-    m = (midata.obs['miRNA_counts'] >= mirna_umi_cutoff) #& (adata.obs['n_counts'] < 10000000)
+    midata.obs["miRNA_counts"] = midata[:, mirna_genes].X.sum(axis=1)
+    m = (
+        midata.obs["miRNA_counts"] >= mirna_umi_cutoff
+    )  # & (adata.obs['n_counts'] < 10000000)
     midata = midata[m, mirna_genes].copy()
     print(f"pre-filtered midata {midata.X.shape}")
     # print(f"pre-filtered midata var {midata.var['reference']}")
 
     # pre-filter mRNA -> apply UMI cutoff and select only genes from the genome index
     # print(f"mdata {mdata}")
-    genome_genes = mdata.var['reference'] == 'genome'
-    mdata.obs['genome_counts'] = mdata[:, genome_genes].X.sum(axis=1)
+    genome_genes = mdata.var["reference"] == "genome"
+    mdata.obs["genome_counts"] = mdata[:, genome_genes].X.sum(axis=1)
     # print(f"genome_counts quantiles: {np.percentile(mdata.obs['genome_counts'], [1, 5, 25, 50, 75, 95, 99])}")
     m = mdata.obs[mrna_umi_cutoff_key] >= mrna_umi_cutoff
     mdata = mdata[m, genome_genes].copy()
@@ -229,7 +316,7 @@ def stitch_mRNA_and_miRNA(mdata_path, midata_path, mrna_umi_cutoff=1000, mirna_u
         print(f"simplifying")
         midata = aggregate_gene_counts(midata)
         print(f"simplified midata {midata.X.shape}")
-    
+
     # normalize separately, if requested
     if normalize:
         print(f"copy before norm")
@@ -260,50 +347,60 @@ def stitch_mRNA_and_miRNA(mdata_path, midata_path, mrna_umi_cutoff=1000, mirna_u
 
     # pandas needs the list of strings first. Inserting a Series of category type will
     # set everything to NaN due to index mismatch. Yay
-    adata.var['reference'] = mdata.var['reference'].tolist() + ['miRNA'] * midata.X.shape[1]
-    adata.var['reference'] = adata.var['reference'].astype('category')
+    adata.var["reference"] = (
+        mdata.var["reference"].tolist() + ["miRNA"] * midata.X.shape[1]
+    )
+    adata.var["reference"] = adata.var["reference"].astype("category")
 
-    adata.obs['n_counts'] = raw.X.sum(axis=1)
-    
-    print(f"we have the following references {adata.var['reference'].drop_duplicates()}.")
-    miRNA_genes = adata.var_names[adata.var['reference'] == 'miRNA'].to_list()
-    genome_genes = adata.var_names[adata.var['reference'] == 'genome'].to_list()
+    adata.obs["n_counts"] = raw.X.sum(axis=1)
+
+    print(
+        f"we have the following references {adata.var['reference'].drop_duplicates()}."
+    )
+    miRNA_genes = adata.var_names[adata.var["reference"] == "miRNA"].to_list()
+    genome_genes = adata.var_names[adata.var["reference"] == "genome"].to_list()
     mt_genes = [g for g in adata.var_names if re.search(mt_gene_pattern, g.lower())]
-    adata.uns['mt_genes'] = sorted(mt_genes)
-    adata.uns['miRNA_genes'] = sorted(miRNA_genes)
-    adata.uns['genome_genes'] = sorted(genome_genes)
+    adata.uns["mt_genes"] = sorted(mt_genes)
+    adata.uns["miRNA_genes"] = sorted(miRNA_genes)
+    adata.uns["genome_genes"] = sorted(genome_genes)
     print(f"detected {len(mt_genes)} mitochondrial gene names")
     print(f"detected {len(miRNA_genes)} miRNA gene names")
     print(f"detected {len(genome_genes)} genome gene names")
 
     protein_coding = set([g.strip() for g in open(protein_coding_genes_path)])
     print(f"detected {len(protein_coding)} protein coding gene names")
-    adata.uns['protein_coding_genes'] = sorted(protein_coding)
+    adata.uns["protein_coding_genes"] = sorted(protein_coding)
 
-    adata.obs['n_miRNA_counts'] = raw[:, miRNA_genes].X.sum(axis=1)
-    adata.obs['n_genome_counts'] = raw[:, genome_genes].X.sum(axis=1)
-    adata.obs['n_mt_counts'] = raw[:, mt_genes].X.sum(axis=1)
-    adata.var['protein_coding'] = adata.var_names.isin(protein_coding)
-    adata.obs['n_coding_counts'] = raw[:, adata.var['protein_coding']].X.sum(axis=1)
+    adata.obs["n_miRNA_counts"] = raw[:, miRNA_genes].X.sum(axis=1)
+    adata.obs["n_genome_counts"] = raw[:, genome_genes].X.sum(axis=1)
+    adata.obs["n_mt_counts"] = raw[:, mt_genes].X.sum(axis=1)
+    adata.var["protein_coding"] = adata.var_names.isin(protein_coding)
+    adata.obs["n_coding_counts"] = raw[:, adata.var["protein_coding"]].X.sum(axis=1)
 
-    adata.obs['pct_coding'] = (100.0 * adata.obs['n_coding_counts']) / adata.obs['n_counts']
-    adata.obs['pct_genome'] = (100.0 * adata.obs['n_genome_counts']) / adata.obs['n_counts']
-    adata.obs['pct_miRNA'] = (100.0 * adata.obs['n_miRNA_counts']) / adata.obs['n_counts']
-    adata.obs['pct_mt'] = (100.0 * adata.obs['n_mt_counts']) / adata.obs['n_counts']
+    adata.obs["pct_coding"] = (100.0 * adata.obs["n_coding_counts"]) / adata.obs[
+        "n_counts"
+    ]
+    adata.obs["pct_genome"] = (100.0 * adata.obs["n_genome_counts"]) / adata.obs[
+        "n_counts"
+    ]
+    adata.obs["pct_miRNA"] = (100.0 * adata.obs["n_miRNA_counts"]) / adata.obs[
+        "n_counts"
+    ]
+    adata.obs["pct_mt"] = (100.0 * adata.obs["n_mt_counts"]) / adata.obs["n_counts"]
 
     raw.obs = adata.obs.copy()
     # sanity check
-    assert adata[:, miRNA_genes].var['protein_coding'].sum() == 0
+    assert adata[:, miRNA_genes].var["protein_coding"].sum() == 0
 
-    adata.uns['ambient_miRNA'] = midata_original.var['ambient']
-    adata.uns['ambient_mRNA'] = mdata.var['ambient']
+    adata.uns["ambient_miRNA"] = midata_original.var["ambient"]
+    adata.uns["ambient_mRNA"] = mdata.var["ambient"]
     return adata, raw, mdata[adata.obs_names], midata_original[adata.obs_names]
 
 
 def assign_species(adata, species_patterns, pct_thresh=80):
     """
     adds up the counts for species-specific genes (e.g. by prefix hg_...) and populates the following adata.obs columns:
-    
+
         - adata.obs[f'n_{species}_counts'] sum of counts of genes that match the pattern
         - adata.obs[f'n_all_species_counts'] above, but summed over all species that are in the list
         - adata.obs[f'pct_{species}'] percent of species-assignable counts that come from that species
@@ -313,59 +410,77 @@ def assign_species(adata, species_patterns, pct_thresh=80):
     If the threshold is not reached for any species, the cell is assigned 'nan' as value of the 'species' field and 0 for 'pct_species'
     """
     import re
-    adata.obs['species'] = 'nan'
-    adata.obs['n_all_species_counts'] = 0
-    adata.obs['pct_species'] = np.nan
+
+    adata.obs["species"] = "nan"
+    adata.obs["n_all_species_counts"] = 0
+    adata.obs["pct_species"] = np.nan
 
     for species, var_name_pattern in species_patterns:
-        species_genes = sorted([gene for gene in adata.var_names if re.search(var_name_pattern, gene)])
+        species_genes = sorted(
+            [gene for gene in adata.var_names if re.search(var_name_pattern, gene)]
+        )
         adata.uns[f"{species}_genes"] = species_genes
-        adata.obs[f"n_{species}_counts"] = np.array(adata.raw[:, species_genes].X.sum(axis=1))[:, 0]
-        adata.obs['n_all_species_counts'] += adata.obs[f"n_{species}_counts"]
+        adata.obs[f"n_{species}_counts"] = np.array(
+            adata.raw[:, species_genes].X.sum(axis=1)
+        )[:, 0]
+        adata.obs["n_all_species_counts"] += adata.obs[f"n_{species}_counts"]
 
     masks = []
     for species, var_name_pattern in species_patterns:
-        adata.obs[f"pct_{species}"] = 100.0 * adata.obs[f"n_{species}_counts"] / adata.obs["n_all_species_counts"]
-    
+        adata.obs[f"pct_{species}"] = (
+            100.0 * adata.obs[f"n_{species}_counts"] / adata.obs["n_all_species_counts"]
+        )
+
         # assign the species to cells where the fraction of counts coming from the species' genes exceeds
         # the threshold
         m = adata.obs[f"pct_{species}"] >= pct_thresh
-        adata.obs.loc[m, 'pct_species'] = adata.obs.loc[m, f'pct_{species}']
+        adata.obs.loc[m, "pct_species"] = adata.obs.loc[m, f"pct_{species}"]
         adata.obs.loc[m, "species"] = species
         masks.append(m)
 
     return masks
 
 
-def pre_filter(adata, umi_cutoff=0, umi_key="n_counts", normalize=True, mt_gene_pattern="^mt-", protein_coding_genes_path=''):
+def pre_filter(
+    adata,
+    umi_cutoff=0,
+    umi_key="n_counts",
+    normalize=True,
+    mt_gene_pattern="^mt-",
+    protein_coding_genes_path="",
+):
     import re
-    genome_genes = adata.var['reference'] == 'genome'
-    adata.uns['genome_genes'] = genome_genes
-    adata.obs['genome_counts'] = adata[:,genome_genes].X.sum(axis=1)
-#    m = (mdata.obs['genome_counts'] > mrna_umi_cutoff) #& (mdata.obs['genome_counts'] < 10000)
+
+    genome_genes = adata.var["reference"] == "genome"
+    adata.uns["genome_genes"] = genome_genes
+    adata.obs["genome_counts"] = adata[:, genome_genes].X.sum(axis=1)
+    #    m = (mdata.obs['genome_counts'] > mrna_umi_cutoff) #& (mdata.obs['genome_counts'] < 10000)
     mt_genes = [g for g in adata.var_names if re.search(mt_gene_pattern, g.lower())]
-    adata.uns['mt_genes'] = sorted(mt_genes)
+    adata.uns["mt_genes"] = sorted(mt_genes)
     print(f"detected {len(mt_genes)} mitochondrial gene names")
 
-
-    adata.obs['n_genome_counts'] = adata[:, genome_genes].X.sum(axis=1)
-    adata.obs['n_mt_counts'] = adata[:, mt_genes].X.sum(axis=1)
-    adata.obs['pct_mt'] = (100.0 * adata.obs['n_mt_counts']) / adata.obs['n_counts']
+    adata.obs["n_genome_counts"] = adata[:, genome_genes].X.sum(axis=1)
+    adata.obs["n_mt_counts"] = adata[:, mt_genes].X.sum(axis=1)
+    adata.obs["pct_mt"] = (100.0 * adata.obs["n_mt_counts"]) / adata.obs["n_counts"]
 
     if protein_coding_genes_path:
         protein_coding = set([g.strip() for g in open(protein_coding_genes_path)])
         print(f"detected {len(protein_coding)} protein coding gene names")
-        adata.uns['protein_coding_genes'] = sorted(protein_coding)
-        adata.var['protein_coding'] = adata.var_names.isin(protein_coding)
-        adata.obs['n_coding_counts'] = adata[:, adata.var['protein_coding']].X.sum(axis=1)
-        adata.obs['pct_coding'] = (100.0 * adata.obs['n_coding_counts']) / adata.obs['n_counts']
-  
+        adata.uns["protein_coding_genes"] = sorted(protein_coding)
+        adata.var["protein_coding"] = adata.var_names.isin(protein_coding)
+        adata.obs["n_coding_counts"] = adata[:, adata.var["protein_coding"]].X.sum(
+            axis=1
+        )
+        adata.obs["pct_coding"] = (100.0 * adata.obs["n_coding_counts"]) / adata.obs[
+            "n_counts"
+        ]
+
     # remove the low-count barcodes lumped together already at the quant.py stage
-    m = adata.obs_names != 'NA'
+    m = adata.obs_names != "NA"
     adata = adata[m, :]
-    
+
     if umi_cutoff:
-        m = (adata.obs[umi_key] > umi_cutoff)
+        m = adata.obs[umi_key] > umi_cutoff
         adata = adata[m, :]
 
     raw = adata.copy()
@@ -378,38 +493,41 @@ def pre_filter(adata, umi_cutoff=0, umi_key="n_counts", normalize=True, mt_gene_
     return adata, raw
 
 
-
 def compare_to_bulk(adata, bulk, genes=[]):
 
     import scipy
-    bulk = pd.DataFrame({
-        'name' : bulk.var_names, 
-        'bulk': np.array(bulk.X.sum(axis=0))[0]
-    }).set_index('name')
+
+    bulk = pd.DataFrame(
+        {"name": bulk.var_names, "bulk": np.array(bulk.X.sum(axis=0))[0]}
+    ).set_index("name")
 
     if not len(genes):
         genes = adata.var_names
     gdata = adata.raw[:, genes]
 
-    pseudo = pd.DataFrame({
-        'name' : gdata.var_names,
-        'pseudo' : np.array(gdata.X.sum(axis=0))[0]
-    }).set_index('name')
+    pseudo = pd.DataFrame(
+        {"name": gdata.var_names, "pseudo": np.array(gdata.X.sum(axis=0))[0]}
+    ).set_index("name")
 
     df = pd.concat([bulk, pseudo], axis=1).fillna(0)
 
-    print(scipy.stats.pearsonr(np.log10(df['bulk'] + 1), np.log10(df['pseudo'] + 1)))
-    
-    df["log2FC"] = np.log2((df["pseudo"] + 1)/ (df["bulk"] + 1) )
+    print(scipy.stats.pearsonr(np.log10(df["bulk"] + 1), np.log10(df["pseudo"] + 1)))
+
+    df["log2FC"] = np.log2((df["pseudo"] + 1) / (df["bulk"] + 1))
     df = df.sort_values("log2FC", ascending=False)
-    df.sort_values('log2FC', ascending=False).head(30)  
-    
+    df.sort_values("log2FC", ascending=False).head(30)
+
     return df
 
 
-def add_common_metrics(adata, mt_gene_pattern="^mt-", protein_coding_genes_path='/data/rajewsky/projects/sc_smRNA_marvin/sm/species_data/mouse/genome/protein_coding_genes.txt'):
+def add_common_metrics(
+    adata,
+    mt_gene_pattern="^mt-",
+    protein_coding_genes_path="/data/rajewsky/projects/sc_smRNA_marvin/sm/species_data/mouse/genome/protein_coding_genes.txt",
+):
     import scanpy as sc
     import re
+
     # lose all zero rows/columns
     sc.pp.filter_cells(adata, min_counts=1)
     sc.pp.filter_genes(adata, min_counts=1)
@@ -425,7 +543,9 @@ def add_common_metrics(adata, mt_gene_pattern="^mt-", protein_coding_genes_path=
     if "exonic_reads" in adata.layers:
         adata.obs["n_reads"] += np.array(adata.layers["exonic_reads"].sum(axis=1))[:, 0]
     if "intronic_reads" in adata.layers:
-        adata.obs["n_reads"] += np.array(adata.layers["intronic_reads"].sum(axis=1))[:, 0]
+        adata.obs["n_reads"] += np.array(adata.layers["intronic_reads"].sum(axis=1))[
+            :, 0
+        ]
 
     if (adata.obs["n_reads"] == 0).all():
         adata.obs["n_reads"] = adata.obs["n_counts"]
@@ -436,36 +556,37 @@ def add_common_metrics(adata, mt_gene_pattern="^mt-", protein_coding_genes_path=
     # and all extra channels/layers
     for l in sorted(adata.layers.keys()):
         adata.obs[f"n_{l}"] = adata.layers[l].sum(axis=1)[:, 0]
-    
-    # this assumes that we have a layer["reads"], which should be the case 
+
+    # this assumes that we have a layer["reads"], which should be the case
     # if the h5ad comes from quant.py output
     adata.obs["reads_per_counts"] = adata.obs["n_reads"] / adata.obs["n_counts"]
 
-    genome_genes = adata.var['reference'] == 'genome'
-    adata.uns['genome_genes'] = genome_genes
-    adata.obs['genome_counts'] = adata[:,genome_genes].X.sum(axis=1)
-#    m = (mdata.obs['genome_counts'] > mrna_umi_cutoff) #& (mdata.obs['genome_counts'] < 10000)
+    genome_genes = adata.var["reference"] == "genome"
+    adata.uns["genome_genes"] = genome_genes
+    adata.obs["genome_counts"] = adata[:, genome_genes].X.sum(axis=1)
+    #    m = (mdata.obs['genome_counts'] > mrna_umi_cutoff) #& (mdata.obs['genome_counts'] < 10000)
     mt_genes = [g for g in adata.var_names if re.search(mt_gene_pattern, g.lower())]
-    adata.uns['mt_genes'] = sorted(mt_genes)
+    adata.uns["mt_genes"] = sorted(mt_genes)
     print(f"detected {len(mt_genes)} mitochondrial gene names")
 
     protein_coding = set([g.strip() for g in open(protein_coding_genes_path)])
     print(f"detected {len(protein_coding)} protein coding gene names")
-    adata.uns['protein_coding_genes'] = sorted(protein_coding)
+    adata.uns["protein_coding_genes"] = sorted(protein_coding)
 
-    adata.obs['n_genome_counts'] = adata[:, genome_genes].X.sum(axis=1)
-    adata.obs['n_mt_counts'] = adata[:, mt_genes].X.sum(axis=1)
-    adata.var['protein_coding'] = adata.var_names.isin(protein_coding)
-    adata.obs['n_coding_counts'] = adata[:, adata.var['protein_coding']].X.sum(axis=1)
+    adata.obs["n_genome_counts"] = adata[:, genome_genes].X.sum(axis=1)
+    adata.obs["n_mt_counts"] = adata[:, mt_genes].X.sum(axis=1)
+    adata.var["protein_coding"] = adata.var_names.isin(protein_coding)
+    adata.obs["n_coding_counts"] = adata[:, adata.var["protein_coding"]].X.sum(axis=1)
 
-    adata.obs['pct_coding'] = (100.0 * adata.obs['n_coding_counts']) / adata.obs['n_counts']
-    adata.obs['pct_mt'] = (100.0 * adata.obs['n_mt_counts']) / adata.obs['n_counts']
+    adata.obs["pct_coding"] = (100.0 * adata.obs["n_coding_counts"]) / adata.obs[
+        "n_counts"
+    ]
+    adata.obs["pct_mt"] = (100.0 * adata.obs["n_mt_counts"]) / adata.obs["n_counts"]
 
-    if 'reference' in adata.var:
-        for ref in adata.var['reference'].drop_duplicates():
+    if "reference" in adata.var:
+        for ref in adata.var["reference"].drop_duplicates():
             print(ref)
-            m = adata.var['reference'] == ref
-            adata.obs[f'n_{ref}_counts'] = adata[:, m].X.sum(axis=1)
+            m = adata.var["reference"] == ref
+            adata.obs[f"n_{ref}_counts"] = adata[:, m].X.sum(axis=1)
 
     return adata
-
