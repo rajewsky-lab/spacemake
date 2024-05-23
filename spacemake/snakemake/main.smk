@@ -759,7 +759,20 @@ rule count_barcode_matches:
             return_empty=True)
     run:
         import os
-        out_df = pd.DataFrame()
+        out_df = pd.DataFrame( {
+            'puck_barcode_file_id': [],
+            'puck_barcode_file': [], 
+            'parsed_barcode_file': [],
+            'n_barcodes': [],
+            'n_matching': [],
+            'matching_ratio': [],
+            'pass_threshold': [],
+            'x_pos_min_px': [],
+            'x_pos_max_px': [],
+            'y_pos_min_px': [],
+            'y_pos_max_px': [],
+            'px_by_um': []
+        })
 
         if 'matched_barcode_files_summary' in input.keys():
             for matched_barcode_file_summary in input['matched_barcode_files_summary']:
@@ -774,3 +787,4 @@ rule count_barcode_matches:
 
         out_df[['puck_barcode_file_id', 'puck_barcode_file', 'parsed_barcode_file', 'n_barcodes', 'n_matching', 'matching_ratio', 'pass_threshold']].to_csv(output[0], index=False)
         out_df[['puck_barcode_file_id','puck_barcode_file','parsed_barcode_file','n_barcodes','n_matching','matching_ratio','x_pos_min_px','x_pos_max_px','y_pos_min_px','y_pos_max_px','px_by_um']].to_csv(output[1], index=False)
+        
