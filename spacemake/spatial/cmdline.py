@@ -1,8 +1,5 @@
-from ..config import ConfigFile
-from ..project_df import ProjectDF
-
-from .he_integration import create_aggregated_expression_img, \
-    create_spot_expression_img
+#from ..config import ConfigFile
+#from ..project_df import ProjectDF
 from ..util import message_aggregation, bool_in_str, str2bool
 from ..errors import SpacemakeError
 
@@ -42,7 +39,7 @@ def get_expression_img_parser(with_umi_cutoff = False):
 
     return parser
 
-def setup_spatial_parser(spmk, parent_parser_subparsers):
+def setup_spatial_parser(parent_parser_subparsers):
     parser = parent_parser_subparsers.add_parser('spatial',
         help = 'spacemake spatial commands')
 
@@ -53,7 +50,7 @@ def setup_spatial_parser(spmk, parent_parser_subparsers):
         parents=[get_expression_img_parser()])
 
     aggregated_img_parser.set_defaults(
-        func=lambda args: create_expression_img_cmdline(spmk, args,
+        func=lambda args: create_expression_img_cmdline(args,
             'aggregated'))
 
     spot_img_parser = subparsers.add_parser(
@@ -61,14 +58,15 @@ def setup_spatial_parser(spmk, parent_parser_subparsers):
         parents=[get_expression_img_parser()])
 
     spot_img_parser.set_defaults(
-        func=lambda args: create_expression_img_cmdline(spmk, args,
+        func=lambda args: create_expression_img_cmdline(args,
             'spot'))
 
 @message_aggregation(logger_name)
-def create_expression_img_cmdline(spmk, args, img_type):
+def create_expression_img_cmdline(args, img_type):
     import cv2 
-
     logger.info('Loading dge file...')
+    from spacemake.smk import Spacemake
+    spmk = Spacemake()
 
     if str2bool(args['processed_data']):
         if not 'umi_cutoff' in args:
@@ -89,9 +87,11 @@ def create_expression_img_cmdline(spmk, args, img_type):
 
     logger.info(f'Generating {img_type} expression image...')
     if img_type == 'spot':
+        from .he_integration import create_spot_expression_img
         img, img_bw = create_spot_expression_img(adata,
             binary=str2bool(args['binary']))
     elif img_type == 'aggregated':
+        from .he_integration import create_aggregated_expression_img
         img, img_bw = create_aggregated_expression_img(
             adata,
             binary_top_qth_percentile=int(args['binary_top_qth_percentile']))

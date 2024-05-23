@@ -85,12 +85,12 @@ run_modes:
         - 500
     
 
-adapters:
-    smart: 'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTC'
-    optical_primer: 'GAATCACGATACGTACACCA'
-
 barcode_flavors:
     default:
+        cell: "r1[0:12]"
+        UMI: "r1[12:20]"
+        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+    dropseq:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
         bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
@@ -115,6 +115,36 @@ barcode_flavors:
         bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
         cell: "r1[0:20]"
     openst:
-        UMI: r2[0:9]
-        bam_tags: CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}
-        cell: r1[2:27]
+        UMI: "r2[0:9]"
+        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        cell: "r1[2:27]"
+
+adapter_flavors: 
+  dropseq:
+    cut_left:
+    - TSO_SMART:
+        max_error: 0.1
+        min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 30
+    - polyA:
+        max_error: 0.25
+        min_overlap: 3
+    - polyG:
+        max_error: 0.1
+        min_overlap: 3
+
+adapters:
+adapters:
+    smart: 'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTC'
+    optical_primer: 'GAATCACGATACGTACACCA'
+    TSO_SMART: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+    SMART: AAGCAGTGGTATCAACGCAGAGTG
+    TSO_10x: AAGCAGTGGTATCAACGCAGAGTACATGGG
+    chromium_bead: CTACACGACGCTCTTCCGATCT
+    dropseq_bead: AAGCAGTGGTATCAACGCAGAGTAC
+    polyA: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    polyG: GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+    nextflex_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACTGACCAATCTCGTATGCCGTCTTCTGCTTGAA
+    truseq_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACCCGTCCA
