@@ -506,7 +506,7 @@ def get_run_parser():
         "--debug",
         default="",
         help=f"comma-separated list of logging-domains for which you want DEBUG output",
-    )    
+    )
     parser.add_argument(
         "--rerun-incomplete",
         "--ri",
@@ -644,12 +644,12 @@ def spacemake_init(args):
         snakemake_config["species"] = species
 
         # define the pattern
-        snakemake_config[
-            "annotation_file_pattern"
-        ] = "species_data/{species}/{species}_{data_type}.gtf"
-        snakemake_config[
-            "genome_file_pattern"
-        ] = "species_data/{species}/{species}_{data_type}.fa"
+        snakemake_config["annotation_file_pattern"] = (
+            "species_data/{species}/{species}_{data_type}.gtf"
+        )
+        snakemake_config["genome_file_pattern"] = (
+            "species_data/{species}/{species}_{data_type}.fa"
+        )
 
         # the to be saved file paths
         species_info = {}
@@ -683,7 +683,11 @@ def spacemake_init(args):
 
         for key, value in species_info.items():
             cf.add_variable(
-                "species", key, reference="genome", sequence=value["genome"], annotation=value["annotation"]
+                "species",
+                key,
+                reference="genome",
+                sequence=value["genome"],
+                annotation=value["annotation"],
             )
 
     # copy visium_puck_barcode_file
@@ -722,9 +726,9 @@ def spacemake_run(args):
 
     root = logging.getLogger("spacemake")
     # TODO: Why is args a dictionary and not argparse.Namespace ?
-    if args['debug']:
+    if args["debug"]:
         # activate cmdline requested debug output for specific domains (comma-separated)
-        for logger_name in args['debug'].split(","):
+        for logger_name in args["debug"].split(","):
             if logger_name:
                 root.info(f"setting domain {logger_name} to DEBUG")
                 logging.getLogger(logger_name.replace("root", "")).setLevel(
@@ -759,7 +763,7 @@ def spacemake_run(args):
         "projects": projects,
         "with_fastqc": with_fastqc,
         "pwd": os.getcwd(),
-        "log_debug" : args['debug'],
+        "log_debug": args["debug"],
     }
 
     # join config_variables and novosparc_variables
@@ -799,6 +803,7 @@ def spacemake_run(args):
         printshellcmds=args["printshellcmds"],
         config=config_variables,
         rerun_triggers=["mtime"],
+        resources={"pipe_mb": 32},
     )
 
     if analysis_finished is False:
