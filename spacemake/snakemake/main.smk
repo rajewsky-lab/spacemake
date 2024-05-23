@@ -290,21 +290,23 @@ rule create_dge:
         count_flavors = lambda wildcards: get_count_flavor_str(wildcards) # from map_strategy.py
     # at most 8 dges will be created the same time
     threads: 16
+    resources:
+        pipe_mb=16
     shell:
-        "python {bin_dir}/quantify.py"
-        "  --sample={wildcards.sample_id}"
-        "  --log-level={log_level}"
-        "  --log-file={log}"
+        "python ~/dh/git/scbamtools/scbamtools/bin/count.py"
+        "  --sample {wildcards.sample_id}"
+        "  --log-level {log_level}"
+        "  --log-file {log}"
         "  --debug={log_debug}"
-        "  --parallel={threads}"
-        "  --buffer-size=100000"
-        "  --config={spacemake_config}"
-        "  --flavor={params.count_flavors}"
-        "  --output={params.dge_root}/"
-        "  --out-dge={output.dge}"
-        "  --out-summary={output.dge_summary}"
-        "  --out-stats={output.stats}"
-        "  --cell-bc-allowlist={input.top_barcodes}"
+        "  --worker-threads {threads}"
+        "  --config .{spacemake_config}"
+        "  --flavor {params.count_flavors}"
+        "  --output {params.dge_root}/"
+        "  --dge-out {output.dge}"
+        "  --summary-out {output.dge_summary}"
+        "  --stats-out {output.stats}"
+        "  --cell-bc-allow-list {input.top_barcodes}"
+        "  --pipe-buffer-size {resources.pipe_mb}"
         "  {input.mapped_bams}"
 
 
