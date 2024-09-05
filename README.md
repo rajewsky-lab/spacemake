@@ -6,7 +6,7 @@
 
 # Spacemake: processing and analysis of large-scale spatial transcriptomics data
 ### [🌐 docs](https://spacemake.readthedocs.io/en/latest/) | [📜 paper](https://doi.org/10.1093/gigascience/giac064) | [💬 discussions](https://github.com/rajewsky-lab/spacemake/discussions)
-<img src="https://raw.githubusercontent.com/rajewsky-lab/spacemake/master/docs/graphical_abstract_twitter.png" width="400" />
+<img src="https://raw.githubusercontent.com/rajewsky-lab/spacemake/master/docs/smk_logo.png" width="200" />
 
 Spacemake is a modular, robust, and scalable spatial transcriptomics pipeline built in `Snakemake` and `Python`. Spacemake is designed to handle all major spatial transcriptomics datasets and can be readily configured for other technologies. It can process and analyze several samples in parallel, even if they stem from different experimental methods. Spacemake's unified framework enables reproducible data processing from raw sequencing data to automatically generated downstream analysis reports. Spacemake is built with a modular design and offers additional functionality such as sample merging, saturation analysis, and analysis of long reads as separate modules.
 
