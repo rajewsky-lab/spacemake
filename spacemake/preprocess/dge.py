@@ -130,6 +130,9 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
             else:
                  X = hstack([X, gene_sp])
 
+        if X is None:
+            X = coo_matrix((len(barcodes), 0), dtype=np.int32)
+    
         if not has_mt:
             # ensure we have an entry for mitochondrial transcripts even if it's just all zeros
             print(
@@ -161,7 +164,6 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
 
 
 def load_external_dge(dge_path):
-    import anndata
     import scanpy as sc
 
     from scanpy._utils import check_nonnegative_integers
@@ -216,8 +218,6 @@ def parse_barcode_file(barcode_file):
 
 
 def attach_barcode_file(adata, barcode_file):
-    import pandas as pd
-
     bc = parse_barcode_file(barcode_file)
 
     # new obs has only the indices of the exact barcode matches
@@ -241,6 +241,7 @@ def attach_puck_variables(adata, puck_variables):
 
     x_pos_max, y_pos_max = tuple(adata.obsm["spatial"].max(axis=0))
     x_pos_min, y_pos_min = tuple(adata.obsm["spatial"].min(axis=0))
+    #print(f"PUCK VARS {puck_variables} X MIN {x_pos_min} X MAX {x_pos_max} Y MIN {y_pos_min} Y MAX {y_pos_max}")
 
     width_um = adata.uns["puck_variables"]["width_um"]
     coord_by_um = (x_pos_max - x_pos_min) / width_um
