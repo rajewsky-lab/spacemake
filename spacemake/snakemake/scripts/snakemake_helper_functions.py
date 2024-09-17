@@ -59,16 +59,16 @@ def get_output_files(
 
         if check_puck_collection:
             puck_vars = project_df.get_puck_variables(
-                project_id = project_id,
-                sample_id = sample_id
+                project_id=project_id, sample_id=sample_id
             )
-        
-            if (len(puck_barcode_file_ids) == 0) \
-                or ("coordinate_system" not in puck_vars.keys()):
+
+            if (len(puck_barcode_file_ids) == 0) or (
+                "coordinate_system" not in puck_vars.keys()
+            ):
                 continue
 
             coordinate_system = puck_vars["coordinate_system"]
-            if coordinate_system == '':
+            if coordinate_system == "":
                 continue
 
             puck_barcode_file_ids = "puck_collection"
@@ -91,7 +91,7 @@ def get_output_files(
                     polyA_adapter_trimmed = ".polyA_adapter_trimmed"
                 else:
                     polyA_adapter_trimmed = ""
-                
+
             out_files = out_files + expand(
                 pattern,
                 project_id=project_id,
@@ -105,6 +105,7 @@ def get_output_files(
             )
 
     return out_files
+
 
 def get_output_files_qc(
     pattern,
@@ -160,14 +161,19 @@ def get_prealignment_files(pattern, filter_merged=False):
         )[0]
 
         run_mode_vars = project_df.config.get_run_mode(run_mode_name).variables
-        puck_variables = project_df.get_puck_variables(project_id = index[0], sample_id = index[1])
+        puck_variables = project_df.get_puck_variables(
+            project_id=index[0], sample_id=index[1]
+        )
 
-        if run_mode_vars["spatial_barcode_min_matches"] == 0 \
-            or puck_variables['coordinate_system'] == '':
+        if (
+            run_mode_vars["spatial_barcode_min_matches"] == 0
+            or puck_variables["coordinate_system"] == ""
+        ):
             continue
 
         # TODO: does this need to be separated per run mode?
-        prealignment_files.append(expand(
+        prealignment_files.append(
+            expand(
                 pattern,
                 project_id=project_id,
                 sample_id=sample_id,
@@ -207,6 +213,7 @@ def get_all_dges(wildcards):
 
 def get_all_dges_collection(wildcards):
     import os
+
     df = project_df.df
 
     dges = []
@@ -215,33 +222,36 @@ def get_all_dges_collection(wildcards):
         project_id, sample_id = index
 
         puck_vars = project_df.get_puck_variables(
-            project_id = project_id,
-            sample_id = sample_id
+            project_id=project_id, sample_id=sample_id
         )
 
         puck_barcode_file_ids = project_df.get_puck_barcode_ids_and_files(
-                project_id, sample_id
-            )[0]
-        
-        if (len(puck_barcode_file_ids) == 0) \
-            or ("coordinate_system" not in puck_vars.keys()):
+            project_id, sample_id
+        )[0]
+
+        if (len(puck_barcode_file_ids) == 0) or (
+            "coordinate_system" not in puck_vars.keys()
+        ):
             continue
 
         coordinate_system = puck_vars["coordinate_system"]
-        if coordinate_system == '':
+        if coordinate_system == "":
             continue
 
         if not os.path.exists(coordinate_system):
-            raise FileNotFoundError(f"at project {project_id} sample {sample_id} "+
-                                    f"'coordinate_system' file {coordinate_system} cannot be found")
+            raise FileNotFoundError(
+                f"at project {project_id} sample {sample_id} "
+                + f"'coordinate_system' file {coordinate_system} cannot be found"
+            )
 
         # will consider puck_collection within all dges if a coordinate system is specified in the puck
         with_puck_collection = False if not coordinate_system else True
 
         for run_mode in row["run_mode"]:
-            if project_df.has_dge(project_id=project_id, sample_id=sample_id):                
+            if project_df.has_dge(project_id=project_id, sample_id=sample_id):
                 if with_puck_collection:
-                    dges.append(get_dge_collection_from_run_mode(
+                    dges.append(
+                        get_dge_collection_from_run_mode(
                             project_id=project_id,
                             sample_id=sample_id,
                             run_mode=run_mode,
@@ -550,7 +560,7 @@ def get_files_to_merge(pattern, project_id, sample_id, **kwargs):
             "merged_from", sample_id=sample_id, project_id=project_id
         )
 
-        for (p, s) in merge_ix:
+        for p, s in merge_ix:
             files = files + get_files_to_merge(
                 project_id=p, sample_id=s, pattern=pattern, **kwargs
             )
@@ -587,7 +597,7 @@ def get_ribo_depletion_log(wildcards):
 
 def get_top_barcodes(wildcards):
     if wildcards.n_beads == "spatial":
-        return {"top_barcodes": spatial_barcodes}
+        return {"top_barcodes": spatial_barcodes}  # experimental
     if wildcards.dge_cleaned == "":
         return {"top_barcodes": top_barcodes}
     else:
@@ -619,7 +629,7 @@ def get_dge_from_run_mode(
     downsampling_percentage,
     puck_barcode_file_id,
     only_spatial=False,
-    to_mesh=None
+    to_mesh=None,
 ):
     has_dge = project_df.has_dge(project_id=project_id, sample_id=sample_id)
 
@@ -805,7 +815,7 @@ def get_dge_collection_from_run_mode(
         )
         for key, pattern in out_files_pattern.items()
     }
-    
+
     return out_files
 
 
@@ -910,7 +920,9 @@ def get_qc_sheet_input_files(wildcards):
     return to_return
 
 
-def get_bam_tag_names(project_id, sample_id, default_tags="CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"):
+def get_bam_tag_names(
+    project_id, sample_id, default_tags="CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+):
     barcode_flavor = project_df.get_metadata(
         "barcode_flavor", project_id=project_id, sample_id=sample_id
     )
@@ -938,7 +950,8 @@ def get_puck_file(wildcards):
         return []
     else:
         return {"barcode_file": puck_barcode_file}
-    
+
+
 def get_all_puck_files(wildcards):
     _, pbf = project_df.get_puck_barcode_ids_and_files(
         project_id=wildcards.project_id, sample_id=wildcards.sample_id
@@ -952,22 +965,26 @@ def get_puck_collection_stitching_input(wildcards, to_mesh=False):
     # 1) no spatial dge
     # 2) spatial dge, no mesh
     # 3) spatial dge with a mesh
-    run_mode = list(get_run_modes_from_sample(wildcards.project_id, wildcards.sample_id).keys())[0]
+    run_mode = list(
+        get_run_modes_from_sample(wildcards.project_id, wildcards.sample_id).keys()
+    )[0]
 
     puck_barcode_file_ids = project_df.get_puck_barcode_ids_and_files(
-                wildcards.project_id, wildcards.sample_id
-            )[0]
+        wildcards.project_id, wildcards.sample_id
+    )[0]
 
-    return [get_dge_from_run_mode(
-                project_id=wildcards.project_id,
-                sample_id=wildcards.sample_id,
-                run_mode=run_mode,
-                data_root_type=wildcards.data_root_type,
-                downsampling_percentage=wildcards.downsampling_percentage,
-                puck_barcode_file_id=puck_barcode_file_ids,
-                only_spatial=True,
-                to_mesh=to_mesh
-            )["dge"]][0]
+    return [
+        get_dge_from_run_mode(
+            project_id=wildcards.project_id,
+            sample_id=wildcards.sample_id,
+            run_mode=run_mode,
+            data_root_type=wildcards.data_root_type,
+            downsampling_percentage=wildcards.downsampling_percentage,
+            puck_barcode_file_id=puck_barcode_file_ids,
+            only_spatial=True,
+            to_mesh=to_mesh,
+        )["dge"]
+    ][0]
 
 
 def get_barcode_files_matching_summary_input(wildcards):
@@ -1006,9 +1023,7 @@ def get_barcode_summary_files_matching_summary_input(wildcards):
         for pbf_id in pbf_ids
     ]
 
-    return {
-        "matched_barcode_files_summary": parsed_spatial_barcode_summary_files
-    }
+    return {"matched_barcode_files_summary": parsed_spatial_barcode_summary_files}
 
 
 def get_barcode_files(wildcards):
@@ -1016,9 +1031,7 @@ def get_barcode_files(wildcards):
         project_id=wildcards.project_id, sample_id=wildcards.sample_id
     )
 
-    return {
-        "puck_barcode_files": pbfs
-    }
+    return {"puck_barcode_files": pbfs}
 
 
 def get_stats_prealigned_spatial_barcodes(wildcards):
@@ -1068,6 +1081,7 @@ def get_automated_analysis_dge_input(wildcards):
                 downsampling_percentage=wildcards.downsampling_percentage,
             )["dge"]
         ]
+
 
 def get_novosparc_input_files(config):
     if (
