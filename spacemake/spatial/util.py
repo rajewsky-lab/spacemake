@@ -335,8 +335,9 @@ def aggregate_adata_by_indices(
     )
 
     aggregated_adata.obs["n_joined"] = [len(x) for x in ix_array]
-
-    joined_dict = {i: idx_to_aggregate[x] for i, x in enumerate(ix_array)}
+    print(f"ix_array={ix_array} shape={ix_array.shape} dtype={ix_array.dtype}")
+    print(f"idx_to_aggregate={idx_to_aggregate}")
+    joined_dict = {i: idx_to_aggregate[x.astype(int)] for i, x in enumerate(ix_array)}
 
     indices_joined_spatial_units = dok_matrix(
         (len(joined_dict), len(adata.obs_names)), dtype=np.int8
