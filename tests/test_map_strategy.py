@@ -101,7 +101,7 @@ def test_validation_cmdline_issue_54(configured_root):
             f"--sample_id={name}",
             f"--map_strategy={mapstr}",
             f"--R1={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"--R2={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
+            f"--R2={spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
             f"--species={species}",
             expect_fail=not expect_pass,
         )
