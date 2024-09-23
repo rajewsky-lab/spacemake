@@ -162,8 +162,7 @@ def test_config_adapter_flavors(initialized_root):
 
 
 def test_species(with_species):
-    test_species = ("--name", "test_hsa")
-    sm("config", "add_species", *test_species)
+    pass  # It's all in the fixture `with_species`
 
 
 def test_puck(initialized_root):
