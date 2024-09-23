@@ -3,17 +3,24 @@ import sys
 import os
 from spacemake.cmdline import *
 
-from fixtures import initialized_root, with_species, with_tile_test_data, configured_root, sm, spacemake_dir
+from fixtures import (
+    initialized_root,
+    with_species,
+    with_tile_test_data,
+    configured_root,
+    sm,
+    spacemake_dir,
+)
 
 
 def test_init(initialized_root):
-    assert os.path.exists(initialized_root.as_posix() + '/config.yaml')
+    assert os.path.exists(initialized_root.as_posix() + "/config.yaml")
 
 
 def test_parsers(configured_root):
     get_project_sample_parser()
     get_add_sample_sheet_parser()
-    
+
     parser = get_sample_main_variables_parser()
     get_action_sample_parser(parser.add_subparsers(), "add", lambda *argc, **kw: None)
 
@@ -37,33 +44,53 @@ def test_config_barcodes(initialized_root):
 
     # add
     sm(
-        "config", "add_barcode_flavor",
-        "--name", "fc_sts_miniseq",
-        "--umi", "r2[0:9]", "--cell_barcode", "r1[2:27]"
+        "config",
+        "add_barcode_flavor",
+        "--name",
+        "fc_sts_miniseq",
+        "--umi",
+        "r2[0:9]",
+        "--cell_barcode",
+        "r1[2:27]",
     )
     # add same bc flavor twice? -> error
     sm(
-        "config", "add_barcode_flavor",
-        "--name", "fc_sts_miniseq",
-        "--umi", "r2[0:9]", "--cell_barcode", "r1[2:27]",
-        expect_fail=True
+        "config",
+        "add_barcode_flavor",
+        "--name",
+        "fc_sts_miniseq",
+        "--umi",
+        "r2[0:9]",
+        "--cell_barcode",
+        "r1[2:27]",
+        expect_fail=True,
     )
     # delete
     sm(
-        "config", "delete_barcode_flavor",
-        "--name", "fc_sts_miniseq",
+        "config",
+        "delete_barcode_flavor",
+        "--name",
+        "fc_sts_miniseq",
     )
     # re-add
     sm(
-        "config", "add_barcode_flavor",
-        "--name", "fc_sts_miniseq",
-        "--umi", "r2[0:8]", "--cell_barcode", "r1[2:27]"
+        "config",
+        "add_barcode_flavor",
+        "--name",
+        "fc_sts_miniseq",
+        "--umi",
+        "r2[0:8]",
+        "--cell_barcode",
+        "r1[2:27]",
     )
     # update
     sm(
-        "config", "update_barcode_flavor",
-        "--name", "fc_sts_miniseq",
-        "--umi", "r2[0:9]"
+        "config",
+        "update_barcode_flavor",
+        "--name",
+        "fc_sts_miniseq",
+        "--umi",
+        "r2[0:9]",
     )
 
 
@@ -71,28 +98,41 @@ def test_config_adapters(initialized_root):
     os.chdir(initialized_root.as_posix())
     # add
     sm(
-        "config", "add_adapter",
-        "--name", "testy", "--seq", "ACGTACGTACGTACGT",
+        "config",
+        "add_adapter",
+        "--name",
+        "testy",
+        "--seq",
+        "ACGTACGTACGTACGT",
     )
     sm(
-        "config", "add_adapter",
-        "--name", "testy", "--seq", "ACGTACGTACGTACGT",
-        expect_fail=True
+        "config",
+        "add_adapter",
+        "--name",
+        "testy",
+        "--seq",
+        "ACGTACGTACGTACGT",
+        expect_fail=True,
     )
     # update
     sm(
-        "config", "update_adapter",
-        "--name", "testy", "--seq", "ACGTACGTACGTACGTA",
+        "config",
+        "update_adapter",
+        "--name",
+        "testy",
+        "--seq",
+        "ACGTACGTACGTACGTA",
     )
     # delete
-    sm(
-        "config", "delete_adapter",
-        "--name", "testy"
-    )
+    sm("config", "delete_adapter", "--name", "testy")
     # re-add
     sm(
-        "config", "add_adapter",
-        "--name", "testy", "--seq", "ACGTACGTACGTACGTACGT",
+        "config",
+        "add_adapter",
+        "--name",
+        "testy",
+        "--seq",
+        "ACGTACGTACGTACGTACGT",
     )
 
 
@@ -100,13 +140,14 @@ def test_config_adapter_flavors(initialized_root):
     os.chdir(initialized_root.as_posix())
 
     test_flavor = (
-        "--name", "testy1",
-        "--cut_left", 
+        "--name",
+        "testy1",
+        "--cut_left",
         "SMART:min_overlap=10:max_errors=0.1",
-        "--cut_right", 
-        "Q:min_base_qual=30", 
+        "--cut_right",
+        "Q:min_base_qual=30",
         "polyG:min_overlap=3:max_errors=0.2",
-        "polyA:min_overlap=3:max_errors=0.25"
+        "polyA:min_overlap=3:max_errors=0.25",
     )
 
     # add
@@ -121,7 +162,8 @@ def test_config_adapter_flavors(initialized_root):
 
 
 def test_species(with_species):
-    pass
+    test_species = ("--name", "test_hsa")
+    sm("config", "add_species", *test_species)
 
 
 def test_puck(initialized_root):
@@ -146,14 +188,16 @@ def test_runmode(initialized_root):
     os.chdir(initialized_root.as_posix())
     # add
     sm("config", "add_run_mode", "--name=spatial_rm", "--umi_cutoff=10")
-    sm("config", "add_run_mode", "--name=spatial_rm2","--umi_cutoff=10")
+    sm("config", "add_run_mode", "--name=spatial_rm2", "--umi_cutoff=10")
     # delete
     sm("config", "delete_run_mode", "--name=spatial_rm2")
     # edit
     sm("config", "update_run_mode", "--name=spatial_rm", "--umi_cutoff=1")
     from spacemake.config import get_global_config
+
     config = get_global_config()
     config.dump()
+
 
 def test_issue_88(initialized_root):
     os.chdir(initialized_root.as_posix())
@@ -161,9 +205,10 @@ def test_issue_88(initialized_root):
     # add
     sm("config", "add_run_mode", "--name", "newrunmode")
     from spacemake.config import get_global_config
+
     config = get_global_config()
     config.dump()
-    inserted = config.variables['run_modes']['newrunmode']
+    inserted = config.variables["run_modes"]["newrunmode"]
     print("here's what we inserted", inserted)
     assert "name" not in inserted
 
@@ -171,35 +216,32 @@ def test_issue_88(initialized_root):
 def test_sample(configured_root):
     os.chdir(configured_root.as_posix())
     test_sample = (
-        f'--R1={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz', 
-        f'--R2={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz', 
-        '--map_strategy=genome:STAR:final',
-        '--species=test_hsa'
+        f"--R1={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
+        f"--R2={spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+        "--map_strategy=genome:STAR:final",
+        "--species=test_hsa",
     )
 
     # add
-    sm(
-        "projects", "add_sample",
-        "--project_id=test", "--sample_id=test1", 
-        *test_sample
-    )
+    sm("projects", "add_sample", "--project_id=test", "--sample_id=test1", *test_sample)
     # delete
     sm(
-        "projects", "delete_sample",
-        "--project_id=test", "--sample_id=test1", 
+        "projects",
+        "delete_sample",
+        "--project_id=test",
+        "--sample_id=test1",
     )
     # re-add
-    sm(
-        "projects", "add_sample",
-        "--project_id=test", "--sample_id=test1", 
-        *test_sample
-    )
+    sm("projects", "add_sample", "--project_id=test", "--sample_id=test1", *test_sample)
     # update
     sm(
-        "projects", "update_sample",
-        "--project_id=test", "--sample_id=test1",
-        '--map_strategy=rRNA:bowtie2->genome:STAR'
+        "projects",
+        "update_sample",
+        "--project_id=test",
+        "--sample_id=test1",
+        "--map_strategy=rRNA:bowtie2->genome:STAR",
     )
+
 
 def test_fill_project_df(with_species):
     os.chdir(with_species.as_posix())
@@ -247,7 +289,7 @@ def test_fill_project_df(with_species):
                 "--map_strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
                 f" --puck_barcode_file {spacemake_dir}/test_data/tile_1.txt"
                 " --puck slide_seq --run_mode slide_seq"
-            )
+            ),
         ),
         (
             "test_hsa",
@@ -259,7 +301,7 @@ def test_fill_project_df(with_species):
                 "--map_strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
                 f" --puck_barcode_file {spacemake_dir}/test_data/tile_2.txt"
                 " --puck slide_seq --run_mode slide_seq"
-            )
+            ),
         ),
         (
             "test_hsa",
@@ -271,35 +313,46 @@ def test_fill_project_df(with_species):
                 "--map_strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
                 f" --puck_barcode_file {spacemake_dir}/test_data/tile_1.txt {spacemake_dir}/test_data/tile_2.txt"
                 " --puck slide_seq --run_mode slide_seq"
-            )
+            ),
         ),
     ]
     for species, project_id, sample_id, R1, R2, extra in test_project_data:
         # add
         sm(
-            "projects", "add_sample",
-            f"--project_id={project_id}", f"--sample_id={sample_id}",
+            "projects",
+            "add_sample",
+            f"--project_id={project_id}",
+            f"--sample_id={sample_id}",
             f"--species={species}",
-            f"--R1={R1}", f"--R2={R2}", *extra.split(' ')
+            f"--R1={R1}",
+            f"--R2={R2}",
+            *extra.split(" "),
         )
 
-def test_run(configured_root):
+
+def test_run(configured_root, dry=True):
     # test everything after init
     os.chdir(configured_root.as_posix())
-    sm("run", "-np", "--cores=8")
+    if dry:
+        sm("run", "-np", "--cores=8")
+    else:
+        sm("run", "-p", "--cores=8")
+
 
 @pytest.mark.big_download
 def test_tiles(with_tile_test_data):
     os.chdir(with_tile_test_data.as_posix())
     sm(
-        "config", "add_puck",
+        "config",
+        "add_puck",
         "--name=openst_fc_010",
         "--coordinate_system=fc_010_coordinate_system.csv",
         "--width_um=1200",
-        "--spot_diameter_um=0.6"
+        "--spot_diameter_um=0.6",
     )
     sm(
-        "projects", "add_sample",
+        "projects",
+        "add_sample",
         "--project_id=fc_sts_75",
         "--sample_id=fc_sts_75_1b",
         "--R1=fc_sts_75_1b_S1_R1_001_subsampled.fastq.gz",
@@ -312,21 +365,33 @@ def test_tiles(with_tile_test_data):
         "fc_010_L2_tile_2558.txt.gz",
         "fc_010_L2_tile_2559.txt.gz",
         "fc_010_L4_tile_2505.txt.gz",
-        '--map_strategy=phiX:bowtie2->rRNA:bowtie2->genome:STAR'
+        "--map_strategy=phiX:bowtie2->rRNA:bowtie2->genome:STAR",
     )
+
 
 def test_merge(configured_root):
     os.chdir(configured_root.as_posix())
     sm(
-        "projects", "merge_samples",
+        "projects",
+        "merge_samples",
         "--merged_project_id=test",
         "--merged_sample_id=test_merged",
-        "--sample_id_list", "test_01", "test_02",
-        expect_fail=True # different map_strategies
+        "--sample_id_list",
+        "test_01",
+        "test_02",
+        expect_fail=True,  # different map_strategies
     )
     sm(
-        "projects", "merge_samples",
+        "projects",
+        "merge_samples",
         "--merged_project_id=test",
         "--merged_sample_id=test_merged",
-        "--sample_id_list", "test_01", "test_01b",
-    )    
+        "--sample_id_list",
+        "test_01",
+        "test_01b",
+    )
+
+
+def test_from_scratch(with_species):
+    test_sample(with_species)
+    test_run(with_species, dry=False)
