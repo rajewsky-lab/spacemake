@@ -116,7 +116,7 @@ def setup_parser(parser):
         type=str,
         help="a summary output file containing the number of matches between query and target, per target file",
         required=False,
-        default=""
+        default="",
     )
 
     parser.add_argument(
@@ -130,7 +130,7 @@ def setup_parser(parser):
     parser.add_argument(
         "--chunksize",
         type=int,
-        default=int(100*1e6),
+        default=int(100 * 1e6),
         help="number of query sequences per processing chunk (default: 100M)",
         required=False,
     )
@@ -145,6 +145,7 @@ def setup_parser(parser):
     )
 
     return parser
+
 
 # TODO: use a partial function to pass args to not use global context
 def find_matches(_target, df=None):
@@ -170,7 +171,9 @@ def find_matches(_target, df=None):
         target = _target
         f_out = args.output[0]
     else:
-        raise ValueError("_target must be either integer (will use as index for 'args.target' or set of unique reads")
+        raise ValueError(
+            "_target must be either integer (will use as index for 'args.target' or set of unique reads"
+        )
 
     start = time.time()
     _intersection = target.intersection(query_seqs)
@@ -179,21 +182,27 @@ def find_matches(_target, df=None):
 
     if args.output != "":
         df_matched = df[df[args.target_column].isin(list(_intersection))]
-        df_matched = df_matched[['cell_bc', 'x_pos', 'y_pos']]
-        df_matched.to_csv(f_out, mode='a', header=not os.path.exists(f_out), index=False)
+        df_matched = df_matched[["cell_bc", "x_pos", "y_pos"]]
+        df_matched.to_csv(
+            f_out, mode="a", header=not os.path.exists(f_out), index=False
+        )
         print(f"saved puck file into {f_out}")
 
     return (f_in, len(target), n_matches)
 
+
 def generate_puck_barcode_summary(df):
-    df_summary = pd.DataFrame({
-        'x_pos_min_px': [df.x_pos.min()],
-        'x_pos_max_px': [df.x_pos.max()],
-        'y_pos_min_px': [df.y_pos.min()],
-        'y_pos_max_px': [df.y_pos.max()]
-    })
+    df_summary = pd.DataFrame(
+        {
+            "x_pos_min_px": [df.x_pos.min()],
+            "x_pos_max_px": [df.x_pos.max()],
+            "y_pos_min_px": [df.y_pos.min()],
+            "y_pos_max_px": [df.y_pos.max()],
+        }
+    )
 
     return df_summary
+
 
 @message_aggregation(logger_name)
 def cmdline():
@@ -214,27 +223,34 @@ def cmdline():
         raise ValueError(
             f"target_id ({len(args.target_id)}) and target ({len(args.target)}) are different in size"
         )
-    
+
     if args.output == "" and args.summary_output == "":
-        raise ValueError(
-            "One of --output or --summary-output must have a value"
-        )
+        raise ValueError("One of --output or --summary-output must have a value")
 
     # Create a df for the final results
     result_df = pd.DataFrame()
 
     # Load the query file as chunks
-    query_df = pd.read_csv(args.query, sep=args.query_separator, skiprows=args.query_plain_skip, chunksize=args.chunksize)
+    query_df = pd.read_csv(
+        args.query,
+        sep=args.query_separator,
+        skiprows=args.query_plain_skip,
+        chunksize=args.chunksize,
+    )
 
     if len(args.output) == 1:
-        df = pd.read_csv(args.target[0], sep=args.target_separator)
+        df = pd.read_csv(args.target[0], sep=args.target_separator).rename(
+            columns={"xcoord": "x_pos", "ycoord": "y_pos"}
+        )
         reads = df[args.target_column]
         target = set(reads)
 
     # Process in chunks
     for query_df_chunk in query_df:
         query_seqs = query_df_chunk.iloc[:, args.query_plain_column]
-        logger.info(f"read chunk of {round(len(query_seqs)/1e6, 2)}M sequences from query file at '{args.query}'")
+        logger.info(
+            f"read chunk of {round(len(query_seqs)/1e6, 2)}M sequences from query file at '{args.query}'"
+        )
 
         # get unique reads into a global context
         query_seqs = set(query_seqs)
@@ -256,24 +272,40 @@ def cmdline():
         )
         result_df_chunk["puck_barcode_file_id"] = args.target_id
         result_df = pd.concat([result_df, result_df_chunk])
-    
+
     if len(args.output) == 1 and args.summary_output != "":
         df_summary = generate_puck_barcode_summary(df)
-        result_df = result_df.groupby(['puck_barcode_file', 'puck_barcode_file_id', 'n_barcodes']).sum().reset_index()
-        df_summary['puck_barcode_file'] = result_df['puck_barcode_file']
-        df_summary['puck_barcode_file_id'] = result_df['puck_barcode_file_id']
-        df_summary['n_barcodes'] = result_df['n_barcodes']
-        df_summary['n_matching'] = result_df['n_matching']
-        df_summary['matching_ratio'] = df_summary['n_matching']/df_summary['n_barcodes']
-        df_summary['parsed_barcode_file'] = args.output
+        result_df = (
+            result_df.groupby(
+                ["puck_barcode_file", "puck_barcode_file_id", "n_barcodes"]
+            )
+            .sum()
+            .reset_index()
+        )
+        df_summary["puck_barcode_file"] = result_df["puck_barcode_file"]
+        df_summary["puck_barcode_file_id"] = result_df["puck_barcode_file_id"]
+        df_summary["n_barcodes"] = result_df["n_barcodes"]
+        df_summary["n_matching"] = result_df["n_matching"]
+        df_summary["matching_ratio"] = (
+            df_summary["n_matching"] / df_summary["n_barcodes"]
+        )
+        df_summary["parsed_barcode_file"] = args.output
         df_summary.to_csv(args.summary_output, index=False)
-    
+
     elif args.summary_output != "":
         # group per puck_barcode_file, and compute sum
-        result_df = result_df.groupby(['puck_barcode_file', 'puck_barcode_file_id', 'n_barcodes']).sum().reset_index()
-        result_df['matching_ratio'] = result_df['n_matching']/result_df['n_barcodes']
-        result_df['pass_threshold'] = 0
-        result_df['pass_threshold'][result_df['matching_ratio'] > args.min_threshold] = 1
+        result_df = (
+            result_df.groupby(
+                ["puck_barcode_file", "puck_barcode_file_id", "n_barcodes"]
+            )
+            .sum()
+            .reset_index()
+        )
+        result_df["matching_ratio"] = result_df["n_matching"] / result_df["n_barcodes"]
+        result_df["pass_threshold"] = 0
+        result_df["pass_threshold"][
+            result_df["matching_ratio"] > args.min_threshold
+        ] = 1
         result_df.to_csv(args.summary_output, index=False)
 
 
