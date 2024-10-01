@@ -3,7 +3,7 @@ channels:
     - bih-cubi
     - conda-forge
     - bioconda
-    - defaults
+    - nodefaults
 dependencies:
     - python>=3.6,<3.12
     - snakemake>=5.32.0,<6.4.0
