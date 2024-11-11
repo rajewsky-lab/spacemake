@@ -194,7 +194,7 @@ def main(args):
 
     # queues for communication between processes
     w = (
-        mf.Workflow("fastq_to_uBAM")
+        mf.Workflow("fastq_to_uBAM",total_pipe_buffer_MB=8)
         # open reads2.fastq.gz
         .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
             input=mf.FIFO("read2", "rt"),
