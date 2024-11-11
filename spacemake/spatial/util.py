@@ -360,6 +360,7 @@ def aggregate_adata_by_indices(
     ]:
         aggregated_adata.obs[column] = summarise_adata_obs_column(adata, column, mean)
 
+    aggregated_adata.obs['n_counts'] = summarise_adata_obs_column(adata, "n_counts")
     return aggregated_adata
 
 
@@ -525,6 +526,7 @@ def create_meshed_adata(
 
     joined_coordinates = mesh_px[np.unique(new_ilocs)]
 
+    adata.obs['n_counts'] = adata.obs['total_counts'] #np.array(adata.X.sum(axis=1))[:, 0]
     meshed_adata = aggregate_adata_by_indices(
         adata,
         idx_to_aggregate=original_ilocs,
