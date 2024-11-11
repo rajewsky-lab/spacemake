@@ -109,7 +109,7 @@ def get_sample_main_variables_parser(
         parser.add_argument(
             "--barcode_flavor",
             type=str,
-            default="dropseq" if defaults else None,
+            default="default" if defaults else None,
             help="barcode flavor for this sample",
         )
 
@@ -117,7 +117,7 @@ def get_sample_main_variables_parser(
         parser.add_argument(
             "--adapter_flavor",
             type=str,
-            default="dropseq" if defaults else None,
+            default="default" if defaults else None,
             help="barcode flavor for this sample",
         )
 
@@ -509,7 +509,7 @@ def get_run_parser():
         "--debug",
         default="",
         help=f"comma-separated list of logging-domains for which you want DEBUG output",
-    )    
+    )
     parser.add_argument(
         "--rerun-incomplete",
         "--ri",
@@ -572,7 +572,7 @@ def setup_init_parser(parent_parser_subparsers):
         "--dropseq_tools",
         help="absolute path to dropseq_tools directory",
         required=True,
-    )    
+    )
     parser_init.set_defaults(func=spacemake_init)
 
     return parser_init
@@ -636,10 +636,8 @@ def spacemake_init(args):
     cf.variables["root_dir"] = args["root_dir"]
     cf.variables["temp_dir"] = args["temp_dir"]
 
-    cf.variables['external_bin'] = {
-        'dropseq_tools' : args['dropseq_tools']
-    }
-    
+    cf.variables["external_bin"] = {"dropseq_tools": args["dropseq_tools"]}
+
     cf.variables["microscopy_out"] = args.get("microscopy_out", "")
 
     if args["download_species"]:
@@ -656,12 +654,12 @@ def spacemake_init(args):
         snakemake_config["species"] = species
 
         # define the pattern
-        snakemake_config[
-            "annotation_file_pattern"
-        ] = "species_data/{species}/{species}_{data_type}.gtf"
-        snakemake_config[
-            "genome_file_pattern"
-        ] = "species_data/{species}/{species}_{data_type}.fa"
+        snakemake_config["annotation_file_pattern"] = (
+            "species_data/{species}/{species}_{data_type}.gtf"
+        )
+        snakemake_config["genome_file_pattern"] = (
+            "species_data/{species}/{species}_{data_type}.fa"
+        )
 
         # the to be saved file paths
         species_info = {}
@@ -695,7 +693,11 @@ def spacemake_init(args):
 
         for key, value in species_info.items():
             cf.add_variable(
-                "species", key, reference="genome", sequence=value["genome"], annotation=value["annotation"]
+                "species",
+                key,
+                reference="genome",
+                sequence=value["genome"],
+                annotation=value["annotation"],
             )
 
     # copy visium_puck_barcode_file
@@ -711,10 +713,15 @@ def spacemake_init(args):
 
     # copy openst_coordinate_system
     dest_puck_collection_path = "puck_data/openst_coordinate_system.csv"
-    logger.info(f"Moving puck collection coordinate system to {dest_puck_collection_path}")
+    logger.info(
+        f"Moving puck collection coordinate system to {dest_puck_collection_path}"
+    )
     os.makedirs(os.path.dirname(dest_puck_collection_path), exist_ok=True)
     copyfile(
-        os.path.join(os.path.dirname(__file__), "data/puck_collection/openst_coordinate_system.csv"),
+        os.path.join(
+            os.path.dirname(__file__),
+            "data/puck_collection/openst_coordinate_system.csv",
+        ),
         dest_puck_collection_path,
     )
 
@@ -743,9 +750,9 @@ def spacemake_run(args):
 
     root = logging.getLogger("spacemake")
     # TODO: Why is args a dictionary and not argparse.Namespace ?
-    if args['debug']:
+    if args["debug"]:
         # activate cmdline requested debug output for specific domains (comma-separated)
-        for logger_name in args['debug'].split(","):
+        for logger_name in args["debug"].split(","):
             if logger_name:
                 root.info(f"setting domain {logger_name} to DEBUG")
                 logging.getLogger(logger_name.replace("root", "")).setLevel(
@@ -780,7 +787,7 @@ def spacemake_run(args):
         "projects": projects,
         "with_fastqc": with_fastqc,
         "pwd": os.getcwd(),
-        "log_debug" : args['debug'],
+        "log_debug": args["debug"],
     }
 
     # join config_variables and novosparc_variables
@@ -795,7 +802,7 @@ def spacemake_run(args):
         configfiles=[var.config_path],
         cores=args["cores"],
         dryrun=args["dryrun"],
-        targets=['get_stats_prealigned_barcodes', 'unload_genome_flag'],
+        targets=["get_stats_prealigned_barcodes", "unload_genome_flag"],
         touch=args["touch"],
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
@@ -818,7 +825,7 @@ def spacemake_run(args):
         configfiles=[var.config_path],
         cores=args["cores"],
         dryrun=args["dryrun"],
-        targets=['get_whitelist_barcodes'],
+        targets=["get_whitelist_barcodes"],
         touch=args["touch"],
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
@@ -1030,6 +1037,7 @@ def make_main_parser():
         # SPACEMAKE SPATIAL #
         #####################
         from spacemake.spatial.cmdline import setup_spatial_parser
+
         parser_spatial = setup_spatial_parser(parser_main_subparsers)
 
     parser_dict = {
@@ -1052,6 +1060,7 @@ def cmdline():
 
     if args.version and args.subcommand is None:
         import spacemake.contrib
+
         print(spacemake.contrib.__version__)
         return 0
     else:
