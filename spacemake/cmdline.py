@@ -8,7 +8,6 @@ from spacemake.contrib import __version__, __license__, __author__, __email__
 logger_name = "spacemake.main"
 logger = logging.getLogger(logger_name)
 
-
 def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
     """
     Return a parser for project_id's and sample_id's
@@ -44,7 +43,7 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         nargs=nargs,
         default=default,
         help=f"{project_argument} {help_extra}",
-        dest=project_argument,
+        dest=f"{prepend.replace('-', '_')}{project_argument}",
     )
     parser.add_argument(
         f"--{prepend}{sample_argument.replace('_', '-')}",
@@ -53,7 +52,7 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         nargs=nargs,
         default=default,
         help=f"{sample_argument} {help_extra}",
-        dest=sample_argument,
+        dest=f"{prepend.replace('-', '_')}{sample_argument}",
     )
 
     # Add legacy snake_case arguments
@@ -64,7 +63,7 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         nargs=nargs,
         default=None,  # No default here; rely on kebab-case
         help=argparse.SUPPRESS,
-        dest=project_argument,
+        dest=f"{prepend.replace('-', '_')}{project_argument}",
     )
     parser.add_argument(
         f"--{prepend}{sample_argument}",
@@ -73,7 +72,7 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         nargs=nargs,
         default=None,
         help=argparse.SUPPRESS,
-        dest=sample_argument,
+        dest=f"{prepend.replace('-', '_')}{sample_argument}",
     )
 
     return parser
@@ -423,7 +422,6 @@ def get_action_sample_parser(parent_parser, action, func):
     :param func:
     """
     logger.debug(f"get_action_sample_parser(action={action}) called")
-    logger.debug(f"Arguments for merge parser: {parser_name}")
 
     if action not in ["add", "update", "delete", "merge"]:
         raise ValueError(f"Invalid action: {action}")
@@ -442,7 +440,7 @@ def get_action_sample_parser(parent_parser, action, func):
             ),
         ]
     else:
-        parser_name = f"{action.replace("_", "-")}-sample"
+        parser_name = f"{action}-sample"
         msg = f"{action} a sample"
         parents = [get_project_sample_parser()]
 
