@@ -1433,7 +1433,7 @@ class ProjectDF:
         sample_id_list=[],
         **kwargs,
     ):
-        """merge_samples.
+        """merge samples.
 
         :param merged_project_id:
         :param merged_sample_id:
@@ -1453,7 +1453,7 @@ class ProjectDF:
         consistent_variables.remove("adapter")
         consistent_variables.remove("quant")
 
-        # append variable "map_strategy" manually.
+        # append variable "map-strategy" manually.
         # TODO: consider moving "map_strategy" into the main_variables_sg2pl, needs additional parser etc.
         consistent_variables.append("map_strategy")
 

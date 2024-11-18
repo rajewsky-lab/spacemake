@@ -39,13 +39,13 @@ def _init():
     sm("--version")
 
     # test the init parser
-    sm("init", "--dropseq_tools", "/data/rajewsky/shared_bins/Drop-seq_tools-2.5.1/")
+    sm("init", "--dropseq-tools", "/data/rajewsky/shared_bins/Drop-seq_tools-2.5.1/")
 
 
 def _add_species():
     sm(
         "config",
-        "add_species",
+        "add-species",
         "--name=test_hsa",
         "--reference=genome",
         f"--sequence={spacemake_dir}/test_data/test_genome.fa.gz",
@@ -54,7 +54,7 @@ def _add_species():
     # add a second reference
     sm(
         "config",
-        "add_species",
+        "add-species",
         "--name=test_hsa",
         "--reference=rRNA",
         f"--sequence={spacemake_dir}/test_data/rRNA_hsa.fa.gz",
@@ -62,7 +62,7 @@ def _add_species():
     # add a third reference
     sm(
         "config",
-        "add_species",
+        "add-species",
         "--name=test_hsa",
         "--reference=miRNA",
         f"--sequence={spacemake_dir}/test_data/mirgenedb.hsa.mature.fa.gz",
@@ -71,7 +71,7 @@ def _add_species():
     # TODO: place some actual mouse genome and/or phiX genomes in test-data repository
     sm(
         "config",
-        "add_species",
+        "add-species",
         "--name=mouse",
         "--reference=genome",
         f"--sequence={spacemake_dir}/test_data/test_genome.fa.gz",
@@ -79,7 +79,7 @@ def _add_species():
     )
     sm(
         "config",
-        "add_species",
+        "add-species",
         "--name=mouse",
         "--reference=phiX",
         f"--sequence={spacemake_dir}/test_data/test_genome.fa.gz",
@@ -87,7 +87,7 @@ def _add_species():
     )
     sm(
         "config",
-        "add_species",
+        "add-species",
         "--name=mouse",
         "--reference=rRNA",
         f"--sequence={spacemake_dir}/test_data/rRNA_hsa.fa.gz",

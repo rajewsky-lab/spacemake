@@ -96,10 +96,10 @@ def test_validation_cmdline_issue_54(configured_root):
         # add
         sm(
             "projects",
-            "add_sample",
-            "--project_id=test",
-            f"--sample_id={name}",
-            f"--map_strategy={mapstr}",
+            "add-sample",
+            "--project-id=test",
+            f"--sample-id={name}",
+            f"--map-strategy={mapstr}",
             f"--R1={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
             f"--R2={spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
             f"--species={species}",

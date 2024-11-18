@@ -227,7 +227,7 @@ def get_species_parser(required=True):
 
 def get_barcode_flavor_parser(required=True):
     parser = argparse.ArgumentParser(
-        allow_abbrev=False, description="add/update barcode_flavor", add_help=False
+        allow_abbrev=False, description="add/update barcode-flavor", add_help=False
     )
     parser.add_argument(
         "--name", help="name of the barcode flavor", type=str, required=True
@@ -241,13 +241,18 @@ def get_barcode_flavor_parser(required=True):
         required=required,
     )
     parser.add_argument(
-        "--cell_barcode",
+        "--cell-barcode",
         help="structure of CELL BARCODE, using python's list syntax. Example: to set"
-        + " the cell_barcode to 1-12 nt of Read1, use --cell_barcode r1[0:12]. It is also possible "
+        + " the cell_barcode to 1-12 nt of Read1, use --cell-barcode r1[0:12]. It is also possible "
         + " to reverse the CELL BARCODE, for instance with r1[0:12][::-1] (reversing the first 12nt of"
         + " Read1, and assigning them as CELL BARCODE).",
         type=str,
         required=required,
+    )
+    parser.add_argument(
+        "--cell_barcode",
+        help=argparse.SUPPRESS,
+        type=str,
     )
 
     return parser
@@ -1191,15 +1196,23 @@ def get_barcode_flavor_parser(required=True):
     # )
 
     parser.add_argument(
-        "--cell_barcode",
+        "--cell-barcode",
         dest="cell",
         help="structure of CELL BARCODE, using python's list syntax. Example: to set"
-        + " the cell_barcode to 1-12 nt of Read1, use --cell_barcode r1[0:12]. It is also possible "
+        + " the cell_barcode to 1-12 nt of Read1, use --cell-barcode r1[0:12]. It is also possible "
         + " to reverse the CELL BARCODE, for instance with r1[0:12][::-1] (reversing the first 12nt of"
         + " Read1, and assigning them as CELL BARCODE).",
         type=str,
         required=required,
     )
+    parser.add_argument(
+        "--cell_barcode",
+        dest="cell",
+        help=argparse.SUPPRESS,
+        type=str,
+        required=False,
+    )
+
     parser.add_argument(
         "--seq",
         help=(
@@ -1221,7 +1234,7 @@ def get_barcode_flavor_parser(required=True):
         default=None,
     )
     parser.add_argument(
-        "--min_qual_trim",
+        "--min-qual-trim",
         help=(
             "Especially if you need access to bases 'at the end' of the read, "
             "that may require trimming bases that bcl2fastq already "
@@ -1229,6 +1242,12 @@ def get_barcode_flavor_parser(required=True):
             "a good option for that is to clip bases from the 3' end if they "
             "have very low quality scores (default=disabled)"
         ),
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--min_qual_trim",
+        help=argparse.SUPPRESS,
         type=int,
         default=None,
     )

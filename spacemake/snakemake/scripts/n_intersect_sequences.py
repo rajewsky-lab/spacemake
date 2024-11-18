@@ -178,7 +178,7 @@ def find_matches(_target, df=None):
     start = time.time()
     _intersection = target.intersection(query_seqs)
     n_matches = len(_intersection)
-    print(f"queried {len(target)} barcodes in {round(time.time()-start, 2)} s")
+    print(f"queried {len(target):,} barcodes and found {n_matches:,} matches in {round(time.time() - start, 2):,} seconds")
 
     if args.output != "":
         df_matched = df[df[args.target_column].isin(list(_intersection))]

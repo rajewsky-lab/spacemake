@@ -423,25 +423,26 @@ def get_action_sample_parser(parent_parser, action, func):
     :param func:
     """
     logger.debug(f"get_action_sample_parser(action={action}) called")
+    logger.debug(f"Arguments for merge parser: {parser_name}")
 
     if action not in ["add", "update", "delete", "merge"]:
         raise ValueError(f"Invalid action: {action}")
-
-    kebab_action = action.replace("_", "-")
 
     if action == "merge":
         parser_name = "merge-samples"
         msg = "merge samples"
         parents = [
             get_project_sample_parser(
-                prepend="merged_", help_extra="of the newly created merged sample"
+                prepend="merged-",
+                help_extra="of the newly created merged sample"
             ),
             get_project_sample_parser(
-                allow_multiple=True, help_extra="of the samples to be merged"
+                allow_multiple=True,
+                help_extra="of the samples to be merged"
             ),
         ]
     else:
-        parser_name = f"{kebab_action}-sample"
+        parser_name = f"{action.replace("_", "-")}-sample"
         msg = f"{action} a sample"
         parents = [get_project_sample_parser()]
 
@@ -730,7 +731,7 @@ def setup_init_parser(parent_parser_subparsers):
     parser_init.add_argument(
         "--dropseq_tools",
         help=argparse.SUPPRESS,
-        required=True,
+        required=False,
         dest="dropseq_tools",
     )
 
