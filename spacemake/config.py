@@ -1397,9 +1397,11 @@ def get_variable_action_subparsers(parent_parser, variable):
         f"list-{variable.replace('_', '-')}",
         description=command_help["list"],
         help=command_help["list"],
-        aliases=[f"list_{variable}"],
     )
     list_parser.set_defaults(func=list_variables_cmdline, variable=variable)
+    # snake_case for backward compatibility. remove in a future update
+    list_parser_legacy = parent_parser.add_parser(f"list_{variable}",)
+    list_parser_legacy.set_defaults(func=list_variables_cmdline, variable=variable)
 
     func = add_update_delete_variable_cmdline
 
@@ -1408,9 +1410,15 @@ def get_variable_action_subparsers(parent_parser, variable):
         f"delete-{variable_singular.replace('_', '-')}",
         description=command_help["delete"],
         help=command_help["delete"],
-        aliases=[f"delete_{variable_singular}"],
     )
+    delete_parser_legacy = parent_parser.add_parser(f"delete_{variable_singular}",) 
     delete_parser.add_argument(
+        "--name",
+        help=f"name of the {variable_singular} to be deleted",
+        type=str,
+        required=True,
+    )
+    delete_parser_legacy.add_argument(
         "--name",
         help=f"name of the {variable_singular} to be deleted",
         type=str,
@@ -1423,7 +1431,14 @@ def get_variable_action_subparsers(parent_parser, variable):
             type=str,
             required=True,
         )
+        delete_parser_legacy.add_argument(
+            "--reference",
+            help=f"name of the reference to be deleted (genome, rRNA, ...)",
+            type=str,
+            required=True,
+        )
     delete_parser.set_defaults(func=func, action="delete", variable=variable)
+    delete_parser_legacy.set_defaults(func=func, action="delete", variable=variable)
 
     # add command
     add_parser = parent_parser.add_parser(
@@ -1431,9 +1446,13 @@ def get_variable_action_subparsers(parent_parser, variable):
         parents=[variable_add_update_parser()],
         description=command_help["add"],
         help=command_help["add"],
-        aliases=[f"add_{variable_singular}"],
+    )
+    add_parser_legacy = parent_parser.add_parser(
+        f"add_{variable_singular}",
+        parents=[variable_add_update_parser()],
     )
     add_parser.set_defaults(func=func, action="add", variable=variable)
+    add_parser_legacy.set_defaults(func=func, action="add", variable=variable)
 
     # update command
     update_parser = parent_parser.add_parser(
@@ -1441,9 +1460,12 @@ def get_variable_action_subparsers(parent_parser, variable):
         parents=[variable_add_update_parser(False)],
         description=command_help["update"],
         help=command_help["update"],
-        aliases=[f"update_{variable_singular}",],
     )
+    update_parser_legacy = parent_parser.add_parser(
+        f"update_{variable_singular}",
+        parents=[variable_add_update_parser(False)],)
     update_parser.set_defaults(func=func, action="update", variable=variable)
+    update_parser_legacy.set_defaults(func=func, action="update", variable=variable)
 
 
 def setup_config_parser(parent_parser_subparsers):

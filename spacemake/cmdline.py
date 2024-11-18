@@ -62,7 +62,6 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         required=False,  # Not required since kebab-case takes precedence
         nargs=nargs,
         default=None,  # No default here; rely on kebab-case
-        help=argparse.SUPPRESS,
         dest=f"{prepend.replace('-', '_')}{project_argument}",
     )
     parser.add_argument(
@@ -71,7 +70,6 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         required=False,
         nargs=nargs,
         default=None,
-        help=argparse.SUPPRESS,
         dest=f"{prepend.replace('-', '_')}{sample_argument}",
     )
 
@@ -103,7 +101,7 @@ def get_add_sample_sheet_parser():
         "--sample_sheet",
         type=str,
         help=argparse.SUPPRESS,
-        required=True,
+        required=False,
         dest="sample_sheet",
     )
     
@@ -118,7 +116,7 @@ def get_add_sample_sheet_parser():
         "--basecalls_dir",
         type=str,
         help=argparse.SUPPRESS,
-        required=True,
+        required=False,
         dest="basecalls_dir",
     )
 
@@ -566,24 +564,35 @@ def setup_project_parser(parent_parser_subparsers):
         description=help_desc["add_sample_sheet"],
         help=help_desc["add_sample_sheet"],
         parents=[get_add_sample_sheet_parser()],
-        aliases=["add_sample_sheet"],
+    )
+    sample_add_sample_sheet_legacy = subparsers.add_parser(
+        "add_sample_sheet",
+        parents=[get_add_sample_sheet_parser()],
     )
     sample_add_sample_sheet.set_defaults(func=add_sample_sheet_cmdline)
+    sample_add_sample_sheet_legacy.set_defaults(func=add_sample_sheet_cmdline)
 
     # ADD SAMPLES FROM YAML
     sample_add_samples_yaml = subparsers.add_parser(
         "add-samples-from-yaml",
         description=help_desc["add_samples_from_yaml"],
         help=help_desc["add_samples_from_yaml"],
-        aliases=["add_samples_from_yaml"],
     )
+    sample_add_samples_yaml_legacy = subparsers.add_parser("add_samples_from_yaml",)
     sample_add_samples_yaml.add_argument(
         "--samples_yaml",
         type=str,
         required=True,
         help="path to the .yaml file containing sample info",
     )
+    sample_add_samples_yaml_legacy.add_argument(
+        "--samples_yaml",
+        type=str,
+        required=True,
+        help="path to the .yaml file containing sample info",
+    )
     sample_add_samples_yaml.set_defaults(func=add_samples_from_yaml_cmdline)
+    sample_add_samples_yaml_legacy.set_defaults(func=add_samples_from_yaml_cmdline)
 
     # get set/remove parser for each main variable
     # this will add parser for:
