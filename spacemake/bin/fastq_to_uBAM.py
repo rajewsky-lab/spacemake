@@ -194,7 +194,7 @@ def main(args):
 
     # queues for communication between processes
     w = (
-        mf.Workflow("fastq_to_uBAM",total_pipe_buffer_MB=8)
+        mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
         # open reads2.fastq.gz
         .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
             input=mf.FIFO("read2", "rt"),
@@ -365,6 +365,13 @@ def parse_args():
         type=int,
         help="phred quality base (default=33)",
     )
+    parser.add_argument(
+        "--pipe-buffer",
+        default=4,
+        type=int,
+        help="How many megabytes of pipe-buffer to use. kernel settings is usually 64MB per user (default=4MB)",
+    )
+
     parser.add_argument(
         "--parallel", default=1, type=int, help="how many processes to spawn"
     )
