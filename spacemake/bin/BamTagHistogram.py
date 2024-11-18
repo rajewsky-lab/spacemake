@@ -128,7 +128,7 @@ def sort_function(input, output, n=8, sort_mem_gigs=8, header=None):
 
 def main(args):
     w = (
-        mf.Workflow("BamTagHistogram")
+        mf.Workflow("BamTagHistogram", total_pipe_buffer_MB=4)
         .BAM_reader(
             input=args.input,
             mode="S",
