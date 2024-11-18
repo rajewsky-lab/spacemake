@@ -1375,7 +1375,10 @@ def get_variable_action_subparsers(parent_parser, variable):
 
     # list command
     list_parser = parent_parser.add_parser(
-        f"list_{variable}", description=command_help["list"], help=command_help["list"]
+        f"list-{variable.replace('_', '-')}",
+        description=command_help["list"],
+        help=command_help["list"],
+        aliases=[f"list_{variable}"],
     )
     list_parser.set_defaults(func=list_variables_cmdline, variable=variable)
 
@@ -1383,9 +1386,10 @@ def get_variable_action_subparsers(parent_parser, variable):
 
     # delete command
     delete_parser = parent_parser.add_parser(
-        f"delete_{variable_singular}",
+        f"delete-{variable_singular.replace('_', '-')}",
         description=command_help["delete"],
         help=command_help["delete"],
+        aliases=[f"delete_{variable_singular}"],
     )
     delete_parser.add_argument(
         "--name",
@@ -1404,19 +1408,21 @@ def get_variable_action_subparsers(parent_parser, variable):
 
     # add command
     add_parser = parent_parser.add_parser(
-        f"add_{variable_singular}",
+        f"add-{variable_singular.replace('_', '-')}",
         parents=[variable_add_update_parser()],
         description=command_help["add"],
         help=command_help["add"],
+        aliases=[f"add_{variable_singular}"],
     )
     add_parser.set_defaults(func=func, action="add", variable=variable)
 
     # update command
     update_parser = parent_parser.add_parser(
-        f"update_{variable_singular}",
+        f"update-{variable_singular.replace('_', '-')}",
         parents=[variable_add_update_parser(False)],
         description=command_help["update"],
         help=command_help["update"],
+        aliases=[f"update_{variable_singular}",],
     )
     update_parser.set_defaults(func=func, action="update", variable=variable)
 
