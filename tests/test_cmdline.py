@@ -240,6 +240,14 @@ def test_sample(configured_root):
         "--sample-id=test1",
         "--map-strategy=rRNA:bowtie2->genome:STAR",
     )
+    # add a second run mode to the sample
+    sm(
+        "projects",
+        "update-sample",
+        "--project-id=test",
+        "--sample-id=test1",
+        "--run-mode=openst default"
+    )
 
 
 def test_fill_project_df(with_species):
