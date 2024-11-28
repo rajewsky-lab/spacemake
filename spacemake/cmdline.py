@@ -186,7 +186,7 @@ def get_sample_main_variables_parser(
             type=str,
             help="string constant definining mapping strategy. Can be multi-stage and use bowtie2 or STAR (see documentation)",
             required=False,
-            default=None,
+            default="STAR:genome",
             dest="map_strategy",
         )
         parser.add_argument(
