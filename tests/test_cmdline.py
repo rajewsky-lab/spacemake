@@ -246,7 +246,8 @@ def test_sample(configured_root):
         "update-sample",
         "--project-id=test",
         "--sample-id=test1",
-        "--run-mode=openst default"
+        "--run-mode=openst",
+        "--run-mode=default",
     )
 
 
