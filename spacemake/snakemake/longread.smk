@@ -32,7 +32,7 @@ lr_overview_csv = lr_overview_dir + 'overview.csv'
 LR_RAW_FILES = {}
 LR_SIGNATURE = {}
 LR_REPORT_STATS = []
-def get_longread_output():
+def get_longread_output(project_df=None, config=None, **kw):
     """
     This function is called from main.smk at least once 
     to determine which output files need to be generated

@@ -1,3 +1,8 @@
+import logging
+
+logger_name = "spacemake.preprocess.dge"
+logger = logging.getLogger(logger_name)
+
 def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
     import scanpy as sc
     import pandas as pd
@@ -88,75 +93,58 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
     import numpy as np
     import gzip
     import pandas as pd
-    from scipy.sparse import csr_matrix, vstack
+    from scipy.sparse import coo_matrix, hstack
 
-    ix = 0
-    mix = 0
-    matrices = []
     gene_names = []
 
     with gzip.open(dge_path, "rt") as dge:
         first_line = dge.readline().strip().split("\t")
         has_mt = False
         barcodes = first_line[1:]
-        ncol = len(barcodes)
-
-        # create an intermediate matrix, which will contain 1000 rows
-        # and cell_number columns. we will parse the dge file and fill
-        # this matrix line by line. Like this we create gene_number/1000 number
-        # of CSR (compressed sparse row) matrices which we join at the end
-        M = np.zeros((1000, ncol))
+        N_bc = len(barcodes)
+        X = None
 
         # read DGE line by line
         # first row: contains CELL BARCODEs
         # each next row contains one gene name, and the counts of that gene
         for line in dge:
-            vals = line.strip().split("\t")
-            # first element contains the gene name
-            # append gene name to gene_names
-            gene_names.append(vals[0])
-            if vals[0].lower().startswith("mt-"):
+            vals = line.strip()
+            _idx_tab = vals.index("\t")
+            _gene_name = vals[:_idx_tab]
+            gene_names.append(_gene_name)
+
+            if _gene_name.lower().startswith("mt-"):
                 has_mt = True
-
-            vals = vals[1:]
-
+                
             # store counts as np.array
-            vals = np.array(vals, dtype=np.int64)
+            _vals = np.fromstring(vals[_idx_tab:], dtype=np.int32, count=N_bc, sep='\t').flatten()
+            _idx_nonzero = np.argwhere(_vals != 0).flatten()
 
-            # update the 1000xcell_number matrix
-            M[ix] = vals
-
-            if ix % 1000 == 999:
-                # if we reached the end of M, make it sparse and append to other
-                # already read matrices
-                mix = mix + 1
-                matrices.append(csr_matrix(M))
-                ix = 0
-
-                # reset M
-                M = np.zeros((1000, ncol))
+            if len(_idx_nonzero) > 0:
+                gene_sp = coo_matrix((_vals[_idx_nonzero].astype(np.int32), (_idx_nonzero, np.zeros(len(_idx_nonzero)))), shape=(N_bc, 1), dtype=np.int32)
             else:
-                ix = ix + 1
+                gene_sp = coo_matrix((N_bc, 1), dtype=np.int32)
 
-        # get the leftovers: these are the overhang lines, when gene_number is
-        # not divisible by 1000
-        M = M[:ix]
-        matrices.append(csr_matrix(M))
+            if X is None:
+                 X = gene_sp
+            else:
+                 X = hstack([X, gene_sp])
 
-        # sparse expression matrix
-        X = vstack(matrices, format="csr")
+        if X is None:
+            X = coo_matrix((len(barcodes), 0), dtype=np.int32)
+    
         if not has_mt:
             # ensure we have an entry for mitochondrial transcripts even if it's just all zeros
             print(
                 "need to add mt-missing because no mitochondrial stuff was among the genes for annotation"
             )
             gene_names.append("mt-missing")
-            X = vstack([X, np.zeros(X.shape[1])]).tocsr()
+            X = hstack([X, np.zeros(X.shape[0])[:, None]])
 
-        # create anndata object, but we get the transpose of X, so matrix will
-        # be in CSC format
+        X = X.tocsr()
+        X = X.astype(np.float32)
         adata = anndata.AnnData(
-            X.T, obs=pd.DataFrame(index=barcodes), var=pd.DataFrame(index=gene_names)
+            X, obs=pd.DataFrame(index=barcodes), var=pd.DataFrame(index=gene_names)
         )
 
         # name the index
@@ -169,11 +157,13 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
         # calculate per shannon_entropy and string_compression per bead
         calculate_shannon_entropy_scompression(adata)
 
+        if adata.X.sum() == 0:
+            logger.warn(f"The DGE from {dge_path} is empty")
+
         return adata
 
 
 def load_external_dge(dge_path):
-    import anndata
     import scanpy as sc
 
     from scanpy._utils import check_nonnegative_integers
@@ -228,8 +218,6 @@ def parse_barcode_file(barcode_file):
 
 
 def attach_barcode_file(adata, barcode_file):
-    import pandas as pd
-
     bc = parse_barcode_file(barcode_file)
 
     # new obs has only the indices of the exact barcode matches
@@ -252,10 +240,18 @@ def attach_puck_variables(adata, puck_variables):
     adata.uns["puck_variables"] = puck_variables
 
     x_pos_max, y_pos_max = tuple(adata.obsm["spatial"].max(axis=0))
+    x_pos_min, y_pos_min = tuple(adata.obsm["spatial"].min(axis=0))
+    #print(f"PUCK VARS {puck_variables} X MIN {x_pos_min} X MAX {x_pos_max} Y MIN {y_pos_min} Y MAX {y_pos_max}")
 
     width_um = adata.uns["puck_variables"]["width_um"]
-    coord_by_um = x_pos_max / width_um
-    height_um = int(y_pos_max / coord_by_um)
+    coord_by_um = (x_pos_max - x_pos_min) / width_um
+
+    # this can be NaN if only one coordinate (only one cell, will fail)
+    if coord_by_um > 0:
+        height_um = int((y_pos_max - y_pos_min) / coord_by_um)
+    else:
+        height_um = 1 # avoid division by zero and error in reports
+        coord_by_um = 1
 
     adata.uns["puck_variables"]["height_um"] = height_um
     adata.uns["puck_variables"]["coord_by_um"] = coord_by_um

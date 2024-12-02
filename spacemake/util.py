@@ -2,12 +2,69 @@ import errno
 import os
 import logging
 
-from contextlib import ContextDecorator, contextmanager
+#from contextlib import ContextDecorator, contextmanager
 from spacemake.errors import SpacemakeError, FileWrongExtensionError
+from spacemake.contrib import __version__, __license__, __author__, __email__
 
 LINE_SEPARATOR = "-" * 50 + "\n"
 
 bool_in_str = ["True", "true", "False", "false"]
+
+def generate_kmers(k, nts='ACGT'):
+    if k == 0:
+        yield ''
+    elif k > 0:
+        for x in nts:
+            for mer in generate_kmers(k-1, nts=nts):
+                yield x + mer
+
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+    def __str__(self):
+        buf = ["dotdict"]
+        for k, v in self.items():
+            if not k.startswith("__"):
+                buf.append(f"  {k} = {v}")
+
+        return "\n".join(buf)
+
+
+def wc_fill(x, wc):
+    """
+    Versatile snakemake helper function that can render any string template used in the mapping and reports modules,
+    either filling in from a Wildcards object, or from a dotdict.
+    """
+    return x.format(
+        sample_id=getattr(wc, "sample_id", "NO_sample_id"),
+        project_id=getattr(wc, "project_id", "NO_project_id"),
+        species=getattr(wc, "species", "NO_species"),
+        ref_name=getattr(wc, "ref_name", "NO_ref_name"),
+        mapper=getattr(wc, "mapper", "NO_mapper"),
+        link_name=getattr(wc, "link_name", "NO_link_name"),
+        polyA_adapter_trimmed=getattr(wc, "polyA_adapter_trimmed", ""),
+        data_root_type=getattr(wc, "data_root_type", "complete_data"),
+    )
+
+def quiet_bam_open(*argc, **kw):
+    """_summary_
+
+    This wrapper around pysam.AlignmentFile() simply silences warnings about missing BAM index etc.
+    We don't care about the index and therefore these error messages are just spam.
+
+    Returns:
+        pysam.AlignmentFile: the sam/bam object as returned by pysam.
+    """
+    import pysam
+
+    save = pysam.set_verbosity(0)
+    bam = pysam.AlignmentFile(*argc, **kw)
+    pysam.set_verbosity(save)
+    return bam
 
 
 def assert_file(file_path, default_value=None, extension=["all"]):
@@ -50,12 +107,43 @@ def str2bool(var):
 
 
 def ensure_path(path):
-    import os
-
-
-def ensure_path(path):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    dirname = os.path.dirname(path)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
     return path
+
+def timed_loop(
+    src,
+    logger,
+    T=5,
+    chunk_size=10000,
+    template="processed {i} BAM records in {dT:.1f}sec. ({rate:.3f} k rec/sec)",
+    skim=0,
+):
+    from time import time
+
+    t0 = time()
+    t_last = t0
+    i = 0
+    for i, x in enumerate(src):
+        if skim:
+            if i % skim == 0:
+                yield x
+        else:
+            yield x
+
+        if i % chunk_size == 0:
+            t = time()
+            if t - t_last > T:
+                dT = t - t0
+                rate = i / dT / 1000.0
+                logger.info(template.format(**locals()))
+                t_last = t
+
+    t = time()
+    dT = t - t0
+    rate = i / dT / 1000.0
+    logger.info("Finished! " + template.format(**locals()))
 
 
 def FASTQ_src(src):
@@ -68,7 +156,7 @@ def FASTQ_src(src):
 def BAM_src(src):
     import pysam
 
-    bam = pysam.AlignmentFile(src, "rb", check_sq=False)
+    bam = quiet_bam_open(src, "rb", check_sq=False)
     for read in bam.fetch(until_eof=True):
         yield read.query_name, read.query_sequence, read.query_qualities
 
@@ -77,6 +165,20 @@ def read_fq(fname, skim=0):
     import gzip
 
     logger = logging.getLogger("spacemake.util.read_fq")
+    if str(fname) == "None":
+        logger.warning("yielding empty data forever")
+        while True:
+            yield ("no_qname", "no_seq", "no_qual")
+
+    if "*" in fname:
+        logger.warning("EXPERIMENTAL: fname contains wildcards")
+        from glob import glob
+
+        for match in sorted(glob(fname)):
+            for rec in read_fq(match, skim=skim):
+                yield rec
+
+    logger.info(f"iterating over reads from '{fname}'")
     if fname.endswith(".gz"):
         src = FASTQ_src(gzip.open(fname, mode="rt"))
     elif fname.endswith(".bam"):
@@ -86,14 +188,36 @@ def read_fq(fname, skim=0):
     else:
         src = FASTQ_src(fname)  # assume its a stream or file-like object already
 
-    for i, (name, seq, qual) in enumerate(src):
-        if not skim:
-            yield name, seq, qual
-        else:
-            if (i % skim) == 0:
-                yield name, seq, qual
+    n = 0
+    for record in timed_loop(src, logger, T=15, template="processed {i} reads in {dT:.1f}sec. ({rate:.3f} k rec/sec)", skim=skim):
+        yield record
+        n += 1
 
-    logger.info(f"processed {i} FASTQ records from '{fname}'")
+    logger.info(f"processed {n} FASTQ records from '{fname}'")
+
+
+def make_header(bam, progname):
+    import os
+    import sys
+
+    header = bam.header.to_dict()
+    # if "PG" in header:
+    # for pg in header['PG']:
+    #     if pg["ID"] == progname:
+    #         progname = progname + ".1"
+
+    pg_list = header.get("PG", [])
+    pg = {
+        "ID": progname,
+        "PN": progname,
+        "CL": " ".join(sys.argv[1:]),
+        "VN": __version__,
+    }
+    if len(pg_list):
+        pg["PP"] = pg_list[-1]["ID"]
+
+    header["PG"] = pg_list + [pg]
+    return header
 
 
 def dge_to_sparse(dge_path):
@@ -246,32 +370,67 @@ def fasta_chunks(lines, strip=True, fuse=True):
         yield chunk, "".join(data)
 
 
-@contextmanager
+# @contextmanager
+# def message_aggregation(log_listen="spacemake", print_logger=False, print_success=True):
+#     message_buffer = []
+
+#     log = logging.getLogger(log_listen)
+#     log.setLevel(logging.INFO)
+
+#     class MessageHandler(logging.NullHandler):
+#         def handle(this, record):
+#             if record.name == log_listen:
+#                 if print_logger:
+#                     print(f"{log_listen}: {record.msg}")
+#                 else:
+#                     print(record.msg)
+
+#     log.addHandler(MessageHandler())
+
+#     try:
+#         yield True
+
+#         if print_success:
+#             print(f"{LINE_SEPARATOR}SUCCESS!")
+
+#     except SpacemakeError as e:
+#         print(e)
+
 def message_aggregation(log_listen="spacemake", print_logger=False, print_success=True):
-    message_buffer = []
+    from functools import wraps
 
-    log = logging.getLogger(log_listen)
-    log.setLevel(logging.INFO)
+    def the_decorator(func):
+        @wraps(func)
+        def wrapper(*argc, **kw):
+            message_buffer = []
 
-    class MessageHandler(logging.NullHandler):
-        def handle(this, record):
-            if record.name == log_listen:
-                if print_logger:
-                    print(f"{log_listen}: {record.msg}")
-                else:
-                    print(record.msg)
+            log = logging.getLogger(log_listen)
+            log.setLevel(logging.INFO)
 
-    log.addHandler(MessageHandler())
+            class MessageHandler(logging.NullHandler):
+                def handle(this, record):
+                    if record.name == log_listen:
+                        if print_logger:
+                            print(f"{log_listen}: {record.msg}")
+                        else:
+                            print(record.msg)
 
-    try:
-        yield True
+            log.addHandler(MessageHandler())
 
-        if print_success:
-            print(f"{LINE_SEPARATOR}SUCCESS!")
+            try:
+                res = func(*argc, **kw)
+            except (SpacemakeError, NotImplementedError) as err:
+                print(f"CAUGHT A SPACEMAKE ERROR {err}")
+                # print(err)
+                return err
+            else:
+                if print_success:
+                    print(f"{LINE_SEPARATOR}SUCCESS!")
+                return res
 
-    except SpacemakeError as e:
-        print(e)
+        return wrapper        
 
+    return the_decorator
 
 def str_to_list(value):
     # if list in string representation, return the list
@@ -302,3 +461,120 @@ def check_star_index_compatibility(star_index_dir):
                 f"STAR index version ({index_version}) is"
                 + f" incompatible with your STAR version ({star_version})"
             )
+
+
+def load_yaml(path, mode="rt"):
+    if not path:
+        return {}
+    else:
+        import yaml
+
+        return yaml.load(path, mode)
+
+
+def setup_logging(
+    args,
+    name="spacemake.main",
+    log_file="",
+    FORMAT="%(asctime)-20s\t{sample:30s}\t%(name)-50s\t%(levelname)s\t%(message)s",
+):
+    sample = getattr(args, "sample", "na")
+    import setproctitle
+    if name != "spacemake.main":
+        setproctitle.setproctitle(f"{name} {sample}")
+
+    FORMAT = FORMAT.format(sample=sample)
+
+    log_level = getattr(args, "log_level", "INFO")
+    lvl = getattr(logging, log_level)
+    logging.basicConfig(level=lvl, format=FORMAT)
+    root = logging.getLogger("spacemake")
+    root.setLevel(lvl)
+
+    log_file = getattr(args, "log_file", log_file)
+    if log_file:
+        fh = logging.FileHandler(filename=ensure_path(log_file), mode="a")
+        fh.setFormatter(logging.Formatter(FORMAT))
+        root.debug(f"adding log-file handler '{log_file}'")
+        root.addHandler(fh)
+
+    if hasattr(args, "debug"):
+        # cmdline requested debug output for specific domains (comma-separated)
+        for logger_name in args.debug.split(","):
+            if logger_name:
+                root.info(f"setting domain {logger_name} to DEBUG")
+                logging.getLogger(logger_name.replace("root", "")).setLevel(
+                    logging.DEBUG
+                )
+
+    logger = logging.getLogger(name)
+    logger.debug("started logging")
+    for k, v in sorted(vars(args).items()):
+        logger.debug(f"cmdline arg\t{k}={v}")
+
+    return logger
+
+def setup_smk_logging(name="spacemake.smk", **kw):
+    import argparse
+    args = argparse.Namespace(**kw)
+    return setup_logging(args, name=name)
+
+default_log_level = "INFO"
+
+
+def make_minimal_parser(prog="", usage="", **kw):
+    import argparse
+
+    parser = argparse.ArgumentParser(prog=prog, usage=usage, **kw)
+    parser.add_argument(
+        "--log-file",
+        default=f"{prog}.log",
+        help=f"place log entries in this file (default={prog}.log)",
+    )
+    parser.add_argument(
+        "--log-level",
+        default=default_log_level,
+        help=f"change threshold of python logging facility (default={default_log_level})",
+    )
+    parser.add_argument(
+        "--debug",
+        default="",
+        help=f"comma-separated list of logging-domains for which you want DEBUG output",
+    )
+    parser.add_argument(
+        "--sample", default="sample_NA", help="sample_id (where applicable)"
+    )
+    return parser
+
+
+def load_config_with_fallbacks(args, try_yaml="config.yaml"):
+    """
+    Tries to load spacemake configuration from
+        1) args.config
+        2) try_yaml
+        3) builtin default from spacamake package
+
+    The entire configuration is attached to the args namespace such that
+    args.config["barcode_flavors"]["dropseq] can work.
+    """
+    from spacemake.config import ConfigFile
+
+    config = None
+    if hasattr(args, "config") and os.access(args.config, os.R_OK):
+        config = ConfigFile.from_yaml(args.config)
+    elif os.access(try_yaml, os.R_OK):
+        config = ConfigFile.from_yaml(try_yaml)
+    else:
+        builtin = os.path.join(os.path.dirname(__file__), "data/config/config.yaml")
+        config = ConfigFile.from_yaml(builtin)
+
+    args_kw = vars(args)
+    # try:
+    #     args_kw["log_level"] = config.variables["logging"]["level"]
+    # except KeyError:
+    #     pass
+
+    args_kw["config"] = config.variables
+    import argparse
+
+    return argparse.Namespace(**args_kw)

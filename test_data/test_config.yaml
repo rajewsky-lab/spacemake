@@ -1,0 +1,265 @@
+root_dir: '.'
+temp_dir: '/tmp'
+external_bin: 
+        dropseq_tools: '/data/rajewsky/shared_bins/Drop-seq_tools-2.5.1/'
+logging:
+  level: INFO
+  debug: "spacemake.util.read_fq"
+
+puck_data:
+    barcode_file: 'predictions_ml.csv'
+    root: 'puck_data'
+
+pucks:
+    default:
+        width_um: 3000
+        spot_diameter_um: 10
+    visium:
+        barcodes: 'puck_data/visium_barcode_positions.csv'
+        width_um: 6500
+        spot_diameter_um: 55
+    seq_scope:
+        width_um: 1000
+        spot_diameter_um: 1
+    slide_seq:
+        width_um: 3000
+        spot_diameter_um: 10
+    test_puck:
+        width_um: 4000
+        spot_diameter_um: 1 
+    openst:
+        width_um: 1200
+        spot_diameter_um: 0.6
+        coordinate_system: 'puck_data/openst_coordinate_system.csv'
+
+run_modes:
+    default:
+        n_beads: 100000
+        umi_cutoff: [100, 300, 500]
+        clean_dge: False
+        detect_tissue: False
+        count_intronic_reads: True
+        count_mm_reads: False
+        mesh_data: False
+        mesh_type: 'circle'
+        mesh_spot_diameter_um: 55
+        mesh_spot_distance_um: 100
+    visium:
+        n_beads: 10000
+        umi_cutoff: [1000]
+        clean_dge: False
+        detect_tissue: True
+        count_intronic_reads: False
+        count_mm_reads: True
+    slide_seq:
+        n_beads: 100000
+        umi_cutoff: [50]
+        clean_dge: False
+        detect_tissue: False
+    scRNA_seq:
+        n_beads: 10000
+        umi_cutoff: [500]
+        detect_tissue: False
+        count_intronic_reads: True
+        count_mm_reads: False
+    seq_scope:
+        clean_dge: false
+        count_intronic_reads: false
+        count_mm_reads: false
+        detect_tissue: false
+        mesh_data: true
+        mesh_spot_diameter_um: 10
+        mesh_spot_distance_um: 15
+        mesh_type: hexagon
+        n_beads: 1000
+        umi_cutoff:
+        - 100
+        - 300
+    spatial_rm:
+        clean_dge: false
+        count_intronic_reads: false
+        count_mm_reads: false
+        detect_tissue: false
+        mesh_data: true
+        mesh_spot_diameter_um: 10
+        mesh_spot_distance_um: 15
+        mesh_type: hexagon
+        n_beads: 1000
+        umi_cutoff:
+        - 500
+        - 1000
+    openst:
+        clean_dge: false
+        count_intronic_reads: true
+        count_mm_reads: true
+        detect_tissue: false
+        mesh_data: true
+        mesh_spot_diameter_um: 7
+        mesh_spot_distance_um: 7
+        mesh_type: hexagon
+        n_beads: 100000
+        polyA_adapter_trimming: true
+        spatial_barcode_min_matches: 0.1
+        umi_cutoff:
+        - 100
+        - 250
+        - 500
+  
+
+barcode_flavors:
+    default:
+        cell: "r1[0:12]"
+        UMI: "r1[12:20]"
+    dropseq:
+        cell: "r1[0:12]"
+        UMI: "r1[12:20]"
+    slide_seq_14bc:
+        cell: "r1[0:14]"
+        UMI: "r1[14:23]"
+    slide_seq_15bc:
+        cell: "r1[0:14]"
+        UMI: "r1[15:23]"
+    visium:
+        cell: "r1[0:16]"
+        UMI: "r1[16:28]"
+    sc_10x_v2:
+        cell: "r1[0:16]"
+        UMI: "r1[16:26]"
+    seq_scope:
+        UMI: "r2[0:9]"
+        cell: "r1[0:20]"
+    nextflex:
+        min_qual_trim: 20
+        cell: "'A'"
+        read1: "None"
+        UMI: "r2[:4] + r2[-4:]"
+        seq: "r2[4:-4]"
+        qual: "r2_qual[4:-4]"
+    openst:
+        UMI: "r2[0:9]"
+        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        cell: "r1[2:27]"
+
+adapters:
+    optical_primer: GAATCACGATACGTACACCA
+    TSO_SMART: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+    SMART: AAGCAGTGGTATCAACGCAGAGTG
+    smart: AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTC
+    TSO_10x: AAGCAGTGGTATCAACGCAGAGTACATGGG
+    chromium_bead: CTACACGACGCTCTTCCGATCT
+    dropseq_bead: AAGCAGTGGTATCAACGCAGAGTAC
+    polyA: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    polyG: GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+    nextflex_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACTGACCAATCTCGTATGCCGTCTTCTGCTTGAA
+    truseq_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACCCGTCCA
+
+adapter_flavors:
+  SMARTER:
+    cut_right:
+    - Q:
+        min_base_quality: 30
+    - polyA:
+        max_error: 0.25
+        min_overlap: 3
+    paired_end: replace_N
+  chromium:
+    cut_right:
+    - Q:
+        min_base_quality: 32
+    - polyA:
+        max_error: 0.25
+        min_overlap: 3
+    - polyG:
+        max_error: 0.1
+        min_overlap: 3
+  dropseq:
+    cut_left:
+    - TSO_SMART:
+        max_error: 0.1
+        min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 30
+    - polyA:
+        max_error: 0.25
+        min_overlap: 3
+    - polyG:
+        max_error: 0.1
+        min_overlap: 3
+    paired_end: single-end
+  default:
+    cut_left:
+    - TSO_SMART:
+          max_error: 0.1
+          min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 30
+    - polyA:
+        max_error: 0.25
+        min_overlap: 3
+    - polyG:
+        max_error: 0.1
+        min_overlap: 3
+    paired_end: single-end
+        
+quant:
+  default:
+    counter_class: "spacemake.quant.DefaultCounter"
+    channels: 
+      - "counts"
+      - "exonic_counts"
+      - "exonic_reads"
+      - "intronic_counts"
+      - "intronic_reads"
+    X_counts: ["exonic_counts", "intronic_counts"]
+    alignment_priorities: {
+        'C': 101, # coding exon
+        'c': 100, # coding exon (lower case == antisense)
+        'U': 51,  # UTR exon
+        'u': 50,
+        'CU': 51, # overlaps both, CDS+UTR (should in fact never occur as 'CU')
+        'cu': 50,
+        'N': 21, # exon of non-coding transcript
+        'n': 20,
+        'I': 11, # intronic region
+        'i': 10,
+        '-': 0,
+    }
+    gene_priorities: {
+        'C': 101, # coding exon
+        'c': 100, # coding exon (lower case == antisense)
+        'U': 51,  # UTR exon
+        'u': 50,
+        'CU': 51, # overlaps both, CDS+UTR (should in fact never occur as 'CU')
+        'cu': 50,
+        'N': 21, # exon of non-coding transcript
+        'n': 20,
+        'I': 11, # intronic region
+        'i': 10,
+        '-': 0,
+    }
+    exonic_tags: ["C", "U", "CU", "N", "c", "u", "cu", "n"]
+    intronic_tags: ["I", "i"]
+    alignment_selection: priority
+    exon_intron_disambiguation: "exon_wins"
+  miRNA:
+    alignment_selection: take_first
+  chrom:
+    alignment_selection: take_first    
+    gene_selection: chrom
+  custom_index:
+    alignment_selection: take_first_plus
+    gene_selection: chrom
+species:
+    test_hsa:
+        genome:
+            annotation: "{spacemake_dir}/test_data/test_genome.gtf.gz"
+            sequence: "{spacemake_dir}/test_data/test_genome.fa.gz"
+        miRNA:
+            annotation: "{spacemake_dir}/test_data/mirgenedb.hsa.mature.gtf.gz"
+            sequence: "{spacemake_dir}/test_data/mirgenedb.hsa.mature.fa.gz"
+        rRNA:
+            annotation: ''
+            sequence: "{spacemake_dir}/test_data/rRNA_hsa.fa.gz"
+

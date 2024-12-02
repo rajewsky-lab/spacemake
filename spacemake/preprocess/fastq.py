@@ -378,7 +378,7 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag):
                 dT = t2 - t0
                 rate = n_rec / dT
                 logger.info(
-                    "processed {0} reads in {1:.0f} seconds (average {2:.0f} reads/second).".format(
+                    "processed {0:,} reads in {1:.0f} seconds (average {2:,.0f} reads/second).".format(
                         n_rec, dT, rate
                     )
                 )
@@ -540,7 +540,9 @@ def main_combinatorial(args):
     Qfq = mp.Queue(
         args.parallel * 5
     )  # FASTQ reads from process_fastq->process_combinatorial
-    Qres = mp.Queue()  # extracted BCs from process_combinatorial->collector
+    Qres = mp.Queue(
+        args.parallel * 25
+    )  # extracted BCs from process_combinatorial->collector
     Qerr = mp.Queue()  # child-processes can report errors back to the main process here
 
     # Proxy objects to allow workers to report statistics about the run
@@ -690,7 +692,9 @@ def main_dropseq(args):
     Qfq = mp.Queue(
         args.parallel * 5
     )  # FASTQ reads from process_fastq->process_combinatorial
-    Qres = mp.Queue()  # extracted BCs from process_combinatorial->collector
+    Qres = mp.Queue(
+        args.parallel * 25
+    )  # extracted BCs from process_combinatorial->collector
     Qerr = mp.Queue()  # child-processes can report errors back to the main process here
 
     # Proxy objects to allow workers to report statistics about the run
