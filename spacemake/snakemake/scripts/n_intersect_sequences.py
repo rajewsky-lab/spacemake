@@ -1,4 +1,5 @@
 import logging
+import os
 
 import multiprocessing as mp
 import pandas as pd
@@ -14,7 +15,8 @@ Usage:
         --query input_reads.txt \
         --target target_file1.txt target_file2.txt \
         --target-id id1 id2 \
-        --summary-output output_summary.txt
+        --summary-output output_summary.txt \
+        --output target_output1.txt target_output2.txt
 
 Author:
     Daniel León-Periñán
@@ -73,37 +75,31 @@ def setup_parser(parser):
     parser.add_argument(
         "--target",
         type=str,
-        nargs="+",
+        nargs="*",
         help="target puck files against which search is performed",
         required=True,
     )
 
     parser.add_argument(
+        "--output",
+        nargs="+",
+        type=str,
+        help="where to save puck files, in the same order as the --target",
+        default="",
+    )
+
+    parser.add_argument(
         "--target-id",
         type=str,
-        nargs="+",
+        nargs="*",
         help="target puck ids for summary output",
         required=True,
     )
 
     parser.add_argument(
-        "--target-tag",
+        "--target-column",
         type=str,
-        help="if input is a bam file, the specified tag will be used as the sequence",
-        default="CB",
-    )
-
-    parser.add_argument(
-        "--target-plain-skip",
-        type=int,
-        help="number of lines to skip, if target input is a plain text file",
-        default=None,
-    )
-
-    parser.add_argument(
-        "--target-plain-column",
-        type=int,
-        help="column to parse from target, if input is a plain text file",
+        help="column name to parse from target",
         default=None,
     )
 
@@ -119,7 +115,8 @@ def setup_parser(parser):
         "--summary-output",
         type=str,
         help="a summary output file containing the number of matches between query and target, per target file",
-        required=True,
+        required=False,
+        default="",
     )
 
     parser.add_argument(
@@ -127,6 +124,14 @@ def setup_parser(parser):
         type=float,
         default=0,
         help="targets with 'matching_ratio' above --min-threshold are marked as True; else, False.",
+        required=False,
+    )
+
+    parser.add_argument(
+        "--chunksize",
+        type=int,
+        default=int(100 * 1e6),
+        help="number of query sequences per processing chunk (default: 100M)",
         required=False,
     )
 
@@ -142,114 +147,61 @@ def setup_parser(parser):
     return parser
 
 
-def BAM_src(src: str, tag: str = None) -> tuple:
-    """
-    Generate read data from a BAM file.
-
-    :param src: Path to the BAM file.
-    :type src: str
-    :param tag: Tag to be used as the sequence. Defaults to None.
-    :type tag: str, optional
-    :yields: Tuple containing read name, sequence, and quality.
-    :rtype: tuple
-    """
-
-    import pysam
-
-    bam = pysam.AlignmentFile(src, "rb", check_sq=False)
-    for read in bam.fetch(until_eof=True):
-        if tag is None:
-            yield read.query_name, read.query_sequence, read.query_qualities
-        else:
-            yield None, read.get_tag(tag), None
-
-
-def plain_src(f: str, skip: int = 0, column: int = 0, separator: str = "\t") -> tuple:
-    """
-    Generate read data from a plain text file.
-
-    :param f: Path to the plain text file.
-    :type f: str
-    :param skip: Number of lines to skip. Defaults to 0.
-    :type skip: int, optional
-    :param column: Column to parse from the file. Defaults to 0.
-    :type column: int, optional
-    :param separator: Character for column separation. Defaults to "\t".
-    :type separator: str, optional
-    :yields: Tuple containing read name, sequence, and quality.
-    :rtype: tuple
-    """
-    
-    reads = pd.read_csv(f, sep=separator, skiprows=skip)
-    reads = reads.iloc[:, column]
-
-    for read in reads:
-        yield None, read, None
-
-
-def read_with_tag(
-    f: str, tag: str = None, skip: int = None, column: int = 0, separator: str = "\t"
-) -> str:  
-    """
-    Read data from various sources based on the file type.
-
-    :param f: Path to the input file.
-    :type f: str
-    :param tag: Tag to be used as the sequence. Defaults to None.
-    :type tag: str, optional
-    :param skip: Number of lines to skip (plain text files only). Defaults to None.
-    :type skip: int, optional
-    :param column: Column to parse from the file (plain text files only). Defaults to 0.
-    :type column: int, optional
-    :param separator: Character for column separation (plain text files only). Defaults to "\t".
-    :type separator: str, optional
-    :yields: Sequence from the input file.
-    :rtype: str
-    """
-    import gzip
-
-    if type(f) is not str:
-        src = FASTQ_src(f)  # assume its a stream or file-like object already
-    elif f.endswith(".txt") or f.endswith(".txt.gz"):
-        src = plain_src(f, skip, column, separator)
-    elif f.endswith(".gz"):
-        src = FASTQ_src(gzip.open(f, mode="rt"))
-    elif f.endswith(".bam"):
-        src = BAM_src(f, tag=tag)
-    else:
-        src = FASTQ_src(open(f))
-
-    for _, seq, _ in src:
-        yield seq
-
-
 # TODO: use a partial function to pass args to not use global context
-def find_matches(f: str):
+def find_matches(_target, df=None):
     """
     Find matches between query and target sequences.
 
-    :param f: Target file to compare against query sequences.
-    :type f: str
+    :param i: iterator index for the file argument, to compare against query sequences.
+    :type i: int
     :returns: Tuple containing information about the target file, number of barcodes, number of matching barcodes, and the matching ratio.
     :rtype: tuple
     """
     global query_seqs, args
 
-    start = time.time()
-    target = set(
-        read_with_tag(
-            f,
-            args.target_tag,
-            args.target_plain_skip,
-            args.target_plain_column,
-            args.target_separator,
+    if isinstance(_target, int):
+        f_in = args.target[_target]
+        df = pd.read_csv(f_in, sep=args.target_separator)
+        reads = df[args.target_column]
+        target = set(reads)
+        if args.output != "":
+            f_out = args.output[_target]
+    elif isinstance(_target, set):
+        f_in = None
+        target = _target
+        f_out = args.output[0]
+    else:
+        raise ValueError(
+            "_target must be either integer (will use as index for 'args.target' or set of unique reads"
         )
-    )
-    n_matches = len(target.intersection(query_seqs))
-    pct_matches_target = n_matches / len(target)
-    print(f"queried {f} in {round(time.time()-start, 2)} s")
 
-    return (f, len(target), n_matches, pct_matches_target)
+    start = time.time()
+    _intersection = target.intersection(query_seqs)
+    n_matches = len(_intersection)
+    print(f"queried {len(target):,} barcodes and found {n_matches:,} matches in {round(time.time() - start, 2):,} seconds")
+
+    if args.output != "":
+        df_matched = df[df[args.target_column].isin(list(_intersection))]
+        df_matched = df_matched[["cell_bc", "x_pos", "y_pos"]]
+        df_matched.to_csv(
+            f_out, mode="a", header=not os.path.exists(f_out), index=False
+        )
+        print(f"saved puck file into {f_out}")
+
+    return (f_in, len(target), n_matches)
+
+
+def generate_puck_barcode_summary(df):
+    df_summary = pd.DataFrame(
+        {
+            "x_pos_min_px": [df.x_pos.min()],
+            "x_pos_max_px": [df.x_pos.max()],
+            "y_pos_min_px": [df.y_pos.min()],
+            "y_pos_max_px": [df.y_pos.max()],
+        }
+    )
+
+    return df_summary
 
 
 @message_aggregation(logger_name)
@@ -267,38 +219,100 @@ def cmdline():
 
     args = parser.parse_args()
 
+    if len(args.target) == 0:
+        df = pd.DataFrame(
+            columns=["puck_barcode_file", "n_barcodes", "n_matching", "matching_ratio"],
+        )
+        df.to_csv(args.summary_output, index=False)
+
     if len(args.target_id) != len(args.target):
         raise ValueError(
             f"target_id ({len(args.target_id)}) and target ({len(args.target)}) are different in size"
         )
 
-    query_seqs = read_with_tag(
+    if args.output == "" and args.summary_output == "":
+        raise ValueError("One of --output or --summary-output must have a value")
+
+    # Create a df for the final results
+    result_df = pd.DataFrame()
+
+    # Load the query file as chunks
+    query_df = pd.read_csv(
         args.query,
-        args.query_tag,
-        args.query_plain_skip,
-        args.query_plain_column,
-        args.query_separator,
-    )
-    logger.info(f"read query file from '{args.query}'")
-
-    # get unique reads into a global context
-    query_seqs = set(query_seqs)
-    logger.info(f"hashed unique query reads")
-    logger.info(
-        f"querying against {len(args.target)} targets with {args.n_jobs} parallel jobs"
+        sep=args.query_separator,
+        skiprows=args.query_plain_skip,
+        chunksize=args.chunksize,
     )
 
-    with mp.Pool(args.n_jobs) as pool:
-        results = pool.map(find_matches, args.target)
+    if len(args.output) == 1:
+        df = pd.read_csv(args.target[0], sep=args.target_separator).rename(
+            columns={"xcoord": "x_pos", "ycoord": "y_pos"}
+        )
+        reads = df[args.target_column]
+        target = set(reads)
 
-    df = pd.DataFrame(
-        results,
-        columns=["puck_barcode_file", "n_barcodes", "n_matching", "matching_ratio"],
-    )
-    df["puck_barcode_file_id"] = args.target_id
-    df['pass_threshold'] = 0
-    df['pass_threshold'][df['matching_ratio'] > args.min_threshold] = 1
-    df.to_csv(args.summary_output, index=False)
+    # Process in chunks
+    for query_df_chunk in query_df:
+        query_seqs = query_df_chunk.iloc[:, args.query_plain_column]
+        logger.info(
+            f"read chunk of {round(len(query_seqs)/1e6, 2)}M sequences from query file at '{args.query}'"
+        )
+
+        # get unique reads into a global context
+        query_seqs = set(query_seqs)
+        logger.info(f"hashed unique query reads")
+
+        if len(args.target) == 1:
+            _, n_barcodes, n_matches = find_matches(target, df)
+            results = [(args.target[0], n_barcodes, n_matches)]
+        elif len(args.target) > 1:
+            logger.info(
+                f"querying against {len(args.target)} targets with {args.n_jobs} parallel jobs"
+            )
+            with mp.Pool(args.n_jobs) as pool:
+                results = pool.map(find_matches, range(len(args.target)))
+
+        result_df_chunk = pd.DataFrame(
+            results,
+            columns=["puck_barcode_file", "n_barcodes", "n_matching"],
+        )
+        result_df_chunk["puck_barcode_file_id"] = args.target_id
+        result_df = pd.concat([result_df, result_df_chunk])
+
+    if len(args.output) == 1 and args.summary_output != "":
+        df_summary = generate_puck_barcode_summary(df)
+        result_df = (
+            result_df.groupby(
+                ["puck_barcode_file", "puck_barcode_file_id", "n_barcodes"]
+            )
+            .sum()
+            .reset_index()
+        )
+        df_summary["puck_barcode_file"] = result_df["puck_barcode_file"]
+        df_summary["puck_barcode_file_id"] = result_df["puck_barcode_file_id"]
+        df_summary["n_barcodes"] = result_df["n_barcodes"]
+        df_summary["n_matching"] = result_df["n_matching"]
+        df_summary["matching_ratio"] = (
+            df_summary["n_matching"] / df_summary["n_barcodes"]
+        )
+        df_summary["parsed_barcode_file"] = args.output
+        df_summary.to_csv(args.summary_output, index=False)
+
+    elif args.summary_output != "":
+        # group per puck_barcode_file, and compute sum
+        result_df = (
+            result_df.groupby(
+                ["puck_barcode_file", "puck_barcode_file_id", "n_barcodes"]
+            )
+            .sum()
+            .reset_index()
+        )
+        result_df["matching_ratio"] = result_df["n_matching"] / result_df["n_barcodes"]
+        result_df["pass_threshold"] = 0
+        result_df["pass_threshold"][
+            result_df["matching_ratio"] > args.min_threshold
+        ] = 1
+        result_df.to_csv(args.summary_output, index=False)
 
 
 if __name__ == "__main__":

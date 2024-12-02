@@ -77,11 +77,10 @@ split_reads_read_type = split_reads_root + "read_type_num.txt"
 # post dropseq and QC #
 #######################
 
-qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.html"
+qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}{polyA_adapter_trimmed}.html"
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = "{polyA_adapter_trimmed}.txt.gz"
 barcode_readcounts = complete_data_root + "/out_readcounts" + barcode_readcounts_suffix
-barcode_readcounts_prealigned = complete_data_root + "/out_readcounts_prealigned.txt.gz"
 strand_info = split_reads_strand_type
 
 # united final.bam
@@ -91,11 +90,15 @@ top_barcodes_clean = complete_data_root + "/topBarcodesClean" + top_barcodes_suf
 
 spatial_barcodes = (
     complete_data_root
-    + "/puck_barcode_files/spatialBarcodes_{puck_barcode_file_id}.txt"
+    + "/puck_barcode_files/spatialBarcodes_{puck_barcode_file_id}{polyA_adapter_trimmed}.txt"
 )
 parsed_spatial_barcodes = (
     complete_data_root
-    + "/puck_barcode_files/spatial_barcodes_{puck_barcode_file_id}.csv"
+    + "/puck_barcode_files/spatial_barcodes_{puck_barcode_file_id}{polyA_adapter_trimmed}.csv"
+)
+parsed_spatial_barcodes_summary = (
+    complete_data_root
+    + "/puck_barcode_files/spatial_barcodes_summary_{puck_barcode_file_id}.csv"
 )
 parsed_spatial_barcodes_pc = (
     complete_data_root
@@ -105,9 +108,11 @@ stats_prealigned_spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/stats_prealigned_spatial_barcodes_{puck_barcode_file_id}.csv"
 )
-puck_barcode_files_summary = complete_data_root + "/puck_barcode_files_summary.csv"
-puck_count_barcode_matches_summary = complete_data_root + "/puck_count_barcode_matches.csv"
-puck_count_prealigned_barcode_matches_summary = complete_data_root + "/puck_count_prealigned_barcode_matches.csv"
+bc_out_dir = complete_data_root + "/puck_barcode_files/.flag{polyA_adapter_trimmed}"
+
+puck_barcode_files_filtered = complete_data_root + "/puck_barcode_files_filtered{polyA_adapter_trimmed}.csv"
+puck_barcode_files_summary = complete_data_root + "/puck_barcode_files_summary{polyA_adapter_trimmed}.csv"
+puck_count_prealigned_barcode_matches_summary = complete_data_root + "/puck_count_prealigned_barcode_matches{polyA_adapter_trimmed}.csv"
 
 # dge creation
 dge_root = data_root + "/dge"
@@ -121,6 +126,10 @@ dge_out_summary = (
     + dge_out_suffix
     + ".{n_beads}_beads_{puck_barcode_file_id}.summary.txt"
 )
+
+# dge checkpoint
+dge_out_dir = dge_root + "/.flag{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}"
+dge_out_done = dge_root + "/.flag{dge_type}{dge_cleaned}{polyA_adapter_trimmed}{mm_included}.{n_beads}_beads{is_external}.{run_mode}.{umi_cutoff}.dge.done"
 
 # processed dge
 h5ad_dge_suffix = "{is_external}.h5ad"
@@ -156,19 +165,19 @@ dge_spatial_obs = (
 dge_spatial_collection = (
     dge_out_prefix
     + dge_out_suffix
-    + ".spatial_beads_puck_collection"
+    + ".{n_beads}_beads_puck_collection"
     + h5ad_dge_suffix
 )
 dge_spatial_collection_obs = (
     dge_out_prefix
     + dge_out_suffix
-    + ".spatial_beads_puck_collection"
+    + ".{n_beads}_beads_puck_collection"
     + h5ad_dge_obs_suffix
 )
 
 # spatial + meshed dge
 dge_spatial_mesh_suffix = (
-    ".spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}_{puck_barcode_file_id}"
+    ".{n_beads}_beads.mesh_{spot_diameter_um}_{spot_distance_um}_{puck_barcode_file_id}"
 )
 dge_spatial_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_mesh_suffix
 dge_spatial_mesh = dge_spatial_mesh_prefix + h5ad_dge_suffix
@@ -176,7 +185,7 @@ dge_spatial_mesh_obs = dge_spatial_mesh_prefix + h5ad_dge_obs_suffix
 
 # spatial + collection + meshed dge
 dge_spatial_collection_mesh_suffix = (
-    ".spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}_puck_collection"
+    ".{n_beads}_beads.mesh_{spot_diameter_um}_{spot_distance_um}_puck_collection"
 )
 dge_spatial_collection_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_collection_mesh_suffix
 dge_spatial_collection_mesh = dge_spatial_collection_mesh_prefix + h5ad_dge_suffix
@@ -210,7 +219,7 @@ automated_analysis_root = (
     data_root + "/automated_analysis/{run_mode}/umi_cutoff_{umi_cutoff}"
 )
 automated_report_prefix = (
-    automated_analysis_root + "/{sample_id}_{puck_barcode_file_id_qc}_"
+    automated_analysis_root + "/{sample_id}_{puck_barcode_file_id_qc}{polyA_adapter_trimmed}_"
 )
 automated_report = automated_report_prefix + "automated_report.html"
 automated_analysis_result_file = automated_report_prefix + "results.h5ad"
@@ -249,6 +258,7 @@ parsed_ribo_depletion_log = complete_data_root + "/parsed_ribo_depletion_log.txt
 #  dropseq rules and vars #
 # #########################
 tagged_bam = complete_data_root + "/unaligned_bc_tagged.bam"
+tagged_bam_log = tagged_bam + ".log"
 unassigned = complete_data_root + "/unaligned_bc_unassigned.bam"
 
 # trim smart adapter from the reads

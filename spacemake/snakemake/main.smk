@@ -15,7 +15,7 @@ import math
 import scanpy as sc
 
 from spacemake.preprocess.dge import dge_to_sparse_adata, attach_barcode_file,\
-    parse_barcode_file, load_external_dge, attach_puck_variables, attach_puck
+    parse_barcode_file, load_external_dge, attach_puck
 from spacemake.spatial.util import create_meshed_adata
 import spacemake.spatial.puck_collection as puck_collection
 from spacemake.project_df import ProjectDF
@@ -87,6 +87,48 @@ def get_module_outputs():
     
     return outputs
 
+######################
+# CHECKPOINT PARSERS #
+######################
+def get_pbf_from_checkpoint_pucks(wildcards):
+    checkpoint_output = checkpoints.checkpoint_pucks.get(**wildcards).output[0]
+    puck_barcode_file_ids = glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p
+    puck_barcode_file_ids = list(set(puck_barcode_file_ids))
+    return puck_barcode_file_ids
+
+
+def checkpoint_puck_collection(wildcards):
+    puck_barcode_file_ids = get_pbf_from_checkpoint_pucks(wildcards)
+    out_files = get_puck_collection_stitching_input(wildcards, puck_barcode_file_ids, to_mesh=False)
+    return out_files
+
+
+def checkpoint_puck_collection_mesh(wildcards):
+    puck_barcode_file_ids = get_pbf_from_checkpoint_pucks(wildcards)
+    out_files = get_puck_collection_stitching_input(wildcards, puck_barcode_file_ids, to_mesh=True)
+    return out_files
+
+
+def checkpoint_puck_files(wildcards):
+    puck_barcode_file_ids = get_pbf_from_checkpoint_pucks(wildcards)
+    out_files = {"dge": get_all_dges(wildcards, puck_barcode_file_ids),
+                 "automated_report": get_output_files(automated_report,
+                  data_root_type = 'complete_data', downsampling_percentage='', 
+                  puck_barcode_file_ids=puck_barcode_file_ids, check_puck_collection=True),
+                 "qc_report": get_output_files(qc_sheet,
+                  data_root_type = 'complete_data', downsampling_percentage='', 
+                   puck_barcode_file_ids=puck_barcode_file_ids, check_puck_collection=True),}
+    return out_files
+
+
+def checkpoint_barcode_files(wildcards):
+    checkpoint_output = checkpoints.checkpoint_barcodes.get(**wildcards).output[0]
+    puck_barcode_file_ids = glob_wildcards(os.path.join(checkpoint_output, "{p}.chk")).p
+    puck_barcode_file_ids = list(set(puck_barcode_file_ids))
+    out_files = get_barcode_files_matching_summary_input(wildcards, puck_barcode_file_ids)
+    return out_files
+
+
 ######################### 
 # INCLUDE OTHER MODULES #
 #########################
@@ -129,53 +171,20 @@ wildcard_constraints:
 #############
 rule run_analysis:
     input:
-        # this creates the dge and a collection of pucks (i.e., spatial stitching)
-        unpack(get_all_dges),
-        unpack(get_all_dges_collection),
-        # create fastqc
-        unpack(
-            lambda wildcards: get_output_files(
+        # get outputs from registered hooks
+        get_module_outputs(),
+
+        # get FastQC reports
+        (
+            get_output_files(
                     fastqc_pattern, ext = fastqc_ext, mate=['1', '2'],
                     data_root_type = 'complete_data', downsampling_percentage = '',
                     filter_merged=True) 
                 if config['with_fastqc'] else []
         ),
-        get_output_files(automated_report, 
-            data_root_type = 'complete_data', downsampling_percentage='', 
-            puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(automated_report, 
-            data_root_type = 'complete_data', downsampling_percentage='', 
-            check_puck_collection=True,
-            puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet, 
-            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
-            puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet, 
-            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
-            check_puck_collection=True,
-            puck_barcode_file_matching_type='spatial_matching'),
-        # finally, everything registered via register_module_output_hook()
-        get_module_outputs(),
-        
+        # get flag for DGE (based on checkpoint, i.e., not explicitly generating files)
+        get_expanded_pattern_project_sample(dge_out_done),
 
-rule get_stats_prealigned_barcodes:
-    input:
-        get_output_files(barcode_readcounts,
-            data_root_type='complete_data',
-            downsampling_percentage='',
-            run_on_external=False,
-            filter_merged=False
-        ),
-        get_prealignment_files(puck_count_prealigned_barcode_matches_summary, filter_merged=True)
-
-rule get_whitelist_barcodes:
-    input:
-        get_output_files(puck_count_barcode_matches_summary,
-            data_root_type = 'complete_data',
-            downsampling_percentage='', run_on_external=False),
-        get_output_files(puck_barcode_files_summary,
-            data_root_type = 'complete_data',
-            downsampling_percentage='', run_on_external=False)
 
 ##############
 # DOWNSAMPLE #
@@ -186,13 +195,6 @@ rule downsample:
             samples = config['samples'],
             projects = config['projects'],
             puck_barcode_file_matching_type = "spatial_matching")
-
-#############
-# NOVOSPARC #
-#############
-#rule novosparc:
-#    input:
-#        *get_novosparc_input_files(config)
 
 #################
 # MERGE SAMPLES #
@@ -277,33 +279,21 @@ rule tag_reads_bc_umi:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
         assigned = tagged_bam,
-        unassigned = unassigned,
-        bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
+        log = tagged_bam_log
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 4
+    threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
-        "python {spacemake_dir}/preprocess/cmdline.py "
+        "python {spacemake_dir}/bin/fastq_to_uBAM.py "
         "--sample={wildcards.sample_id} "
         "--read1={input.R1} "
         "--read2={input.R2} "
         "--parallel={threads} "
-        "--save-stats={output.bc_stats} "
-        "--log-file={log} "
-        "--bc1-ref={params.bc.bc1_ref} "
-        "--bc2-ref={params.bc.bc2_ref} "
-        "--bc1-cache={params.bc.bc1_cache} "
-        "--bc2-cache={params.bc.bc2_cache} "
-        "--threshold={params.bc.score_threshold} "
+	    "--out-bam={output.assigned} "
         "--cell='{params.bc.cell}' "
-        "--cell-raw='{params.bc.cell_raw}' "
-        "--out-format=bam "
-        "--out-unassigned={output.unassigned} "
-        "--out-assigned=/dev/stdout "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
-        "--min-opseq-score={params.bc.min_opseq_score} "
-        "| samtools view -bh /dev/stdin > {output.assigned} "
+        "--log-file='{output.log}' "
 
 rule run_fastqc:
     input:
@@ -328,43 +318,29 @@ rule get_barcode_readcounts:
     input:
         unpack(get_final_bam)
     output:
-        barcode_readcounts
+        barcode_readcounts,
+        barcode_readcounts_log
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{cell}']
+    threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
+        # {dropseq_tools}/BamTagHistogram -m 32g 
         """
-        {dropseq_tools}/BamTagHistogram -m 32g \
-        I= {input} \
-        O= {output} \
-        TAG={params.cell_barcode_tag} \
-        READ_MQ=0
+        python {spacemake_dir}/bin/BamTagHistogram.py \
+        --input {input} \
+        --output {output[0]} \
+        --tag {params.cell_barcode_tag} \
+        --min-count 1 \
+        --log-file {output[1]} \
         """
-
-rule get_barcode_readcounts_prealigned:
-    # we perform some preliminary counting on the prealigned reads
-    input:
-        tagged_bam
-    output:
-        barcode_readcounts_prealigned
-    params:
-        cell_barcode_tag = lambda wildcards: get_bam_tag_names(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)['{cell}']
-    shell:
-        """
-        {dropseq_tools}/BamTagHistogram -m 32g \
-        I= {input} \
-        O= {output} \
-        TAG={params.cell_barcode_tag} \
-        READ_MQ=0
-        """
+        #READ_MQ=0
 
 rule merge_stats_prealigned_spatial_barcodes:
     input:
         unpack(get_barcode_files),
-        bc_prealign = barcode_readcounts_prealigned
+        bc_counts = barcode_readcounts
     params:
         pbc_id = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
             project_id=wildcards.project_id, sample_id=wildcards.sample_id
@@ -380,15 +356,15 @@ rule merge_stats_prealigned_spatial_barcodes:
     threads: max(workflow.cores * 0.5, 1)
     shell:
         "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
-        " --query {input.bc_prealign}"
-        " --query-plain-skip 0"
+        " --query {input.bc_counts}"
+        " --query-plain-skip 1"
         " --query-plain-column 1"
         " --target {input.puck_barcode_files}"
         " --target-id {params.pbc_id}"
-        " --target-plain-column 0"
+        " --target-column 'cell_bc'"
         " --summary-output {output}"
         " --min-threshold {params.min_threshold}"
-        " --n-jobs {threads}"   
+        " --n-jobs {threads}"
 
 rule create_top_barcode_whitelist:
     input:
@@ -409,30 +385,23 @@ rule clean_top_barcodes:
 rule create_spatial_barcode_file:
     input:
         unpack(get_puck_file),
-        unpack(get_all_barcode_readcounts)
+        unpack(get_all_barcode_readcounts),
+        puck_barcode_files_filtered
     output:
-        parsed_spatial_barcodes
-    run:
-        # TODO: benchmark this rule - set+np index instead of merge?
-        # load all readcounts
-        bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
-            names=['read_n', 'cell_bc']) for bc_rc in input['bc_readcounts']]
-
-        # join them together
-        bc_readcounts = pd.concat(bc_readcounts)
-
-        # remove duplicates
-        bc_readcounts.drop_duplicates(subset='cell_bc', keep='first',
-            inplace=True)
-
-        # load barcode file and parse it
-        bc = parse_barcode_file(input[0])
-        bc.reset_index(level=0, inplace=True)
-        # inner join to get rid of barcode without any data
-        bc = pd.merge(bc, bc_readcounts, how='inner', on='cell_bc')
-        bc = bc[['cell_bc', 'x_pos', 'y_pos']]
-
-        bc.to_csv(output[0], index=False)
+        parsed_spatial_barcodes,
+        temp(parsed_spatial_barcodes_summary)
+    shell:
+        "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
+        " --query {input.bc_readcounts}"
+        " --query-plain-skip 1"
+        " --query-plain-column 1"
+        " --target {input.barcode_file}"
+        " --target-id {wildcards.puck_barcode_file_id}"
+        " --target-column 'cell_bc'"
+        " --output {output[0]}"
+        " --summary-output {output[1]}"
+        " --n-jobs {threads}"   
+        " --chunksize 10000000"
 
 rule create_spatial_barcode_whitelist:
     input: parsed_spatial_barcodes
@@ -440,10 +409,23 @@ rule create_spatial_barcode_whitelist:
     run:
         bc = pd.read_csv(input[0])
         bc = bc[['cell_bc']]
-        bc = bc.append({'cell_bc': 'NNNNNNNNNNNN'}, ignore_index=True)
+        # bc = bc.append({'cell_bc': 'NNNNNNNNNNNN'}, ignore_index=True)
 
         # save both the whitelist and the beads in a separate file
         bc[['cell_bc']].to_csv(output[0], header=False, index=False)
+
+rule create_filtered_bc_summary:
+    input: puck_count_prealigned_barcode_matches_summary
+    output: temp(puck_barcode_files_filtered)
+    params:
+        min_threshold = lambda wildcards:
+                project_df.config.get_run_mode(list(get_run_modes_from_sample(
+                wildcards.project_id, wildcards.sample_id).keys())[0]).variables['spatial_barcode_min_matches']
+    run:
+        df_prealigned = pd.read_csv(input[0])
+        df_filtered = df_prealigned[df_prealigned['matching_ratio'] > params.min_threshold]
+        df_filtered.to_csv(output[0], index=False)
+        
         
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
@@ -483,8 +465,7 @@ rule create_dge:
 rule create_h5ad_dge:
     input:
         unpack(get_puck_file),
-        unpack(get_raw_dge),
-        puck_barcode_files_summary
+        unpack(get_raw_dge)
     # output here will either be n_beads=number, n_beads=spatial
     output: dge_out_h5ad, dge_out_h5ad_obs
     run:
@@ -524,7 +505,8 @@ rule create_mesh_spatial_dge:
         pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id,
-            puck_barcode_file_id = wildcards.puck_barcode_file_id)
+            puck_barcode_file_id = wildcards.puck_barcode_file_id,
+            polyA_adapter_trimmed = wildcards.polyA_adapter_trimmed)
     run:
         adata = sc.read(input[0])
         if wildcards.spot_distance_um == 'hexagon':
@@ -545,8 +527,7 @@ rule create_mesh_spatial_dge:
 
 rule puck_collection_stitching:
     input:
-        unpack(lambda wc: get_puck_collection_stitching_input(wc, to_mesh=False)),
-        # the puck_barcode_files_summary is required for puck_metadata
+        unpack(checkpoint_puck_collection),
         puck_barcode_files_summary
     output:
         dge_spatial_collection,
@@ -559,10 +540,13 @@ rule puck_collection_stitching:
             project_id=wildcards.project_id, sample_id=wildcards.sample_id
         ),
     run:
+        # get the compatible puck_ids for the puck_files
+        puck_barcode_file_ids = get_pbf_from_checkpoint_pucks(wildcards)
+
         _pc = puck_collection.merge_pucks_to_collection(
-            # takes all input except the puck_barcode_files
+            # takes all input except the dge_out_done and puck_barcode_files
             input[:-1],
-            params['puck_metadata'][0],
+            puck_barcode_file_ids,
             params['puck_data']['coordinate_system'],
             "",
             "puck_id",
@@ -579,7 +563,6 @@ rule puck_collection_stitching:
         df = _pc.obs
         df.index = np.arange(len(df))
         df.index.name = "cell_bc"
-        
         # only get numeric columns, to avoid problems during summarisation
         # we could implement sth like df.A.str.extract('(\d+)')
         # to avoid losing information from columns that are not numeric
@@ -589,8 +572,7 @@ rule puck_collection_stitching:
 # TODO: collapse this with previous rule so we have a single point where we create the dge_spatial_collection
 rule puck_collection_stitching_meshed:
     input:
-        unpack(lambda wc: get_puck_collection_stitching_input(wc, to_mesh=True)),
-        # the puck_barcode_files_summary is required for puck_metadata
+        unpack(checkpoint_puck_collection_mesh),
         puck_barcode_files_summary
     output:
         dge_spatial_collection_mesh,
@@ -603,10 +585,12 @@ rule puck_collection_stitching_meshed:
             project_id=wildcards.project_id, sample_id=wildcards.sample_id
         ),
     run:
+        puck_barcode_file_ids = get_pbf_from_checkpoint_pucks(wildcards)
+
         _pc = puck_collection.merge_pucks_to_collection(
-            # takes all input except the puck_barcode_files
+            # takes all input except the dge_out_done and puck_barcode_files
             input[:-1],
-            params['puck_metadata'][0],
+            puck_barcode_file_ids,
             params['puck_data']['coordinate_system'],
             "",
             "puck_id",
@@ -642,7 +626,8 @@ rule create_qc_sheet:
         pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id,
-            puck_barcode_file_id = wildcards.puck_barcode_file_id_qc),
+            puck_barcode_file_id = wildcards.puck_barcode_file_id_qc,
+            polyA_adapter_trimmed=wildcards.polyA_adapter_trimmed),
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
@@ -717,7 +702,8 @@ rule create_automated_report:
         pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id,
-            puck_barcode_file_id = wildcards.puck_barcode_file_id_qc),
+            puck_barcode_file_id = wildcards.puck_barcode_file_id_qc,
+            polyA_adapter_trimmed=wildcards.polyA_adapter_trimmed),
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
@@ -750,73 +736,19 @@ rule split_reads_sam_to_bam:
     shell:
         "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
 
-rule count_barcode_matches:
-    input:
-        unpack(get_barcode_files_matching_summary_input)
-    output:
-        puck_count_barcode_matches_summary
-    params:
-        pbf_ids = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)[0],
-        run_mode_variables = lambda wildcards:
-            project_df.config.get_run_mode(list(get_run_modes_from_sample(
-            wildcards.project_id, wildcards.sample_id).keys())[0]).variables
-    run:
-        import os
-        out_df = pd.DataFrame(columns=[
-            'puck_barcode_file_id',
-            'puck_barcode_file',
-            'parsed_barcode_file',
-            'n_barcodes',
-            'n_matching',
-            'matching_ratio'
-            ])
-
-        if ('puck_barcode_files' in input.keys() and
-            'parsed_spatial_barcode_files' in input.keys()):
-            for pbf_id, pbf, parsed_barcode_file in zip(
-                    params['pbf_ids'],
-                    input['puck_barcode_files'],
-                    input['parsed_spatial_barcode_files'],
-                ):
-                n_barcodes = pd.read_csv(pbf).shape[0]
-                n_matching = pd.read_csv(parsed_barcode_file).shape[0]
-                matching_ratio = round(float(n_matching)/n_barcodes, 2)
-                
-                out_df = pd.concat([out_df, pd.DataFrame({
-                    'puck_barcode_file_id': [pbf_id],
-                    'puck_barcode_file': [pbf],
-                    'parsed_barcode_file': [parsed_barcode_file],
-                    'n_barcodes': [n_barcodes],
-                    'n_matching': [n_matching],
-                    'matching_ratio': [matching_ratio],
-                })], ignore_index=True, sort=False)
-
-            # we use > so whenever default: 0 we exclude empty pucks
-            above_threshold_mask = out_df.matching_ratio > params['run_mode_variables']['spatial_barcode_min_matches']
-            out_df['pass_threshold'] = 0
-            out_df['pass_threshold'][above_threshold_mask] = 1
-
-        out_df.to_csv(output[0], index=False)
-
-
 rule create_barcode_files_matching_summary:
     input:
-        unpack(get_barcode_files_matching_summary_input),
-        puck_count_barcode_matches_summary
+        unpack(checkpoint_barcode_files),
+        bc_summary=puck_barcode_files_filtered
     output:
         puck_barcode_files_summary
     params:
-        pbf_ids = lambda wildcards: project_df.get_puck_barcode_ids_and_files(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id)[0],
         puck_variables = lambda wildcards:
             project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
                 return_empty=True),
         run_mode_variables = lambda wildcards:
             project_df.config.get_run_mode(list(get_run_modes_from_sample(
-            wildcards.project_id, wildcards.sample_id).keys())[0]).variables
+            wildcards.project_id, wildcards.sample_id).keys())[0]).variables,
     run:
         import os
         out_df = pd.DataFrame(columns=[
@@ -832,13 +764,16 @@ rule create_barcode_files_matching_summary:
             'y_pos_max_px',
             'px_by_um'])
 
+        df_puck_barcode_files_filtered = pd.read_csv(input['bc_summary'])
+
         if ('puck_barcode_files' in input.keys() and
             'parsed_spatial_barcode_files' in input.keys()):
             for pbf_id, pbf, parsed_barcode_file in zip(
-                    params['pbf_ids'],
+                    df_puck_barcode_files_filtered['puck_barcode_file_id'],
                     input['puck_barcode_files'],
                     input['parsed_spatial_barcode_files'],
                 ):
+
                 pbf_df = parse_barcode_file(pbf)
                 n_barcodes = pbf_df.shape[0]
                 n_matching = pd.read_csv(parsed_barcode_file).shape[0]
@@ -868,3 +803,36 @@ rule create_barcode_files_matching_summary:
                 })], ignore_index=True, sort=False)
 
         out_df.to_csv(output[0], index=False)
+
+###################
+# Puck checkpoint #
+###################
+checkpoint checkpoint_barcodes:
+    input:
+        bc_summary_file=puck_barcode_files_filtered
+    output:
+        bc_summaries=temp(directory([bc_out_dir]))
+    run:
+        os.mkdir(output[0])
+        barcodes_df = pd.read_csv(input.bc_summary_file)
+        for p in barcodes_df['puck_barcode_file_id'].tolist():
+            with open(output[0] + f"/{p}.chk", "w") as out:
+                out.write("")
+
+checkpoint checkpoint_pucks:
+    input:
+        bc_summary_file=puck_barcode_files_summary
+    output:
+        dge_pointers=temp(directory(dge_out_dir))
+    run:
+        os.mkdir(output.dge_pointers)
+        barcodes_df = pd.read_csv(input.bc_summary_file)
+        for p in barcodes_df['puck_barcode_file_id'].tolist():
+            with open(output.dge_pointers + f"/{p}.chk", "w") as out:
+                out.write("")
+
+rule aggregate_dge:
+    input:
+        unpack(checkpoint_puck_files),
+    output:
+        temp(touch(dge_out_done))

@@ -50,6 +50,7 @@ rule filter_mm_reads:
         unpack(get_final_bam)
     output:
         pipe(final_bam_mm_included_pipe)
+    threads: 1
     shell:
         """
         python {repo_dir}/scripts/filter_mm_reads.py \

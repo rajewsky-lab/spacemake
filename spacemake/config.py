@@ -227,7 +227,7 @@ def get_species_parser(required=True):
 
 def get_barcode_flavor_parser(required=True):
     parser = argparse.ArgumentParser(
-        allow_abbrev=False, description="add/update barcode_flavor", add_help=False
+        allow_abbrev=False, description="add/update barcode-flavor", add_help=False
     )
     parser.add_argument(
         "--name", help="name of the barcode flavor", type=str, required=True
@@ -241,13 +241,18 @@ def get_barcode_flavor_parser(required=True):
         required=required,
     )
     parser.add_argument(
-        "--cell_barcode",
+        "--cell-barcode",
         help="structure of CELL BARCODE, using python's list syntax. Example: to set"
-        + " the cell_barcode to 1-12 nt of Read1, use --cell_barcode r1[0:12]. It is also possible "
+        + " the cell_barcode to 1-12 nt of Read1, use --cell-barcode r1[0:12]. It is also possible "
         + " to reverse the CELL BARCODE, for instance with r1[0:12][::-1] (reversing the first 12nt of"
         + " Read1, and assigning them as CELL BARCODE).",
         type=str,
         required=required,
+    )
+    parser.add_argument(
+        "--cell_barcode",
+        help=argparse.SUPPRESS,
+        type=str,
     )
 
     return parser
@@ -1191,15 +1196,23 @@ def get_barcode_flavor_parser(required=True):
     # )
 
     parser.add_argument(
-        "--cell_barcode",
+        "--cell-barcode",
         dest="cell",
         help="structure of CELL BARCODE, using python's list syntax. Example: to set"
-        + " the cell_barcode to 1-12 nt of Read1, use --cell_barcode r1[0:12]. It is also possible "
+        + " the cell_barcode to 1-12 nt of Read1, use --cell-barcode r1[0:12]. It is also possible "
         + " to reverse the CELL BARCODE, for instance with r1[0:12][::-1] (reversing the first 12nt of"
         + " Read1, and assigning them as CELL BARCODE).",
         type=str,
         required=required,
     )
+    parser.add_argument(
+        "--cell_barcode",
+        dest="cell",
+        help=argparse.SUPPRESS,
+        type=str,
+        required=False,
+    )
+
     parser.add_argument(
         "--seq",
         help=(
@@ -1221,7 +1234,7 @@ def get_barcode_flavor_parser(required=True):
         default=None,
     )
     parser.add_argument(
-        "--min_qual_trim",
+        "--min-qual-trim",
         help=(
             "Especially if you need access to bases 'at the end' of the read, "
             "that may require trimming bases that bcl2fastq already "
@@ -1229,6 +1242,12 @@ def get_barcode_flavor_parser(required=True):
             "a good option for that is to clip bases from the 3' end if they "
             "have very low quality scores (default=disabled)"
         ),
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--min_qual_trim",
+        help=argparse.SUPPRESS,
         type=int,
         default=None,
     )
@@ -1375,19 +1394,31 @@ def get_variable_action_subparsers(parent_parser, variable):
 
     # list command
     list_parser = parent_parser.add_parser(
-        f"list_{variable}", description=command_help["list"], help=command_help["list"]
+        f"list-{variable.replace('_', '-')}",
+        description=command_help["list"],
+        help=command_help["list"],
     )
     list_parser.set_defaults(func=list_variables_cmdline, variable=variable)
+    # snake_case for backward compatibility. remove in a future update
+    list_parser_legacy = parent_parser.add_parser(f"list_{variable}",)
+    list_parser_legacy.set_defaults(func=list_variables_cmdline, variable=variable)
 
     func = add_update_delete_variable_cmdline
 
     # delete command
     delete_parser = parent_parser.add_parser(
-        f"delete_{variable_singular}",
+        f"delete-{variable_singular.replace('_', '-')}",
         description=command_help["delete"],
         help=command_help["delete"],
     )
+    delete_parser_legacy = parent_parser.add_parser(f"delete_{variable_singular}",) 
     delete_parser.add_argument(
+        "--name",
+        help=f"name of the {variable_singular} to be deleted",
+        type=str,
+        required=True,
+    )
+    delete_parser_legacy.add_argument(
         "--name",
         help=f"name of the {variable_singular} to be deleted",
         type=str,
@@ -1400,25 +1431,41 @@ def get_variable_action_subparsers(parent_parser, variable):
             type=str,
             required=True,
         )
+        delete_parser_legacy.add_argument(
+            "--reference",
+            help=f"name of the reference to be deleted (genome, rRNA, ...)",
+            type=str,
+            required=True,
+        )
     delete_parser.set_defaults(func=func, action="delete", variable=variable)
+    delete_parser_legacy.set_defaults(func=func, action="delete", variable=variable)
 
     # add command
     add_parser = parent_parser.add_parser(
-        f"add_{variable_singular}",
+        f"add-{variable_singular.replace('_', '-')}",
         parents=[variable_add_update_parser()],
         description=command_help["add"],
         help=command_help["add"],
     )
+    add_parser_legacy = parent_parser.add_parser(
+        f"add_{variable_singular}",
+        parents=[variable_add_update_parser()],
+    )
     add_parser.set_defaults(func=func, action="add", variable=variable)
+    add_parser_legacy.set_defaults(func=func, action="add", variable=variable)
 
     # update command
     update_parser = parent_parser.add_parser(
-        f"update_{variable_singular}",
+        f"update-{variable_singular.replace('_', '-')}",
         parents=[variable_add_update_parser(False)],
         description=command_help["update"],
         help=command_help["update"],
     )
+    update_parser_legacy = parent_parser.add_parser(
+        f"update_{variable_singular}",
+        parents=[variable_add_update_parser(False)],)
     update_parser.set_defaults(func=func, action="update", variable=variable)
+    update_parser_legacy.set_defaults(func=func, action="update", variable=variable)
 
 
 def setup_config_parser(parent_parser_subparsers):

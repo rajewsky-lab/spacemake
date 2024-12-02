@@ -149,10 +149,15 @@ class ProjectDF:
             "barcode_flavor": "barcode_flavors",
             "puck": "pucks",
         }
-        if not hasattr(self, 'df'):
-            raise SystemExit(ValueError("The 'project_df' does not exist in the ProjectDF object or is empty"))
+        if not hasattr(self, "df"):
+            raise SystemExit(
+                ValueError(
+                    "The 'project_df' does not exist in the ProjectDF object or is empty"
+                )
+            )
         elif self.df.empty:
-            logger.warn("The 'project_df' in the ProjectDF object is empty")
+            logger.warning("The 'project_df' in the ProjectDF object is empty")
+            self.create_empty_df()
 
         _unique_samples = self._check_unique_samples()
         if _unique_samples is not None:
@@ -160,68 +165,101 @@ class ProjectDF:
 
         for index, row in self.df.iterrows():
             # check that sample sheet file exists
-            if (row['sample_sheet'] is not None) and (not os.path.exists(row['sample_sheet'])):
-                raise SystemExit(FileNotFoundError(f"At {index}, the 'sample_sheet' file does not exist"))
-            
+            if (row["sample_sheet"] is not None) and (
+                not os.path.exists(row["sample_sheet"])
+            ):
+                raise SystemExit(
+                    FileNotFoundError(
+                        f"At {index}, the 'sample_sheet' file does not exist"
+                    )
+                )
+
             # checking that variables are what they're supposed to be (according to config file)
             for pdf_col, config_var in project_df_column_to_config_varname.items():
                 if type(row[pdf_col]) is list:
                     for _it_row in row[pdf_col]:
-                        self.config.assert_variable(f'{config_var}', _it_row)
+                        self.config.assert_variable(f"{config_var}", _it_row)
                 elif type(row[pdf_col]) is str:
-                    self.config.assert_variable(f'{config_var}', row[pdf_col])
-            
+                    self.config.assert_variable(f"{config_var}", row[pdf_col])
+
             # check that puck_barcode_file(s), R1 and R2 files exist
-            for n_col in ['puck_barcode_file', 'R1', 'R2']:
-                if n_col in ['R1', 'R2'] and row['is_merged']:
+            for n_col in ["puck_barcode_file", "R1", "R2"]:
+                if n_col in ["R1", "R2"] and row["is_merged"]:
                     continue
 
                 if type(row[n_col]) is list:
                     for _it_row in row[n_col]:
                         if not os.path.exists(_it_row):
-                            raise SystemExit(FileNotFoundError(f"At {index}, the {n_col} file does not exist: '{os.path.abspath(_it_row)}'"))
-                elif type(row[n_col]) is str and row[n_col] != '':
+                            raise SystemExit(
+                                FileNotFoundError(
+                                    f"At {index}, the {n_col} file does not exist: '{os.path.abspath(_it_row)}'"
+                                )
+                            )
+                elif type(row[n_col]) is str and row[n_col] != "":
                     if not os.path.exists(row[n_col]):
-                        raise SystemExit(FileNotFoundError(f"At {index}, the {n_col} file does not exist: '{os.path.abspath(_it_row)}'"))
-                    
+                        raise SystemExit(
+                            FileNotFoundError(
+                                f"At {index}, the {n_col} file does not exist: '{os.path.abspath(_it_row)}'"
+                            )
+                        )
+
             # check that pucks are specified only if puck is spatial (or puck_collection is enabled)
             _valid_puck_coordinate = True
-            if row['puck_barcode_file'] is None:
+            if row["puck_barcode_file"] is None:
                 _valid_puck_coordinate = False
-            elif type(row['puck_barcode_file']) is list:
-                if len(row['puck_barcode_file']) == 0:
+            elif type(row["puck_barcode_file"]) is list:
+                if len(row["puck_barcode_file"]) == 0:
                     _valid_puck_coordinate = False
-            elif type(row['puck_barcode_file']) is str and row['puck_barcode_file'] == '':
+            elif (
+                type(row["puck_barcode_file"]) is str and row["puck_barcode_file"] == ""
+            ):
                 _valid_puck_coordinate = False
-            
+
             # check that merging variables are properly specified
             # otherwise, this throws 'MissingInputException' because it cannot find the bam files
-            if row['is_merged']:
-                if len(row['merged_from']) < 2:
-                    raise SystemExit(SpacemakeError(f"At {index}, there is <2 samples under 'merged_from'"))
-                for merged_i in row['merged_from']:
-                    if (not isinstance(merged_i, tuple) and not isinstance(merged_i, list)) or len(merged_i) != 2:
-                        raise SystemExit(SpacemakeError(f"At {index}, wrong format for 'merged_from'.\n"+
-                                                        "It must be something like "+
-                                                        "[('project', 'sample_a'), ('project', 'sample_b')]"))
+            if row["is_merged"]:
+                if len(row["merged_from"]) < 2:
+                    raise SystemExit(
+                        SpacemakeError(
+                            f"At {index}, there is <2 samples under 'merged_from'"
+                        )
+                    )
+                for merged_i in row["merged_from"]:
+                    if (
+                        not isinstance(merged_i, tuple)
+                        and not isinstance(merged_i, list)
+                    ) or len(merged_i) != 2:
+                        raise SystemExit(
+                            SpacemakeError(
+                                f"At {index}, wrong format for 'merged_from'.\n"
+                                + "It must be something like "
+                                + "[('project', 'sample_a'), ('project', 'sample_b')]"
+                            )
+                        )
                     try:
                         self.assert_sample(merged_i[0], merged_i[1])
                     except ProjectSampleNotFoundError as e:
                         self.logger.error(f"Merging error at {index}")
                         raise e
-                    
+
             if not _valid_puck_coordinate:
-                _puck_vars = self.get_puck_variables(project_id = index[0], sample_id = index[1])
-                if _puck_vars.get('coordinate_system', '') != '':
-                    raise SystemExit(SpacemakeError(f"At {index}, the selected puck '{row['puck']}' " + \
-                                                    "contains a coordinate_system " + \
-                                                    "but no 'puck_barcode_files' are specified"))
-                
+                _puck_vars = self.get_puck_variables(
+                    project_id=index[0], sample_id=index[1]
+                )
+                if _puck_vars.get("coordinate_system", "") != "":
+                    raise SystemExit(
+                        SpacemakeError(
+                            f"At {index}, the selected puck '{row['puck']}' "
+                            + "contains a coordinate_system "
+                            + "but no 'puck_barcode_files' are specified"
+                        )
+                    )
+
     def _check_unique_samples(self):
         for index, _ in self.df.iterrows():
             if len(self.df[self.df.index.isin([index])]) > 1:
                 return index
-        
+
         return None
 
     def create_empty_df(self):
@@ -233,6 +271,7 @@ class ProjectDF:
         self.df = pd.DataFrame(self.project_df_default_values, index=index)
 
         self.df = self.df.astype(self.project_df_dtypes)
+        self.dump()
 
     def compute_max_barcode_mismatch(self, indices: List[str]) -> int:
         """compute_max_barcode_mismatch.
@@ -311,33 +350,37 @@ class ProjectDF:
     def consolidate_pucks_merged_samples(self):
         for index, row in self.df.iterrows():
             project_id, sample_id = index
-            puck_ids = row['puck_barcode_file_id']
-            
-            if (not row['is_merged']) or (not self.is_spatial(project_id, sample_id, puck_ids)):
+            puck_ids = row["puck_barcode_file_id"]
+
+            if (not row["is_merged"]) or (
+                not self.is_spatial(project_id, sample_id, puck_ids)
+            ):
                 continue
 
             if len(puck_ids) >= 1:
                 puck_ids = puck_ids[0]
             elif len(puck_ids):
-                puck_ids = self.project_df_default_values['puck_barcode_file_id']
+                puck_ids = self.project_df_default_values["puck_barcode_file_id"]
 
-            merged_from = row['merged_from']
+            merged_from = row["merged_from"]
             puck_id_file = set()
 
             for sample_tuple in merged_from:
-                pid = self.df.loc[sample_tuple]['puck_barcode_file_id']
-                pbf = self.df.loc[sample_tuple]['puck_barcode_file']
+                pid = self.df.loc[sample_tuple]["puck_barcode_file_id"]
+                pbf = self.df.loc[sample_tuple]["puck_barcode_file"]
                 _tuple = [(id, bf) for id, bf in zip(pid, pbf)]
-                
-                puck_id_file.update([ tuple(t) for t in _tuple ])
+
+                puck_id_file.update([tuple(t) for t in _tuple])
 
             pid, pbf = list(zip(*list(puck_id_file)))
-            self.df.loc[index, 'puck_barcode_file_id'] = list(pid)
-            self.df.loc[index, 'puck_barcode_file'] = list(pbf)
-
+            self.df.loc[index, "puck_barcode_file_id"] = list(pid)
+            self.df.loc[index, "puck_barcode_file"] = list(pbf)
 
     def update_project_df_barcode_matches(self, prealigned=False):
-        from spacemake.snakemake.variables import puck_count_barcode_matches_summary, puck_count_prealigned_barcode_matches_summary
+        from spacemake.snakemake.variables import (
+            puck_count_barcode_matches_summary,
+            puck_count_prealigned_barcode_matches_summary,
+        )
         import pandas as pd
 
         if prealigned:
@@ -348,34 +391,38 @@ class ProjectDF:
         for index, row in self.df.iterrows():
             project_id, sample_id = index
 
-            puck_ids = row['puck_barcode_file_id']
+            puck_ids = row["puck_barcode_file_id"]
             if len(puck_ids) >= 1:
                 puck_ids = puck_ids[0]
             elif len(puck_ids):
-                puck_ids = self.project_df_default_values['puck_barcode_file_id']
+                puck_ids = self.project_df_default_values["puck_barcode_file_id"]
 
-            if (row['is_merged'] and prealigned) or (not self.is_spatial(project_id, sample_id, puck_ids)):
+            if (row["is_merged"] and prealigned) or (
+                not self.is_spatial(project_id, sample_id, puck_ids)
+            ):
                 continue
 
             # check if barcodes have been filtered
-            _f_barcodes_df = _bc_file.format(project_id=project_id,
-                    sample_id=sample_id)
+            _f_barcodes_df = _bc_file.format(project_id=project_id, sample_id=sample_id)
 
             # project_df is only updated if a prealignment barcode matching file is found
             if os.path.exists(_f_barcodes_df):
                 barcodes_df = pd.read_csv(_f_barcodes_df)
 
-                if 'pass_threshold' not in barcodes_df.columns:
+                if "pass_threshold" not in barcodes_df.columns:
                     continue
 
-                above_threshold_mask = barcodes_df['pass_threshold'] == 1
+                above_threshold_mask = barcodes_df["pass_threshold"] == 1
 
-                _puck_barcode_files = barcodes_df[above_threshold_mask]['puck_barcode_file'].values.tolist()
-                _puck_barcode_files_id = barcodes_df[above_threshold_mask]['puck_barcode_file_id'].values.tolist()
+                _puck_barcode_files = barcodes_df[above_threshold_mask][
+                    "puck_barcode_file"
+                ].values.tolist()
+                _puck_barcode_files_id = barcodes_df[above_threshold_mask][
+                    "puck_barcode_file_id"
+                ].values.tolist()
 
-                self.df.at[index, 'puck_barcode_file'] = _puck_barcode_files
-                self.df.at[index, 'puck_barcode_file_id'] = _puck_barcode_files_id
-
+                self.df.at[index, "puck_barcode_file"] = _puck_barcode_files
+                self.df.at[index, "puck_barcode_file_id"] = _puck_barcode_files_id
 
     def get_sample_info(self, project_id: str, sample_id: str) -> Dict:
         """get_sample_info.
@@ -568,12 +615,15 @@ class ProjectDF:
 
         # validate and correct map_strategies
         from spacemake.map_strategy import validate_mapstr
+
         corrected_map_strategies = []
         for row in self.df.itertuples():
             corrected_map_strategies.append(
-                validate_mapstr(row.map_strategy, config=self.config, species=row.species)
+                validate_mapstr(
+                    row.map_strategy, config=self.config, species=row.species
+                )
             )
-        self.df['map_strategy'] = corrected_map_strategies
+        self.df["map_strategy"] = corrected_map_strategies
 
         if not "adapter_flavor" in self.df.columns:
             self.df["adapter_flavor"] = self.project_df_default_values["adapter_flavor"]
@@ -679,24 +729,21 @@ class ProjectDF:
         self,
         project_id: str,
         sample_id: str,
+        polyA_adapter_trimmed: str = "",
     ):
         import pandas as pd
 
         summary_file = puck_barcode_files_summary.format(
-            project_id=project_id, sample_id=sample_id
+            project_id=project_id, sample_id=sample_id, polyA_adapter_trimmed=polyA_adapter_trimmed
         )
 
+        # will return all the pucks in the project_df for a (project, sample),
+        # if it cannot find the summary file (i.e., after n_intersect_sequences)
         if not os.path.isfile(summary_file):
             # print(f"looking for summary file: '{summary_file}'")
             return self.project_df_default_values["puck_barcode_file_id"]
 
         df = pd.read_csv(summary_file)
-
-        # Comment the following line that restricts the analysis of some tiles.
-        # All tiles provided will now be processed -- it's up to the user to
-        # provide a meaningful list of tiles.
-        #
-        # df = df.loc[(df.n_matching > 500) & (df.matching_ratio > 0.1)]
 
         pdf_ids = df.puck_barcode_file_id.to_list()
 
@@ -709,10 +756,12 @@ class ProjectDF:
         project_id: str,
         sample_id: str,
         puck_barcode_file_id: str,
+        **kwargs
     ):
         import numpy as np
+
         summary_file = puck_barcode_files_summary.format(
-            project_id=project_id, sample_id=sample_id
+            project_id=project_id, sample_id=sample_id, **kwargs
         )
 
         if not os.path.isfile(summary_file):
@@ -726,20 +775,27 @@ class ProjectDF:
         # we calculate the stats for the puck_collection here
         # the max and min coordinates are not in global system
         if puck_barcode_file_id == "puck_collection":
+
             def multi_func(functions):
                 def f(col):
                     return functions[col.name](col)
+
                 return f
 
-            df_pc = df._get_numeric_data() \
-                        .apply(multi_func({'x_pos_min_px': np.min, 
-                                          'x_pos_max_px': np.max, 
-                                          'y_pos_min_px': np.min,
-                                          'y_pos_max_px': np.max, 
-                                          'n_barcodes': np.mean,
-                                          'n_matching': np.mean,
-                                          'matching_ratio': np.mean,
-                                          'px_by_um': np.mean}))
+            df_pc = df._get_numeric_data().apply(
+                multi_func(
+                    {
+                        "x_pos_min_px": np.min,
+                        "x_pos_max_px": np.max,
+                        "y_pos_min_px": np.min,
+                        "y_pos_max_px": np.max,
+                        "n_barcodes": np.mean,
+                        "n_matching": np.mean,
+                        "matching_ratio": np.mean,
+                        "px_by_um": np.mean,
+                    }
+                )
+            )
 
             return df_pc.to_dict()
 
@@ -747,10 +803,8 @@ class ProjectDF:
             return None
         else:
             return df_puck.iloc[0].to_dict()
-        
-    def get_puck(
-            self, project_id: str, sample_id: str, return_empty=False
-    ) -> Puck:
+
+    def get_puck(self, project_id: str, sample_id: str, return_empty=False) -> Puck:
         """get_puck.
 
         :param project_id: project_id of a sample
@@ -986,10 +1040,10 @@ class ProjectDF:
 
         if R2 == ["None"]:
             R2 = None
-        
+
         if reads == "None":
             reads = None
-        
+
         if action == "add" and (R2 is None) and (reads is None) and not is_merged:
             self.logger.info("R2 not provided, trying longreads")
 
@@ -1096,11 +1150,14 @@ class ProjectDF:
         if action == "add":
             _i_species = kwargs["species"]
         elif action == "update":
-            _i_species = self.df.loc[ix]['species']
+            _i_species = self.df.loc[ix]["species"]
 
         # validate and correct map_strategies
         from spacemake.map_strategy import validate_mapstr
-        kwargs['map_strategy'] = validate_mapstr(map_strategy, config=self.config, species=_i_species)
+
+        kwargs["map_strategy"] = validate_mapstr(
+            map_strategy, config=self.config, species=_i_species
+        )
 
         # TODO: remove
         # kwargs["map_strategy"] = map_strategy
@@ -1181,10 +1238,11 @@ class ProjectDF:
             new_project = pd.Series(self.project_df_default_values)
             new_project.name = ix
             new_project.update(kwargs)
-            # before addition
 
             # after addition
             self.df = pd.concat([self.df, pd.DataFrame(new_project).T], axis=0)
+            # as of pandas 2.0.1 the names of a MultiIndex do not survive concat.
+            self.df.index.names = ["project_id", "sample_id"]
 
         if return_series:
             return (ix, new_project)
@@ -1373,7 +1431,7 @@ class ProjectDF:
         sample_id_list=[],
         **kwargs,
     ):
-        """merge_samples.
+        """merge samples.
 
         :param merged_project_id:
         :param merged_sample_id:
@@ -1393,11 +1451,10 @@ class ProjectDF:
         consistent_variables.remove("adapter")
         consistent_variables.remove("quant")
 
-        
-        # append variable "map_strategy" manually.
+        # append variable "map-strategy" manually.
         # TODO: consider moving "map_strategy" into the main_variables_sg2pl, needs additional parser etc.
         consistent_variables.append("map_strategy")
-        
+
         ix_list = ix.to_list()
 
         if ix_list == []:
@@ -1424,6 +1481,7 @@ class ProjectDF:
                     variable_name=variable, variable_value=variable_val, ix=ix
                 )
             else:
+                # TODO: here, might be why the map strategy is not formatted properly
                 # attach the deduced, consisten variable
                 kwargs[variable] = variable_val[0]
 
@@ -1499,6 +1557,7 @@ def get_global_ProjectDF(root="."):
     global __global_ProjectDF
     if __global_ProjectDF is None:
         from spacemake.config import get_global_config
+
         __global_ProjectDF = ProjectDF(
             f"{root}/project_df.csv", config=get_global_config()
         )

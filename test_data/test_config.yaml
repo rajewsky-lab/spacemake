@@ -1,7 +1,7 @@
 root_dir: '.'
-temp_dir: './tmp'
+temp_dir: '/tmp'
 external_bin: 
-        dropseq_tools: './bin/dropseq'
+        dropseq_tools: '/data/rajewsky/shared_bins/Drop-seq_tools-2.5.1/'
 logging:
   level: INFO
   debug: "spacemake.util.read_fq"
@@ -254,7 +254,7 @@ quant:
 species:
     test_hsa:
         genome:
-            annotation: "{spacemake_dir}/test_data/test_annotation.gtf.gz"
+            annotation: "{spacemake_dir}/test_data/test_genome.gtf.gz"
             sequence: "{spacemake_dir}/test_data/test_genome.fa.gz"
         miRNA:
             annotation: "{spacemake_dir}/test_data/mirgenedb.hsa.mature.gtf.gz"

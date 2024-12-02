@@ -378,7 +378,7 @@ def process_ordered_results(res_queue, args, Qerr, abort_flag):
                 dT = t2 - t0
                 rate = n_rec / dT
                 logger.info(
-                    "processed {0} reads in {1:.0f} seconds (average {2:.0f} reads/second).".format(
+                    "processed {0:,} reads in {1:.0f} seconds (average {2:,.0f} reads/second).".format(
                         n_rec, dT, rate
                     )
                 )
