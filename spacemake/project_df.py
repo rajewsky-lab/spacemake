@@ -1,15 +1,15 @@
-import pandas as pd
+# import pandas as pd
 import os
-import yaml
 import math
-import argparse
-import datetime
-import re
+
+# import argparse
+# import datetime
 import logging
 import time
 
 from spacemake.config import Puck
 from spacemake.errors import *
+
 from spacemake.config import ConfigFile
 from spacemake.util import message_aggregation, assert_file, str_to_list
 from spacemake.snakemake.variables import puck_barcode_files_summary
@@ -17,572 +17,6 @@ from typing import List, Dict
 
 logger_name = "spacemake.project_df"
 logger = logging.getLogger(logger_name)
-# logging.basicConfig(level=logging.INFO)
-
-
-def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
-    """
-    Return a parser for project_id's and sample_id's
-
-    :param allow_multiple: if true, we allow multiple projects and samples,
-        and the parser will have a `--project_id_list` and a `--sample_id_list`
-        parameter
-    :param prepend: a string that will be prepended before the arguments
-    :param help_extra: extra help message
-    :return: a parser object
-    :rtype: argparse.ArgumentParser
-    """
-    logger.info(f"get_project_sample_parser(prepend={prepend}) called")
-
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-    project_argument = "project_id"
-    sample_argument = "sample_id"
-    required = True
-    nargs = None
-    default = None
-
-    if allow_multiple:
-        project_argument = f"{project_argument}_list"
-        sample_argument = f"{sample_argument}_list"
-        required = False
-        nargs = "*"
-        default = []
-
-    parser.add_argument(
-        f"--{prepend}{project_argument}",
-        type=str,
-        required=required,
-        nargs=nargs,
-        default=default,
-        help=f"{project_argument} {help_extra}",
-    )
-
-    parser.add_argument(
-        f"--{prepend}{sample_argument}",
-        type=str,
-        required=required,
-        nargs=nargs,
-        default=default,
-        help=f"{sample_argument} {help_extra}",
-    )
-
-    return parser
-
-
-def get_add_sample_sheet_parser():
-    """
-    Returns parser for sample sheet addition
-
-    :return: parser
-    :rtype: argparse.ArgumentParser
-    """
-    logger.info("get_add_sample_sheet_parser() called")
-    parser = argparse.ArgumentParser(
-        allow_abbrev=False,
-        description="add a new sample sheet to the samples",
-        add_help=False,
-    )
-
-    parser.add_argument(
-        "--sample_sheet",
-        type=str,
-        help="the path to the Illumina sample sheet",
-        required=True,
-    )
-    parser.add_argument(
-        "--basecalls_dir",
-        type=str,
-        help="path to the basecalls directory",
-        required=True,
-    )
-
-    return parser
-
-
-def get_sample_main_variables_parser(
-    species_required=False,
-    main_variables=["barcode_flavor", "species", "puck", "run_mode", "map_strategy"],
-):
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-    logger.info(
-        f"get_sample_main_variables_parser called with main_variables={main_variables}"
-    )
-
-    if "barcode_flavor" in main_variables:
-        parser.add_argument(
-            "--barcode_flavor", type=str, help="barcode flavor for this sample"
-        )
-
-    if "species" in main_variables:
-        parser.add_argument(
-            "--species",
-            type=str,
-            help="add the name of the species for this sample",
-            required=species_required,
-        )
-
-    if "map_strategy" in main_variables:
-        parser.add_argument(
-            "--map_strategy",
-            type=str,
-            help="string constant definining mapping strategy. Can be multi-stage and use bowtie2 or STAR (see documentation)",
-            required=False,
-            default=None,
-        )
-
-    if "puck" in main_variables:
-        parser.add_argument(
-            "--puck",
-            type=str,
-            help="name of the puck for this sample. if puck_type contains a \n"
-            + "`barcodes` path to a coordinate file, those coordinates\n"
-            + " will be used when processing this sample. if \n"
-            + " not provided, a default puck will be used with \n"
-            + "width_um=3000, spot_diameter_um=10",
-        )
-
-        parser.add_argument(
-            "--puck_barcode_file_id",
-            type=str,
-            help="puck_barcode_file_id of the sample to be added/update",
-            nargs="+",
-        )
-
-    parser.add_argument(
-        "--puck_barcode_file",
-        type=str,
-        nargs="+",
-        help="the path to the file contining (x,y) positions of the barcodes",
-    )
-
-    if "run_mode" in main_variables:
-        parser.add_argument(
-            "--run_mode",
-            type=str,
-            nargs="+",
-            help="run_mode names for this sample.\n"
-            + "the sample will be processed using the provided run_modes.\n"
-            + "for merged samples, if left empty, the run_modes of the \n"
-            + "merged (input) samples will be intersected.\n",
-        )
-
-    return parser
-
-
-def get_sample_extra_info_parser():
-    logger.info("get_sample_extra_info_parser() called")
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-
-    parser.add_argument(
-        "--investigator",
-        type=str,
-        help="add the name of the investigator(s) responsible for this sample",
-    )
-
-    parser.add_argument("--experiment", type=str, help="description of the experiment")
-
-    parser.add_argument(
-        "--sequencing_date",
-        type=datetime.date.fromisoformat,
-        help="sequencing date of the sample. format: YYYY-MM-DD",
-    )
-
-    return parser
-
-
-def get_data_parser(reads_required=False):
-    """
-    Returns a parser which contain extra arguments for a given sample.
-    The returned parser will contain the --R1, --R2, --longreads,
-    --longread-signature, --barcode_flavor, --species, --puck,  --puck_barcode_file_id,
-    --puck_barcode_file, --investigator, --experiment, --sequencing_date,
-    --run_mode arguments.
-
-    :param species_required: if true, the --species argument will be required
-        during parsing.
-    :param reads_required: if true, --R1, --R2, and --longreads arguments will be
-        required during parsing.
-    """
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-    logger.info("get_data_parser() called")
-    parser.add_argument(
-        "--R1",
-        type=str,
-        help=".fastq.gz file path to R1 reads",
-        nargs="+",
-        required=reads_required,
-    )
-
-    parser.add_argument(
-        "--R2",
-        type=str,
-        help=".fastq.gz file path to R2 reads",
-        nargs="+",
-        required=reads_required,
-    )
-
-    parser.add_argument(
-        "--dge",
-        type=str,
-        help="Path to dge matrix. spacemake can also handle already processed"
-        + " digital expression data",
-        required=reads_required,
-    )
-
-    parser.add_argument(
-        "--longreads",
-        type=str,
-        help="fastq(.gz)|fq(.gz)|bam file path to pacbio long reads for library debugging",
-        required=reads_required,
-    )
-
-    parser.add_argument(
-        "--longread-signature",
-        type=str,
-        help="identify the expected longread signature (see longread.yaml)",
-    )
-
-    return parser
-
-
-def get_set_remove_variable_subparsers(
-    parent_parser, variable_name, func, prepend="", allow_multiple=False
-):
-    """get_set_remove_variable_subparsers.
-
-    :param parent_parser:
-    :param variable_name:
-    :param func:
-    :param prepend:
-    :param allow_multiple:
-    """
-    if allow_multiple:
-        nargs = "+"
-    else:
-        nargs = None
-
-    logger.info(f"get_set_remove_variable_subparsers(varname={variable_name}) called")
-
-    def get_action_parser(action):
-        """get_action_parser.
-
-        :param action:
-        """
-        action_parser = parent_parser.add_parser(
-            f"{action}_{variable_name}",
-            parents=[get_project_sample_parser(allow_multiple=True)],
-            description=f"{action} {variable_name} for several projects/samples",
-            help=f"{action} {variable_name} for several projects/samples",
-        )
-        action_parser.add_argument(
-            f"--{variable_name}", type=str, required=True, nargs=nargs
-        )
-        action_parser.set_defaults(func=func, variable=variable_name, action=action)
-
-        return action_parser
-
-    set_parser = get_action_parser("set")
-
-    if allow_multiple:
-        set_parser.add_argument("--keep_old", action="store_true")
-
-        remove_parser = get_action_parser("remove")
-
-
-def get_action_sample_parser(parent_parser, action, func):
-    """get_action_sample_parser.
-
-    :param parent_parser:
-    :param action:
-    :param func:
-    """
-    logger.info(f"get_action_sample_parser(action={action}) called")
-    if action not in ["add", "update", "delete", "merge"]:
-        raise ValueError(f"Invalid action: {action}")
-
-    if action == "merge":
-        parser_name = "merge_samples"
-        msg = "merge samples"
-        parents = [
-            get_project_sample_parser(
-                prepend="merged_", help_extra="of the newly created merged sample"
-            ),
-            get_project_sample_parser(
-                allow_multiple=True, help_extra="of the samples to be merged"
-            ),
-        ]
-    else:
-        parser_name = f"{action}_sample"
-        msg = f"{action} a sample"
-        parents = [get_project_sample_parser()]
-
-    if action == "add":
-        # add arguments for species, run_mode, barcode_flavor and puck
-        parents.append(
-            get_sample_main_variables_parser(
-                species_required=True,
-            )
-        )
-        # add arguments for R1/R1, dge, longread
-        parents.append(get_data_parser())
-        # add arguments for extra sample info
-        parents.append(get_sample_extra_info_parser())
-    elif action == "update":
-        # add main variables parser
-        parents.append(get_sample_main_variables_parser())
-        # add arguments for R1/R1, dge, longread
-        parents.append(get_data_parser())
-        # add possibility to add extra info
-        parents.append(get_sample_extra_info_parser())
-    elif action == "merge":
-        # add main variables parser
-        # when merging, only let the user overwrite puck and run_mode
-        parents.append(
-            get_sample_main_variables_parser(
-                main_variables=["run_mode", "puck"],
-            )
-        )
-
-        # add possibility to add extra info
-        parents.append(get_sample_extra_info_parser())
-
-    sample_parser = parent_parser.add_parser(
-        parser_name, description=msg, help=msg, parents=parents
-    )
-    sample_parser.set_defaults(func=func, action=action)
-
-
-def setup_project_parser(pdf, parent_parser_subparsers):
-    """setup_project_parser.
-
-    :param pdf:
-    :param attach_to:
-    """
-    parser = parent_parser_subparsers.add_parser(
-        "projects",
-        help="manage projects and samples",
-        description="Using one of the subcommands specified below, it is possible to"
-        + " add/update/remove projects and their settings",
-    )
-    subparsers = parser.add_subparsers()
-
-    help_desc = {
-        "add_sample_sheet": "add projects and samples from Illumina sample sheet",
-        "add_samples_from_yaml": "add several samples at once from a .yaml file",
-        "merge_samples": "merge several samples into one. "
-        + "samples need to have the same species",
-        "list": "list several project(s) and sample(s) and their settings",
-    }
-
-    # ADD/UPDATE/DELETE/MERGE sample(s)
-    # get parsers for adding, deleting and updating a sample
-    for action in ["add", "update", "delete"]:
-        get_action_sample_parser(
-            subparsers,
-            action,
-            # attach the function to the parser
-            func=lambda args: add_update_delete_sample_cmdline(pdf, args),
-        )
-
-    # get parser for merging
-    get_action_sample_parser(
-        subparsers, "merge", func=lambda args: merge_samples_cmdline(pdf, args)
-    )
-
-    # LIST PROJECTS
-    # always show these variables
-    always_show = [
-        "puck_barcode_file_id",
-        "species",
-        "investigator",
-        "sequencing_date",
-        "experiment",
-        "run_mode",
-        "barcode_flavor",
-        "map_strategy",
-    ]
-    remaining_options = [
-        x for x in pdf.project_df_default_values.keys() if x not in always_show
-    ]
-    list_projects = subparsers.add_parser(
-        "list",
-        description=help_desc["list"],
-        help=help_desc["list"],
-        parents=[
-            get_project_sample_parser(
-                allow_multiple=True,
-                help_extra="subset the data. If none provided, all will be displayed",
-            )
-        ],
-    )
-    list_projects.add_argument(
-        "--variables",
-        help="which extra variables to display per sample? "
-        + f"{always_show} will always be shown.",
-        choices=remaining_options,
-        default=[],
-        nargs="*",
-    )
-    list_projects.set_defaults(
-        func=lambda args: list_projects_cmdline(pdf, args), always_show=always_show
-    )
-
-    # ADD SAMPLE SHEET
-    sample_add_sample_sheet = subparsers.add_parser(
-        "add_sample_sheet",
-        description=help_desc["add_sample_sheet"],
-        help=help_desc["add_sample_sheet"],
-        parents=[get_add_sample_sheet_parser()],
-    )
-    sample_add_sample_sheet.set_defaults(
-        func=lambda args: add_sample_sheet_cmdline(pdf, args)
-    )
-
-    # ADD SAMPLES FROM YAML
-    sample_add_samples_yaml = subparsers.add_parser(
-        "add_samples_from_yaml",
-        description=help_desc["add_samples_from_yaml"],
-        help=help_desc["add_samples_from_yaml"],
-    )
-    sample_add_samples_yaml.add_argument(
-        "--samples_yaml",
-        type=str,
-        required=True,
-        help="path to the .yaml file containing sample info",
-    )
-    sample_add_samples_yaml.set_defaults(
-        func=lambda args: add_samples_from_yaml_cmdline(pdf, args)
-    )
-
-    # get set/remove parser for each main variable
-    # this will add parser for:
-    # setting/removing run_mode
-    # setting species
-    # setting puck
-    # setting barcode_flavor
-    # NOTE: the ConfigFile.main_variable_sg2type keys determine
-    # which commandline args will be defined for the parser.
-    # this is a little un-intuitive...
-    # TODO: cleaner factory functions for the commandline-parsers
-    for main_var_sg, main_var_type in ConfigFile.main_variable_sg2type.items():
-        allow_multiple = False
-        if isinstance(main_var_type, str) and main_var_type.endswith("_list"):
-            allow_multiple = True
-
-        get_set_remove_variable_subparsers(
-            subparsers,
-            variable_name=main_var_sg,
-            func=lambda args: set_remove_variable_cmdline(pdf, args),
-            allow_multiple=allow_multiple,
-        )
-    return parser
-
-
-@message_aggregation(logger_name)
-def add_update_delete_sample_cmdline(pdf, args):
-    """add_update_delete_sample_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    action = args["action"]
-
-    # remove the action from args
-    del args["action"]
-
-    if action == "add" or action == "update":
-        func = lambda **kwargs: pdf.add_update_sample(action=action, **kwargs)
-    elif action == "delete":
-        func = pdf.delete_sample
-
-    sample = func(**args)
-    pdf.dump()
-
-
-@message_aggregation(logger_name)
-def add_sample_sheet_cmdline(pdf, args):
-    """add_sample_sheet_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    pdf.add_sample_sheet(args["sample_sheet"], args["basecalls_dir"])
-
-    pdf.dump()
-
-
-@message_aggregation(logger_name)
-def add_samples_from_yaml_cmdline(pdf, args):
-    """add_samples_from_yaml_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    pdf.add_samples_from_yaml(args["samples_yaml"])
-
-    pdf.dump()
-
-
-@message_aggregation(logger_name)
-def set_remove_variable_cmdline(pdf, args):
-    """set_remove_variable_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    variable_name = args["variable"]
-    action = args["action"]
-
-    variable_key = args[variable_name]
-
-    pdf.set_remove_variable(
-        variable_name=variable_name,
-        variable_key=variable_key,
-        action=action,
-        project_id_list=args["project_id_list"],
-        sample_id_list=args["sample_id_list"],
-        keep_old=args.get("keep_old", False),
-    )
-
-    pdf.dump()
-
-
-@message_aggregation(logger_name)
-def merge_samples_cmdline(pdf, args):
-    """merge_samples_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    pdf.merge_samples(**args)
-
-    pdf.dump()
-
-
-@message_aggregation(logger_name)
-def list_projects_cmdline(pdf, args):
-    """list_projects_cmdline.
-
-    :param pdf:
-    :param args:
-    """
-    projects = args["project_id_list"]
-    samples = args["sample_id_list"]
-    variables = args["always_show"] + args["variables"]
-
-    df = pdf.df
-    logger = logging.getLogger(logger_name)
-
-    if projects != [] or samples != []:
-        df = df.query("project_id in @projects or sample_id in @samples")
-        logger.inof(f"listing projects: {projects} and samples: {samples}")
-    else:
-        logger.info("listing all projects and samples")
-
-    logger.info(f"variables used: {variables}")
-
-    # print the table
-    logger.info(df.loc[:, variables].__str__())
 
 
 class ProjectDF:
@@ -596,6 +30,8 @@ class ProjectDF:
     :type df: pd.DataFrame
     """
 
+    logger = logging.getLogger("spacemake.project_df.ProjectDF")
+
     # default values of the project dataframe columns
     project_df_default_values = {
         "puck_barcode_file_id": ["no_spatial_data"],
@@ -606,6 +42,7 @@ class ProjectDF:
         "basecalls_dir": None,
         "R1": None,
         "R2": None,
+        "reads": None,
         "longreads": None,
         "longread_signature": None,
         "investigator": "unknown",
@@ -619,9 +56,10 @@ class ProjectDF:
         "puck": "default",
         "dge": None,
         "map_strategy": {  # default mapping strategy changes depending on if we have rRNA or not
-            True: "bowtie2:rRNA,STAR:genome:final",  # map in parallel to rRNA and genome (default so far)
-            False: "STAR:genome:final",  # w/o rRNA, map to genome directly
+            True: "rRNA:bowtie2->genome:STAR",  # map in parallel to rRNA and genome (default so far)
+            False: "genome:STAR",  # w/o rRNA, map to genome directly
         },
+        "adapter_flavor": "default",
     }
 
     project_df_dtypes = {
@@ -633,6 +71,7 @@ class ProjectDF:
         "basecalls_dir": "str",
         "R1": "object",
         "R2": "object",
+        "reads": "object",
         "longreads": "str",
         "longread_signature": "str",
         "investigator": "str",
@@ -656,12 +95,13 @@ class ProjectDF:
         """
         self.file_path = file_path
         self.config = config
+        import pandas as pd
 
         if os.path.isfile(file_path):
             attempts = 0
-            failed = False
+            df_loaded_flag = False
 
-            while not failed:
+            while not df_loaded_flag:
                 try:
                     self.df = pd.read_csv(
                         file_path,
@@ -669,16 +109,18 @@ class ProjectDF:
                         na_values=["None", "none"],
                         dtype=self.project_df_dtypes,
                     )
-                    failed = True
+                    df_loaded_flag = True
                 except pd.errors.EmptyDataError as e:
                     if attempts < 5:
                         # wait 5 seconds before retrying
+                        self.logger.warning(
+                            f"The file '{self.file_path}' seems to be empty. Trying again ({attempts}/5) in 5 seconds"
+                        )
                         time.sleep(5)
                         attempts = attempts + 1
                         continue
                     else:
                         raise e
-                        failed = True
 
             if self.df.empty:
                 self.create_empty_df()
@@ -687,6 +129,8 @@ class ProjectDF:
                 self.fix()
         else:
             self.create_empty_df()
+
+        self.assert_valid()
 
         self.logger = logging.getLogger(logger_name)
 
@@ -705,77 +149,129 @@ class ProjectDF:
             "barcode_flavor": "barcode_flavors",
             "puck": "pucks",
         }
-        if not hasattr(self, 'df'):
-            raise SystemExit(ValueError("The 'project_df' does not exist in the ProjectDF object or is empty"))
+        if not hasattr(self, "df"):
+            raise SystemExit(
+                ValueError(
+                    "The 'project_df' does not exist in the ProjectDF object or is empty"
+                )
+            )
         elif self.df.empty:
-            logger.warn("The 'project_df' in the ProjectDF object is empty")
+            logger.warning("The 'project_df' in the ProjectDF object is empty")
+            self.create_empty_df()
+
+        _unique_samples = self._check_unique_samples()
+        if _unique_samples is not None:
+            raise SampleAlreadyExistsError(_unique_samples)
 
         for index, row in self.df.iterrows():
             # check that sample sheet file exists
-            if (row['sample_sheet'] is not None) and (not os.path.exists(row['sample_sheet'])):
-                raise SystemExit(FileNotFoundError(f"At {index}, the 'sample_sheet' file does not exist"))
-            
+            if (row["sample_sheet"] is not None) and (
+                not os.path.exists(row["sample_sheet"])
+            ):
+                raise SystemExit(
+                    FileNotFoundError(
+                        f"At {index}, the 'sample_sheet' file does not exist"
+                    )
+                )
+
             # checking that variables are what they're supposed to be (according to config file)
             for pdf_col, config_var in project_df_column_to_config_varname.items():
                 if type(row[pdf_col]) is list:
                     for _it_row in row[pdf_col]:
-                        self.config.assert_variable(f'{config_var}', _it_row)
+                        self.config.assert_variable(f"{config_var}", _it_row)
                 elif type(row[pdf_col]) is str:
-                    self.config.assert_variable(f'{config_var}', row[pdf_col])
-            
+                    self.config.assert_variable(f"{config_var}", row[pdf_col])
+
             # check that puck_barcode_file(s), R1 and R2 files exist
-            for n_col in ['puck_barcode_file', 'R1', 'R2']:
-                if n_col in ['R1', 'R2'] and row['is_merged']:
+            for n_col in ["puck_barcode_file", "R1", "R2"]:
+                if n_col in ["R1", "R2"] and row["is_merged"]:
                     continue
 
                 if type(row[n_col]) is list:
                     for _it_row in row[n_col]:
                         if not os.path.exists(_it_row):
-                            raise SystemExit(FileNotFoundError(f"At {index}, the {n_col} file does not exist"))
-                elif type(row[n_col]) is str and row[n_col] != '':
+                            raise SystemExit(
+                                FileNotFoundError(
+                                    f"At {index}, the {n_col} file does not exist: '{os.path.abspath(_it_row)}'"
+                                )
+                            )
+                elif type(row[n_col]) is str and row[n_col] != "":
                     if not os.path.exists(row[n_col]):
-                        raise SystemExit(FileNotFoundError(f"At {index}, the {n_col} file does not exist"))
-                    
+                        raise SystemExit(
+                            FileNotFoundError(
+                                f"At {index}, the {n_col} file does not exist: '{os.path.abspath(_it_row)}'"
+                            )
+                        )
+
             # check that pucks are specified only if puck is spatial (or puck_collection is enabled)
             _valid_puck_coordinate = True
-            if row['puck_barcode_file'] is None:
+            if row["puck_barcode_file"] is None:
                 _valid_puck_coordinate = False
-            elif type(row['puck_barcode_file']) is list:
-                if len(row['puck_barcode_file']) == 0:
+            elif type(row["puck_barcode_file"]) is list:
+                if len(row["puck_barcode_file"]) == 0:
                     _valid_puck_coordinate = False
-            elif type(row['puck_barcode_file']) is str and row['puck_barcode_file'] == '':
+            elif (
+                type(row["puck_barcode_file"]) is str and row["puck_barcode_file"] == ""
+            ):
                 _valid_puck_coordinate = False
-            
+
             # check that merging variables are properly specified
             # otherwise, this throws 'MissingInputException' because it cannot find the bam files
-            if row['is_merged']:
-                if len(row['merged_from']) < 2:
-                    raise SystemExit(SpacemakeError(f"At {index}, there is <2 samples under 'merged_from'"))
-                for merged_i in row['merged_from']:
-                    if (not isinstance(merged_i, tuple) and not isinstance(merged_i, list)) or len(merged_i) != 2:
-                        raise SystemExit(SpacemakeError(f"At {index}, wrong format for 'merged_from'.\n"+
-                                                        "It must be something like "+
-                                                        "[('project', 'sample_a'), ('project', 'sample_b')]"))
+            if row["is_merged"]:
+                if len(row["merged_from"]) < 2:
+                    raise SystemExit(
+                        SpacemakeError(
+                            f"At {index}, there is <2 samples under 'merged_from'"
+                        )
+                    )
+                for merged_i in row["merged_from"]:
+                    if (
+                        not isinstance(merged_i, tuple)
+                        and not isinstance(merged_i, list)
+                    ) or len(merged_i) != 2:
+                        raise SystemExit(
+                            SpacemakeError(
+                                f"At {index}, wrong format for 'merged_from'.\n"
+                                + "It must be something like "
+                                + "[('project', 'sample_a'), ('project', 'sample_b')]"
+                            )
+                        )
                     try:
                         self.assert_sample(merged_i[0], merged_i[1])
                     except ProjectSampleNotFoundError as e:
                         self.logger.error(f"Merging error at {index}")
                         raise e
-                    
+
             if not _valid_puck_coordinate:
-                _puck_vars = self.get_puck_variables(project_id = index[0], sample_id = index[1])
-                if _puck_vars['coordinate_system'] != '':
-                    raise SystemExit(SpacemakeError(f"At {index}, the selected puck '{row['puck']}' " + \
-                                                    "contains a coordinate_system " + \
-                                                    "but no 'puck_barcode_files' are specified"))
+                _puck_vars = self.get_puck_variables(
+                    project_id=index[0], sample_id=index[1]
+                )
+                if _puck_vars.get("coordinate_system", "") != "":
+                    raise SystemExit(
+                        SpacemakeError(
+                            f"At {index}, the selected puck '{row['puck']}' "
+                            + "contains a coordinate_system "
+                            + "but no 'puck_barcode_files' are specified"
+                        )
+                    )
+
+    def _check_unique_samples(self):
+        for index, _ in self.df.iterrows():
+            if len(self.df[self.df.index.isin([index])]) > 1:
+                return index
+
+        return None
 
     def create_empty_df(self):
+        import pandas as pd
+
         index = pd.MultiIndex(
             names=["project_id", "sample_id"], levels=[[], []], codes=[[], []]
         )
         self.df = pd.DataFrame(self.project_df_default_values, index=index)
 
         self.df = self.df.astype(self.project_df_dtypes)
+        self.dump()
 
     def compute_max_barcode_mismatch(self, indices: List[str]) -> int:
         """compute_max_barcode_mismatch.
@@ -851,6 +347,83 @@ class ProjectDF:
         else:
             return self.project_df_default_values["puck_barcode_file"]
 
+    def consolidate_pucks_merged_samples(self):
+        for index, row in self.df.iterrows():
+            project_id, sample_id = index
+            puck_ids = row["puck_barcode_file_id"]
+
+            if (not row["is_merged"]) or (
+                not self.is_spatial(project_id, sample_id, puck_ids)
+            ):
+                continue
+
+            if len(puck_ids) >= 1:
+                puck_ids = puck_ids[0]
+            elif len(puck_ids):
+                puck_ids = self.project_df_default_values["puck_barcode_file_id"]
+
+            merged_from = row["merged_from"]
+            puck_id_file = set()
+
+            for sample_tuple in merged_from:
+                pid = self.df.loc[sample_tuple]["puck_barcode_file_id"]
+                pbf = self.df.loc[sample_tuple]["puck_barcode_file"]
+                _tuple = [(id, bf) for id, bf in zip(pid, pbf)]
+
+                puck_id_file.update([tuple(t) for t in _tuple])
+
+            pid, pbf = list(zip(*list(puck_id_file)))
+            self.df.loc[index, "puck_barcode_file_id"] = list(pid)
+            self.df.loc[index, "puck_barcode_file"] = list(pbf)
+
+    def update_project_df_barcode_matches(self, prealigned=False):
+        from spacemake.snakemake.variables import (
+            puck_count_barcode_matches_summary,
+            puck_count_prealigned_barcode_matches_summary,
+        )
+        import pandas as pd
+
+        if prealigned:
+            _bc_file = puck_count_prealigned_barcode_matches_summary
+        else:
+            _bc_file = puck_count_barcode_matches_summary
+
+        for index, row in self.df.iterrows():
+            project_id, sample_id = index
+
+            puck_ids = row["puck_barcode_file_id"]
+            if len(puck_ids) >= 1:
+                puck_ids = puck_ids[0]
+            elif len(puck_ids):
+                puck_ids = self.project_df_default_values["puck_barcode_file_id"]
+
+            if (row["is_merged"] and prealigned) or (
+                not self.is_spatial(project_id, sample_id, puck_ids)
+            ):
+                continue
+
+            # check if barcodes have been filtered
+            _f_barcodes_df = _bc_file.format(project_id=project_id, sample_id=sample_id)
+
+            # project_df is only updated if a prealignment barcode matching file is found
+            if os.path.exists(_f_barcodes_df):
+                barcodes_df = pd.read_csv(_f_barcodes_df)
+
+                if "pass_threshold" not in barcodes_df.columns:
+                    continue
+
+                above_threshold_mask = barcodes_df["pass_threshold"] == 1
+
+                _puck_barcode_files = barcodes_df[above_threshold_mask][
+                    "puck_barcode_file"
+                ].values.tolist()
+                _puck_barcode_files_id = barcodes_df[above_threshold_mask][
+                    "puck_barcode_file_id"
+                ].values.tolist()
+
+                self.df.at[index, "puck_barcode_file"] = _puck_barcode_files
+                self.df.at[index, "puck_barcode_file_id"] = _puck_barcode_files_id
+
     def get_sample_info(self, project_id: str, sample_id: str) -> Dict:
         """get_sample_info.
 
@@ -883,6 +456,7 @@ class ProjectDF:
             [
                 "R1",
                 "R2",
+                "reads",
                 "basecalls_dir",
                 "sample_sheet",
                 "longreads",
@@ -899,9 +473,10 @@ class ProjectDF:
             + f"is_merged={bool(data.is_merged)}"
         )
         if (
-            (data.R1 and data.R2)
+            data.R2  # R1 is optional (bulk samples)
             or (data.basecalls_dir and data.sample_sheet)
             or (data.longreads)
+            or (data.reads)
             and not data.dge
             or data.is_merged
         ):
@@ -930,6 +505,7 @@ class ProjectDF:
             [
                 "R1",
                 "R2",
+                "reads",
                 "basecalls_dir",
                 "sample_sheet",
                 "longreads",
@@ -940,9 +516,10 @@ class ProjectDF:
 
         if (
             data.is_merged
-            or (data.R1 and data.R2)
+            or data.R2
             or (data.sample_sheet and data.basecalls_dir)
             or data.dge
+            or data.reads
         ):
             return True
         elif data.longreads:
@@ -982,14 +559,16 @@ class ProjectDF:
     def get_default_map_strategy_for_species(self, species):
         have_rRNA = "rRNA" in self.config.variables["species"][species]
         map_strategy = self.project_df_default_values["map_strategy"][have_rRNA]
-        print(
-            f"getting default for '{species}' have_rRNA={have_rRNA} -> {map_strategy}"
-        )
+        # print(
+        #     f"getting default for '{species}' have_rRNA={have_rRNA} -> {map_strategy}"
+        # )
         return map_strategy
 
     def fix(self):
         import numpy as np
+        import pandas as pd
 
+        modified = False
         # convert types
         self.df = self.df.where(pd.notnull(self.df), None)
         self.df = self.df.replace({np.nan: None})
@@ -1015,17 +594,50 @@ class ProjectDF:
 
         project_list = []
         # required if upgrading from pre-longread tree
+        if not "reads" in self.df.columns:
+            modified = True
+            self.df["reads"] = None
+
         if not "longreads" in self.df.columns:
+            modified = True
             self.df["longreads"] = None
 
         if not "longread_signature" in self.df.columns:
+            modified = True
             self.df["longread_signature"] = None
 
         # required if upgrading from pre-bowtie2/map-strategy tree
         if not "map_strategy" in self.df.columns:
+            modified = True
             self.df["map_strategy"] = self.df["species"].apply(
                 self.get_default_map_strategy_for_species
             )
+
+        # validate and correct map_strategies
+        from spacemake.map_strategy import validate_mapstr
+
+        corrected_map_strategies = []
+        for row in self.df.itertuples():
+            corrected_map_strategies.append(
+                validate_mapstr(
+                    row.map_strategy, config=self.config, species=row.species
+                )
+            )
+        self.df["map_strategy"] = corrected_map_strategies
+
+        if not "adapter_flavor" in self.df.columns:
+            self.df["adapter_flavor"] = self.project_df_default_values["adapter_flavor"]
+            # print("added adapter-flavor!")
+            modified = True
+
+        if modified:
+            self.logger.warning(
+                f".fix() reported changes! Saving migrated project_df.csv to '{self.file_path}'"
+            )
+            # self.logger.warning(self.df)
+            # self.logger.warning(self.df.columns)
+            # self.logger.warning(self.df["adapter_flavor"])
+            self.dump()
 
         # per row updates
         # first create a series of a
@@ -1118,11 +730,14 @@ class ProjectDF:
         project_id: str,
         sample_id: str,
     ):
+        import pandas as pd
+
         summary_file = puck_barcode_files_summary.format(
             project_id=project_id, sample_id=sample_id
         )
 
         if not os.path.isfile(summary_file):
+            # print(f"looking for summary file: '{summary_file}'")
             return self.project_df_default_values["puck_barcode_file_id"]
 
         df = pd.read_csv(summary_file)
@@ -1146,12 +761,14 @@ class ProjectDF:
         puck_barcode_file_id: str,
     ):
         import numpy as np
+
         summary_file = puck_barcode_files_summary.format(
             project_id=project_id, sample_id=sample_id
         )
 
         if not os.path.isfile(summary_file):
             return None
+        import pandas as pd
 
         df = pd.read_csv(summary_file)
 
@@ -1160,20 +777,27 @@ class ProjectDF:
         # we calculate the stats for the puck_collection here
         # the max and min coordinates are not in global system
         if puck_barcode_file_id == "puck_collection":
+
             def multi_func(functions):
                 def f(col):
                     return functions[col.name](col)
+
                 return f
 
-            df_pc = df._get_numeric_data() \
-                        .apply(multi_func({'x_pos_min_px': np.min, 
-                                          'x_pos_max_px': np.max, 
-                                          'y_pos_min_px': np.min,
-                                          'y_pos_max_px': np.max, 
-                                          'n_barcodes': np.mean,
-                                          'n_matching': np.mean,
-                                          'matching_ratio': np.mean,
-                                          'px_by_um': np.mean}))
+            df_pc = df._get_numeric_data().apply(
+                multi_func(
+                    {
+                        "x_pos_min_px": np.min,
+                        "x_pos_max_px": np.max,
+                        "y_pos_min_px": np.min,
+                        "y_pos_max_px": np.max,
+                        "n_barcodes": np.mean,
+                        "n_matching": np.mean,
+                        "matching_ratio": np.mean,
+                        "px_by_um": np.mean,
+                    }
+                )
+            )
 
             return df_pc.to_dict()
 
@@ -1181,10 +805,8 @@ class ProjectDF:
             return None
         else:
             return df_puck.iloc[0].to_dict()
-        
-    def get_puck(
-            self, project_id: str, sample_id: str, return_empty=False
-    ) -> Puck:
+
+    def get_puck(self, project_id: str, sample_id: str, return_empty=False) -> Puck:
         """get_puck.
 
         :param project_id: project_id of a sample
@@ -1246,6 +868,7 @@ class ProjectDF:
 
     def dump(self):
         """dump."""
+        self.logger.debug(f"writing project_df.csv to '{self.file_path}")
         self.df.to_csv(self.file_path)
 
     def add_sample_sheet(self, sample_sheet_path, basecalls_dir):
@@ -1254,6 +877,8 @@ class ProjectDF:
         :param sample_sheet_path:
         :param basecalls_dir:
         """
+        import pandas as pd
+
         with open(sample_sheet_path) as sample_sheet:
             ix = 0
             investigator = None
@@ -1352,6 +977,7 @@ class ProjectDF:
         sample_id=None,
         R1=None,
         R2=None,
+        reads=None,
         dge=None,
         longreads=None,
         longread_signature=None,
@@ -1371,6 +997,7 @@ class ProjectDF:
         :param sample_id:
         :param R1:
         :param R2:
+        :param reads:
         :param dge:
         :param longreads:
         :param longread_signature:
@@ -1381,6 +1008,8 @@ class ProjectDF:
         :param map_strategy:
         :param kwargs:
         """
+        import pandas as pd
+
         ix = (project_id, sample_id)
         sample_exists = self.sample_exists(*ix)
 
@@ -1407,8 +1036,18 @@ class ProjectDF:
         # If longreads not provided, we try with basecalls_dir and sample_sheet
         #   (only used by add_sample_sheet command)
         # If those area also not provided, we try to add a simple dge
-        if action == "add" and (R1 is None or R2 is None) and not is_merged:
-            self.logger.info("R1 or R2 not provided, trying longreads")
+
+        if R1 == ["None"]:
+            R1 = None
+
+        if R2 == ["None"]:
+            R2 = None
+
+        if reads == "None":
+            reads = None
+
+        if action == "add" and (R2 is None) and (reads is None) and not is_merged:
+            self.logger.info("R2 not provided, trying longreads")
 
             if not longreads:
                 self.logger.info(
@@ -1420,7 +1059,7 @@ class ProjectDF:
                     )
                     if not dge:
                         raise SpacemakeError(
-                            "Neither R1 & R2, longreads, basecalls_dir & "
+                            "Neither R1,R2, longreads, basecalls_dir & "
                             + "sample_sheet, nor dge were provided.\n"
                             + "Some reads/data has to be provided"
                         )
@@ -1431,8 +1070,13 @@ class ProjectDF:
                     )
 
         # assert files first
+        # if R1 is not None:
         assert_file(R1, default_value=None, extension=".fastq.gz")
+
+        # if R2 is not None:
         assert_file(R2, default_value=None, extension=".fastq.gz")
+
+        assert_file(reads, default_value=None, extension=[".txt", ".csv", ".tsv"])
         assert_file(longreads, default_value=None, extension="all")
         assert_file(
             dge,
@@ -1470,6 +1114,7 @@ class ProjectDF:
         config_variables_to_check = {
             "pucks": "puck",
             "barcode_flavors": "barcode_flavor",
+            "adapter_flavors": "adapter_flavor",
             "species": "species",
         }
 
@@ -1482,6 +1127,7 @@ class ProjectDF:
         # first populate kwargs
         kwargs["R1"] = R1
         kwargs["R2"] = R2
+        kwargs["reads"] = reads
         kwargs["dge"] = dge
         kwargs["longreads"] = longreads
         kwargs["longread_signature"] = longread_signature
@@ -1503,7 +1149,20 @@ class ProjectDF:
                 )
             )
 
-        kwargs["map_strategy"] = map_strategy
+        if action == "add":
+            _i_species = kwargs["species"]
+        elif action == "update":
+            _i_species = self.df.loc[ix]["species"]
+
+        # validate and correct map_strategies
+        from spacemake.map_strategy import validate_mapstr
+
+        kwargs["map_strategy"] = validate_mapstr(
+            map_strategy, config=self.config, species=_i_species
+        )
+
+        # TODO: remove
+        # kwargs["map_strategy"] = map_strategy
 
         # populate puck_barcode_file
         if puck_barcode_file is not None:
@@ -1581,10 +1240,11 @@ class ProjectDF:
             new_project = pd.Series(self.project_df_default_values)
             new_project.name = ix
             new_project.update(kwargs)
-            # before addition
 
             # after addition
             self.df = pd.concat([self.df, pd.DataFrame(new_project).T], axis=0)
+            # as of pandas 2.0.1 the names of a MultiIndex do not survive concat.
+            self.df.index.names = ["project_id", "sample_id"]
 
         if return_series:
             return (ix, new_project)
@@ -1617,6 +1277,8 @@ class ProjectDF:
 
         :param projects_yaml_file:
         """
+        import yaml
+
         config = yaml.load(open(projects_yaml_file), Loader=yaml.FullLoader)
         demux_projects = config.get("projects", None)
 
@@ -1771,7 +1433,7 @@ class ProjectDF:
         sample_id_list=[],
         **kwargs,
     ):
-        """merge_samples.
+        """merge samples.
 
         :param merged_project_id:
         :param merged_sample_id:
@@ -1788,11 +1450,13 @@ class ProjectDF:
 
         consistent_variables = list(self.config.main_variables_sg2pl.keys())
         consistent_variables.remove("run_mode")
-        
-        # append variable "map_strategy" manually.
+        consistent_variables.remove("adapter")
+        consistent_variables.remove("quant")
+
+        # append variable "map-strategy" manually.
         # TODO: consider moving "map_strategy" into the main_variables_sg2pl, needs additional parser etc.
         consistent_variables.append("map_strategy")
-        
+
         ix_list = ix.to_list()
 
         if ix_list == []:
@@ -1885,3 +1549,18 @@ class ProjectDF:
         )
 
         return (sample_added, ix)
+
+
+__global_ProjectDF = None
+
+
+def get_global_ProjectDF(root="."):
+    global __global_ProjectDF
+    if __global_ProjectDF is None:
+        from spacemake.config import get_global_config
+
+        __global_ProjectDF = ProjectDF(
+            f"{root}/project_df.csv", config=get_global_config()
+        )
+
+    return __global_ProjectDF

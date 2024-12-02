@@ -1,5 +1,6 @@
 import os
-import yaml
+
+# import yaml
 import argparse
 import re
 import logging
@@ -10,6 +11,16 @@ from spacemake.util import check_star_index_compatibility
 
 logger_name = "spacemake.config"
 
+
+__global_config = None
+
+
+def get_global_config(root="."):
+    global __global_config
+    if __global_config is None:
+        __global_config = ConfigFile.from_yaml(f"{root}/config.yaml")
+
+    return __global_config
 
 def get_puck_parser(required=True):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
@@ -39,7 +50,6 @@ def get_puck_parser(required=True):
     )
 
     return parser
-
 
 def get_run_mode_parser(required=True):
     parser = argparse.ArgumentParser(
@@ -217,7 +227,7 @@ def get_species_parser(required=True):
 
 def get_barcode_flavor_parser(required=True):
     parser = argparse.ArgumentParser(
-        allow_abbrev=False, description="add/update barcode_flavor", add_help=False
+        allow_abbrev=False, description="add/update barcode-flavor", add_help=False
     )
     parser.add_argument(
         "--name", help="name of the barcode flavor", type=str, required=True
@@ -231,13 +241,18 @@ def get_barcode_flavor_parser(required=True):
         required=required,
     )
     parser.add_argument(
-        "--cell_barcode",
+        "--cell-barcode",
         help="structure of CELL BARCODE, using python's list syntax. Example: to set"
-        + " the cell_barcode to 1-12 nt of Read1, use --cell_barcode r1[0:12]. It is also possible "
+        + " the cell_barcode to 1-12 nt of Read1, use --cell-barcode r1[0:12]. It is also possible "
         + " to reverse the CELL BARCODE, for instance with r1[0:12][::-1] (reversing the first 12nt of"
         + " Read1, and assigning them as CELL BARCODE).",
         type=str,
         required=required,
+    )
+    parser.add_argument(
+        "--cell_barcode",
+        help=argparse.SUPPRESS,
+        type=str,
     )
 
     return parser
@@ -360,7 +375,7 @@ def add_update_delete_variable_cmdline(config, args):
 def list_variables_cmdline(config, args):
     variable = args["variable"]
     del args["variable"]
-
+    import yaml
     config.logger.info(f"Listing {variable}")
     config.logger.info(yaml.dump(config.variables[variable]))
 
@@ -449,8 +464,11 @@ class ConfigFile:
     main_variables_pl2sg = {
         "pucks": "puck",
         "barcode_flavors": "barcode_flavor",
+        "adapters": "adapter",
+        "adapter_flavors": "adapter_flavor",
         "run_modes": "run_mode",
         "species": "species",
+        "quant": "quant",
     }
 
     main_variables_sg2pl = {value: key for key, value in main_variables_pl2sg.items()}
@@ -458,6 +476,8 @@ class ConfigFile:
     main_variable_sg2type = {
         "puck": str,
         "barcode_flavor": str,
+        "adapter": str,
+        "adapter_flavor": str,
         "run_mode": "str_list",
         "species": str,
         "map_strategy": str,
@@ -465,19 +485,23 @@ class ConfigFile:
 
     def __init__(self):
         self.variables = {
-            "root_dir": "",
+            "root_dir": ".",
             "temp_dir": "/tmp",
             "species": {},
             "barcode_flavors": {},
+            "adapter_flavors": {},
+            "adapters": {},
             "run_modes": {},
             "pucks": {},
+            "quant": {},
         }
         self.file_path = "config.yaml"
         self.logger = logging.getLogger(logger_name)
 
     @classmethod
-    def from_yaml(cls, file_path):
+    def from_yaml(cls, file_path="config.yaml"):
         cf = cls()
+        import yaml
 
         config_yaml_variables = None
         with open(file_path, "r") as f:
@@ -493,7 +517,6 @@ class ConfigFile:
 
             # correct variables to ensure backward compatibility
             cf.correct()
-
             # check which variables do not exist, if they dont,
             # copy them from initial config
             for main_variable in cf.main_variables_pl2sg:
@@ -521,7 +544,30 @@ class ConfigFile:
                     default_val.update(cf.variables[var_with_default]["default"])
                     cf.variables[var_with_default]["default"] = default_val
 
+        cf.expand_strings()
         return cf
+
+    def expand_strings(self, **kw):
+        kw['spacemake_dir'] = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
+        # print(f"expanding strings in config with context={kw}")
+        import collections.abc as abc
+        def recurse(d):
+            if type(d) == str:
+                try:
+                    return d.format(**kw)
+                except KeyError:
+                    return d
+
+            if isinstance(d, abc.Mapping):
+                for key, value in d.items():
+                    d[key] = recurse(value)
+
+            elif isinstance(d, abc.Collection):
+                d = [recurse(x) for x in d]
+
+            return d
+
+        self.variables = recurse(self.variables)
 
     def assert_main_variable(self, variable):
         if variable not in self.main_variables_pl2sg.keys():
@@ -627,6 +673,9 @@ class ConfigFile:
             self.variables["run_modes"][run_mode_name] = variables
 
     def dump(self):
+        import yaml
+
+        self.logger.debug(f"writing config.yaml to '{self.file_path}")
         with open(self.file_path, "w") as fo:
             fo.write(yaml.dump(self.variables))
 
@@ -673,7 +722,7 @@ class ConfigFile:
 
         return variable_data
 
-    def process_run_mode_args(self, **kwargs):
+    def process_run_mode_args(self, name=None, **kwargs):
         # typeset boolean values of run_mode
         default_run_mode = self.get_variable("run_modes", "default")
 
@@ -683,27 +732,85 @@ class ConfigFile:
 
         return kwargs
 
-    def process_barcode_flavor_args(self, cell_barcode=None, umi=None, name=None):
+    def process_barcode_flavor_args(self, **kw):
         bam_tags = "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
-
+        
         # r(1|2) and then string slice
-        to_match = r"r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$"
+        # this is too restrictive. What about umi = "r1[12:20] + r2[:8]" ? 
+        # would be perfectly reasonable 
+        # to_match = r"r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$"
 
-        if umi is not None and re.match(to_match, umi) is None:
-            raise InvalidBarcodeStructure("umi", to_match)
+        UMI = kw.get("UMI", None)
+        # if umi is not None and re.match(to_match, umi) is None:
+        #     raise InvalidBarcodeStructureError("umi", to_match)
 
-        if cell_barcode is not None and re.match(to_match, cell_barcode) is None:
-            raise InvalidBarcodeStructure("umi", to_match)
+        cell_barcode = kw.get("cell", None)
+        # if cell_barcode is not None and re.match(to_match, cell_barcode) is None:
+        #     raise InvalidBarcodeStructureError("cell", to_match)
 
         barcode_flavor = {"bam_tags": bam_tags}
 
-        if umi is not None:
-            barcode_flavor["UMI"] = umi
+        if UMI is not None:
+            barcode_flavor["UMI"] = UMI
 
         if cell_barcode is not None:
             barcode_flavor["cell"] = cell_barcode
 
+        for key, value in kw.items():
+            if value is not None:
+                barcode_flavor[key] = value
+
         return barcode_flavor
+
+    def process_adapter_args(self, name=None, seq=None):
+        # print(f"processing {name} {seq}")
+        if (name is None) or (seq is None):
+            raise ValueError(f"need a name and a sequence: name={name} seq={seq}")
+
+        return {name: seq}
+
+    def process_adapter_flavor_args(self, cut_left=[], cut_right=[], name=None, **kw):
+        def parse_adapters(cut):
+            type_d = {
+                "max_errors": float,
+                "min_overlap": int,
+                "min_base_qual": float,
+            }
+            from collections import OrderedDict
+
+            out = []
+            for c in cut:
+                parts = c.split(":")
+                adap_name = parts[0]
+                if adap_name != "Q" and not adap_name in self.variables["adapters"]:
+                    raise KeyError(
+                        (
+                            f"unknown adapter {adap_name}! We have "
+                            f"{','.join(self.variables['adapters'])} "
+                            " you can add new adapter with --add_adapter "
+                        )
+                    )
+                d = {}
+                if len(parts) > 1:
+                    for param_str in parts[1:]:
+                        key, value = param_str.split("=")
+                        d[key] = type_d.get(key, str)(value)
+
+                out.append({adap_name: d})
+
+            return out
+
+        adapter_flavor = {
+            "cut_left": parse_adapters(cut_left),
+            "cut_right": parse_adapters(cut_right),
+        }
+
+        for key, value in kw.items():
+            if value is not None:
+                adapter_flavor[key] = value
+
+        # print(f"processed adapter_flavors {adapter_flavor}")
+        return {name: adapter_flavor}
 
     def process_species_args(
         self,
@@ -736,7 +843,7 @@ class ConfigFile:
             d["BT2_flags"] = BT2_flags
 
         if STAR_flags:
-            d["STAR_flags"] = BT2_flags
+            d["STAR_flags"] = STAR_flags
 
         species_refs = self.variables["species"].get(name, {})
         species_refs[reference] = d
@@ -766,6 +873,10 @@ class ConfigFile:
     def process_variable_args(self, variable, **kwargs):
         if variable == "barcode_flavors":
             return self.process_barcode_flavor_args(**kwargs)
+        elif variable == "adapters":
+            return self.process_adapter_args(**kwargs)
+        elif variable == "adapter_flavors":
+            return self.process_adapter_flavor_args(**kwargs)
         elif variable == "run_modes":
             return self.process_run_mode_args(**kwargs)
         elif variable == "pucks":
@@ -797,7 +908,12 @@ class ConfigFile:
             else:
                 values = self.process_variable_args(variable, **kwargs)
                 self.variables[variable][name] = values
-
+        elif variable == "adapters":
+            if not self.variable_exists(variable, name):
+                values = self.process_variable_args(variable, **kwargs)
+                self.variables[variable].update(values)
+            else:
+                raise DuplicateConfigVariableError(variable, name)
         else:
             if not self.variable_exists(variable, name):
                 values = self.process_variable_args(variable, **kwargs)
@@ -813,9 +929,19 @@ class ConfigFile:
 
     def update_variable(self, variable, name, **kwargs):
         if self.variable_exists(variable, name):
-            values = self.process_variable_args(variable, **kwargs)
-            self.variables[variable][name].update(values)
-
+            # print(f"updating {variable} {name} {kwargs}")
+            values = self.process_variable_args(variable, name=name, **kwargs)
+            if variable == "adapters":
+                self.variables[variable].update(values)
+            elif variable == "adapter_flavors":
+                raise NotImplementedError(
+                    (
+                        "Updating ofadapter flavors is not implemented! "
+                        "please delete the flavor and then add aggain."
+                    )
+                )
+            else:
+                self.variables[variable][name].update(values)
             variable_data = self.variables[variable][name]
         else:
             if variable in ["run_modes", "pucks", "barcode_flavors"]:
@@ -827,7 +953,6 @@ class ConfigFile:
         return variable_data
 
     def get_variable(self, variable, name):
-        # print(f"config.get_variable({variable}, {name})")
         if not self.variable_exists(variable, name):
             raise ConfigVariableNotFoundError(variable, name)
         else:
@@ -858,3 +983,542 @@ class ConfigFile:
                 raise
             else:
                 return Puck(name)
+
+    def get_barcode_flavor(self, flavor):
+        return self.get_variable("barcode_flavors", flavor)
+
+    def get_adapter_flavor(
+        self, flavor, add_adapter_sequences=["cut_left", "cut_right"]
+    ):
+        adapter_sequences = self.variables["adapters"]
+        af = self.get_variable("adapter_flavors", flavor)
+        # populate each adapter clip definition in this flavor with the full sequence of the adapter
+        for section, entries in af.items():
+            if section in add_adapter_sequences:
+                for (name, d_adap) in entries.items():
+                    if name == "Q":
+                        continue
+                    d_adap["seq"] = adapter_sequences.get(
+                        name,
+                        f"'{name}' NOT FOUND in 'adapters:' section of config.yaml",
+                    )
+
+        return af
+
+
+def get_run_mode_parser(required=True):
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False,
+        formatter_class=argparse.RawTextHelpFormatter,
+        description="add/update run_mode parent parser",
+        add_help=False,
+    )
+    parser.add_argument(
+        "--name", type=str, help="name of the run_mode to be added", required=True
+    )
+    parser.add_argument(
+        "--parent_run_mode",
+        type=str,
+        help="Name of the parent run_mode. All run_modes will fall back to 'default'",
+    )
+    parser.add_argument(
+        "--umi_cutoff",
+        type=int,
+        nargs="+",
+        help="umi_cutoff for this run_mode."
+        + "the automated analysis will be run with these cutoffs",
+    )
+    parser.add_argument(
+        "--n_beads", type=int, help="number of expected beads for this run_mode"
+    )
+    parser.add_argument(
+        "--clean_dge",
+        required=False,
+        choices=bool_in_str,
+        type=str,
+        help="if True, the DGE will be cleaned of barcodes which overlap with primers",
+    )
+    parser.add_argument(
+        "--detect_tissue",
+        required=False,
+        choices=bool_in_str,
+        type=str,
+        help="By default only beads having at least umi_cutoff UMI counts are analysed "
+        + "during the automated analysis, all other beads are filtered out. If this "
+        + "parameter is set, contiguous islands within umi_cutoff passing beads will "
+        + "also be included in the analysis",
+    )
+    parser.add_argument(
+        "--polyA_adapter_trimming",
+        required=False,
+        choices=bool_in_str,
+        type=str,
+        help="if set, reads will have polyA stretches and adapter sequence overlaps trimmed "
+        + "BEFORE mapping.",
+    )
+    parser.add_argument(
+        "--count_intronic_reads",
+        required=False,
+        choices=bool_in_str,
+        type=str,
+        help="if set, INTRONIC reads will also be countsed (apart from UTR and CDS)",
+    )
+    parser.add_argument(
+        "--count_mm_reads",
+        required=False,
+        choices=bool_in_str,
+        type=str,
+        help="if True, multi-mappers will also be counted. For every "
+        + "multimapper only reads which have one unique read mapped"
+        + "to a CDS or UTR region will be counted",
+    )
+
+    parser.add_argument(
+        "--mesh_data",
+        required=False,
+        choices=bool_in_str,
+        type=str,
+        help="if True, this data will be 'mehsed': a hexagonal structured "
+        + "meshgrid will be created, where each new spot will have diameter"
+        + " of --mesh_spot_diameter_um micron diameter and the spots will "
+        + "be spaced --mesh_spot_distance_um microns apart",
+    )
+    parser.add_argument(
+        "--mesh_type",
+        required=False,
+        choices=["circle", "hexagon"],
+        type=str,
+        help="circle: circles with diameter of --mesh_spot_diameter_um will be placed"
+        + " in a hex grid, where he distance between any two circles will be "
+        + "--mesh_spot_distance_um\n"
+        + "hexagon: a mesh of touching hexagons will be created, with their "
+        + "centers being --mesh_spot_distance_um apart. This will cover all "
+        + "the data without any holes",
+    )
+    parser.add_argument(
+        "--mesh_spot_diameter_um",
+        type=float,
+        required=False,
+        help="diameter of mesh spot, in microns. to create a visium-style "
+        + "mesh, use 55um",
+    )
+    parser.add_argument(
+        "--mesh_spot_distance_um",
+        type=float,
+        required=False,
+        help="distance between mesh spots in um. to create a visium-style "
+        + "mesh use 100um",
+    )
+
+    return parser
+
+
+def get_species_parser(required=True):
+    "a parser that allows to add a reference sequence and annotation, belonging to some species"
+    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
+    parser.add_argument(
+        "--reference",
+        help="name of the reference (default=genome)",
+        type=str,
+        default="genome",
+    )
+    parser.add_argument("--name", help="name of the species", type=str, required=True)
+    parser.add_argument(
+        "--sequence",
+        help="path to the sequence (.fa) file for the species/reference to be added (e.g. the genome)",
+        type=str,
+        required=required,
+    )
+    parser.add_argument(
+        "--genome",
+        help="[DEPRECATED] path to the genome (.fa) file for the species to be added. --genome=<arg> is a synonym for --reference=genome --sequence=<arg>",
+        type=str,
+        required=False,
+    )
+
+    parser.add_argument(
+        "--annotation",
+        help="path to the genome annotation (.gtf) file for the species to be added",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--STAR_index_dir",
+        help="path to STAR index directory",
+        type=str,
+        required=False,
+    )
+    parser.add_argument(
+        "--BT2_index",
+        help="path to BOWTIE2 index",
+        type=str,
+        required=False,
+    )
+    parser.add_argument(
+        "--BT2_flags",
+        help="bt2 mapping arguments for this reference (default=mapping.smk:default_BT2_MAP_FLAGS) ",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--STAR_flags",
+        help="STAR mapping arguments for this reference (default=mapping.smk:default_STAR_MAP_FLAGS)",
+        type=str,
+        default="",
+        required=False,
+    )
+
+    return parser
+
+
+def get_barcode_flavor_parser(required=True):
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False, description="add/update barcode_flavor", add_help=False
+    )
+    parser.add_argument(
+        "--name", help="name of the barcode flavor", type=str, required=True
+    )
+    parser.add_argument(
+        "--umi",
+        dest="UMI",
+        help="structure of UMI, using python's list syntax. Example: to set UMI to "
+        + "13-20 NT of Read1, use --UMI r1[12:20]. It is also possible to use the first 8nt of "
+        + "Read2 as UMI: --UMI r2[0:8]",
+        type=str,
+        required=required,
+    )
+    # parser.add_argument(
+    #     "--read1",
+    #     help="can be used to modify or replace 'read1' sequence",
+    #     type=str,
+    # )
+
+    parser.add_argument(
+        "--cell-barcode",
+        dest="cell",
+        help="structure of CELL BARCODE, using python's list syntax. Example: to set"
+        + " the cell_barcode to 1-12 nt of Read1, use --cell-barcode r1[0:12]. It is also possible "
+        + " to reverse the CELL BARCODE, for instance with r1[0:12][::-1] (reversing the first 12nt of"
+        + " Read1, and assigning them as CELL BARCODE).",
+        type=str,
+        required=required,
+    )
+    parser.add_argument(
+        "--cell_barcode",
+        dest="cell",
+        help=argparse.SUPPRESS,
+        type=str,
+        required=False,
+    )
+
+    parser.add_argument(
+        "--seq",
+        help=(
+            "if set, allows to modify the sequence, e.g. "
+            "--seq='r2[4:]' will trim the first 4 bases. "
+            "NOTE: has to be matched with --qual='r2_qual[4:]' !"
+        ),
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--qual",
+        help=(
+            "if set, allows to modify the base qualities, e.g. "
+            "--qual='r2_qual[4:]' will trim the first 4 quality values"
+            "NOTE: has to be matched with --seq='r2[4:]' !"
+        ),
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--min-qual-trim",
+        help=(
+            "Especially if you need access to bases 'at the end' of the read, "
+            "that may require trimming bases that bcl2fastq already "
+            "marked as non-existent (i.e. sequencing adapter). "
+            "a good option for that is to clip bases from the 3' end if they "
+            "have very low quality scores (default=disabled)"
+        ),
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--min_qual_trim",
+        help=argparse.SUPPRESS,
+        type=int,
+        default=None,
+    )
+
+    return parser
+
+
+def get_adapter_parser(required=True):
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False,
+        add_help=False,
+        description=("add/update adapter sequences"),
+    )
+    parser.add_argument("--name", help="name of the adapter", type=str, required=True)
+    parser.add_argument(
+        "--seq",
+        help="sequence of the adapter",
+        type=str,
+        required=required,
+    )
+    return parser
+
+
+def get_adapter_flavor_parser(required=True):
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False,
+        add_help=False,
+        description="add/update adapter_flavor",
+    )
+    parser.add_argument(
+        "--name",
+        help=(
+            "name of the adapter flavor."
+            "an 'adapter_flavor' describes a recipe for trimming raw reads. "
+            "this can entail clipping sequences from either end (such as TSO "
+            "and/or polyA tails) as well as quality-score based trimming "
+            "of bases on the reads 3' end. \n"
+            "NOTE: adapters need to be first added via \n"
+            "   add_adapter --name <name> --seq <sequence>\n"
+            "before they can be used in an adapter_flavor. To customize the "
+            "parameters for determining a match, key-value pairs can be passed "
+            "to --cut_left and --cut_right, for example:\n\n"
+            "   --cut_left SMART:min_overlap=10:max_errors=0.1 "
+            "   --cut_right Q:min_base_qual=30 polyA:min_overlap=3:max_errors=0.25 "
+        ),
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--cut_left",
+        help=(
+            "list the adapter sequences that should "
+            "be trimmed from the left side of the read,"
+            "e.g. --cut_left TSO_SMART SMART"
+        ),
+        type=str,
+        nargs="+",
+    )
+    parser.add_argument(
+        "--cut_right",
+        help=(
+            "list the adapter sequences that should "
+            "be trimmed from the right side of the read,"
+            "e.g. --cut_right Q polyG polyA "
+            "NOTE: 'Q' means quality-score trimming"
+        ),
+        type=str,
+        nargs="+",
+    )
+    parser.add_argument(
+        "--paired_end",
+        help=(
+            "if consecutive reads are mates of a paired-end read,"
+            "and trimming leads to a read that is shorter than "
+            "min_read_length, we need to discard either both reads,"
+            "or, instead of discarding, the short read can be replaced"
+            " with a single 'N' [EXPERIMENTAL]"
+        ),
+        type=str,
+        choices=["single_end", "replace_N", "discard_both"],
+    )
+    parser.add_argument(
+        "--min_read_length",
+        help=(
+            "if triming reduces the length of the read below this"
+            " threshold, the read should be discarded (default=18)"
+        ),
+        type=int,
+        default=None,
+    )
+
+    return parser
+
+
+def get_quant_parser(required=True):
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False,
+        add_help=False,
+        description="add/update counting flavors (quant)",
+    )
+    parser.add_argument(
+        "--name",
+        help=(
+            "name of the counting flavor."
+        ),
+        type=str,
+        required=True,
+    )
+    return parser
+
+def get_variable_action_subparsers(parent_parser, variable):
+
+    if variable == "barcode_flavors":
+        variable_singular = variable[:-1]
+        variable_add_update_parser = get_barcode_flavor_parser
+    elif variable == "adapters":
+        variable_singular = variable[:-1]
+        variable_add_update_parser = get_adapter_parser
+    elif variable == "adapter_flavors":
+        variable_singular = variable[:-1]
+        variable_add_update_parser = get_adapter_flavor_parser
+    elif variable == "pucks":
+        variable_singular = variable[:-1]
+        variable_add_update_parser = get_puck_parser
+    elif variable == "run_modes":
+        variable_singular = variable[:-1]
+        variable_add_update_parser = get_run_mode_parser
+    elif variable == "species":
+        variable_singular = variable
+        variable_add_update_parser = get_species_parser
+    elif variable == "quant":
+        variable_singular = variable
+        variable_add_update_parser = get_quant_parser
+
+    else:
+        print(f"suspicious variable {variable}")
+
+    command_help = {
+        "list": f"list {variable} and their settings",
+        "delete": f"delete {variable_singular}",
+        "add": f"add a new {variable_singular}",
+        "update": f"update an existing {variable_singular}",
+    }
+
+    # list command
+    list_parser = parent_parser.add_parser(
+        f"list-{variable.replace('_', '-')}",
+        description=command_help["list"],
+        help=command_help["list"],
+    )
+    list_parser.set_defaults(func=list_variables_cmdline, variable=variable)
+    # snake_case for backward compatibility. remove in a future update
+    list_parser_legacy = parent_parser.add_parser(f"list_{variable}",)
+    list_parser_legacy.set_defaults(func=list_variables_cmdline, variable=variable)
+
+    func = add_update_delete_variable_cmdline
+
+    # delete command
+    delete_parser = parent_parser.add_parser(
+        f"delete-{variable_singular.replace('_', '-')}",
+        description=command_help["delete"],
+        help=command_help["delete"],
+    )
+    delete_parser_legacy = parent_parser.add_parser(f"delete_{variable_singular}",) 
+    delete_parser.add_argument(
+        "--name",
+        help=f"name of the {variable_singular} to be deleted",
+        type=str,
+        required=True,
+    )
+    delete_parser_legacy.add_argument(
+        "--name",
+        help=f"name of the {variable_singular} to be deleted",
+        type=str,
+        required=True,
+    )
+    if variable == "species":
+        delete_parser.add_argument(
+            "--reference",
+            help=f"name of the reference to be deleted (genome, rRNA, ...)",
+            type=str,
+            required=True,
+        )
+        delete_parser_legacy.add_argument(
+            "--reference",
+            help=f"name of the reference to be deleted (genome, rRNA, ...)",
+            type=str,
+            required=True,
+        )
+    delete_parser.set_defaults(func=func, action="delete", variable=variable)
+    delete_parser_legacy.set_defaults(func=func, action="delete", variable=variable)
+
+    # add command
+    add_parser = parent_parser.add_parser(
+        f"add-{variable_singular.replace('_', '-')}",
+        parents=[variable_add_update_parser()],
+        description=command_help["add"],
+        help=command_help["add"],
+    )
+    add_parser_legacy = parent_parser.add_parser(
+        f"add_{variable_singular}",
+        parents=[variable_add_update_parser()],
+    )
+    add_parser.set_defaults(func=func, action="add", variable=variable)
+    add_parser_legacy.set_defaults(func=func, action="add", variable=variable)
+
+    # update command
+    update_parser = parent_parser.add_parser(
+        f"update-{variable_singular.replace('_', '-')}",
+        parents=[variable_add_update_parser(False)],
+        description=command_help["update"],
+        help=command_help["update"],
+    )
+    update_parser_legacy = parent_parser.add_parser(
+        f"update_{variable_singular}",
+        parents=[variable_add_update_parser(False)],)
+    update_parser.set_defaults(func=func, action="update", variable=variable)
+    update_parser_legacy.set_defaults(func=func, action="update", variable=variable)
+
+
+def setup_config_parser(parent_parser_subparsers):
+    parser_config = parent_parser_subparsers.add_parser(
+        "config", help="configure spacemake"
+    )
+    parser_config_subparsers = parser_config.add_subparsers(
+        help="config sub-command help"
+    )
+
+    for variable in ConfigFile.main_variables_pl2sg.keys():
+        get_variable_action_subparsers(parser_config_subparsers, variable)
+
+    return parser_config
+
+
+@message_aggregation(logger_name)
+def add_update_delete_variable_cmdline(args):
+    # set the name and delete from dictionary
+    name = args["name"]
+    variable = args["variable"]
+    action = args["action"]
+
+    import yaml
+
+    config = get_global_config()
+    config.assert_main_variable(variable)
+
+    # remove the args from the dict
+    del args["action"]
+    del args["variable"]
+    del args["name"]
+
+    if action == "add":
+        func = config.add_variable
+    elif action == "update":
+        func = config.update_variable
+    elif action == "delete":
+        func = config.delete_variable
+
+    var_variables = func(variable, name, **args)
+    # print and dump config file
+    config.logger.info(yaml.dump(var_variables, sort_keys=False))
+    config.dump()
+
+
+@message_aggregation(logger_name)
+def list_variables_cmdline(args):
+    variable = args["variable"]
+    del args["variable"]
+    import yaml
+
+    config = get_global_config()
+
+    config.logger.info(f"Listing {variable}")
+    config.logger.info(yaml.dump(config.variables[variable]))
