@@ -55,7 +55,7 @@ if __name__ == '__main__':
             delta_seconds = (finish_time - start_time).seconds
             # restart time
             start_time = finish_time
-            print(f'Processed 1 millon records in {delta_seconds} seconds, total records processed {counter}. current time: {finish_time}')
+            print(f'Processed 1 million records in {delta_seconds} seconds, total records processed {counter}. current time: {finish_time}')
 
         mapped_number = aln.get_tag('NH')
 

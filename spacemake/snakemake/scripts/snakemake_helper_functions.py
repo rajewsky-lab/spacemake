@@ -211,10 +211,7 @@ def get_output_files(
                     set([_default_non_spatial]))
                 )
 
-        # add the non spatial barcode by default
-        non_spatial_pbf_id = project_df.project_df_default_values[
-            "puck_barcode_file_id"
-        ][0]
+            puck_barcode_file_ids = "puck_collection"
 
         if check_puck_collection and len(puck_barcode_file_ids) > 1:
             _puck_vars = project_df.get_puck_variables(project_id = project_id, sample_id = sample_id)
@@ -368,7 +365,7 @@ def parse_barcode_flavors(
         cell_raw="None",
         score_threshold=0.0,
         min_opseq_score=22,
-        bam_tags="CR:{cell},MI:{UMI}",
+        bam_tags="CR:{cell},CB:{cell},MI:{UMI}",
     ),
 ):
     """
@@ -593,7 +590,7 @@ def get_files_to_merge(pattern, project_id, sample_id, **kwargs):
             "merged_from", sample_id=sample_id, project_id=project_id
         )
 
-        for (p, s) in merge_ix:
+        for p, s in merge_ix:
             files = files + get_files_to_merge(
                 project_id=p, sample_id=s, pattern=pattern, **kwargs
             )
@@ -630,7 +627,7 @@ def get_ribo_depletion_log(wildcards):
 
 def get_top_barcodes(wildcards):
     if wildcards.n_beads == "spatial":
-        return {"top_barcodes": spatial_barcodes}
+        return {"top_barcodes": spatial_barcodes}  # experimental
     if wildcards.dge_cleaned == "":
         return {"top_barcodes": top_barcodes}
     else:
@@ -849,7 +846,7 @@ def get_dge_collection_from_run_mode(
         )
         for key, pattern in out_files_pattern.items()
     }
-    
+
     return out_files
 
 
@@ -947,7 +944,9 @@ def get_qc_sheet_input_files(wildcards):
     return to_return
 
 
-def get_bam_tag_names(project_id, sample_id, default_tags="CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"):
+def get_bam_tag_names(
+    project_id, sample_id, default_tags="CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+):
     barcode_flavor = project_df.get_metadata(
         "barcode_flavor", project_id=project_id, sample_id=sample_id
     )
@@ -1041,9 +1040,7 @@ def get_barcode_files(wildcards):
         project_id=wildcards.project_id, sample_id=wildcards.sample_id
     )
 
-    return {
-        "puck_barcode_files": pbfs
-    }
+    return {"puck_barcode_files": pbfs}
 
 
 def get_automated_analysis_dge_input(wildcards):
@@ -1073,7 +1070,6 @@ def get_automated_analysis_dge_input(wildcards):
             )["dge"]
         ]
 
-# FLAG: unused
 def get_novosparc_input_files(config):
     if (
         "reference_project_id" in config

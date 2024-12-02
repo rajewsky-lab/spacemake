@@ -1,13 +1,7 @@
 Configuration
 =============
 
-Once installed, spacemake needs to be configured.
-
-.. include:: shared/spacemake_init.rst
-
-Optionally, you can also provide the ``--download_species`` flag, which will download Gencode genomes and
-annotations for ``mouse`` and ``human``, and place them under ``project\_root/species\_data/<species>``,
-where <species> is either mouse or human.
+Once installed and initialized, spacemake needs to be configured.
 
 .. include:: shared/shared_sample_variables.rst
 
@@ -61,6 +55,15 @@ Spacemake provides the following barcode\_flavors out of the box:
     default:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
+    openst:
+        cell: "r1[2:27]"
+        UMI: "r2[0:9]"
+    sc_10x_v2:
+        cell: "r1[0:16]"
+        UMI: "r1[16:26]"
+    seq_scope:
+        UMI: "r2[0:9]"
+        cell: "r1[0:20]"
     slide_seq_14bc:
         cell: "r1[0:14]"
         UMI: "r1[14:23]"
@@ -70,12 +73,6 @@ Spacemake provides the following barcode\_flavors out of the box:
     visium:
         cell: "r1[0:16]"
         UMI: "r1[16:28]"
-    sc_10x_v2:
-        cell: "r1[0:16]"
-        UMI: "r1[16:26]"
-    seq_scope:
-        UMI: "r2[0:9]"
-        cell: "r1[0:20]"
 
 To list the currently available ``barcode_flavor``-s, type::
    
@@ -164,57 +161,77 @@ Each ``run_mode`` can have the following variables:
    If a one of the ``run_mode`` variables is missing, the variable of the parent will be used.
    If parent is not provided, the ``default`` ``run_mode`` will be the parent. 
 
-Provided run\_mode(s)
+Provided run\_modes
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: yaml
 
-    default:
-        n_beads: 100000
-        umi_cutoff: [100, 300, 500]
-        clean_dge: False
-        detect_tissue: False
-        polyA_adapter_trimming: True
-        count_intronic_reads: True
-        count_mm_reads: False
-        mesh_data: False
-        mesh_type: 'circle'
-        mesh_spot_diameter_um: 55
-        mesh_spot_distance_um: 100
-        spatial_barcode_min_matches: 0
-    visium:
-        n_beads: 10000
-        umi_cutoff: [1000]
-        clean_dge: False
-        detect_tissue: True
-        polyA_adapter_trimming: False
-        count_intronic_reads: False
-        count_mm_reads: True
-    slide_seq:
-        n_beads: 100000
-        umi_cutoff: [50]
-        clean_dge: False
-        detect_tissue: False
-    scRNA_seq:
-        n_beads: 10000
-        umi_cutoff: [500]
-        detect_tissue: False
-        polyA_adapter_trimming: True
-        count_intronic_reads: True
-        count_mm_reads: False
-    seq_scope:
-        clean_dge: false
-        count_intronic_reads: false
-        count_mm_reads: false
-        detect_tissue: false
-        mesh_data: true
-        mesh_spot_diameter_um: 10
-        mesh_spot_distance_um: 15
-        mesh_type: hexagon
-        n_beads: 1000
-        umi_cutoff:
-        - 100
-        - 300
+  default:
+    clean_dge: false
+    count_intronic_reads: true
+    count_mm_reads: false
+    detect_tissue: false
+    mesh_data: false
+    mesh_spot_diameter_um: 55
+    mesh_spot_distance_um: 100
+    mesh_type: circle
+    n_beads: 100000
+    polyA_adapter_trimming: true
+    spatial_barcode_min_matches: 0
+    umi_cutoff:
+    - 100
+    - 300
+    - 500
+  openst:
+    clean_dge: false
+    count_intronic_reads: true
+    count_mm_reads: true
+    detect_tissue: false
+    mesh_data: true
+    mesh_spot_diameter_um: 7
+    mesh_spot_distance_um: 7
+    mesh_type: hexagon
+    n_beads: 100000
+    polyA_adapter_trimming: true
+    spatial_barcode_min_matches: 0.1
+    umi_cutoff:
+    - 100
+    - 250
+    - 500
+  scRNA_seq:
+    count_intronic_reads: true
+    count_mm_reads: false
+    detect_tissue: false
+    n_beads: 10000
+    umi_cutoff:
+    - 500
+  seq_scope:
+    clean_dge: false
+    count_intronic_reads: false
+    count_mm_reads: false
+    detect_tissue: false
+    mesh_data: true
+    mesh_spot_diameter_um: 10
+    mesh_spot_distance_um: 15
+    mesh_type: hexagon
+    n_beads: 1000
+    umi_cutoff:
+    - 100
+    - 300
+  slide_seq:
+    clean_dge: false
+    detect_tissue: false
+    n_beads: 100000
+    umi_cutoff:
+    - 50
+  visium:
+    clean_dge: false
+    count_intronic_reads: false
+    count_mm_reads: true
+    detect_tissue: true
+    n_beads: 10000
+    umi_cutoff:
+    - 1000
 
 .. note::
    If a sample has no ``run_mode`` provided, the ``default`` will be used
@@ -259,21 +276,22 @@ Configure pucks
 
 .. _configure-puck:
 
-Each spatial sample, needs to have a ``puck``. The ``puck`` sample-variable will define the 
-dimensionality of the underlying spatial structure, which then spacemake will use
-during the autmated analysis and plotting. 
+Each spatial sample is associated with a ``puck``. The ``puck`` variable defines the 
+dimensionality of the underlying spatial structure, which spacemake uses
+during the automated analysis and plotting, as well as the binning (meshing) of
+the data when selected in the ``run_mode``.
 
 Each puck has the following variables:
 
 - ``width_um``: the width of the puck, in microns
 - ``spot_diameter_um``: the diameter of bead on this puck, in microns.
 - ``barcodes`` (optional): the path to the barcode file, containing the cell\_barcode
-  and (x,y) position for each. This is handy, when several pucks have the same barcodes,
-  such as for 10x visium.
+  and (x,y) position for each. This is handy when several pucks have the same barcodes,
+  such as for 10x Visium.
 - ``coordinate_system`` (optional): the path to the coordinate system file, containing puck
   IDs and the (x,y,z) position for each, in global coordinates. This coordinate system is analogous
   to the global coordinate system for image stitching. When specified, this 'stitching' is
-  automatically performed on ``puck``-s with spatial information
+  automatically performed on ``puck``-s with spatial information.
 
 
 Provided pucks
@@ -281,26 +299,27 @@ Provided pucks
 
 .. code-block:: yaml
 
-    default:
-        width_um: 3000
-        spot_diameter_um: 10
-    visium:
-        barcodes: 'puck_data/visium_barcode_positions.csv'
-        width_um: 6500
-        spot_diameter_um: 55
-    seq_scope:
-        width_um: 1000
-        spot_diameter_um: 1
-    slide_seq:
-        width_um: 3000
-        spot_diameter_um: 10
-    openst:
-        width_um: 1200
-        spot_diameter_um: 0.6
-        coordinate_system: 'puck_data/openst_coordinate_system.csv'
+  default:
+    coordinate_system: ''
+    spot_diameter_um: 10
+    width_um: 3000
+  openst:
+    coordinate_system: puck_data/openst_coordinate_system.csv
+    spot_diameter_um: 0.6
+    width_um: 1200
+  seq_scope:
+    spot_diameter_um: 1
+    width_um: 1000
+  slide_seq:
+    spot_diameter_um: 10
+    width_um: 3000
+  visium:
+    barcodes: puck_data/visium_barcode_positions.csv
+    spot_diameter_um: 55
+    width_um: 6500
 
-as you can see, the ``visium`` puck comes with a ``barcodes`` variable, which points to
-``puck_data/visium_barcode_positions.csv``; similarly, the ``openst`` puck comes with
+The ``visium`` puck comes with a ``barcodes`` variable, which points to
+``puck_data/visium_barcode_positions.csv``. Similarly, the ``openst`` puck comes with
 a ``coordinate_system`` variable, pointing to ``puck_data/openst_coordinate_system.csv``.
 
 Upon initiation, these files will automatically placed there by spacemake
@@ -324,18 +343,18 @@ Add a new puck
 
 
 Custom snakemake rules
-^^^^^^^^^^^^^^^^^^^^^^
+----------------------
 
-As of version ``0.7`` it is now add custom snakemake rules to your spacemake workflow. Simply 
-add the following line to the ``config.yaml`` in your spacemake root folder:
+As of version ``0.7`` it is now possible to add custom snakemake rules to your spacemake workflow.
+Simply add the following line to the ``config.yaml`` in your spacemake root folder:
 
 .. code-block:: yaml
 
    custom_rules: /path/to/my_own_custom_snakefile.smk
 
-Within your custom code you can import spacemake modules and have access to internal variables.
-If you need to make spacemake aware of new top-level targets that have to be made, you can register a
-callback
+Within your custom code, you can import spacemake modules and have access to internal variables.
+If you need to make spacemake aware of new top-level targets that have to be made, 
+you can register a callback
 
 .. code-block:: python
 

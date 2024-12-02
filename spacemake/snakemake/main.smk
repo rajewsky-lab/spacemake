@@ -279,33 +279,21 @@ rule tag_reads_bc_umi:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
         assigned = tagged_bam,
-        unassigned = unassigned,
-        bc_stats = reverse_reads_mate_1.replace(reads_suffix, ".bc_stats.tsv")
+        log = tagged_bam_log
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
-    threads: 4
+    threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
-        "python {spacemake_dir}/preprocess/cmdline.py "
+        "python {spacemake_dir}/bin/fastq_to_uBAM.py "
         "--sample={wildcards.sample_id} "
         "--read1={input.R1} "
         "--read2={input.R2} "
         "--parallel={threads} "
-        "--save-stats={output.bc_stats} "
-        "--log-file={log} "
-        "--bc1-ref={params.bc.bc1_ref} "
-        "--bc2-ref={params.bc.bc2_ref} "
-        "--bc1-cache={params.bc.bc1_cache} "
-        "--bc2-cache={params.bc.bc2_cache} "
-        "--threshold={params.bc.score_threshold} "
+	    "--out-bam={output.assigned} "
         "--cell='{params.bc.cell}' "
-        "--cell-raw='{params.bc.cell_raw}' "
-        "--out-format=bam "
-        "--out-unassigned={output.unassigned} "
-        "--out-assigned=/dev/stdout "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
-        "--min-opseq-score={params.bc.min_opseq_score} "
-        "| samtools view -bh /dev/stdin > {output.assigned} "
+        "--log-file='{output.log}' "
 
 rule run_fastqc:
     input:
@@ -330,19 +318,24 @@ rule get_barcode_readcounts:
     input:
         unpack(get_final_bam)
     output:
-        barcode_readcounts
+        barcode_readcounts,
+        barcode_readcounts_log
     params:
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
             project_id = wildcards.project_id,
             sample_id = wildcards.sample_id)['{cell}']
+    threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
+        # {dropseq_tools}/BamTagHistogram -m 32g 
         """
-        {dropseq_tools}/BamTagHistogram -m 32g \
-        I= {input} \
-        O= {output} \
-        TAG={params.cell_barcode_tag} \
-        READ_MQ=0
+        python {spacemake_dir}/bin/BamTagHistogram.py \
+        --input {input} \
+        --output {output[0]} \
+        --tag {params.cell_barcode_tag} \
+        --min-count 1 \
+        --log-file {output[1]} \
         """
+        #READ_MQ=0
 
 rule merge_stats_prealigned_spatial_barcodes:
     input:
@@ -364,11 +357,11 @@ rule merge_stats_prealigned_spatial_barcodes:
     shell:
         "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
         " --query {input.bc_counts}"
-        " --query-plain-skip 0"
+        " --query-plain-skip 1"
         " --query-plain-column 1"
         " --target {input.puck_barcode_files}"
         " --target-id {params.pbc_id}"
-        " --target-plain-column 0"
+        " --target-column 'cell_bc'"
         " --summary-output {output}"
         " --min-threshold {params.min_threshold}"
         " --n-jobs {threads}"
@@ -395,28 +388,20 @@ rule create_spatial_barcode_file:
         unpack(get_all_barcode_readcounts),
         puck_barcode_files_filtered
     output:
-        parsed_spatial_barcodes
-    run:
-        # TODO: benchmark this rule - set+np index instead of merge?
-        # load all readcounts
-        bc_readcounts=[pd.read_table(bc_rc, skiprows=1,
-            names=['read_n', 'cell_bc']) for bc_rc in input['bc_readcounts']]
-
-        # join them together
-        bc_readcounts = pd.concat(bc_readcounts)
-
-        # remove duplicates
-        bc_readcounts.drop_duplicates(subset='cell_bc', keep='first',
-            inplace=True)
-
-        # load barcode file and parse it
-        bc = parse_barcode_file(input[0])
-        bc.reset_index(level=0, inplace=True)
-        # inner join to get rid of barcode without any data
-        bc = pd.merge(bc, bc_readcounts, how='inner', on='cell_bc')
-        bc = bc[['cell_bc', 'x_pos', 'y_pos']]
-
-        bc.to_csv(output[0], index=False)
+        parsed_spatial_barcodes,
+        temp(parsed_spatial_barcodes_summary)
+    shell:
+        "python {spacemake_dir}/snakemake/scripts/n_intersect_sequences.py"
+        " --query {input.bc_readcounts}"
+        " --query-plain-skip 1"
+        " --query-plain-column 1"
+        " --target {input.barcode_file}"
+        " --target-id {wildcards.puck_barcode_file_id}"
+        " --target-column 'cell_bc'"
+        " --output {output[0]}"
+        " --summary-output {output[1]}"
+        " --n-jobs {threads}"   
+        " --chunksize 10000000"
 
 rule create_spatial_barcode_whitelist:
     input: parsed_spatial_barcodes
@@ -424,7 +409,7 @@ rule create_spatial_barcode_whitelist:
     run:
         bc = pd.read_csv(input[0])
         bc = bc[['cell_bc']]
-        bc = bc.append({'cell_bc': 'NNNNNNNNNNNN'}, ignore_index=True)
+        # bc = bc.append({'cell_bc': 'NNNNNNNNNNNN'}, ignore_index=True)
 
         # save both the whitelist and the beads in a separate file
         bc[['cell_bc']].to_csv(output[0], header=False, index=False)
@@ -502,12 +487,6 @@ rule create_h5ad_dge:
                 )
             )
 
-        if adata.X.sum() == 0:
-            raise SpacemakeError(f"""The h5ad file for {wildcards} is empty (adata.X.sum() == 0).
-                                 This will not be further processed.
-                                 
-                                 To avoid this error from further processing other samples, 
-                                 run spacemake with --keep-going""")
         # add 'cell_bc' name to index for same format as individual pucks
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         adata.write(output[0])
@@ -578,12 +557,12 @@ rule puck_collection_stitching:
         _pc.obs['y_pos'] = _pc.obsm['spatial'][..., 1]
 
         _pc.write_h5ad(output[0])
+    
         # add 'cell_bc' name to index for same format as individual pucks
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         df = _pc.obs
         df.index = np.arange(len(df))
         df.index.name = "cell_bc"
-
         # only get numeric columns, to avoid problems during summarisation
         # we could implement sth like df.A.str.extract('(\d+)')
         # to avoid losing information from columns that are not numeric
@@ -622,6 +601,7 @@ rule puck_collection_stitching_meshed:
         _pc.obs['y_pos'] = _pc.obsm['spatial'][..., 1]
 
         _pc.write_h5ad(output[0])
+
         # add 'cell_bc' name to index for same format as individual pucks
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         df = _pc.obs

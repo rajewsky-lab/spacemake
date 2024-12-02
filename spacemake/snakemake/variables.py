@@ -96,6 +96,10 @@ parsed_spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/spatial_barcodes_{puck_barcode_file_id}{polyA_adapter_trimmed}.csv"
 )
+parsed_spatial_barcodes_summary = (
+    complete_data_root
+    + "/puck_barcode_files/spatial_barcodes_summary_{puck_barcode_file_id}.csv"
+)
 parsed_spatial_barcodes_pc = (
     complete_data_root
     + "/puck_barcode_files/spatial_barcodes_puck_collection.csv"
@@ -254,6 +258,7 @@ parsed_ribo_depletion_log = complete_data_root + "/parsed_ribo_depletion_log.txt
 #  dropseq rules and vars #
 # #########################
 tagged_bam = complete_data_root + "/unaligned_bc_tagged.bam"
+tagged_bam_log = tagged_bam + ".log"
 unassigned = complete_data_root + "/unaligned_bc_unassigned.bam"
 
 # trim smart adapter from the reads
