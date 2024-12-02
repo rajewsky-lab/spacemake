@@ -48,6 +48,13 @@ def get_puck_parser(required=True):
         help="path to coordinate system file. When specified, spacemake will 'stitch'"
         + " pucks into a single file, with corresponding global coordinates",
     )
+    parser.add_argument(
+        "--puck_adjacency_edgelist",
+        type=str,
+        required=False,
+        help="path to puck adjacency edgelist. When specified, spacemake will use this to"
+        + "filter pucks based on spatial adjacency, to improve true positive/negative matches",
+    )
 
     return parser
 
@@ -437,7 +444,13 @@ class RunMode(ConfigMainVariable):
 
 
 class Puck(ConfigMainVariable):
-    variable_types = {"barcodes": str, "spot_diameter_um": float, "width_um": int, "coordinate_system": str}
+    variable_types = {
+        "barcodes": str,
+        "spot_diameter_um": float,
+        "width_um": int,
+        "coordinate_system": str,
+        "puck_adjacency_edgelist": str
+    }
 
     @property
     def has_barcodes(self):
@@ -453,6 +466,14 @@ class Puck(ConfigMainVariable):
             "coordinate_system" in self.variables
             and self.variables["coordinate_system"]
             and self.variables["coordinate_system"] != "None"
+        )
+    
+    @property
+    def has_puck_adjacency_edgelist(self):
+        return (
+            "puck_adjacency_edgelist" in self.variables
+            and self.variables["puck_adjacency_edgelist"]
+            and self.variables["puck_adjacency_edgelist"] != "None"
         )
 
 
@@ -850,9 +871,10 @@ class ConfigFile:
         self.variables["species"][name] = species_refs
         return species_refs
 
-    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None, coordinate_system=None, name=None):
+    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None, coordinate_system=None, puck_adjacency_edgelist=None, name=None):
         assert_file(barcodes, default_value=None, extension="all")
         assert_file(coordinate_system, default_value=None, extension="all")
+        assert_file(puck_adjacency_edgelist, default_value=None, extension="all")
 
         puck = {}
         if width_um is not None:
@@ -866,6 +888,9 @@ class ConfigFile:
 
         if coordinate_system is not None:
             puck["coordinate_system"] = coordinate_system
+
+        if puck_adjacency_edgelist is not None:
+            puck["puck_adjacency_edgelist"] = puck_adjacency_edgelist
 
 
         return puck

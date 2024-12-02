@@ -11,10 +11,10 @@ It generates a DataFrame with puck names and their corresponding global
 (x, y, z) coordinates and saves it to a CSV file.
 
 Usage:
-    python create_openst_coordinate_system.py --output <output_file> [options]
+    python create_novaseq_S4_coordinate_system.py --output <output_file> [options]
 
 Example:
-    python create_openst_coordinate_system.py \
+    python create_novaseq_S4_coordinate_system.py \
         --output output.csv \
         --format-string fc_1_L{lane}{side_letter}_tile_{side_number}{column}{row:02d} \
         --x-offset 33739 \
@@ -176,6 +176,8 @@ def create_coordinate_system(
                                 "x_offset": [x_ofs],
                                 "y_offset": [y_ofs],
                                 "z_offset": [z_ofs],
+                                "lane": [lane],
+                                "side": [side]
                             }
                         )
                     )

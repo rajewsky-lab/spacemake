@@ -411,8 +411,9 @@ class ProjectDF:
 
                 if "pass_threshold" not in barcodes_df.columns:
                     continue
-
-                above_threshold_mask = barcodes_df["pass_threshold"] == 1
+            
+                _pass_col = 'pass_adjacency' if 'pass_adjacency' in barcodes_df.columns else 'pass_threshold'
+                above_threshold_mask = barcodes_df[_pass_col] == 1
 
                 _puck_barcode_files = barcodes_df[above_threshold_mask][
                     "puck_barcode_file"
