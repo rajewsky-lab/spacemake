@@ -24,20 +24,20 @@ To add species, the following command can be used::
                              # path to the annotation (.gtf) file for the species
                              # to be added
 
-The ``spacemake config update_species`` takes the same arguments as above, while ``spacemake config delete_species`` takes only ``--name``.
+The ``spacemake config update-species`` takes the same arguments as above, while ``spacemake config delete-species`` takes only ``--name``.
 
 As of version ``0.7`` you can add multiple reference sequences per species. For that, 
-simply execute ``add_species`` multiple times, varying ``--reference ...`` but keeping ``--name`` constant.
+simply execute ``add-species`` multiple times, varying ``--reference ...`` but keeping ``--name`` constant.
 
 
 To list the currently available ``species``, type::
    
-   spacemake config list_species
+   spacemake config list-species
 
-Configure barcode\_flavors
+Configure barcode-flavors
 --------------------------
 
-.. _configure-barcode_flavor:
+.. _configure-barcode-flavor:
 
 This sample-variable describes how the cell-barcode and the UMI should be extracted from Read1 and Read2.
 The ``default`` value for barcode\_flavor will be dropseq: ``cell = r1[0:12]`` (cell-barcode comes from first 12nt of Read1) and
@@ -45,10 +45,10 @@ The ``default`` value for barcode\_flavor will be dropseq: ``cell = r1[0:12]`` (
 
 **If a sample has no barcode\_flavor provided, the default run\_mode will be used**
 
-Provided barcode\_flavors
+Provided barcode-flavors
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Spacemake provides the following barcode\_flavors out of the box:
+Spacemake provides the following barcode-flavors out of the box:
 
 .. code-block:: yaml
 
@@ -74,16 +74,16 @@ Spacemake provides the following barcode\_flavors out of the box:
         cell: "r1[0:16]"
         UMI: "r1[16:28]"
 
-To list the currently available ``barcode_flavor``-s, type::
+To list the currently available ``barcode-flavor``-s, type::
    
-   spacemake config list_barcode_flavors
+   spacemake config list_barcode-flavors
 
-Add a new barcode\_flavor
+Add a new barcode-flavor
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block::
 
-   spacemake config add_barcode_flavor \
+   spacemake config add_barcode-flavor \
       --name NAME \
          # name of the barcode flavor
 
@@ -92,26 +92,26 @@ Add a new barcode\_flavor
          # Example: to set UMI to 13-20 NT of Read1, use --umi r1[12:20].
          # It is also possible to use the first 8nt of Read2 as UMI: --umi r2[0:8].
 
-      --cell_barcode CELL_BARCODE
+      --cell-barcode CELL-BARCODE
          # structure of CELL BARCODE, using python's list syntax.
-         # Example: to set the cell_barcode to 1-12 nt of Read1, use --cell_barcode r1[0:12].
+         # Example: to set the cell-barcode to 1-12 nt of Read1, use --cell-barcode r1[0:12].
          # It is also possible to reverse the CELL BARCODE, for instance with r1[0:12][::-1]. 
 
 
-Update/delete a barcode\_flavor
+Update/delete a barcode-flavor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The ``spacemake config update_barcode_flavor`` takes the same arguments as above, while ``spacemake config delete_barcode_flavor`` takes only ``--name``.
+The ``spacemake config update-barcode-flavor`` takes the same arguments as above, while ``spacemake config delete-barcode-flavor`` takes only ``--name``.
 
-Configure run\_modes
+Configure run-modes
 --------------------
 
-.. _configure-run_mode:
+.. _configure-run-mode:
 
 Specifying a "run mode" is an essential flexibity that spacemake offers.
-Through setting a ``run_mode``, a sample can be processed and analysed downstream in various fashions.
+Through setting a ``run-mode``, a sample can be processed and analysed downstream in various fashions.
 
-Each ``run_mode`` can have the following variables:
+Each ``run-mode`` can have the following variables:
 
 ``n_beads``
    number of cell-barcode expected
@@ -137,7 +137,7 @@ Each ``run_mode`` can have the following variables:
    counted this way, which map to exactly one CDS or UTR segment of a gene.
 
 ``mesh_data`` (spatial only)
-   if ``True`` a mesh will be created when running this ``run_mode``.
+   if ``True`` a mesh will be created when running this ``run-mode``.
 
 ``mesh_type`` (spatial only)
    spacemake currently offers two types of meshes: (1) ``circle``, where circles with a given
@@ -156,12 +156,12 @@ Each ``run_mode`` can have the following variables:
    filter out pucks from DGE creation and subsequent steps of the pipeline. If set to 0, 
    no pucks are excluded.
 
-``parent_run_mode``
-   Each ``run_mode`` can have a parent, to which it will fall back.
-   If a one of the ``run_mode`` variables is missing, the variable of the parent will be used.
-   If parent is not provided, the ``default`` ``run_mode`` will be the parent. 
+``parent_run-mode``
+   Each ``run-mode`` can have a parent, to which it will fall back.
+   If a one of the ``run-mode`` variables is missing, the variable of the parent will be used.
+   If parent is not provided, the ``default`` ``run-mode`` will be the parent. 
 
-Provided run\_modes
+Provided run-modes
 ^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: yaml
@@ -234,23 +234,23 @@ Provided run\_modes
     - 1000
 
 .. note::
-   If a sample has no ``run_mode`` provided, the ``default`` will be used
+   If a sample has no ``run-mode`` provided, the ``default`` will be used
 
 .. note:: 
-   If a ``run_mode`` variable is not provided, the variable of the default ``run_mode`` will be used
+   If a ``run-mode`` variable is not provided, the variable of the default ``run-mode`` will be used
 
-To list the currently available ``run_mode``-s, type::
+To list the currently available ``run-mode``-s, type::
    
-   spacemake config list_run_modes
+   spacemake config list_run-modes
 
 Add a new run\_mode
 ^^^^^^^^^^^^^^^^^^^
 
-See the :ref:`variable descriptions <configure-run_mode>` above.
+See the :ref:`variable descriptions <configure-run-mode>` above.
 
 .. code-block::
 
-   spacemake config add_run_mode \
+   spacemake config add_run-mode \
       --name NAME \ 
       --parent_run_mode PARENT_RUN_MODE \
       --umi_cutoff UMI_CUTOFF [UMI_CUTOFF ...] \
@@ -265,10 +265,10 @@ See the :ref:`variable descriptions <configure-run_mode>` above.
       --mesh_spot_diameter_um MESH_SPOT_DIAMETER_UM \
       --mesh_spot_distance_um MESH_SPOT_DISTANCE_UM
 
-Update/delete a run\_mode
+Update/delete a run-mode
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The ``spacemake config update_run_mode`` takes the same arguments as above, while ``spacemake config delete_run_mode`` takes only ``--name``.
+The ``spacemake config update-run-mode`` takes the same arguments as above, while ``spacemake config delete-run-mode`` takes only ``--name``.
 
 
 Configure pucks
@@ -279,7 +279,7 @@ Configure pucks
 Each spatial sample is associated with a ``puck``. The ``puck`` variable defines the 
 dimensionality of the underlying spatial structure, which spacemake uses
 during the automated analysis and plotting, as well as the binning (meshing) of
-the data when selected in the ``run_mode``.
+the data when selected in the ``run-mode``.
 
 Each puck has the following variables:
 
