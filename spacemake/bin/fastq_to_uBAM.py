@@ -100,7 +100,7 @@ def quality_trim(fq_src, min_qual=20, phred_base=33):
 
 
 def render_to_sam(fq1, fq2, sam_out, args, **kwargs):
-    logger = util.setup_logging(args, "spacemake.bin.fastq_to_uBAM.worker")
+    logger = util.setup_logging(args, "fastq_to_uBAM.worker", rename_process=False)
     logger.debug(
         f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args}"
     )
@@ -151,41 +151,6 @@ def render_to_sam(fq1, fq2, sam_out, args, **kwargs):
         sam_out.write(make_sam_record(flag=4, **attrs))
 
     return N
-    # if args.paired_end:
-    #             # if args.paired_end[0] == 'r':
-    #             #     # rev_comp R1 and reverse qual1
-    #             #     q1 = q1[::-1]
-    #             #     r1 = util.rev_comp(r1)
-
-    #             # if args.paired_end[1] == 'r':
-    #             #     # rev_comp R2 and reverse qual2
-    #             #     q2 = q2[::-1]
-    #             #     r2 = util.rev_comp(r2)
-
-    #             rec1 = fmt.make_bam_record(
-    #                 qname=fqid,
-    #                 r1="THISSHOULDNEVERBEREFERENCED",
-    #                 r2=r1,
-    #                 R1=r1,
-    #                 R2=r2,
-    #                 r2_qual=q1,
-    #                 r2_qname=fqid,
-    #                 flag=69,  # unmapped, paired, first in pair
-    #             )
-    #             rec2 = fmt.make_bam_record(
-    #                 qname=fqid,
-    #                 r1="THISSHOULDNEVERBEREFERENCED",
-    #                 r2=r2,
-    #                 R1=r1,
-    #                 R2=r2,
-    #                 r2_qual=q2,
-    #                 r2_qname=fqid,
-    #                 flag=133,  # unmapped, paired, second in pair
-    #             )
-    #             results.append(rec1)
-    #             results.append(rec2)
-
-    #         else:
 
 
 def main(args):
@@ -194,7 +159,9 @@ def main(args):
 
     # queues for communication between processes
     w = (
-        mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
+        mf.Workflow(
+            f"[{args.sample}]fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer
+        )
         # open reads2.fastq.gz
         .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
             input=mf.FIFO("read2", "rt"),
@@ -244,6 +211,9 @@ def main(args):
         # output="/dev/stdout"
         # )
         output=mf.FIFO("sam_combined", "wt"),
+        log_rate_every_n=1000000,
+        log_rate_template="written {M_out:.1f} M BAM records ({MPS:.3f} M/s, overall {mps:.3f} M/s)",
+        log_name="fastq_to_uBAM.collect",
     )
     # compress to BAM
     w.funnel(
