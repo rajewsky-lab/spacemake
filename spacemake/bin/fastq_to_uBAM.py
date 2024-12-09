@@ -212,7 +212,7 @@ def main(args):
         # )
         output=mf.FIFO("sam_combined", "wt"),
         log_rate_every_n=1000000,
-        log_rate_template="written {M_out:.1f} M BAM records ({MPS:.3f} M/s, overall {mps:.3f} M/s)",
+        log_rate_template="written {M_out:.1f} M BAM records ({mps:.3f} M/s, overall {MPS:.3f} M/s)",
         log_name="fastq_to_uBAM.collect",
     )
     # compress to BAM
@@ -221,7 +221,7 @@ def main(args):
         input=mf.FIFO("sam_combined", "rt"),
         output=args.out_bam,
         _manage_fifos=False,
-        fmt="Sbh",
+        fmt=f"Sh{args.bam_fmt}",
         threads=16,
     )
     return w.run()
@@ -357,6 +357,11 @@ def parse_args():
         default="CR:{cell},CB:{cell},MI:{UMI},RG:A",
         help="a template of comma-separated BAM tags to generate. Variables are replaced with extracted cell barcode, UMI etc.",
     )
+    parser.add_argument(
+        "--bam-fmt", default="b", choices=["b", "C"],
+        help="b=BAM (default), C=CRAM",
+    )
+
     args = parser.parse_args()
     if args.parallel < 1:
         raise ValueError(f"--parallel {args.parallel} is invalid. Must be >= 1")
