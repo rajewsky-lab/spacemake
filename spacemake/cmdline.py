@@ -774,6 +774,37 @@ def setup_run_parser(parent_parser_subparsers):
     return parser_run
 
 
+def setup_migrate_parser(parent_parser_subparsers):
+    """setup_migrate_parser
+
+    :param parent_parser_subparsers
+    """
+    parser_migrate = parent_parser_subparsers.add_parser(
+        "migrate",
+        help="migrate spacemake"
+    )
+
+    parser_migrate.add_argument(
+        "--project-id",
+        default="",
+        help="The project-id of the sample to perform the migration.",
+        type=str,
+        required=True,
+        dest="project_id",
+    )
+    parser_migrate.add_argument(
+        "--sample-id",
+        default="",
+        help="The sample-id of the sample to perform the migration.",
+        type=str,
+        required=True,
+        dest="sample_id",
+    )
+
+    parser_migrate.set_defaults(func=spacemake_migrate)
+
+    return parser_migrate
+
 #####################################################
 # actual command-line functions, used as call-backs #
 #####################################################
@@ -1145,6 +1176,25 @@ def list_projects_cmdline(args):
     # print the table
     logger.info(df.loc[:, variables].__str__())
 
+@message_aggregation(logger_name)
+def spacemake_migrate(args):
+    """spacemake_migrate.
+
+    :param args:
+    """
+    from spacemake.project_df import get_global_ProjectDF
+
+    pdf = get_global_ProjectDF()
+    
+    # Check that the project-id and sample-id combination provided exists
+    pdf.assert_sample(args['project_id'], args['sample_id'])
+
+    # TODO: convert BAM to CRAM, appropriately change timestamp
+
+    # TODO: delete BAMs
+
+    # TODO: delete other unnecessary files
+
 
 def make_main_parser():
     #################
@@ -1159,7 +1209,7 @@ def make_main_parser():
 
     parser_main = argparse.ArgumentParser(
         allow_abbrev=False,
-        description="spacemake: bioinformatic pipeline for processing and analysis of spatial-transcriptomics data",
+        description="Spacemake: processing and analysis of large-scale spatial transcriptomics data",
     )
 
     parser_main.add_argument("--version", action="store_true")
@@ -1172,6 +1222,7 @@ def make_main_parser():
     parser_projects = None
     parser_config = None
     parser_init = None
+    parser_migrate = None
     parser_spatial = None
 
     ##################
@@ -1194,13 +1245,18 @@ def make_main_parser():
         # SPACEMAKE PROJECT/SAMPLE #
         ############################
         from spacemake.cmdline import setup_project_parser
-
+ 
         parser_projects = setup_project_parser(parser_main_subparsers)
 
         #################
         # SPACEMAKE RUN #
         #################
         parser_run = setup_run_parser(parser_main_subparsers)
+
+        #####################
+        # SPACEMAKE MIGRATE #
+        #####################
+        parser_migrate = setup_migrate_parser(parser_main_subparsers)
 
         #####################
         # SPACEMAKE SPATIAL #
@@ -1214,6 +1270,7 @@ def make_main_parser():
         "config": parser_config,
         "projects": parser_projects,
         "run": parser_run,
+        "migrate": parser_migrate,
         "main": parser_main,
         "spatial": parser_spatial,
     }
