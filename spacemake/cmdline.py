@@ -787,7 +787,7 @@ def setup_migrate_parser(parent_parser_subparsers):
     parser_migrate.add_argument(
         "--project-id",
         default="",
-        help="The project-id of the sample to perform the migration.",
+        help="The project-id of the sample to perform the migration",
         type=str,
         required=True,
         dest="project_id",
@@ -795,10 +795,18 @@ def setup_migrate_parser(parent_parser_subparsers):
     parser_migrate.add_argument(
         "--sample-id",
         default="",
-        help="The sample-id of the sample to perform the migration.",
+        help="The sample-id of the sample to perform the migration",
         type=str,
         required=True,
         dest="sample_id",
+    )
+    parser_migrate.add_argument(
+        "--threads",
+        default="1",
+        help="Number of threads to use",
+        type=str,
+        required=False,
+        dest="threads",
     )
 
     parser_migrate.set_defaults(func=spacemake_migrate)
@@ -1176,6 +1184,7 @@ def list_projects_cmdline(args):
     # print the table
     logger.info(df.loc[:, variables].__str__())
 
+
 @message_aggregation(logger_name)
 def spacemake_migrate(args):
     """spacemake_migrate.
@@ -1183,17 +1192,62 @@ def spacemake_migrate(args):
     :param args:
     """
     from spacemake.project_df import get_global_ProjectDF
+    import subprocess
+    import time
+    import yaml
+
+    project_id = args['project_id']
+    sample_id = args['sample_id']
+    threads = args['threads']
 
     pdf = get_global_ProjectDF()
-    
-    # Check that the project-id and sample-id combination provided exists
-    pdf.assert_sample(args['project_id'], args['sample_id'])
 
-    # TODO: convert BAM to CRAM, appropriately change timestamp
+    # Make sure that the project-id and sample-id combination provided exists
+    pdf.assert_sample(project_id, sample_id)
+    project_folder = os.path.join('projects', project_id, 'processed_data', sample_id, 'illumina', 'complete_data')
 
-    # TODO: delete BAMs
+    # Extract vars from the config.yaml for later use
+    with open("config.yaml") as yamlfile:
+        cf = yaml.safe_load(yamlfile.read())
+    sample_species = pdf.get_sample_info(project_id, sample_id)['species']
+    genome_sequence = cf['species'][sample_species]['genome']['sequence']
 
-    # TODO: delete other unnecessary files
+    # Start migrartion
+    print('Beginning migration ...', time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+    if not os.path.exists(os.path.join(project_id, 'stats.csv')):
+        print(f"Stats file for sample with (project_id, sample_id)=({project_id}, {sample_id}) " 
+              "not found on disk. Will generate it now.")
+        # Execute code written elsewhere to generate the file
+    else:
+        print("Stats file found on disk")
+
+    if not os.path.exists(os.path.join(project_folder, 'final.cram')):
+        print(f"CRAM files for sample with (project_id, sample_id)=({project_id}, {sample_id}) "
+              "not found on disk. Will generate them now.")
+        # Execute code to convert to CRAM)
+        # TODO: reference BAM from internals OR write a func to find it
+        # TODO: proper naming for CRAM
+        # TODO: transfer timestamp
+        subprocess.run(
+            [
+                "samtools", "view",
+                "-T", genome_sequence,
+                "-C",
+                "--threads", str(threads),
+                "-o", os.path.join(project_folder, "final.cram"),
+                os.path.join(project_folder, "final.polyA_adapter_trimmed.bam")
+            ]
+        )
+    else:
+        print(f"CRAM files for sample with (project_id, sample_id)=({project_id}, {sample_id}) "
+              "already on disk. Skipping conversion step.")
+
+    print("Removing unnecessary files ...", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+    # to delete:
+    # - BAM files (if CRAM are present)
+    # - unaligned.bam
+
+    print("Migration complete ...", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
 
 
 def make_main_parser():
