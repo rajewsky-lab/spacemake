@@ -1223,6 +1223,7 @@ def spacemake_migrate(args):
         print("Stats file found on disk")
 
     if not os.path.exists(os.path.join(project_folder, 'final.cram')):
+        # TODO: fix this with a proper check.
         print(f"CRAM files for sample with (project-id, sample-id)=({project_id}, {sample_id}) "
               "not found on disk. Will generate them now.")
         # Execute code to convert to CRAM

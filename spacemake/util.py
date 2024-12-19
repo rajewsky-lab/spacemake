@@ -578,3 +578,29 @@ def load_config_with_fallbacks(args, try_yaml="config.yaml"):
     import argparse
 
     return argparse.Namespace(**args_kw)
+
+
+def sync_timestamps(original_file, new_file):
+    """
+    Sync the timestamps (access and modification time) of new_file with those of original_file.
+    
+    Args:
+        original_file (str): Path to the file whose timestamps will be copied.
+        new_file (str): Path to the file that will have its timestamps updated.
+    """
+    try:
+        # Get the access time and modification time from original_file
+        if os.path.islink(original_file):
+            source_times = os.lstat(original_file)
+        else:
+            source_times = os.stat(original_file)
+
+        # Set the same access and modification time for new_file 
+        os.utime(new_file, (source_times.st_atime, source_times.st_mtime),
+                 follow_symlinks=not os.path.islink(original_file))
+      
+        print(f"File timestamps of {new_file} set to match {original_file}.")
+    except FileNotFoundError:
+        print(f"Error: One or both of the files '{original_file}' or '{new_file}' do not exist.")
+    except Exception as e:
+        print(f"An error occurred: {e}")

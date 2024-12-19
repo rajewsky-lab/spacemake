@@ -2,6 +2,8 @@ import os
 import subprocess
 import time
 
+from spacemake.util import sync_timestamps
+
 
 def find_bam_files(folder):
     """
@@ -20,28 +22,6 @@ def find_bam_files(folder):
     return list(zip(bam_files, are_symlinks))
 
 
-def sync_timestamps(original_file, new_file):
-    """
-    Sync the timestamps (access and modification time) of new_file with those of original_file.
-    
-    Args:
-        original_file (str): Path to the file whose timestamps will be copied.
-        new_file (str): Path to the file that will have its timestamps updated.
-    """
-    try:
-        # Get the access time and modification time from original_file
-        source_times = os.stat(original_file)
-
-        # Set the same access and modification time for new_file
-        os.utime(new_file, (source_times.st_atime, source_times.st_mtime))
-
-        print(f"File timestamps of {new_file} set to match {original_file}.")
-    except FileNotFoundError:
-        print(f"Error: One or both of the files '{original_file}' or '{new_file}' do not exist.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-
 def convert_bam_to_cram(ref_sequence, project_folder, threads=4):
     bam_files = find_bam_files(project_folder)
 
@@ -54,14 +34,13 @@ def convert_bam_to_cram(ref_sequence, project_folder, threads=4):
             print('CRAM file', cram_filename, 'already exists. Skipping conversion.')
             continue
 
-        # TODO: change ref sequence for genome, rRNA, phiX, custom?
+        # TODO: change ref sequence for genome, rRNA, phiX, custom? Get it from map_strategy
         
         if bam_file_is_symlink:
-            # TODO: fix timestamp for symlink 
             true_bam_filename = os.readlink(os.path.join(project_folder, bam_filename))
             true_bam_filename_prefix = true_bam_filename.rsplit('.', 1)[0]
             os.symlink(true_bam_filename_prefix + '.cram',
-                       os.path.join(project_folder, bam_filename_prefix + '.cram'))
+                       os.path.join(project_folder, cram_filename))
         else:
             print('Converting', bam_filename, 'to', cram_filename, 
             '...', time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
