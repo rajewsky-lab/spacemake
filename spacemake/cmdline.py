@@ -1205,13 +1205,7 @@ def spacemake_migrate(args):
     # Make sure that the project-id and sample-id combination provided exists
     pdf.assert_sample(project_id, sample_id)
     project_folder = os.path.join('projects', project_id, 'processed_data', sample_id, 'illumina', 'complete_data')
-
-    # Extract vars from the config.yaml for later use
-    with open("config.yaml") as yamlfile:
-        cf = yaml.safe_load(yamlfile.read())
-    sample_species = pdf.get_sample_info(project_id, sample_id)['species']
-    genome_sequence = cf['species'][sample_species]['genome']['sequence']
-
+    
     # Begin migration
     print('Beginning migration ...', time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
     
@@ -1227,7 +1221,7 @@ def spacemake_migrate(args):
         print(f"CRAM files for sample with (project-id, sample-id)=({project_id}, {sample_id}) "
               "not found on disk. Will generate them now.")
         # Execute code to convert to CRAM
-        convert_bam_to_cram(genome_sequence, project_folder, threads)
+        convert_bam_to_cram(project_id, sample_id, threads)
     else:
         print(f"CRAM files for sample with (project-id, sample-id)=({project_id}, {sample_id}) "
               "already on disk.")
