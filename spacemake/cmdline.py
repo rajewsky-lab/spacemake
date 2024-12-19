@@ -1191,8 +1191,8 @@ def spacemake_migrate(args):
 
     :param args:
     """
+    from spacemake.migrate import convert_bam_to_cram
     from spacemake.project_df import get_global_ProjectDF
-    import subprocess
     import time
     import yaml
 
@@ -1212,40 +1212,26 @@ def spacemake_migrate(args):
     sample_species = pdf.get_sample_info(project_id, sample_id)['species']
     genome_sequence = cf['species'][sample_species]['genome']['sequence']
 
-    # Start migrartion
+    # Begin migration
     print('Beginning migration ...', time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+    
     if not os.path.exists(os.path.join(project_id, 'stats.csv')):
-        print(f"Stats file for sample with (project_id, sample_id)=({project_id}, {sample_id}) " 
+        print(f"Stats file for sample with (project-id, sample-id)=({project_id}, {sample_id}) " 
               "not found on disk. Will generate it now.")
         # Execute code written elsewhere to generate the file
     else:
         print("Stats file found on disk")
 
     if not os.path.exists(os.path.join(project_folder, 'final.cram')):
-        print(f"CRAM files for sample with (project_id, sample_id)=({project_id}, {sample_id}) "
+        print(f"CRAM files for sample with (project-id, sample-id)=({project_id}, {sample_id}) "
               "not found on disk. Will generate them now.")
-        # Execute code to convert to CRAM)
-        # TODO: reference BAM from internals OR write a func to find it
-        # TODO: proper naming for CRAM
-        # TODO: transfer timestamp
-        subprocess.run(
-            [
-                "samtools", "view",
-                "-T", genome_sequence,
-                "-C",
-                "--threads", str(threads),
-                "-o", os.path.join(project_folder, "final.cram"),
-                os.path.join(project_folder, "final.polyA_adapter_trimmed.bam")
-            ]
-        )
+        # Execute code to convert to CRAM
+        convert_bam_to_cram(genome_sequence, project_folder, threads)
     else:
-        print(f"CRAM files for sample with (project_id, sample_id)=({project_id}, {sample_id}) "
-              "already on disk. Skipping conversion step.")
+        print(f"CRAM files for sample with (project-id, sample-id)=({project_id}, {sample_id}) "
+              "already on disk.")
 
     print("Removing unnecessary files ...", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-    # to delete:
-    # - BAM files (if CRAM are present)
-    # - unaligned.bam
 
     print("Migration complete ...", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
 
