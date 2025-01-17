@@ -85,6 +85,7 @@ def make_sam_record(
 
 def quality_trim(fq_src, min_qual=20, phred_base=33):
     from cutadapt.qualtrim import quality_trim_index
+
     for name, seq, qual in fq_src:
         end = len(seq)
         new_start, new_end = quality_trim_index(qual, min_qual, min_qual)
@@ -98,15 +99,15 @@ def quality_trim(fq_src, min_qual=20, phred_base=33):
         yield (name, seq, qual)
 
 
-#def quality_trim(fq_src, min_qual=20, phred_base=33):
+# def quality_trim(fq_src, min_qual=20, phred_base=33):
 #    for name, seq, qual in fq_src:
 #        end = len(seq)
 #        q = np.array(bytearray(qual.encode("ASCII"))) - phred_base
 #        qtrim = q >= min_qual
 #        new_end = end - (qtrim[::-1]).argmax()
 #
-        # TODO: yield A3,T3 adapter-trimming tags
-        # TODO: convert to cutadapt/BWA qual-trim logic
+# TODO: yield A3,T3 adapter-trimming tags
+# TODO: convert to cutadapt/BWA qual-trim logic
 #        if new_end != end:
 #            qual = qual[:new_end]
 #            seq = seq[:new_end]
@@ -116,13 +117,15 @@ def quality_trim(fq_src, min_qual=20, phred_base=33):
 
 def simplify_qname(qname, n):
     return f"{int(n):d}"
+
+
 #    return f"{qname.split(':')[0]}_{n}"
-    
+
 
 QMAP = {}
-for Q in range(40):
+for Q in range(41):
     C = chr(Q + 33)
-    q = (Q // 5) * 5
+    q = int(np.round(Q / 10, 0)) * 10
     c = chr(q + 33)
     QMAP[C] = c
 
@@ -133,11 +136,11 @@ def quantize_quality(qual):
 
 def render_to_sam(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
 
-    _n = _extra_args['n']
+    w = _extra_args["n"]
 
     logger = util.setup_logging(args, "fastq_to_uBAM.worker", rename_process=False)
     logger.debug(
-        f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args} _extra_wargs={_extra_args}"
+        f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args} _extra_args={_extra_args}"
     )
 
     def iter_paired(fq1, fq2):
@@ -158,8 +161,8 @@ def render_to_sam(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
             )
 
         for fqid, seq, qual in fq_src2:
-#            if args.qual_quantization:
-#                qual = quantize_quality(qual)
+            if args.qual_quantization:
+                qual = quantize_quality(qual)
             yield (fqid, "NA", "NA"), (fqid, seq, qual)
 
     if fq1:
@@ -179,17 +182,21 @@ def render_to_sam(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
     # args = argparse.Namespace(**kw)
 
     N = mf.util.CountDict()
+    c = args.chunk_size
+    p = args.parallel
 
     fmt = make_formatter_from_args(args)  # , **params
 
     for (fqid, r1, q1), (_, r2, q2) in ingress:
-        N.count("total")
         if args.qual_quantization:
-          q2 = quantize_quality(q2)
+            q2 = quantize_quality(q2)
 
         if args.simplify_read_id:
-          fqid = simplify_qname(fqid, N.stats['total'] + args.chunk_size * _n)
+            i = N.stats["total"]
+            n = c * (w + (i // c) * (p + w)) + i % c
+            fqid = simplify_qname(fqid, n)
 
+        N.count("total")
         attrs = fmt(r2_qname=fqid, r1=r1, r1_qual=q1, r2=r2, r2_qual=q2)
         sam_out.write(make_sam_record(flag=4, **attrs))
 
@@ -259,12 +266,15 @@ def main(args):
         log_name="fastq_to_uBAM.collect",
     )
     # compress to BAM
+    fmt_opt = " ".join([f"--output-fmt-option {o}" for o in args.output_fmt_option])
+    fmt = f"Sh -O {args.output_fmt} {fmt_opt}"
+
     w.funnel(
         func=mf.parts.bam_writer,  # mf.parts.null_writer, #
         input=mf.FIFO("sam_combined", "rt"),
         output=args.out_bam,
         _manage_fifos=False,
-        fmt=f"Sh{args.bam_fmt}",
+        fmt=fmt,
         threads=16,
     )
     return w.run()
@@ -423,10 +433,20 @@ def parse_args():
         help="a template of comma-separated BAM tags to generate. Variables are replaced with extracted cell barcode, UMI etc.",
     )
     parser.add_argument(
-        "--bam-fmt",
-        default="b",
-        choices=["b", "C"],
-        help="b=BAM (default), C=CRAM",
+        "--output-fmt",
+        default="BAM",
+        choices=[
+            "SAM",
+            "BAM",
+            "CRAM",
+        ],
+        help="SAM, BAM (default), or CRAM",
+    )
+    parser.add_argument(
+        "--output-fmt-option",
+        default="",
+        nargs="+",
+        help="passed options to `samtools view` as --output-fmt-options",
     )
 
     args = parser.parse_args()
