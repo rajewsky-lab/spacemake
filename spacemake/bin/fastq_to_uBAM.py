@@ -84,60 +84,25 @@ def make_sam_record(
 
 
 def quality_trim(fq_src, min_qual=20, phred_base=33):
-    from cutadapt.qualtrim import quality_trim_index
     for name, seq, qual in fq_src:
         end = len(seq)
-        new_start, new_end = quality_trim_index(qual, min_qual, min_qual)
-        # we use the cutadapt function here (which implements BWA's logic).
-        n_trimmed = len(qual) - (new_end - new_start)
+        q = np.array(bytearray(qual.encode("ASCII"))) - phred_base
+        qtrim = q >= min_qual
+        new_end = end - (qtrim[::-1]).argmax()
 
         # TODO: yield A3,T3 adapter-trimming tags
-        qual = qual[new_start:new_end]
-        seq = seq[new_start:new_end]
+        # TODO: convert to cutadapt/BWA qual-trim logic
+        if new_end != end:
+            qual = qual[:new_end]
+            seq = seq[:new_end]
 
         yield (name, seq, qual)
 
 
-#def quality_trim(fq_src, min_qual=20, phred_base=33):
-#    for name, seq, qual in fq_src:
-#        end = len(seq)
-#        q = np.array(bytearray(qual.encode("ASCII"))) - phred_base
-#        qtrim = q >= min_qual
-#        new_end = end - (qtrim[::-1]).argmax()
-#
-        # TODO: yield A3,T3 adapter-trimming tags
-        # TODO: convert to cutadapt/BWA qual-trim logic
-#        if new_end != end:
-#            qual = qual[:new_end]
-#            seq = seq[:new_end]
-
-#        yield (name, seq, qual)
-
-
-def simplify_qname(qname, n):
-    return f"{int(n):d}"
-#    return f"{qname.split(':')[0]}_{n}"
-    
-
-QMAP = {}
-for Q in range(40):
-    C = chr(Q + 33)
-    q = (Q // 5) * 5
-    c = chr(q + 33)
-    QMAP[C] = c
-
-
-def quantize_quality(qual):
-    return "".join([QMAP[q] for q in qual])
-
-
-def render_to_sam(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
-
-    _n = _extra_args['n']
-
+def render_to_sam(fq1, fq2, sam_out, args, **kwargs):
     logger = util.setup_logging(args, "fastq_to_uBAM.worker", rename_process=False)
     logger.debug(
-        f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args} _extra_wargs={_extra_args}"
+        f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args}"
     )
 
     def iter_paired(fq1, fq2):
@@ -158,8 +123,6 @@ def render_to_sam(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
             )
 
         for fqid, seq, qual in fq_src2:
-#            if args.qual_quantization:
-#                qual = quantize_quality(qual)
             yield (fqid, "NA", "NA"), (fqid, seq, qual)
 
     if fq1:
@@ -184,12 +147,6 @@ def render_to_sam(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
 
     for (fqid, r1, q1), (_, r2, q2) in ingress:
         N.count("total")
-        if args.qual_quantization:
-          q2 = quantize_quality(q2)
-
-        if args.simplify_read_id:
-          fqid = simplify_qname(fqid, N.stats['total'] + args.chunk_size * _n)
-
         attrs = fmt(r2_qname=fqid, r1=r1, r1_qual=q1, r2=r2, r2_qual=q2)
         sam_out.write(make_sam_record(flag=4, **attrs))
 
@@ -379,28 +336,6 @@ def parse_args():
         help="phred quality base (default=33)",
     )
     parser.add_argument(
-        "--qual-quantization",
-        default=False,
-        # type=bool,
-        action="store_true",
-        help="Quantize quality scores to just 4 levels for better compression/smaller file size (default=False)",
-    )
-    parser.add_argument(
-        "--simplify-read-id",
-        default=False,
-        # type=bool,
-        action="store_true",
-        help="Simplify read name (FASTQ id, QNAME) for better compression/smaller file size (default=False)",
-    )
-
-    parser.add_argument(
-        "--qname-simplification",
-        default=False,
-        action="store_true",
-        help="Truncate flow-cell tile coordinates from QNAME and replace with counter for better compression/smaller file size (default=False)",
-    )
-
-    parser.add_argument(
         "--pipe-buffer",
         default=4,
         type=int,
@@ -423,9 +358,7 @@ def parse_args():
         help="a template of comma-separated BAM tags to generate. Variables are replaced with extracted cell barcode, UMI etc.",
     )
     parser.add_argument(
-        "--bam-fmt",
-        default="b",
-        choices=["b", "C"],
+        "--bam-fmt", default="b", choices=["b", "C"],
         help="b=BAM (default), C=CRAM",
     )
 
