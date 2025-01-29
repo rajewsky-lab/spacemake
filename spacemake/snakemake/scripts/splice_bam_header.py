@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-__version__ = "0.9"
 __author__ = [
     "Marvin Jens",
 ]
@@ -99,12 +98,12 @@ if __name__ == "__main__":
         help="fixed output bam (default=/dev/stdout)",
         default="/dev/stdout",
     )
-    parser.add_argument("--out-mode", help="mode for output (default=b0)", default="b0")
+    parser.add_argument("--out-mode", help="mode for output (default=c0)", default="c0")
 
     args = parser.parse_args()
 
-    mbam = pysam.AlignmentFile(args.in_bam, "rb")
-    ubam = pysam.AlignmentFile(args.in_ubam, "rb", check_sq=False)
+    mbam = pysam.AlignmentFile(args.in_bam, "r")
+    ubam = pysam.AlignmentFile(args.in_ubam, "r", check_sq=False)
 
     mapped_header = mbam.header.to_dict()
     ubam_header = ubam.header.to_dict()

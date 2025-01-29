@@ -136,13 +136,13 @@ def get_map_params(wc, output, mapper="STAR"):
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
-    annotation_cmd = f"| samtools view --threads=4 -bh /dev/stdin > {output}"
+    annotation_cmd = f"| samtools view --threads=4 -ch /dev/stdin > {output}"
     # this is a stub for "no annotation tagging"
     if hasattr(mr, "ann_final"):
         ann = mr.ann_final
         if ann and ann.lower().endswith(".gtf"):
-            tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={mr.out_path} ANNOTATIONS_FILE={mr.ann_final}"
-            annotation_cmd = tagging_cmd.format(dropseq_tools=dropseq_tools, mr=mr)
+            tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O=/dev/stdout COMPRESSION_LEVEL=0 ANNOTATIONS_FILE={mr.ann_final} | samtools view --no-PG -T {ref} -C /dev/stdin -o {mr.out_path}"
+            annotation_cmd = tagging_cmd.format(dropseq_tools=dropseq_tools, mr=mr, ref=species_reference_sequence.format(species=mr.species, ref_name=mr.ref_name))
 
     return {
         'annotation_cmd' : annotation_cmd,
@@ -189,7 +189,7 @@ rule map_reads_bowtie2:
         auto = lambda wc, output: get_map_params(wc, output, mapper='bowtie2'),
     threads: 32 
     shell:
-        # 1) decompress unmapped reads from existing BAM
+        # 1) decompress unmapped reads from existing BAM/CRAM
         "samtools view -f 4 {input.bam}"
         # 2) re-convert SAM into uncompressed BAM.
         #     Somehow needed for bowtie2 2.4.5. If we don't do this

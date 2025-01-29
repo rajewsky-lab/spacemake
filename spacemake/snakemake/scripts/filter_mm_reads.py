@@ -43,9 +43,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
 
-    bam_in = pysam.AlignmentFile(args.in_bam, "rb")
+    bam_in = pysam.AlignmentFile(args.in_bam, "rc")
 
-    bam_out = pysam.AlignmentFile(args.out_bam, "wb", header=bam_in.header)
+    bam_out = pysam.AlignmentFile(args.out_bam, "wc", header=bam_in.header)
     counter = 0
     start_time = datetime.datetime.now()
     finish_time = start_time

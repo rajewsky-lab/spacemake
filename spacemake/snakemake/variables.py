@@ -29,13 +29,13 @@ plots_dir = complete_data_root + "/plots"
 ########################################
 
 # patterns for auto-generated BAM file names and symlinks
-linked_bam = complete_data_root + "/{link_name}.bam"
-mapped_bam = complete_data_root + "/{ref_name}.{mapper}.bam"
-unmapped_bam = complete_data_root + "/not_{ref_name}.{mapper}.bam"
-star_mapped_bam = complete_data_root + "/{ref_name}.STAR.bam"
-star_unmapped_bam = complete_data_root + "/not_{ref_name}.STAR.bam"
-bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.bam"
-bt2_unmapped_bam = complete_data_root + "/not_{ref_name}.bowtie2.bam"
+linked_bam = complete_data_root + "/{link_name}.cram"
+mapped_bam = complete_data_root + "/{ref_name}.{mapper}.cram"
+unmapped_bam = complete_data_root + "/not_{ref_name}.{mapper}.cram"
+star_mapped_bam = complete_data_root + "/{ref_name}.STAR.cram"
+star_unmapped_bam = complete_data_root + "/not_{ref_name}.STAR.cram"
+bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.cram"
+bt2_unmapped_bam = complete_data_root + "/not_{ref_name}.bowtie2.cram"
 bt2_mapped_log = log_dir + "/{ref_name}.bowtie2.log"
 
 # special log file used for rRNA "ribo depletion" stats
@@ -113,7 +113,7 @@ split_reads_sam_names = [
     "minus_AMB",
 ]
 split_reads_sam_pattern = split_reads_root + "{file_name}.sam"
-split_reads_bam_pattern = split_reads_root + "{file_name}.bam"
+split_reads_bam_pattern = split_reads_root + "{file_name}.cram"
 
 split_reads_sam_files = [split_reads_root + x + ".sam" for x in split_reads_sam_names]
 
@@ -310,15 +310,15 @@ tagged_bam_log = tagged_bam + ".log"
 unassigned = complete_data_root + "/unaligned_bc_unassigned.cram"
 
 # trim smart adapter from the reads
-tagged_trimmed_bam = complete_data_root + "/unaligned_bc_tagged_trimmed.bam"
+tagged_trimmed_bam = complete_data_root + "/unaligned_bc_tagged_trimmed.cram"
 
 # trim polyA overheang if exists
 tagged_polyA_adapter_trimmed_bam = (
-    complete_data_root + "/unaligned_bc_tagged.polyA_adapter_trimmed.bam"
+    complete_data_root + "/unaligned_bc_tagged.polyA_adapter_trimmed.cram"
 )
 
 tagged_bam_pattern = (
-    complete_data_root + "/unaligned_bc_tagged{polyA_adapter_trimmed}.bam"
+    complete_data_root + "/unaligned_bc_tagged{polyA_adapter_trimmed}.cram"
 )
 
 # mapped reads
@@ -329,16 +329,16 @@ star_tmp_dir = star_prefix + "tmp"
 
 # final bam file
 final_bam_suffix = "/final{polyA_adapter_trimmed}"
-final_bam = complete_data_root + final_bam_suffix + ".bam"
-bam_mm_included_pipe_suffix = "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included_{puck_barcode_file_id}.bam"
+final_bam = complete_data_root + final_bam_suffix + ".cram"
+bam_mm_included_pipe_suffix = "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included_{puck_barcode_file_id}.cram"
 final_bam_mm_included_pipe = complete_data_root + "/final" + bam_mm_included_pipe_suffix
 
 # downsampled bam
 downsampled_bam_mm_included_pipe_suffix = (
-    "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam"
+    "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.cram"
 )
 downsampled_bam = (
-    downsampled_data_root + "/final_downsampled{polyA_adapter_trimmed}.bam"
+    downsampled_data_root + "/final_downsampled{polyA_adapter_trimmed}.cram"
 )
 downsampled_bam_mm_included_pipe = (
     downsampled_data_root

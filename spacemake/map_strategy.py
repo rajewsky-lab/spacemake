@@ -441,12 +441,12 @@ def get_mapped_BAM_output(
 
                 out_files.append(lr.link_path)
 
-    # for k,v in sorted(map_data['MAP_RULES_LKUP'].items()):
+    # for k, v in sorted(map_data["MAP_RULES_LKUP"].items()):
     #     print(f"map_rules for '{k}'")
     #     print(v)
 
     # print("BAM_SYMLINKS")
-    # for k, v in map_data['BAM_SYMLINKS'].items():
+    # for k, v in map_data["BAM_SYMLINKS"].items():
     #     print(f"    output={k} <- source={v}")
 
     # print("out_files", out_files)
