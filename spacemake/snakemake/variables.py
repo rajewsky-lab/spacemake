@@ -3,6 +3,7 @@ project_dir = "projects/{project_id}"
 config_path = "config.yaml"
 project_df = "project_df.csv"
 
+
 #################
 # DIRECTORY STR #
 #################
@@ -19,9 +20,55 @@ data_root = illumina_root + "/{data_root_type}{downsampling_percentage}"
 downsampled_data_prefix = illumina_root + "/downsampled_data"
 downsampled_data_root = downsampled_data_prefix + "{downsampling_percentage}"
 
-log_dir = complete_data_root + '/logs'
-stats_dir = complete_data_root + '/stats'
-plots_dir = complete_data_root + '/plots'
+log_dir = complete_data_root + "/logs"
+stats_dir = complete_data_root + "/stats"
+plots_dir = complete_data_root + "/plots"
+
+########################################
+#### map_strategy string templates #####
+########################################
+
+# patterns for auto-generated BAM file names and symlinks
+linked_bam = complete_data_root + "/{link_name}.bam"
+mapped_bam = complete_data_root + "/{ref_name}.{mapper}.bam"
+unmapped_bam = complete_data_root + "/not_{ref_name}.{mapper}.bam"
+star_mapped_bam = complete_data_root + "/{ref_name}.STAR.bam"
+star_unmapped_bam = complete_data_root + "/not_{ref_name}.STAR.bam"
+bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.bam"
+bt2_unmapped_bam = complete_data_root + "/not_{ref_name}.bowtie2.bam"
+bt2_mapped_log = log_dir + "/{ref_name}.bowtie2.log"
+
+# special log file used for rRNA "ribo depletion" stats
+bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
+
+# default places for mapping indices, unless specified differently in the config.yaml
+star_index = "species_data/{species}/{ref_name}/star_index"
+star_index_param = star_index
+star_index_log = star_index + ".log"
+star_index_file = star_index + "/SAindex"
+star_index_locked = star_index + "/smk.indexlocked.{species}.{ref_name}"
+import uuid
+
+star_index_locked_current = star_index_locked + f".{uuid.uuid4()}"
+star_index_loaded = "{species}.{ref_name}.genomeLoad.done"
+star_index_unloaded = "{species}.{ref_name}.genomeUnload.done"
+star_index_log_location = "species_data/{species}/{ref_name}/.star_index_logs"
+star_idx_service = "{species}.{ref_name}.STAR_index_loaded"
+
+bt2_index = "species_data/{species}/{ref_name}/bt2_index"
+bt2_index_param = bt2_index + "/{ref_name}"
+bt2_index_file = bt2_index_param + ".1.bt2"
+bt2_index_log = bt2_index_param + ".log"
+
+species_reference_sequence = "species_data/{species}/{ref_name}/sequence.fa"
+species_reference_annotation = "species_data/{species}/{ref_name}/annotation.gtf"
+
+species_reference_annotation_compiled = (
+    "species_data/{species}/{ref_name}/compiled_annotation"
+)
+species_reference_annotation_compiled_target = (
+    "species_data/{species}/{ref_name}/compiled_annotation/non_overlapping.csv"
+)
 
 ##############
 # Demux vars #
@@ -104,16 +151,19 @@ parsed_spatial_barcodes_summary = (
     + "/puck_barcode_files/spatial_barcodes_summary_{puck_barcode_file_id}.csv"
 )
 parsed_spatial_barcodes_pc = (
-    complete_data_root
-    + "/puck_barcode_files/spatial_barcodes_puck_collection.csv"
+    complete_data_root + "/puck_barcode_files/spatial_barcodes_puck_collection.csv"
 )
 stats_prealigned_spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/stats_prealigned_spatial_barcodes_{puck_barcode_file_id}.csv"
 )
 puck_barcode_files_summary = complete_data_root + "/puck_barcode_files_summary.csv"
-puck_count_barcode_matches_summary = complete_data_root + "/puck_count_barcode_matches.csv"
-puck_count_prealigned_barcode_matches_summary = complete_data_root + "/puck_count_prealigned_barcode_matches.csv"
+puck_count_barcode_matches_summary = (
+    complete_data_root + "/puck_count_barcode_matches.csv"
+)
+puck_count_prealigned_barcode_matches_summary = (
+    complete_data_root + "/puck_count_prealigned_barcode_matches.csv"
+)
 
 # dge creation
 dge_root = data_root + "/dge"
@@ -160,10 +210,7 @@ dge_spatial_obs = (
 
 # spatial + collection dge
 dge_spatial_collection = (
-    dge_out_prefix
-    + dge_out_suffix
-    + ".spatial_beads_puck_collection"
-    + h5ad_dge_suffix
+    dge_out_prefix + dge_out_suffix + ".spatial_beads_puck_collection" + h5ad_dge_suffix
 )
 dge_spatial_collection_obs = (
     dge_out_prefix
@@ -184,9 +231,13 @@ dge_spatial_mesh_obs = dge_spatial_mesh_prefix + h5ad_dge_obs_suffix
 dge_spatial_collection_mesh_suffix = (
     ".spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}_puck_collection"
 )
-dge_spatial_collection_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_collection_mesh_suffix
+dge_spatial_collection_mesh_prefix = (
+    dge_out_prefix + dge_out_suffix + dge_spatial_collection_mesh_suffix
+)
 dge_spatial_collection_mesh = dge_spatial_collection_mesh_prefix + h5ad_dge_suffix
-dge_spatial_collection_mesh_obs = dge_spatial_collection_mesh_prefix + h5ad_dge_obs_suffix
+dge_spatial_collection_mesh_obs = (
+    dge_spatial_collection_mesh_prefix + h5ad_dge_obs_suffix
+)
 
 dge_types = [
     ".exon",
@@ -254,9 +305,9 @@ parsed_ribo_depletion_log = complete_data_root + "/parsed_ribo_depletion_log.txt
 # #########################
 #  dropseq rules and vars #
 # #########################
-tagged_bam = complete_data_root + "/unaligned_bc_tagged.bam"
+tagged_bam = complete_data_root + "/unaligned_bc_tagged.cram"
 tagged_bam_log = tagged_bam + ".log"
-unassigned = complete_data_root + "/unaligned_bc_unassigned.bam"
+unassigned = complete_data_root + "/unaligned_bc_unassigned.cram"
 
 # trim smart adapter from the reads
 tagged_trimmed_bam = complete_data_root + "/unaligned_bc_tagged_trimmed.bam"
@@ -283,15 +334,20 @@ bam_mm_included_pipe_suffix = "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm
 final_bam_mm_included_pipe = complete_data_root + "/final" + bam_mm_included_pipe_suffix
 
 # downsampled bam
-downsampled_bam_mm_included_pipe_suffix = "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam"
+downsampled_bam_mm_included_pipe_suffix = (
+    "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam"
+)
 downsampled_bam = (
     downsampled_data_root + "/final_downsampled{polyA_adapter_trimmed}.bam"
 )
 downsampled_bam_mm_included_pipe = (
-    downsampled_data_root + "/final_downsampled" + downsampled_bam_mm_included_pipe_suffix
+    downsampled_data_root
+    + "/final_downsampled"
+    + downsampled_bam_mm_included_pipe_suffix
 )
 downsample_saturation_analysis = (
-    downsampled_data_prefix + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.html"
+    downsampled_data_prefix
+    + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.html"
 )
 
 

@@ -37,7 +37,6 @@ register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
 #####################################
 #### snakemake string templates #####
 #####################################
-# (may eventually move to variables.py)
 
 # The entry point: pre-processed, unmapped reads in a uBAM
 ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
@@ -49,32 +48,6 @@ ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
 final_target = "final.polyA_adapter_trimmed"
 # ubam_input = "unaligned_bc_tagged{polyA_adapter_trimmed}"
 # final_target = "final{polyA_adapter_trimmed}"
-
-# patterns for auto-generated BAM file names and symlinks
-linked_bam = complete_data_root + "/{link_name}.bam"
-mapped_bam = complete_data_root + "/{ref_name}.{mapper}.bam"
-star_mapped_bam = complete_data_root + "/{ref_name}.STAR.bam"
-bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.bam"
-
-# special log file used for rRNA "ribo depletion" stats
-bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
-
-# default places for mapping indices, unless specified differently in the config.yaml
-star_index = 'species_data/{species}/{ref_name}/star_index'
-star_index_param = star_index
-star_index_file = star_index + '/SAindex'
-star_index_locked = star_index + '/smk.indexlocked.{species}.{ref_name}'
-star_index_locked_current = star_index_locked + f'.{uuid.uuid4()}'
-star_index_loaded = '{species}.{ref_name}.genomeLoad.done'
-star_index_unloaded = '{species}.{ref_name}.genomeUnload.done'
-star_index_log_location = 'species_data/{species}/{ref_name}/.star_index_logs'
-
-bt2_index = 'species_data/{species}/{ref_name}/bt2_index'
-bt2_index_param = bt2_index + '/{ref_name}'
-bt2_index_file = bt2_index_param + '.1.bt2'
-
-species_reference_sequence = 'species_data/{species}/{ref_name}/sequence.fa'
-species_reference_annotation = 'species_data/{species}/{ref_name}/annotation.gtf'
 
 default_BT2_MAP_FLAGS = (
     " --local"

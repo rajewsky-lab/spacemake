@@ -294,6 +294,8 @@ rule tag_reads_bc_umi:
         "--cell='{params.bc.cell}' "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
+        "--output-fmt=CRAM "
+#        "--output-fmt-option='version=3.1' " # not supported by DropSeqTools 2.5.1
         "--log-file='{output.log}' "
 
 rule run_fastqc:
