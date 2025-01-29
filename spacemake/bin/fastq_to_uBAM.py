@@ -115,9 +115,8 @@ def quality_trim(fq_src, min_qual=20, phred_base=33):
 #        yield (name, seq, qual)
 
 
-def simplify_qname(qname, i, w, c, p):
-    n = c * (w + (i // c) * (p + w)) + i % c
-    return f"n={int(n):d} worker={w} parallel={p} internal={i} chunk_size={c}"
+def simplify_qname(qname, n):
+    return f"{int(n):d}"
 
 
 #    return f"{qname.split(':')[0]}_{n}"
@@ -194,7 +193,8 @@ def render_to_sam(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
 
         if args.simplify_read_id:
             i = N.stats["total"]
-            fqid = simplify_qname(fqid, i, w, c, p)
+            n = c * (w + (i // c) * (p + w)) + i % c
+            fqid = simplify_qname(fqid, n)
 
         N.count("total")
         attrs = fmt(r2_qname=fqid, r1=r1, r1_qual=q1, r2=r2, r2_qual=q2)
