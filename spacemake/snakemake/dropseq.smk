@@ -14,6 +14,7 @@ rule remove_smart_adapter:
         tagged_bam
     output:
         pipe(tagged_trimmed_bam)
+        #tagged_trimmed_bam
     params:
         reports_dir = reports_dir
     shell:
@@ -34,6 +35,7 @@ rule remove_polyA:
         tagged_trimmed_bam
     output:
         temp(tagged_polyA_adapter_trimmed_bam)
+        #tagged_polyA_adapter_trimmed_bam
     params:
         reports_dir = reports_dir
     shell:

@@ -136,7 +136,7 @@ def get_map_params(wc, output, mapper="STAR"):
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
-    annotation_cmd = f"| samtools view --threads=4 -ch /dev/stdin > {output}"
+    annotation_cmd = f"| samtools view --threads=4 -Ch -T {species_reference_sequence.format(species=mr.species, ref_name=mr.ref_name)} /dev/stdin > {output}"
     # this is a stub for "no annotation tagging"
     if hasattr(mr, "ann_final"):
         ann = mr.ann_final
