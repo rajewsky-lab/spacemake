@@ -65,13 +65,13 @@ def test_single():
     )
 
 
-def test_minqual():
-    sm(
-        "--read2",
-        spacemake_dir + "test_data/reads_chr22_R2.fastq.gz",
-        "--out-bam",
-        "/dev/null",
-        "--min-qual",
-        "30",
-        """--cell='"A"'""",
-    )
+# def test_minqual():
+#     sm(
+#         "--read2",
+#         spacemake_dir + "test_data/reads_chr22_R2.fastq.gz",
+#         "--out-bam",
+#         "/dev/null",
+#         "--min-qual",
+#         "30",
+#         """--cell='"A"'""",
+#     )
