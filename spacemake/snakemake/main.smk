@@ -279,7 +279,7 @@ rule tag_reads_bc_umi:
     params:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
-        assigned = tagged_bam,
+        ubam = tagged_polyA_adapter_trimmed_bam,
         log = tagged_bam_log
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
@@ -290,7 +290,7 @@ rule tag_reads_bc_umi:
         "--read1={input.R1} "
         "--read2={input.R2} "
         "--parallel={threads} "
-	    "--out-bam={output.assigned} "
+	    "--out-bam={output.ubam} "
         "--cell='{params.bc.cell}' "
         "--UMI='{params.bc.UMI}' "
         "--bam-tags='{params.bc.bam_tags}' "
