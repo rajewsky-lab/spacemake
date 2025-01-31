@@ -65,6 +65,42 @@ def test_single():
     )
 
 
+def test_preprocessing():
+    pre = PreProcessor("Q:left=25,right=25")
+
+    qname, seq, qual = (
+        "@NS_mRNA:7 2:N:0:ACTGAGCG",
+        "CCTGCTGGGAGGGGGTGGGGGGAGGAGGAAGAGGTGGGGCTCTACTCTGATTAATTA",
+        "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII",
+    )
+
+    res = pre.process(qname, seq, qual)
+    assert qual == res[2]
+    assert len(res[-1]) == 0
+
+    qual = "###IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII###I#I#"
+    res = pre.process(qname, seq, qual)
+    # print(res)
+    tag_d = dict(res[-1])
+    assert tag_d["T5"] == "3"
+    assert tag_d["T3"] == "7"
+
+    pre = PreProcessor("Q:left=25,right=25;polyA")
+
+    qname, seq, qual = (
+        "@NS_mRNA:7 2:N:0:ACTGAGCG",
+        "CCTGCTGGGAGGGGGTGGGGGGAGGAGGAAGAGGTGGGGCTCTACTCTGATTAATTAAAAAAAAAGAGAAAAAAAAAAAAAAAAGGG",
+        "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIEEIEEIE#IIIIIIIIIIIIIIEIII###",
+    )
+
+    res = pre.process(qname, seq, qual)
+    tag_d = dict(res[-1])
+    assert tag_d["T3"] == "3,28"
+
+
+if __name__ == "__main__":
+    test_preprocessing()
+
 # def test_minqual():
 #     sm(
 #         "--read2",

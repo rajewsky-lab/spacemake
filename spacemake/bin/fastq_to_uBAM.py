@@ -124,12 +124,15 @@ def qual_trim(left=0, right=25):
     return Q
 
 
-def polyA_trim(rev_comp=True):
+def polyA_trim(rev_comp=False):
     from cutadapt.qualtrim import poly_a_trim_index
 
     def polyA(qname, seq, qual, tags):
         end = len(seq)
         index = poly_a_trim_index(seq, revcomp=rev_comp)
+        # print(
+        #     f"PolyA: seq='{seq}' index={index} end={end} seq[:index]={seq[:index]} seq[index:]={seq[index:]}"
+        # )
 
         n_trimmed = end - index
         if n_trimmed:
@@ -215,9 +218,11 @@ class PreProcessor(object):
 
     def process(self, qname, seq, qual):
         tags = defaultdict(list)
+        self.stats["freq"]["N_input"] += 1
         self.stats["len_in"][len(seq)] += 1
         for func in self.pipeline:
             qname, seq, qual, tags = func(qname, seq, qual, tags)
+            # print(f"after func {func}: {seq} {qual} {dict(tags)}")
 
         self.record_stats(tags)
         self.stats["len_out"][len(seq)] += 1
@@ -225,15 +230,17 @@ class PreProcessor(object):
         return qname, seq, qual, bam_tags
 
     def record_stats(self, tags):
-        for a, t in zip(tags["A5"], tags["T5"]):
-            self.stats[f"freq"][a] += 1
-            self.stats[f"bases_{a}"][t] += 1
-            self.stats[f"bases"][a] += int(t)
+        if "A5" in tags:
+            for a, t in zip(tags["A5"], tags["T5"]):
+                self.stats[f"freq"][a] += 1
+                self.stats[f"bases_{a}"][t] += 1
+                self.stats[f"bases"][a] += int(t)
 
-        for a, t in zip(tags["A3"], tags["T3"]):
-            self.stats[f"freq"][a] += 1
-            self.stats[f"bases_{a}"][t] += 1
-            self.stats[f"bases"][a] += int(t)
+        if "A3" in tags:
+            for a, t in zip(tags["A3"], tags["T3"]):
+                self.stats[f"freq"][a] += 1
+                self.stats[f"bases_{a}"][t] += 1
+                self.stats[f"bases"][a] += int(t)
 
 
 def render_to_sam(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
