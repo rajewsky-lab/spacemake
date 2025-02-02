@@ -183,7 +183,8 @@ rule map_reads_bowtie2:
         # index=lambda wc: BAM_IDX_LKUP[wc_fill(bt2_mapped_bam, wc)],
         unpack(lambda wc: get_map_inputs(wc, mapper='bowtie2')),
     output:
-        bam=bt2_mapped_bam
+        bam=bt2_mapped_bam,
+        ubam=bt2_unmapped_bam
     log: bt2_mapped_bam + ".log"
     params:
         auto = lambda wc, output: get_map_params(wc, output, mapper='bowtie2'),
@@ -206,7 +207,9 @@ rule map_reads_bowtie2:
         "| python {repo_dir}/scripts/splice_bam_header.py"
         "  --in-ubam {input.bam}"
         " "
-        "{params.auto[annotation_cmd]}"
+        "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) "
+        "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
+       
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
 
@@ -249,6 +252,7 @@ rule map_reads_STAR:
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
         bam=star_mapped_bam,
+        ubam=star_unmapped_bam,
         log=star_target_log_file,
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
     params:
@@ -272,7 +276,8 @@ rule map_reads_STAR:
         "| python {repo_dir}/scripts/splice_bam_header.py"
         " --in-ubam {input.bam}"
         " "
-        "{params.auto[annotation_cmd]}"
+        "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) "
+        "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
         " "
         "; rm -rf {params.tmp_dir}"
 
