@@ -20,6 +20,7 @@ map_data = {
     "BAM_UNMAPPED_KEEP": set(),
     # used for automated mapping index generation
     "INDEX_FASTA_LKUP": {},
+    "REF_FOR_FINAL": {},
     #   key: bt2_index_file or star_index_file
     #   value: dotdict with
     #       .ref_path: path to genome FASTA
@@ -438,6 +439,7 @@ def get_mapped_BAM_output(
                 )
                 # print("STAR_FINAL_LOG_SYMLINKS preparation", final_target, final_log_name, "->", final_log)
                 map_data["STAR_FINAL_LOG_SYMLINKS"][final_log_name] = final_log
+                map_data["REF_FOR_FINAL"][lr.link_path] = mr.ref_path
 
                 out_files.append(lr.link_path)
 
