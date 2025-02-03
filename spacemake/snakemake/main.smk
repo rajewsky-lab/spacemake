@@ -450,6 +450,7 @@ rule create_dge:
         dge=dge_out,
         dge_summary=dge_out_summary
     params:
+        reference=lambda wildcards: get_final_bam_reference(wildcards),
         dge_root = dge_root,
         dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
@@ -460,12 +461,15 @@ rule create_dge:
             sample_id = wildcards.sample_id)['{UMI}']
     threads: 1
     shell:
+        #R={params.reference} \
+        #I= {input.reads}\
+        # -m 16g \
         """
         mkdir -p {params.dge_root}
 
+        samtools view -h {input.reads} -T {params.reference} --threads=2 | \
         {dropseq_tools}/DigitalExpression \
-        -m 16g \
-        I= {input.reads}\
+        I= /dev/stdin \
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
