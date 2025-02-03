@@ -48,8 +48,8 @@ def _add_species():
         "add-species",
         "--name=test_hsa",
         "--reference=genome",
-        f"--sequence={spacemake_dir}/test_data/test_genome.fa.gz",
-        f"--annotation={spacemake_dir}/test_data/test_genome.gtf.gz",
+        f"--sequence={spacemake_dir}/test_data/simple_genome.fa",
+        f"--annotation={spacemake_dir}/test_data/simple_annotation.gtf",
     )
     # add a second reference
     sm(

@@ -215,8 +215,8 @@ def test_issue_88(initialized_root):
 def test_sample(configured_root):
     os.chdir(configured_root.as_posix())
     test_sample = (
-        f"--R1={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-        f"--R2={spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+        f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+        f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
         "--map-strategy=genome:STAR:final",
         "--species=test_hsa",
     )
@@ -257,24 +257,24 @@ def test_fill_project_df(with_species):
             "test_hsa",
             "test",
             "test_01",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             "--map-strategy=genome:STAR:final",
         ),
         (
             "test_hsa",
             "test",
             "test_02.2",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final",
         ),
         (
             "test_hsa",
             "test",
             "test_03_nofinal",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR",
         ),
         (
@@ -282,7 +282,7 @@ def test_fill_project_df(with_species):
             "test",
             "test_bulk",
             "None",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
             " --barcode_flavor=visium",
         ),
@@ -290,8 +290,8 @@ def test_fill_project_df(with_species):
             "test_hsa",
             "tile",
             "tile_1",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
                 f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt"
@@ -302,8 +302,8 @@ def test_fill_project_df(with_species):
             "test_hsa",
             "tile",
             "tile_2",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
                 f" --puck-barcode-file {spacemake_dir}/test_data/tile_2.txt"
@@ -314,8 +314,8 @@ def test_fill_project_df(with_species):
             "test_hsa",
             "tile",
             "tile_both",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
                 f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt {spacemake_dir}/test_data/tile_2.txt"
