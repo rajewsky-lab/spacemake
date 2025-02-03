@@ -140,20 +140,20 @@ rule run_analysis:
                     filter_merged=True) 
                 if config['with_fastqc'] else []
         ),
-        get_output_files(automated_report, 
-            data_root_type = 'complete_data', downsampling_percentage='', 
-            puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(automated_report, 
-            data_root_type = 'complete_data', downsampling_percentage='', 
-            check_puck_collection=True,
-            puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet, 
-            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
-            puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet, 
-            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
-            check_puck_collection=True,
-            puck_barcode_file_matching_type='spatial_matching'),
+       get_output_files(automated_report,
+           data_root_type = 'complete_data', downsampling_percentage='',
+           puck_barcode_file_matching_type='spatial_matching'),
+       get_output_files(automated_report,
+           data_root_type = 'complete_data', downsampling_percentage='',
+           check_puck_collection=True,
+           puck_barcode_file_matching_type='spatial_matching'),
+       get_output_files(qc_sheet,
+           data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
+           puck_barcode_file_matching_type='spatial_matching'),
+       get_output_files(qc_sheet,
+           data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
+           check_puck_collection=True,
+           puck_barcode_file_matching_type='spatial_matching'),
         # finally, everything registered via register_module_output_hook()
         get_module_outputs(),
         
@@ -280,7 +280,7 @@ rule tag_reads_bc_umi:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
         ubam = tagged_polyA_adapter_trimmed_bam,
-        log = tagged_bam_log
+        log = tagged_trimmed_bam_log
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
     threads: max(min(workflow.cores * 0.5, 16), 1)
@@ -343,7 +343,7 @@ rule get_barcode_readcounts:
 rule get_barcode_readcounts_prealigned:
     # we perform some preliminary counting on the prealigned reads
     input:
-        tagged_bam
+        tagged_polyA_adapter_trimmed_bam
     output:
         barcode_readcounts_prealigned,
         barcode_readcounts_prealigned_log
