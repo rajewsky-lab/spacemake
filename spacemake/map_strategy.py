@@ -297,8 +297,8 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
                 if final in lr.link_name:
                     final_link = lr
 
-        # left = f"not_{mr.out_name}"
-        left = mr.out_name
+        left = f"not_{mr.out_name}"
+        # left = mr.out_name
 
     for mr in last_mr:
         mr.keep_unmapped = True
