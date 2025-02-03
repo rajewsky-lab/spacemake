@@ -289,15 +289,18 @@ rule map_reads_STAR:
 from spacemake.map_strategy import get_all_mapped_bams
 import spacemake.snakemake.variables as smv
 
-def bam_cleanup_list(wc):
+def get_unmapped_cleanup_cmd(wc):
     key = (wc.project_id, wc.sample_id)
     bams = map_data["ALL_UNMAPPED_BAMS"]
     keep = map_data["BAM_IS_NOT_TEMP"]
+    slated = sorted(bams[key] - keep)
     # print(f"bams={bams[key]}")
     # print(f"keep={keep}")
-    slated = sorted(bams[key] - keep)
     # print(f"slated for removal: {slated}")
-    return " ".join(slated)
+    if slated:
+        return f"rm {' '.join(slated)} && "
+    else:
+        return ""
 
 rule remove_unmapped:
     input:
@@ -305,10 +308,9 @@ rule remove_unmapped:
     output:
         smv.unmapped_removed_flag
     params:
-        to_remove=bam_cleanup_list
+        cleanup_cmd=get_unmapped_cleanup_cmd
     shell:
-        "# rm {params.to_remove}"
-        "# touch {output}"
+        "{params.cleanup_cmd}touch {output}"
 
 
 rule prepare_species_reference_sequence:
