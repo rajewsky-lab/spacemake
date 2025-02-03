@@ -977,6 +977,7 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
+        # debug_dag=True, verbose=True
     )
 
     if preprocess_finished is False:
@@ -1000,6 +1001,7 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
+        # debug_dag=True, verbose=True
     )
 
     pdf.update_project_df_barcode_matches()
@@ -1017,6 +1019,8 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
+        # debug_dag=True, verbose=True
+
     )
 
     if analysis_finished is False:
