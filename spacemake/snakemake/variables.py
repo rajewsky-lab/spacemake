@@ -41,6 +41,9 @@ bt2_mapped_log = log_dir + "/{ref_name}.bowtie2.log"
 # special log file used for rRNA "ribo depletion" stats
 bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.cram.log"
 
+# special flag to indicate that intermediate non_...cram files have been removed
+unmapped_removed_flag = complete_data_root + "/.unmapped_removed"
+
 # default places for mapping indices, unless specified differently in the config.yaml
 star_index = "species_data/{species}/{ref_name}/star_index"
 star_index_param = star_index

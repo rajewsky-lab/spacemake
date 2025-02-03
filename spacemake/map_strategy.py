@@ -13,6 +13,7 @@ map_data = {
     "ANNOTATED_BAMS": defaultdict(set),
     "REF_NAMES": defaultdict(set),
     "ALL_BAMS": defaultdict(set),
+    "ALL_UNMAPPED_BAMS": defaultdict(set),
     "BAM_IS_NOT_TEMP": set(),
     "SAMPLE_MAP_STRATEGY": {},
     # used for symlink name to source mapping
@@ -349,6 +350,8 @@ def get_mapped_BAM_output(
             mr.sample_id = index[1]
             mr.species = row.species
 
+            out_files.append(wc_fill(smv.unmapped_removed_flag, mr))
+            
             mr.out_path = wc_fill(smv.mapped_bam, mr)
             mr.out_unmapped_path = wc_fill(smv.unmapped_bam, mr)
             if mr.keep_unmapped:
@@ -360,6 +363,7 @@ def get_mapped_BAM_output(
             mr.ref_path = species_d[mr.ref_name]["sequence"]
             mr.ann_path = species_d[mr.ref_name].get("annotation", None)
             map_data["ALL_BAMS"][(index[0], index[1])].add(mr.out_path)
+            map_data["ALL_UNMAPPED_BAMS"][(index[0], index[1])].add(mr.out_unmapped_path)
 
             if mr.cflavor == "auto":
                 # if we have annotation use the actual default, which works for complex
