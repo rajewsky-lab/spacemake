@@ -83,46 +83,195 @@ def make_sam_record(
     return f"{fqid}\t{flag}\t*\t0\t0\t*\t*\t0\t0\t{seq}\t{qual}\t{tag_str}\n"
 
 
-def quality_trim(fq_src, min_qual=20, phred_base=33):
-    for name, seq, qual in fq_src:
+def simplify_qname(qname, n):
+    return f"{int(n):d}"
+
+
+QMAP = {}
+for Q in range(41):
+    C = chr(Q + 33)
+    q = int(np.round(Q / 10, 0)) * 10
+    c = chr(q + 33)
+    QMAP[C] = c
+
+
+def quantize_quality(qual):
+    return "".join([QMAP[q] for q in qual])
+
+
+# pre-processing function factories
+def qual_trim(left=0, right=25):
+    from cutadapt.qualtrim import quality_trim_index
+
+    def Q(qname, seq, qual, tags):
         end = len(seq)
-        q = np.array(bytearray(qual.encode("ASCII"))) - phred_base
-        qtrim = q >= min_qual
-        new_end = end - (qtrim[::-1]).argmax()
+        # we use the cutadapt function here (which implements BWA's logic).
+        new_start, new_end = quality_trim_index(qual, left, right)
+        n_trimmed = len(qual) - (new_end - new_start)
+        if n_trimmed:
+            qual = qual[new_start:new_end]
+            seq = seq[new_start:new_end]
+            if new_start:
+                tags["A5"].append("Q")
+                tags["T5"].append(str(new_start))
 
-        # TODO: yield A3,T3 adapter-trimming tags
-        # TODO: convert to cutadapt/BWA qual-trim logic
-        if new_end != end:
-            qual = qual[:new_end]
-            seq = seq[:new_end]
+            if new_end != end:
+                tags["A3"].append("Q")
+                tags["T3"].append(str(end - new_end))
 
-        yield (name, seq, qual)
+        return qname, seq, qual, tags
+
+    return Q
 
 
-def render_to_sam(fq1, fq2, sam_out, args, **kwargs):
-    logger = util.setup_logging(args, "spacemake.bin.fastq_to_uBAM.worker")
+def polyA_trim(rev_comp=False):
+    from cutadapt.qualtrim import poly_a_trim_index
+
+    def polyA(qname, seq, qual, tags):
+        end = len(seq)
+        index = poly_a_trim_index(seq, revcomp=rev_comp)
+        # print(
+        #     f"PolyA: seq='{seq}' index={index} end={end} seq[:index]={seq[:index]} seq[index:]={seq[index:]}"
+        # )
+
+        n_trimmed = end - index
+        if n_trimmed:
+            seq = seq[:index]
+            qual = qual[:index]
+            tags["A3"].append("polyA")
+            tags["T3"].append(str(n_trimmed))
+
+        return qname, seq, qual, tags
+
+    return polyA
+
+
+def adapter_trim(
+    name="SMART_TSO", seq="AAGCAGTGGTATCAACGCAGAGTGAATGGG", where="right", **kw
+):
+    import cutadapt.adapters
+
+    if where == "left":
+        adapter = cutadapt.adapters.NonInternalFrontAdapter(seq, name=name, **kw)
+    else:
+        adapter = cutadapt.adapters.BackAdapter(seq, name=name, **kw)
+
+    def adap(qname, qseq, qual, tags):
+        match = adapter.match_to(qseq)
+        if match:
+            if where == "left":
+                n_trimmed = match.rstop
+                tags["A5"].append(name)
+                tags["T5"].append(n_trimmed)
+                qseq = qseq[match.rstop :]
+                qual = qual[match.rstop :]
+            else:
+                n_trimmed = len(seq) - match.rstart
+                tags["A3"].append(name)
+                tags["T3"].append(n_trimmed)
+                qseq = qseq[: match.rstart]
+                qual = qual[: match.rstop]
+
+        return qname, qseq, qual, tags
+
+    return adap
+
+
+class PreProcessor(object):
+    def __init__(self, processing_str):  # , min_len=18):
+        # parse processing_str and assemble a processor function
+        self.pipeline = self.parse(processing_str)
+        # collect statistics here
+        self.stats = defaultdict(lambda: defaultdict(int))
+        # self.min_len = min_len
+
+    def parse(self, processing_str):
+        type_dict = {"right": int, "left": int, "min_overlap": int, "max_errors": float}
+        fn_dict = {
+            "Q": qual_trim,
+            "polyA": polyA_trim,
+            "adapter": adapter_trim,
+            # TODO: add 'clip', 'barcode', 'qquant', 'simple_name'
+        }
+
+        pipeline = []
+
+        for token in processing_str.split(";"):
+            if ":" in token:
+                fn_name, kw_str = token.split(":", 1)
+            else:
+                fn_name = token
+                kw_str = ""
+
+            kw = {}
+            for param in kw_str.split(","):
+                if not param:
+                    continue
+
+                k, v_str = param.split("=")
+                kw[k] = type_dict.get(k, str)(v_str)
+
+            fn = fn_dict[fn_name]
+            pipeline.append(fn(**kw))
+
+        return pipeline
+
+    def process(self, qname, seq, qual):
+        tags = defaultdict(list)
+        self.stats["freq"]["N_input"] += 1
+        self.stats["len_in"][len(seq)] += 1
+        for func in self.pipeline:
+            qname, seq, qual, tags = func(qname, seq, qual, tags)
+            # print(f"after func {func}: {seq} {qual} {dict(tags)}")
+
+        self.record_stats(tags)
+        self.stats["len_out"][len(seq)] += 1
+        bam_tags = [(n, f"{','.join(records)}") for n, records in tags.items()]
+        return qname, seq, qual, bam_tags
+
+    def record_stats(self, tags):
+        if "A5" in tags:
+            for a, t in zip(tags["A5"], tags["T5"]):
+                self.stats[f"freq"][a] += 1
+                self.stats[f"bases_{a}"][t] += 1
+                self.stats[f"bases"][a] += int(t)
+
+        if "A3" in tags:
+            for a, t in zip(tags["A3"], tags["T3"]):
+                self.stats[f"freq"][a] += 1
+                self.stats[f"bases_{a}"][t] += 1
+                self.stats[f"bases"][a] += int(t)
+
+
+def render_to_sam(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
+
+    w = _extra_args["n"]
+
+    logger = util.setup_logging(args, "fastq_to_uBAM.worker", rename_process=False)
     logger.debug(
-        f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args}"
+        f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args} _extra_args={_extra_args}"
     )
 
     def iter_paired(fq1, fq2):
         fq_src1 = util.FASTQ_src(fq1)
         fq_src2 = util.FASTQ_src(fq2)
-        if args.min_qual_trim:
-            fq_src2 = quality_trim(
-                fq_src2, min_qual=args.min_qual_trim, phred_base=args.phred_base
-            )
+        # if args.min_qual_trim:
+        #     fq_src2 = quality_trim(
+        #         fq_src2, min_qual=args.min_qual_trim, phred_base=args.phred_base
+        #     )
 
         return zip(fq_src1, fq_src2)
 
     def iter_single(fq2):
         fq_src2 = util.FASTQ_src(fq2)
-        if args.min_qual_trim:
-            fq_src2 = quality_trim(
-                fq_src2, min_qual=args.min_qual_trim, phred_base=args.phred_base
-            )
+        # if args.min_qual_trim:
+        #     fq_src2 = quality_trim(
+        #         fq_src2, min_qual=args.min_qual_trim, phred_base=args.phred_base
+        #     )
 
         for fqid, seq, qual in fq_src2:
+            # if args.qual_quantization:
+            #     qual = quantize_quality(qual)
             yield (fqid, "NA", "NA"), (fqid, seq, qual)
 
     if fq1:
@@ -141,51 +290,38 @@ def render_to_sam(fq1, fq2, sam_out, args, **kwargs):
     # import argparse
     # args = argparse.Namespace(**kw)
 
+    pre = PreProcessor(args.processing)
+
     N = mf.util.CountDict()
+    c = args.chunk_size
+    p = args.parallel
 
     fmt = make_formatter_from_args(args)  # , **params
 
     for (fqid, r1, q1), (_, r2, q2) in ingress:
+        if pre:
+            fqid, r2, q2, preprocess_tags = pre.process(fqid, r2, q2)
+
+        # if args.qual_quantization:
+        #     q2 = quantize_quality(q2)
+
+        # if args.simplify_read_id:
+        #     i = N.stats["total"]
+        #     n = c * (w + (i // c) * (p + w)) + i % c
+        #     fqid = simplify_qname(fqid, n)
+
         N.count("total")
         attrs = fmt(r2_qname=fqid, r1=r1, r1_qual=q1, r2=r2, r2_qual=q2)
-        sam_out.write(make_sam_record(flag=4, **attrs))
+        sam_out.write(
+            make_sam_record(
+                flag=4,
+                tags=preprocess_tags
+                + [("CB", "{cell}"), ("MI", "{UMI}"), ("CR", "{raw}"), ("RG", "A")],
+                **attrs,
+            )
+        )
 
     return N
-    # if args.paired_end:
-    #             # if args.paired_end[0] == 'r':
-    #             #     # rev_comp R1 and reverse qual1
-    #             #     q1 = q1[::-1]
-    #             #     r1 = util.rev_comp(r1)
-
-    #             # if args.paired_end[1] == 'r':
-    #             #     # rev_comp R2 and reverse qual2
-    #             #     q2 = q2[::-1]
-    #             #     r2 = util.rev_comp(r2)
-
-    #             rec1 = fmt.make_bam_record(
-    #                 qname=fqid,
-    #                 r1="THISSHOULDNEVERBEREFERENCED",
-    #                 r2=r1,
-    #                 R1=r1,
-    #                 R2=r2,
-    #                 r2_qual=q1,
-    #                 r2_qname=fqid,
-    #                 flag=69,  # unmapped, paired, first in pair
-    #             )
-    #             rec2 = fmt.make_bam_record(
-    #                 qname=fqid,
-    #                 r1="THISSHOULDNEVERBEREFERENCED",
-    #                 r2=r2,
-    #                 R1=r1,
-    #                 R2=r2,
-    #                 r2_qual=q2,
-    #                 r2_qname=fqid,
-    #                 flag=133,  # unmapped, paired, second in pair
-    #             )
-    #             results.append(rec1)
-    #             results.append(rec2)
-
-    #         else:
 
 
 def main(args):
@@ -194,7 +330,9 @@ def main(args):
 
     # queues for communication between processes
     w = (
-        mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
+        mf.Workflow(
+            f"[{args.sample}]fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer
+        )
         # open reads2.fastq.gz
         .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
             input=mf.FIFO("read2", "rt"),
@@ -244,14 +382,20 @@ def main(args):
         # output="/dev/stdout"
         # )
         output=mf.FIFO("sam_combined", "wt"),
+        log_rate_every_n=1000000,
+        log_rate_template="written {M_out:.1f} M BAM records ({mps:.3f} M/s, overall {MPS:.3f} M/s)",
+        log_name="fastq_to_uBAM.collect",
     )
     # compress to BAM
+    fmt_opt = " ".join([f"--output-fmt-option {o}" for o in args.output_fmt_option])
+    fmt = f"Sh -O {args.output_fmt} {fmt_opt}"
+
     w.funnel(
         func=mf.parts.bam_writer,  # mf.parts.null_writer, #
         input=mf.FIFO("sam_combined", "rt"),
         output=args.out_bam,
         _manage_fifos=False,
-        fmt="Sbh",
+        fmt=fmt,
         threads=16,
     )
     return w.run()
@@ -299,6 +443,7 @@ def parse_args():
         "fastq_to_uBAM",
         description="Convert raw reads1 and reads2 FASTQ into a single BAM file with cell barcode and UMI as BAM-tags",
     )
+    # input options
     parser.add_argument(
         "--matrix",
         default=None,
@@ -315,18 +460,20 @@ def parse_args():
         help="source from where to get read2 (FASTQ format)",
         # required=True,
     )
-    parser.add_argument("--cell", default="r1[8:20][::-1]")
-    parser.add_argument("--UMI", default="r1[0:8]")
-    parser.add_argument("--seq", default="r2")
-    parser.add_argument("--qual", default="r2_qual")
-    parser.add_argument("--disable-safety", default=False, type=bool)
-
     parser.add_argument(
         "--paired-end",
         default=None,
         choices=["fr", "ff", "rf", "rr"],
         help="read1 and read2 are paired end mates and store both in the BAM",
     )
+    parser.add_argument(
+        "--phred-base",
+        default=33,
+        type=int,
+        help="phred quality base in the input (default=33)",
+    )
+
+    # output options
     parser.add_argument(
         "--out-bam",
         default="/dev/stdout",
@@ -340,31 +487,58 @@ def parse_args():
     parser.add_argument(
         "--save-cell-barcodes",
         default="",
-        help="store (raw) cell barcode counts in this file. Numbers add up to number of total raw reads.",
+        help="store (raw) cell barcode counts in this file. Numbers add up to number of total raw reads. Warning: may use excessive RAM for Open-ST data!",
     )
+
+    # pre-processing options
     parser.add_argument(
-        "--fq-qual",
-        default="E",
-        help="phred qual for assigned barcode bases in FASTQ output (default='E')",
+        "--processing",
+        help="string encoding the processing of the cDNA",
+        default="Q:right=25;polyA;adapter:name=SMART,seq=AAGCAGTGGTATCAACGCAGAGTGAATGGG,max_errors=0.1,min_overlap=10",  # ;barcode:cell='r1[8:20][::-1]',UMI='r1[0:8]'
     )
-    parser.add_argument(
-        "--min-qual-trim",
-        default=0,
-        type=int,
-        help="clip low quality-bases from a read2 3' end (e.g. pre-detected adapter)",
-    )
+
+    # filtering options
+    # parser.add_argument(
+    #     "--min-qual-trim",
+    #     default=0,
+    #     type=int,
+    #     help="clip low quality-bases from a read2 3' end (e.g. pre-detected adapter)",
+    # )
     parser.add_argument(
         "--min-len",
         default=18,
         type=int,
-        help="minimum read2 length to keep after quality trimming (default=18)",
+        help="minimum read2 length to keep after preprocessing trimming (default=18)",
+    )
+
+    # Barcode/UMI extraction options
+    parser.add_argument("--cell", default="r1[8:20][::-1]")
+    parser.add_argument("--UMI", default="r1[0:8]")
+    parser.add_argument("--seq", default="r2")
+    parser.add_argument("--qual", default="r2_qual")
+    parser.add_argument("--disable-safety", default=False, type=bool)
+    # parser.add_argument(
+    #     "--fq-qual",
+    #     default="E",
+    #     help="phred qual for assigned barcode bases in FASTQ output (default='E')",
+    # )
+
+    # experimental options to reduce disk footprint
+    parser.add_argument(
+        "--qual-quantization",
+        default=False,
+        # type=bool,
+        action="store_true",
+        help="[EXPERIMENTAL] Quantize quality scores to just 4 levels for better compression/smaller file size (default=False)",
     )
     parser.add_argument(
-        "--phred-base",
-        default=33,
-        type=int,
-        help="phred quality base (default=33)",
+        "--qname-simplification",
+        default=False,
+        action="store_true",
+        help="[EXPERIMENTAL] Truncate flow-cell tile coordinates from QNAME and replace with counter for better compression/smaller file size (default=False)",
     )
+
+    # parallelization
     parser.add_argument(
         "--pipe-buffer",
         default=4,
@@ -373,20 +547,56 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--parallel", default=1, type=int, help="how many processes to spawn"
-    )
-    parser.add_argument(
         "--chunk-size",
         default=10,
         type=int,
         help="how many consecutive reads are assigned to the same worker (default=10)",
     )
+    parser.add_argument(
+        "--parallel", default=1, type=int, help="how many processes to spawn"
+    )
+    parser.add_argument(
+        "--threads-read",
+        help="number of threads for reading bam_in (default=2)",
+        type=int,
+        default=2,
+    )
+    parser.add_argument(
+        "--threads-write",
+        help="number of threads for writing bam_out (default=4)",
+        type=int,
+        default=4,
+    )
+    parser.add_argument(
+        "--threads-work",
+        help="number of worker threads for actual trimming (default=8)",
+        type=int,
+        default=8,
+    )
+
     # SAM standard now supports CB=corrected cell barcode, CR=original cell barcode, and MI=molecule identifier/UMI
     parser.add_argument(
         "--bam-tags",
         default="CR:{cell},CB:{cell},MI:{UMI},RG:A",
         help="a template of comma-separated BAM tags to generate. Variables are replaced with extracted cell barcode, UMI etc.",
     )
+    parser.add_argument(
+        "--output-fmt",
+        default="BAM",
+        choices=[
+            "SAM",
+            "BAM",
+            "CRAM",
+        ],
+        help="SAM, BAM (default), or CRAM",
+    )
+    parser.add_argument(
+        "--output-fmt-option",
+        default="",
+        nargs="+",
+        help="passed options to `samtools view` as --output-fmt-options",
+    )
+
     args = parser.parse_args()
     if args.parallel < 1:
         raise ValueError(f"--parallel {args.parallel} is invalid. Must be >= 1")

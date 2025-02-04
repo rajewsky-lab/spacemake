@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-__version__ = "0.9"
 __author__ = [
     "Marvin Jens",
 ]
@@ -103,8 +102,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    mbam = pysam.AlignmentFile(args.in_bam, "rb")
-    ubam = pysam.AlignmentFile(args.in_ubam, "rb", check_sq=False)
+    mbam = pysam.AlignmentFile(args.in_bam, "r")
+    ubam = pysam.AlignmentFile(args.in_ubam, "rc", check_sq=False)
 
     mapped_header = mbam.header.to_dict()
     ubam_header = ubam.header.to_dict()

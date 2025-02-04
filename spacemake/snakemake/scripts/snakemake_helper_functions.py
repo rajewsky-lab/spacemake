@@ -401,6 +401,12 @@ def get_final_bam(wildcards):
 
     return res
 
+def get_final_bam_reference(wildcards):
+    from spacemake.map_strategy import map_data
+    fb = wc_fill(final_bam, wildcards)
+    ref = map_data["REF_FOR_FINAL"][fb]
+    # print(f">>> {fb} {ref}")
+    return ref
 
 def get_dge_input_bam(wildcards):
     if wildcards.data_root_type == "complete_data":

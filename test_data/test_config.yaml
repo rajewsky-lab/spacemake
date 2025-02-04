@@ -254,8 +254,8 @@ quant:
 species:
     test_hsa:
         genome:
-            annotation: "{spacemake_dir}/test_data/test_genome.gtf.gz"
-            sequence: "{spacemake_dir}/test_data/test_genome.fa.gz"
+            annotation: "{spacemake_dir}/test_data/simple_annotation.gtf"
+            sequence: "{spacemake_dir}/test_data/simple_genome.fa"
         miRNA:
             annotation: "{spacemake_dir}/test_data/mirgenedb.hsa.mature.gtf.gz"
             sequence: "{spacemake_dir}/test_data/mirgenedb.hsa.mature.fa.gz"

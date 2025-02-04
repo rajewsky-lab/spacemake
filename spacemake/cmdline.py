@@ -966,6 +966,7 @@ def spacemake_run(args):
     # get the snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
     # run snakemake
+
     preprocess_finished = snakemake.snakemake(
         snakefile,
         configfiles=[var.config_path],
@@ -977,8 +978,8 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
+        # debug_dag=True, verbose=True
     )
-
     if preprocess_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
 
@@ -1000,6 +1001,7 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
+        # debug_dag=True, verbose=True
     )
 
     pdf.update_project_df_barcode_matches()
@@ -1017,6 +1019,8 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
+        # debug_dag=True, verbose=True
+
     )
 
     if analysis_finished is False:
