@@ -34,12 +34,15 @@ class SeqData(object):
         self.tags = defaultdict(list)
 
     def render_tags(self, extra_tags=[]):
+        # print(self.tags)
         bam_tags = [(n, f"{','.join(records)}") for n, records in self.tags.items()]
         tag_str = "\t".join([f"{tag}:Z:{val}" for tag, val in bam_tags] + extra_tags)
         return tag_str
 
     def render_SAM(self, flag=4, extra_tags=["RG:Z:A"]):
         tag_str = self.render_tags(extra_tags=extra_tags)
+        # if len(self.r2) != len(self.q2):
+        #     print(self.r2, self.q2, tag_str)
         return f"{self.qname}\t{flag}\t*\t0\t0\t*\t*\t0\t0\t{self.r2}\t{self.q2}\t{tag_str}\n"
 
     def __str__(self):
@@ -169,15 +172,15 @@ def adapter_trim(
             if where == "left":
                 n_trimmed = match.rstop
                 sdata.tags["A5"].append(name)
-                sdata.tags["T5"].append(n_trimmed)
+                sdata.tags["T5"].append(str(n_trimmed))
                 sdata.r2 = sdata.r2[match.rstop :]
                 sdata.q2 = sdata.q2[match.rstop :]
             else:
                 n_trimmed = len(sdata.r2) - match.rstart
                 sdata.tags["A3"].append(name)
-                sdata.tags["T3"].append(n_trimmed)
+                sdata.tags["T3"].append(str(n_trimmed))
                 sdata.r2 = sdata.r2[: match.rstart]
-                sdata.q2 = sdata.q2[: match.rstop]
+                sdata.q2 = sdata.q2[: match.rstart]
 
     return adap
 
@@ -244,15 +247,34 @@ class PreProcessor(object):
         "clip": clip,
     }
 
-    def __init__(self, processing_str, **kw):  # , min_len=18):
+    def __init__(self, processing_str="", flavor_dict={}, **kw):  # , min_len=18):
         self.kw = kw
         # collect statistics here
         self.stats = defaultdict(lambda: defaultdict(int))
 
         # parse processing_str and assemble a pre-processing pipeline
-        self.pipeline = self.parse(processing_str)
+        if flavor_dict:
+            self.pipeline = self.pipeline_from_flavor(flavor_dict)
+        else:
+            self.pipeline = self.pipeline_from_str(processing_str)
 
-    def parse(self, processing_str):
+    def pipeline_from_flavor(self, flavor_dict):
+        pipeline = []
+        from pprint import pprint
+
+        for step_d in flavor_dict:
+            # this should always only have one item
+            for fn_name, kw_d in step_d.items():
+                kw = self.kw.get(fn_name, {}).copy()
+                if kw_d is not None:
+                    kw.update(kw_d)
+
+                fn = self.fn_dict[fn_name]
+                pipeline.append(fn(**kw))
+
+        return pipeline
+
+    def pipeline_from_str(self, processing_str):
         pipeline = []
 
         for token in processing_str.split(";"):
@@ -320,9 +342,15 @@ def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
     # # kw.update(par)
     # import argparse
     # args = argparse.Namespace(**kw)
+    if args.flavor:
+        args = util.load_config_with_fallbacks(args)
+        flavor_dict = args.config["preprocessing_flavors"][args.flavor]
+    else:
+        flavor_dict = {}
 
     pre = PreProcessor(
-        args.processing,
+        processing_str=args.processing,
+        flavor_dict=flavor_dict,
         simple_name=dict(
             w=_extra_args["n"],
             n_workers=args.threads_work,
@@ -419,13 +447,13 @@ def main(args):
         min_len=args.min_len,
     )
     # compress to BAM
-    fmt_opt = " ".join([f"--output-fmt-option {o}" for o in args.output_fmt_option])
-    fmt = f"Sh -O {args.output_fmt} {fmt_opt}"
+    fmt_opt = " ".join([f"--output-fmt-option {o}" for o in args.out_fmt_option])
+    fmt = f"Sh -O {args.out_fmt} {fmt_opt}"
 
     w.funnel(
         func=mf.parts.bam_writer,  # mf.parts.null_writer, #
         input=mf.FIFO("sam_filtered", "rt"),
-        output=args.out_bam,
+        output=args.out_file,
         _manage_fifos=False,
         fmt=fmt,
         threads=args.threads_write,
@@ -475,7 +503,7 @@ def parse_args():
         "fastq_to_uBAM",
         description="Convert raw reads1 and reads2 FASTQ into a single BAM file with cell barcode and UMI as BAM-tags",
     )
-    # input options
+    ## input options
     parser.add_argument(
         "--matrix",
         default=None,
@@ -505,13 +533,22 @@ def parse_args():
         help="phred quality base in the input (default=33)",
     )
 
-    # pre-processing options
+    ## pre-processing options
     parser.add_argument(
         "--processing",
         help="string encoding the processing of the cDNA",
         default="quality:right=25;polyA;adapter:name=SMART,seq=AAGCAGTGGTATCAACGCAGAGTGAATGGG,max_errors=0.1,min_overlap=10;barcode:cell=r1[8:20][::-1],UMI=r1[0:8]",
     )
-
+    parser.add_argument(
+        "--config",
+        help="path to config.yaml",
+        default="config.yaml",
+    )
+    parser.add_argument(
+        "--flavor",
+        help="read a preprocessing_flavor from config.yaml to configure the pre-processing pipeline, instead of parsing --processing",
+        default="",
+    )
     parser.add_argument(
         "--min-len",
         default=18,
@@ -519,7 +556,7 @@ def parse_args():
         help="minimum read2 length to keep after preprocessing, which involves trimming (default=18)",
     )
 
-    # parallelization
+    ## parallelization
     parser.add_argument(
         "--pipe-buffer",
         default=4,
@@ -533,21 +570,21 @@ def parse_args():
         help="how many consecutive reads are assigned to the same worker (default=10)",
     )
     parser.add_argument(
-        "--threads-write",
-        help="number of threads for writing bam_out (default=8)",
-        type=int,
-        default=8,
-    )
-    parser.add_argument(
         "--threads-work",
         help="number of worker threads for actual trimming (default=8)",
         type=int,
         default=8,
     )
-
-    # output options
     parser.add_argument(
-        "--out-bam",
+        "--threads-write",
+        help="number of threads for writing bam_out (default=8)",
+        type=int,
+        default=8,
+    )
+
+    ## output options
+    parser.add_argument(
+        "--out-file",
         default="/dev/stdout",
         help="output for unaligned BAM records (default=/dev/stdout) ",
     )
