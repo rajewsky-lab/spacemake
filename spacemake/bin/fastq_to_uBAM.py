@@ -188,11 +188,16 @@ def adapter_trim(
 format_func_template = """
 def format_func(sdata):
     {i5i7}
-    sdata.tags['CB'] = [sdata.{cell}, ]
-    sdata.tags['MI'] = [sdata.{UMI}, ]
+    r1 = sdata.r1
+    q1 = sdata.q1
+    r2 = sdata.r2
+    q2 = sdata.q2
 
-    sdata.r2 = sdata.{seq}
-    sdata.q2 = sdata.{qual}
+    sdata.tags['CB'] = [{cell}, ]
+    sdata.tags['MI'] = [{UMI}, ]
+
+    sdata.r2 = {seq}
+    sdata.q2 = {qual}
 """
 i5i7_extract_template = "i5i7 = sdata.qname.split(':N:0:')[1].replace('+', '')"
 

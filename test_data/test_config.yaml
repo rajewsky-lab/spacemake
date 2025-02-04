@@ -114,9 +114,11 @@ preprocessing_flavors:
         - adapter:
             name: SMART
             seq: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+            min_overlap: 10
+            max_errors: 0.1
         - barcode:
-            cell: "r1[0:12]"
-            UMI: "r1[12:20]"
+            UMI: "r1[0:8]"
+            cell: "r1[8:20]"
 
 barcode_flavors:
     default:
