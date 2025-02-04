@@ -289,13 +289,13 @@ rule tag_reads_bc_umi:
         "--sample={wildcards.sample_id} "
         "--read1={input.R1} "
         "--read2={input.R2} "
-        "--parallel={threads} "
-	    "--out-bam={output.ubam} "
+        "--threads-work={threads} "
+	    "--out-file={output.ubam} "
         "--cell='{params.bc.cell}' "
         "--UMI='{params.bc.UMI}' "
-        "--bam-tags='{params.bc.bam_tags}' "
-        "--output-fmt=CRAM "
-#        "--output-fmt-option='version=3.1' " # not supported by DropSeqTools 2.5.1
+        #"--bam-tags='{params.bc.bam_tags}' "
+        "--out-fmt=CRAM "
+        "--out-fmt-option='version=3.1' " # not supported by DropSeqTools 2.5.1
         "--log-file='{output.log}' "
 
 rule run_fastqc:

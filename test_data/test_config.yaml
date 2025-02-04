@@ -117,8 +117,36 @@ preprocessing_flavors:
             min_overlap: 10
             max_errors: 0.1
         - barcode:
-            UMI: "r1[0:8]"
-            cell: "r1[8:20]"
+            cell: "r1[0:12]"
+            UMI: "r1[12:20]"
+    openst:
+        - quality:
+            right: 25
+        - polyA:
+        - adapter:
+            name: SMART
+            seq: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+            min_overlap: 10
+            max_errors: 0.1
+        - barcode:
+            UMI: "r2[0:9]"
+            cell: "r1[2:27]"
+        - clip:
+            left: 12
+
+    dropseq:
+        - quality:
+            right: 25
+        - polyA:
+        - adapter:
+            name: SMART
+            seq: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+            min_overlap: 10
+            max_errors: 0.1
+        - barcode:
+            cell: "r1[0:12]"
+            UMI: "r1[12:20]"
+
 
 barcode_flavors:
     default:
@@ -149,15 +177,6 @@ barcode_flavors:
         UMI: "r2[:4] + r2[-4:]"
         seq: "r2[4:-4]"
         qual: "r2_qual[4:-4]"
-    openst:
-        - qual:
-            right: 25
-        - polyA:
-        - adapter:
-            name: SMART
-        - barcodes:
-            UMI: "r2[0:9]"
-            cell: "r1[2:27]"
 
 
 adapters:

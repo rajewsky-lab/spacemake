@@ -191,7 +191,7 @@ def format_func(sdata):
     r1 = sdata.r1
     q1 = sdata.q1
     r2 = sdata.r2
-    q2 = sdata.q2
+    r2_qual = sdata.q2
 
     sdata.tags['CB'] = [{cell}, ]
     sdata.tags['MI'] = [{UMI}, ]
@@ -360,6 +360,13 @@ def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
             w=_extra_args["n"],
             n_workers=args.threads_work,
             chunk_size=args.chunk_size,
+        ),
+        # LEGACY CONFIGURATION
+        barcode=dict(
+            cell=args.cell,
+            UMI=args.UMI,
+            seq=args.seq,
+            qual=args.qual,
         ),
     )
 
@@ -542,7 +549,7 @@ def parse_args():
     parser.add_argument(
         "--processing",
         help="string encoding the processing of the cDNA",
-        default="quality:right=25;polyA;adapter:name=SMART,seq=AAGCAGTGGTATCAACGCAGAGTGAATGGG,max_errors=0.1,min_overlap=10;barcode:cell=r1[8:20][::-1],UMI=r1[0:8]",
+        default="quality:right=25;polyA;adapter:name=SMART,seq=AAGCAGTGGTATCAACGCAGAGTGAATGGG,max_errors=0.1,min_overlap=10;barcode",  #:cell=r1[8:20][::-1],UMI=r1[0:8]",
     )
     parser.add_argument(
         "--config",
@@ -560,6 +567,12 @@ def parse_args():
         type=int,
         help="minimum read2 length to keep after preprocessing, which involves trimming (default=18)",
     )
+    # Barcode/UMI extraction LEGACY options
+    parser.add_argument("--cell", default="r1[8:20][::-1]", help="DEPRECATED")
+    parser.add_argument("--UMI", default="r1[0:8]", help="DEPRECATED")
+    parser.add_argument("--seq", default="r2", help="DEPRECATED")
+    parser.add_argument("--qual", default="r2_qual", help="DEPRECATED")
+    parser.add_argument("--disable-safety", default=False, type=bool, help="DEPRECATED")
 
     ## parallelization
     parser.add_argument(
