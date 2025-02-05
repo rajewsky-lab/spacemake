@@ -18,8 +18,9 @@ uns_keys = ['hvg', 'leiden', 'log1p', 'neighbors', 'pca', 'umap']
 
 # all the keys have to be in adata.uns
 adata_complete = any([key in adata.uns.keys() for key in uns_keys])
+
 #################
-# TOP10 markers #
+# TOP20 markers #
 #################
 if not adata_complete:
     pd.DataFrame().to_csv(snakemake.output['cluster_markers'])
@@ -27,9 +28,10 @@ if not adata_complete:
 else:
     res_keys = adata.obs.columns[adata.obs.columns.str.startswith('leiden_')]
     
-    top_10_marker_dfs = []
+    top_20_marker_dfs = []
     nhood_enrichment_dfs = []
     
+    # Iterate over different resolution values
     for res_key in res_keys:
         rank_key = 'rank_genes_groups_' + res_key
         
@@ -58,8 +60,11 @@ else:
              
         df['resolution'] = res_key.split('_')[1]
         df.reset_index(inplace=True)
+
+        # Restrict to top X markers
+        df = df.groupby("cluster").head(20)
          
-        top_10_marker_dfs.append(df)
+        top_20_marker_dfs.append(df)
 
         if snakemake.params['is_spatial']:
         # get nhood data
@@ -72,7 +77,7 @@ else:
 
             nhood_enrichment_dfs.append(df)
         
-    pd.concat(top_10_marker_dfs).to_csv(snakemake.output['cluster_markers'], index=False)
+    pd.concat(top_20_marker_dfs).to_csv(snakemake.output['cluster_markers'], index=False)
 
     if snakemake.params['is_spatial']:
         pd.concat(nhood_enrichment_dfs).to_csv(snakemake.output['nhood_enrichment'], index=False)

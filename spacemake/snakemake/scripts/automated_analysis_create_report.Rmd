@@ -296,7 +296,7 @@ library(pals)
 
 cluster_clrs <- unname(glasbey())
 
-#top10_marker_table <- read_table2(snakemake@input$cluster_markers)
+#top20_marker_table <- read_table2(snakemake@input$cluster_markers)
 
 if(is_spatial){
     nhood_dat <- read_csv(snakemake@input$nhood_enrichment)
