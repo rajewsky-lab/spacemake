@@ -22,6 +22,7 @@ def get_global_config(root="."):
 
     return __global_config
 
+
 def get_puck_parser(required=True):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     parser.add_argument("--name", help="name of the puck", type=str, required=True)
@@ -50,6 +51,7 @@ def get_puck_parser(required=True):
     )
 
     return parser
+
 
 def get_run_mode_parser(required=True):
     parser = argparse.ArgumentParser(
@@ -209,14 +211,28 @@ def get_species_parser(required=True):
     )
     parser.add_argument(
         "--BT2_flags",
-        help="bt2 mapping arguments for this reference (default=mapping.smk:default_BT2_MAP_FLAGS) ",
+        help="bt2 mapping arguments for this reference (default=map_strategy.py:default_BT2_MAP_FLAGS) ",
         type=str,
         default="",
         required=False,
     )
     parser.add_argument(
         "--STAR_flags",
-        help="STAR mapping arguments for this reference (default=mapping.smk:default_STAR_MAP_FLAGS)",
+        help="STAR mapping arguments for this reference (default=map_strategy.py:default_STAR_MAP_FLAGS)",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--BT2_index_flags",
+        help="bt2 index creation arguments for this reference (default=map_strategy.py:default_BT2_INDEX_FLAGS) ",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--STAR_index_flags",
+        help="STAR index creation arguments for this reference (default=map_strategy.py:default_STAR_INDEX_FLAGS)",
         type=str,
         default="",
         required=False,
@@ -376,6 +392,7 @@ def list_variables_cmdline(config, args):
     variable = args["variable"]
     del args["variable"]
     import yaml
+
     config.logger.info(f"Listing {variable}")
     config.logger.info(yaml.dump(config.variables[variable]))
 
@@ -437,7 +454,12 @@ class RunMode(ConfigMainVariable):
 
 
 class Puck(ConfigMainVariable):
-    variable_types = {"barcodes": str, "spot_diameter_um": float, "width_um": int, "coordinate_system": str}
+    variable_types = {
+        "barcodes": str,
+        "spot_diameter_um": float,
+        "width_um": int,
+        "coordinate_system": str,
+    }
 
     @property
     def has_barcodes(self):
@@ -446,7 +468,7 @@ class Puck(ConfigMainVariable):
             and self.variables["barcodes"]
             and self.variables["barcodes"] != "None"
         )
-    
+
     @property
     def has_coordinate_system(self):
         return (
@@ -548,9 +570,12 @@ class ConfigFile:
         return cf
 
     def expand_strings(self, **kw):
-        kw['spacemake_dir'] = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
+        kw["spacemake_dir"] = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../")
+        )
         # print(f"expanding strings in config with context={kw}")
         import collections.abc as abc
+
         def recurse(d):
             if type(d) == str:
                 try:
@@ -707,14 +732,16 @@ class ConfigFile:
 
         variable_data = self.variables[variable_name][variable_key]
         if variable_name == "species":
-            ref_name = kw['reference']
+            ref_name = kw["reference"]
             if ref_name in self.variables[variable_name][variable_key]:
-                del self.variables[variable_name][variable_key][kw['reference']]
+                del self.variables[variable_name][variable_key][kw["reference"]]
             else:
-                logging.warning(f"reference {ref_name} is not registered under species {variable_key}")
+                logging.warning(
+                    f"reference {ref_name} is not registered under species {variable_key}"
+                )
 
             if len(self.variables[variable_name][variable_key]) == 0:
-                # this was the last reference entry. 
+                # this was the last reference entry.
                 # Let's remove the species altogether
                 del self.variables[variable_name][variable_key]
         else:
@@ -734,10 +761,10 @@ class ConfigFile:
 
     def process_barcode_flavor_args(self, **kw):
         bam_tags = "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
-        
+
         # r(1|2) and then string slice
-        # this is too restrictive. What about umi = "r1[12:20] + r2[:8]" ? 
-        # would be perfectly reasonable 
+        # this is too restrictive. What about umi = "r1[12:20] + r2[:8]" ?
+        # would be perfectly reasonable
         # to_match = r"r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$"
 
         UMI = kw.get("UMI", None)
@@ -822,6 +849,8 @@ class ConfigFile:
         BT2_index=None,
         BT2_flags=None,
         STAR_flags=None,
+        BT2_index_flags=None,
+        STAR_index_flags=None,
     ):
         assert_file(sequence, default_value=None, extension=[".fa", ".fa.gz"])
         if annotation:
@@ -845,12 +874,25 @@ class ConfigFile:
         if STAR_flags:
             d["STAR_flags"] = STAR_flags
 
+        if BT2_index_flags:
+            d["BT2_index_flags"] = BT2_index_flags
+
+        if STAR_index_flags:
+            d["STAR_index_flags"] = STAR_index_flags
+
         species_refs = self.variables["species"].get(name, {})
         species_refs[reference] = d
         self.variables["species"][name] = species_refs
         return species_refs
 
-    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None, coordinate_system=None, name=None):
+    def process_puck_args(
+        self,
+        width_um=None,
+        spot_diameter_um=None,
+        barcodes=None,
+        coordinate_system=None,
+        name=None,
+    ):
         assert_file(barcodes, default_value=None, extension="all")
         assert_file(coordinate_system, default_value=None, extension="all")
 
@@ -866,7 +908,6 @@ class ConfigFile:
 
         if coordinate_system is not None:
             puck["coordinate_system"] = coordinate_system
-
 
         return puck
 
@@ -995,7 +1036,7 @@ class ConfigFile:
         # populate each adapter clip definition in this flavor with the full sequence of the adapter
         for section, entries in af.items():
             if section in add_adapter_sequences:
-                for (name, d_adap) in entries.items():
+                for name, d_adap in entries.items():
                     if name == "Q":
                         continue
                     d_adap["seq"] = adapter_sequences.get(
@@ -1113,64 +1154,64 @@ def get_run_mode_parser(required=True):
     return parser
 
 
-def get_species_parser(required=True):
-    "a parser that allows to add a reference sequence and annotation, belonging to some species"
-    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-    parser.add_argument(
-        "--reference",
-        help="name of the reference (default=genome)",
-        type=str,
-        default="genome",
-    )
-    parser.add_argument("--name", help="name of the species", type=str, required=True)
-    parser.add_argument(
-        "--sequence",
-        help="path to the sequence (.fa) file for the species/reference to be added (e.g. the genome)",
-        type=str,
-        required=required,
-    )
-    parser.add_argument(
-        "--genome",
-        help="[DEPRECATED] path to the genome (.fa) file for the species to be added. --genome=<arg> is a synonym for --reference=genome --sequence=<arg>",
-        type=str,
-        required=False,
-    )
+# def get_species_parser(required=True):
+#     "a parser that allows to add a reference sequence and annotation, belonging to some species"
+#     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
+#     parser.add_argument(
+#         "--reference",
+#         help="name of the reference (default=genome)",
+#         type=str,
+#         default="genome",
+#     )
+#     parser.add_argument("--name", help="name of the species", type=str, required=True)
+#     parser.add_argument(
+#         "--sequence",
+#         help="path to the sequence (.fa) file for the species/reference to be added (e.g. the genome)",
+#         type=str,
+#         required=required,
+#     )
+#     parser.add_argument(
+#         "--genome",
+#         help="[DEPRECATED] path to the genome (.fa) file for the species to be added. --genome=<arg> is a synonym for --reference=genome --sequence=<arg>",
+#         type=str,
+#         required=False,
+#     )
 
-    parser.add_argument(
-        "--annotation",
-        help="path to the genome annotation (.gtf) file for the species to be added",
-        type=str,
-        default="",
-        required=False,
-    )
-    parser.add_argument(
-        "--STAR_index_dir",
-        help="path to STAR index directory",
-        type=str,
-        required=False,
-    )
-    parser.add_argument(
-        "--BT2_index",
-        help="path to BOWTIE2 index",
-        type=str,
-        required=False,
-    )
-    parser.add_argument(
-        "--BT2_flags",
-        help="bt2 mapping arguments for this reference (default=mapping.smk:default_BT2_MAP_FLAGS) ",
-        type=str,
-        default="",
-        required=False,
-    )
-    parser.add_argument(
-        "--STAR_flags",
-        help="STAR mapping arguments for this reference (default=mapping.smk:default_STAR_MAP_FLAGS)",
-        type=str,
-        default="",
-        required=False,
-    )
+#     parser.add_argument(
+#         "--annotation",
+#         help="path to the genome annotation (.gtf) file for the species to be added",
+#         type=str,
+#         default="",
+#         required=False,
+#     )
+#     parser.add_argument(
+#         "--STAR_index_dir",
+#         help="path to STAR index directory",
+#         type=str,
+#         required=False,
+#     )
+#     parser.add_argument(
+#         "--BT2_index",
+#         help="path to BOWTIE2 index",
+#         type=str,
+#         required=False,
+#     )
+#     parser.add_argument(
+#         "--BT2_flags",
+#         help="bt2 mapping arguments for this reference (default=mapping.smk:default_BT2_MAP_FLAGS) ",
+#         type=str,
+#         default="",
+#         required=False,
+#     )
+#     parser.add_argument(
+#         "--STAR_flags",
+#         help="STAR mapping arguments for this reference (default=mapping.smk:default_STAR_MAP_FLAGS)",
+#         type=str,
+#         default="",
+#         required=False,
+#     )
 
-    return parser
+#     return parser
 
 
 def get_barcode_flavor_parser(required=True):
@@ -1350,13 +1391,12 @@ def get_quant_parser(required=True):
     )
     parser.add_argument(
         "--name",
-        help=(
-            "name of the counting flavor."
-        ),
+        help=("name of the counting flavor."),
         type=str,
         required=True,
     )
     return parser
+
 
 def get_variable_action_subparsers(parent_parser, variable):
 
@@ -1400,7 +1440,9 @@ def get_variable_action_subparsers(parent_parser, variable):
     )
     list_parser.set_defaults(func=list_variables_cmdline, variable=variable)
     # snake_case for backward compatibility. remove in a future update
-    list_parser_legacy = parent_parser.add_parser(f"list_{variable}",)
+    list_parser_legacy = parent_parser.add_parser(
+        f"list_{variable}",
+    )
     list_parser_legacy.set_defaults(func=list_variables_cmdline, variable=variable)
 
     func = add_update_delete_variable_cmdline
@@ -1411,7 +1453,9 @@ def get_variable_action_subparsers(parent_parser, variable):
         description=command_help["delete"],
         help=command_help["delete"],
     )
-    delete_parser_legacy = parent_parser.add_parser(f"delete_{variable_singular}",) 
+    delete_parser_legacy = parent_parser.add_parser(
+        f"delete_{variable_singular}",
+    )
     delete_parser.add_argument(
         "--name",
         help=f"name of the {variable_singular} to be deleted",
@@ -1463,7 +1507,8 @@ def get_variable_action_subparsers(parent_parser, variable):
     )
     update_parser_legacy = parent_parser.add_parser(
         f"update_{variable_singular}",
-        parents=[variable_add_update_parser(False)],)
+        parents=[variable_add_update_parser(False)],
+    )
     update_parser.set_defaults(func=func, action="update", variable=variable)
     update_parser_legacy.set_defaults(func=func, action="update", variable=variable)
 

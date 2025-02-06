@@ -76,28 +76,6 @@ bt2_index_file = bt2_index_param + '.1.bt2'
 species_reference_sequence = 'species_data/{species}/{ref_name}/sequence.fa'
 species_reference_annotation = 'species_data/{species}/{ref_name}/annotation.gtf'
 
-default_BT2_MAP_FLAGS = (
-    " --local"
-    " -L 10 -D 30 -R 30"
-    " --ignore-quals"
-    " --score-min=L,0,1.5" # require 75% of perfect match (2=base match)
-)
-# original rRNA mapping code used --very-fast-local and that was that.
-
-default_STAR_MAP_FLAGS = (
-    # before shared memory
-    # " --genomeLoad NoSharedMemory"
-    # with shared memory
-    " --genomeLoad LoadAndKeep"
-    " --limitBAMsortRAM 5000000000"
-    " --outSAMprimaryFlag AllBestScore"
-    " --outSAMattributes All"
-    " --outSAMunmapped Within"
-    " --outStd BAM_Unsorted"
-    " --outSAMtype BAM Unsorted"
-    " --limitOutSJcollapsed 5000000"
-)
-
 # TODO: port remaining python code to map_strategy.py
 # to expose it to enable coverage analysis and unit-testing
 # possibly best way is to turn map_strategy into a class-instance that can be set-up with 
@@ -332,6 +310,7 @@ rule prepare_species_reference_annotation:
 		else:
 			shell('ln -sr {input} {output}')
 
+
 # TODO: transition to species_reference_file and map_index_param
 # and get rid of INDEX_FASTA_LKUP
 rule create_bowtie2_index:
@@ -340,14 +319,11 @@ rule create_bowtie2_index:
     output:
         bt2_index_file
     params:
-        auto = lambda wc: INDEX_FASTA_LKUP[wc_fill(bt2_index_file, wc)]
+        settings = lambda wc: get_index_creation_settings(pdf=project_df, species=wc.species, reference=wc.ref_name)
     shell:
         """
-        mkdir -p {params.auto[map_index]}
-        bowtie2-build --ftabchars 12 \
-                      --offrate 1 \
-                      {params.auto[ref_path]} \
-                      {params.auto[map_index_param]}
+        mkdir -p {params.settings[bt2_index]}
+        bowtie2-build {params.settings[bowtie2_flags]} {input} {params.settings[bt2_index_param]}
         """
 
 rule create_star_index:
@@ -358,10 +334,13 @@ rule create_star_index:
         index_dir=directory(star_index),
         index_file=star_index_file
     threads: max(workflow.cores * 0.25, 8)
+    params:
+        settings = lambda wc: get_index_creation_settings(pdf=project_df, species=wc.species, reference=wc.ref_name)
     shell:
         """
         mkdir -p {output.index_dir} 
         STAR --runMode genomeGenerate \
+             {params.settings[STAR_flags]} \
              --runThreadN {threads} \
              --genomeDir {output.index_dir} \
              --genomeFastaFiles {input.sequence} \

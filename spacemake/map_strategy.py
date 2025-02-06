@@ -95,14 +95,22 @@ default_BT2_MAP_FLAGS = (
 # original rRNA mapping code used --very-fast-local and that was that.
 
 default_STAR_MAP_FLAGS = (
+    # before shared memory
     # " --genomeLoad NoSharedMemory"
+    # with shared memory
+    " --genomeLoad LoadAndKeep"
+    " --limitBAMsortRAM 5000000000"
     " --outSAMprimaryFlag AllBestScore"
-    " --outSAMattributes Standard"
+    " --outSAMattributes All"
     " --outSAMunmapped Within"
     " --outStd BAM_Unsorted"
     " --outSAMtype BAM Unsorted"
     " --limitOutSJcollapsed 5000000"
 )
+
+# mapping index creation fine-tuning
+default_BT2_INDEX_FLAGS = "--ftabchars 12 --offrate 1"
+default_STAR_INDEX_FLAGS = ""
 
 default_counting_flavor_with_annotation = "default"
 default_counting_flavor_no_annotation = "custom_index"
@@ -352,6 +360,23 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
     # for m in map_rules:
     #     print(m)
     return map_rules, link_rules
+
+
+def get_index_creation_settings(pdf, species, reference):
+    print(f"species={species} reference={reference}")
+    d = pdf.config.get_variable("species", name=species)[reference]
+    print(f"d={d}")
+    settings = {
+        "bt2_index_param": bt2_index_param.format(species=species, ref_name=reference),
+        "bt2_index": bt2_index.format(species=species, ref_name=reference),
+        "fasta": d["sequence"],
+        "bowtie2_flags": d.get("BT2_index_flags", default_BT2_INDEX_FLAGS),
+        "STAR_flags": d.get("STAR_index_flags", default_STAR_INDEX_FLAGS),
+    }
+    from pprint import pprint
+
+    pprint(settings)
+    return settings
 
 
 def get_mapped_BAM_output(
