@@ -217,7 +217,7 @@ def test_sample(configured_root):
     test_sample = (
         f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
         f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
-        "--map-strategy=genome:STAR:final",
+        "--map-strategy=rRNA:bowtie2->genome:STAR:final",
         "--species=test_hsa",
     )
 
@@ -246,7 +246,9 @@ def test_sample(configured_root):
         "update-sample",
         "--project-id=test",
         "--sample-id=test1",
-        "--run-mode", "openst", "default",
+        "--run-mode",
+        "openst",
+        "default",
     )
 
 
