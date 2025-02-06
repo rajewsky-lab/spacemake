@@ -357,7 +357,7 @@ def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
         processing_str=args.processing,
         flavor_dict=flavor_dict,
         simple_name=dict(
-            w=_extra_args["n"],
+            # w=_extra_args["n"], # needed for read simplification but not yet in mrfifo upstream. Disable for now
             n_workers=args.threads_work,
             chunk_size=args.chunk_size,
         ),
