@@ -50,7 +50,7 @@ def test_dropseq():
         spacemake_dir + "test_data/reads_chr22_R1.fastq.gz",
         "--read2",
         spacemake_dir + "test_data/reads_chr22_R2.fastq.gz",
-        "--out-bam",
+        "--out-file",
         "/dev/null",
     )
 
@@ -59,43 +59,48 @@ def test_single():
     sm(
         "--read2",
         spacemake_dir + "test_data/reads_chr22_R2.fastq.gz",
-        "--out-bam",
+        "--out-file",
         "/dev/null",
         """--cell='"A"'""",
     )
 
 
 def test_preprocessing():
-    pre = PreProcessor("Q:left=25,right=25")
+    pre = PreProcessor("quality:left=25,right=25")
 
-    qname, seq, qual = (
-        "@NS_mRNA:7 2:N:0:ACTGAGCG",
+    qual = "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII"
+    sdata = SeqData(
+        "@NS_mRNA:7 1:N:0:ACTGAGCG",
+        "CCTGCTGGGAGGGG",
+        "IIIIIIIIIIIIII",
         "CCTGCTGGGAGGGGGTGGGGGGAGGAGGAAGAGGTGGGGCTCTACTCTGATTAATTA",
-        "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII",
+        qual,
     )
-
-    res = pre.process(qname, seq, qual)
-    assert qual == res[2]
-    assert len(res[-1]) == 0
+    sdata = pre.process(sdata)
+    assert sdata.q2 == qual
+    assert len(sdata.tags) == 0
 
     qual = "###IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII###I#I#"
-    res = pre.process(qname, seq, qual)
+    sdata.q2 = qual
+    res = pre.process(sdata)
     # print(res)
-    tag_d = dict(res[-1])
-    assert tag_d["T5"] == "3"
-    assert tag_d["T3"] == "7"
+    tag_d = dict(res.tags)
+    assert tag_d["T5"] == ["3"]
+    assert tag_d["T3"] == ["7"]
 
-    pre = PreProcessor("Q:left=25,right=25;polyA")
+    pre = PreProcessor("quality:left=25,right=25;polyA")
 
-    qname, seq, qual = (
-        "@NS_mRNA:7 2:N:0:ACTGAGCG",
+    sdata = SeqData(
+        "@NS_mRNA:7 1:N:0:ACTGAGCG",
+        "CCTGCTGGGAGGGG",
+        "IIIIIIIIIIIIII",
         "CCTGCTGGGAGGGGGTGGGGGGAGGAGGAAGAGGTGGGGCTCTACTCTGATTAATTAAAAAAAAAGAGAAAAAAAAAAAAAAAAGGG",
         "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIEEIEEIE#IIIIIIIIIIIIIIEIII###",
     )
-
-    res = pre.process(qname, seq, qual)
-    tag_d = dict(res[-1])
-    assert tag_d["T3"] == "3,28"
+    res = pre.process(sdata)
+    tag_d = dict(res.tags)
+    print(tag_d)
+    assert tag_d["T3"] == ["3", "28"]
 
 
 if __name__ == "__main__":
