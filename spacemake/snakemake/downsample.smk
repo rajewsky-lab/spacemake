@@ -22,8 +22,8 @@ rule downsample_bam:
         """
         mkdir -p {params.downsample_dir}
 
-        sambamba view -o {output} -f bam -t {threads} \
-            -s 0.{params.ratio} {input}
+        samtools view -bh -o {output} --threads {threads} \
+            --subsample 0.{params.ratio} {input}
         """
 
 rule downsampled_filter_mm_reads:

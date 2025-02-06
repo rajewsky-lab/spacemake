@@ -9,7 +9,6 @@ dependencies:
     - snakemake>=5.32.0,<6.4.0
     - star>=2.7.1a
     - samtools>=1.13
-    - sambamba>=0.6.8
     - bowtie2>=2.3.4
     - bcl2fastq2>=2.19
     - fastqc>=0.11.9
@@ -27,6 +26,7 @@ dependencies:
     - openjdk==11.0.15
     - pigz
     - pip:
+        - cutadapt       
         - setproctitle
         - isal
         - pytest
