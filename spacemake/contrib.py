@@ -1,5 +1,5 @@
 import importlib.metadata
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 __author__ = ["Nikos Karaiskos", "Tamas Ryszard Sztanka-Toth", "Marvin Jens"]
 __license__ = "GPL"
 __email__ = [
