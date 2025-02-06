@@ -286,6 +286,32 @@ rule map_reads_STAR:
 # a) that the reference sequence has already been provided (by user or another rule)
 # b) that the index is to be placed in the default location
 
+from spacemake.map_strategy import get_all_mapped_bams
+import spacemake.snakemake.variables as smv
+
+def get_unmapped_cleanup_cmd(wc):
+    key = (wc.project_id, wc.sample_id)
+    bams = map_data["ALL_UNMAPPED_BAMS"]
+    keep = map_data["BAM_IS_NOT_TEMP"]
+    slated = sorted(bams[key] - keep)
+    # print(f"bams={bams[key]}")
+    # print(f"keep={keep}")
+    # print(f"slated for removal: {slated}")
+    if slated:
+        return f"rm {' '.join(slated)} && "
+    else:
+        return ""
+
+rule remove_unmapped:
+    input:
+        unpack(get_all_mapped_bams)
+    output:
+        smv.unmapped_removed_flag
+    params:
+        cleanup_cmd=get_unmapped_cleanup_cmd
+    shell:
+        "{params.cleanup_cmd}touch {output}"
+
 
 rule prepare_species_reference_sequence:
 	input:

@@ -140,17 +140,17 @@ rule run_analysis:
                     filter_merged=True) 
                 if config['with_fastqc'] else []
         ),
-        get_output_files(automated_report, 
-            data_root_type = 'complete_data', downsampling_percentage='', 
+        get_output_files(automated_report,
+            data_root_type = 'complete_data', downsampling_percentage='',
             puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(automated_report, 
-            data_root_type = 'complete_data', downsampling_percentage='', 
+        get_output_files(automated_report,
+            data_root_type = 'complete_data', downsampling_percentage='',
             check_puck_collection=True,
             puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet, 
+        get_output_files(qc_sheet,
             data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
             puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet, 
+        get_output_files(qc_sheet,
             data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
             check_puck_collection=True,
             puck_barcode_file_matching_type='spatial_matching'),
@@ -280,7 +280,7 @@ rule tag_reads_bc_umi:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
         ubam = tagged_polyA_adapter_trimmed_bam,
-        log = tagged_bam_log
+        log = tagged_trimmed_bam_log
     log:
         reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
     threads: max(min(workflow.cores * 0.5, 16), 1)
@@ -289,13 +289,13 @@ rule tag_reads_bc_umi:
         "--sample={wildcards.sample_id} "
         "--read1={input.R1} "
         "--read2={input.R2} "
-        "--parallel={threads} "
-	    "--out-bam={output.ubam} "
+        "--threads-work={threads} "
+	    "--out-file={output.ubam} "
         "--cell='{params.bc.cell}' "
         "--UMI='{params.bc.UMI}' "
-        "--bam-tags='{params.bc.bam_tags}' "
-        "--output-fmt=CRAM "
-#        "--output-fmt-option='version=3.1' " # not supported by DropSeqTools 2.5.1
+        #"--bam-tags='{params.bc.bam_tags}' "
+        "--out-fmt=CRAM "
+        "--out-fmt-option='version=3.1' " # not supported by DropSeqTools 2.5.1
         "--log-file='{output.log}' "
 
 rule run_fastqc:
@@ -343,7 +343,7 @@ rule get_barcode_readcounts:
 rule get_barcode_readcounts_prealigned:
     # we perform some preliminary counting on the prealigned reads
     input:
-        tagged_bam
+        tagged_polyA_adapter_trimmed_bam
     output:
         barcode_readcounts_prealigned,
         barcode_readcounts_prealigned_log
@@ -450,6 +450,7 @@ rule create_dge:
         dge=dge_out,
         dge_summary=dge_out_summary
     params:
+        reference=lambda wildcards: get_final_bam_reference(wildcards),
         dge_root = dge_root,
         dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
@@ -460,12 +461,15 @@ rule create_dge:
             sample_id = wildcards.sample_id)['{UMI}']
     threads: 1
     shell:
+        #R={params.reference} \
+        #I= {input.reads}\
+        # -m 16g \
         """
         mkdir -p {params.dge_root}
 
+        samtools view -h {input.reads} -T {params.reference} --threads=2 | \
         {dropseq_tools}/DigitalExpression \
-        -m 16g \
-        I= {input.reads}\
+        I= /dev/stdin \
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \

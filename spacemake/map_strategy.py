@@ -13,6 +13,7 @@ map_data = {
     "ANNOTATED_BAMS": defaultdict(set),
     "REF_NAMES": defaultdict(set),
     "ALL_BAMS": defaultdict(set),
+    "ALL_UNMAPPED_BAMS": defaultdict(set),
     "BAM_IS_NOT_TEMP": set(),
     "SAMPLE_MAP_STRATEGY": {},
     # used for symlink name to source mapping
@@ -20,6 +21,7 @@ map_data = {
     "BAM_UNMAPPED_KEEP": set(),
     # used for automated mapping index generation
     "INDEX_FASTA_LKUP": {},
+    "REF_FOR_FINAL": {},
     #   key: bt2_index_file or star_index_file
     #   value: dotdict with
     #       .ref_path: path to genome FASTA
@@ -296,8 +298,8 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
                 if final in lr.link_name:
                     final_link = lr
 
-        # left = f"not_{mr.out_name}"
-        left = mr.out_name
+        left = f"not_{mr.out_name}"
+        # left = mr.out_name
 
     for mr in last_mr:
         mr.keep_unmapped = True
@@ -348,6 +350,8 @@ def get_mapped_BAM_output(
             mr.sample_id = index[1]
             mr.species = row.species
 
+            out_files.append(wc_fill(smv.unmapped_removed_flag, mr))
+            
             mr.out_path = wc_fill(smv.mapped_bam, mr)
             mr.out_unmapped_path = wc_fill(smv.unmapped_bam, mr)
             if mr.keep_unmapped:
@@ -359,6 +363,7 @@ def get_mapped_BAM_output(
             mr.ref_path = species_d[mr.ref_name]["sequence"]
             mr.ann_path = species_d[mr.ref_name].get("annotation", None)
             map_data["ALL_BAMS"][(index[0], index[1])].add(mr.out_path)
+            map_data["ALL_UNMAPPED_BAMS"][(index[0], index[1])].add(mr.out_unmapped_path)
 
             if mr.cflavor == "auto":
                 # if we have annotation use the actual default, which works for complex
@@ -438,6 +443,7 @@ def get_mapped_BAM_output(
                 )
                 # print("STAR_FINAL_LOG_SYMLINKS preparation", final_target, final_log_name, "->", final_log)
                 map_data["STAR_FINAL_LOG_SYMLINKS"][final_log_name] = final_log
+                map_data["REF_FOR_FINAL"][lr.link_path] = mr.ref_path
 
                 out_files.append(lr.link_path)
 

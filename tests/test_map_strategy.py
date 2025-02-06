@@ -57,7 +57,7 @@ def test_mapstr(configured_root):
     for name, mapstr, expect in data:
         mr, lr = mapstr_to_targets(mapstr)
         assert mr[0].input_name == "uBAM"
-        assert mr[-1].input_name == "rRNA.bowtie2"
+        assert mr[-1].input_name == "not_rRNA.bowtie2"
         assert lr[0].link_src == "genome.STAR"
         assert lr[0].link_name == "final"
 
