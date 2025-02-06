@@ -731,7 +731,7 @@ rule split_final_bam:
         prefix=split_reads_root
     shell:
         """
-        sambamba view -F 'mapping_quality==255' -h {input} | \
+        samtools view -q 255 -h {input} | \
         python {repo_dir}/scripts/split_reads_by_strand_info.py \
         --prefix {params.prefix} /dev/stdin
         """
@@ -743,7 +743,7 @@ rule split_reads_sam_to_bam:
         split_reads_bam_pattern
     threads: 2
     shell:
-        "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
+        "samtools view -Sch --threads {threads} -o {output} {input}"
 
 
 rule count_barcode_matches:
