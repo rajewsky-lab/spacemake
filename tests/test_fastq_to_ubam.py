@@ -99,7 +99,6 @@ def test_preprocessing():
     )
     res = pre.process(sdata)
     tag_d = dict(res.tags)
-    print(tag_d)
     assert tag_d["T3"] == ["3", "28"]
 
 
