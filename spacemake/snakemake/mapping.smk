@@ -136,13 +136,17 @@ def get_map_params(wc, output, mapper="STAR"):
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
-    annotation_cmd = f"| samtools view --threads=4 -Ch -T {species_reference_sequence.format(species=mr.species, ref_name=mr.ref_name)} /dev/stdin > {output.bam}"
+    ref = species_reference_sequence.format(species=mr.species, ref_name=mr.ref_name)
+    annotation_cmd = f"samtools view --no-PG -F4 --threads=4 -Ch -T {ref} /dev/stdin > {output.bam}"
     # this is a stub for "no annotation tagging"
     if hasattr(mr, "ann_final"):
         ann = mr.ann_final
         if ann and ann.lower().endswith(".gtf"):
-            tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O=/dev/stdout COMPRESSION_LEVEL=0 ANNOTATIONS_FILE={mr.ann_final} | samtools view --no-PG -T {ref} -C /dev/stdin -o {mr.out_path}"
-            annotation_cmd = tagging_cmd.format(dropseq_tools=dropseq_tools, mr=mr, ref=species_reference_sequence.format(species=mr.species, ref_name=mr.ref_name))
+            annotation_cmd =  (
+                "samtools view --no-PG -F4 --threads=2 -buh | "
+                f"{dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O=/dev/stdout COMPRESSION_LEVEL=0 ANNOTATIONS_FILE={mr.ann_final} | "
+                f"samtools view --no-PG --threads=4 -T {ref} -C /dev/stdin -o {mr.out_path}"
+            )
 
     return {
         'annotation_cmd' : annotation_cmd,
@@ -191,23 +195,23 @@ rule map_reads_bowtie2:
     threads: 32 
     shell:
         # 1) decompress unmapped reads from existing BAM/CRAM
-        "samtools view -f 4 {input.bam} \ \n"
+        "samtools view -f 4 {input.bam} "
         # 2) re-convert SAM into uncompressed BAM.
         #     Somehow needed for bowtie2 2.4.5. If we don't do this
         #     bowtie2 just says "0 reads"
         " "
-        "| samtools view --no-PG --threads=2 -Sbu \ \n" 
-        " \ \n"
+        "| samtools view --no-PG --threads=2 -Sbu " 
+        " "
         # 3) align reads with bowtie2, *preserving the original BAM tags*
-        "| bowtie2 -p {threads} --reorder --mm \ \n"
-        "  -x {params.auto[index]} -b /dev/stdin --preserve-tags \ \n"
-        "  {params.auto[flags]} 2> {log} \ \n"
-        " \ \n"
+        "| bowtie2 -p {threads} --reorder --mm "
+        "  -x {params.auto[index]} -b /dev/stdin --preserve-tags "
+        "  {params.auto[flags]} 2> {log} "
+        " "
         # fix the BAM header to accurately reflect the entire history of processing via PG records.
-        "| python {repo_dir}/scripts/splice_bam_header.py \ \n"
+        "| python {repo_dir}/scripts/splice_bam_header.py "
         "  --in-ubam {input.bam}"
-        " \ \n"
-        "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) \ \n"
+        " "
+        "| tee >( {params.auto[annotation_cmd]} ) "
         "| samtools view -f 4 --threads=4 -Ch --no-PG > {output.ubam}"
        
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
@@ -276,8 +280,8 @@ rule map_reads_STAR:
         "| python {repo_dir}/scripts/splice_bam_header.py"
         " --in-ubam {input.bam}"
         " "
-        "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) "
-        "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
+        "| tee >( {params.auto[annotation_cmd]} ) "
+        "| samtools view -f 4 --threads=4 -Ch > {output.ubam}"
         " "
         "; rm -rf {params.tmp_dir}"
 
