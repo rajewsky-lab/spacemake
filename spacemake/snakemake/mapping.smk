@@ -136,7 +136,7 @@ def get_map_params(wc, output, mapper="STAR"):
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
-    annotation_cmd = f"| samtools view --threads=4 -Ch -T {species_reference_sequence.format(species=mr.species, ref_name=mr.ref_name)} /dev/stdin > {output}"
+    annotation_cmd = f"| samtools view --threads=4 -Ch -T {species_reference_sequence.format(species=mr.species, ref_name=mr.ref_name)} /dev/stdin > {output.bam}"
     # this is a stub for "no annotation tagging"
     if hasattr(mr, "ann_final"):
         ann = mr.ann_final
@@ -191,24 +191,24 @@ rule map_reads_bowtie2:
     threads: 32 
     shell:
         # 1) decompress unmapped reads from existing BAM/CRAM
-        "samtools view -f 4 {input.bam}"
+        "samtools view -f 4 {input.bam} \ \n"
         # 2) re-convert SAM into uncompressed BAM.
         #     Somehow needed for bowtie2 2.4.5. If we don't do this
         #     bowtie2 just says "0 reads"
         " "
-        "| samtools view --no-PG --threads=2 -Sbu" 
-        " "
+        "| samtools view --no-PG --threads=2 -Sbu \ \n" 
+        " \ \n"
         # 3) align reads with bowtie2, *preserving the original BAM tags*
-        "| bowtie2 -p {threads} --reorder --mm"
-        "  -x {params.auto[index]} -b /dev/stdin --preserve-tags"
-        "  {params.auto[flags]} 2> {log}"
-        " "
+        "| bowtie2 -p {threads} --reorder --mm \ \n"
+        "  -x {params.auto[index]} -b /dev/stdin --preserve-tags \ \n"
+        "  {params.auto[flags]} 2> {log} \ \n"
+        " \ \n"
         # fix the BAM header to accurately reflect the entire history of processing via PG records.
-        "| python {repo_dir}/scripts/splice_bam_header.py"
+        "| python {repo_dir}/scripts/splice_bam_header.py \ \n"
         "  --in-ubam {input.bam}"
-        " "
-        "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) "
-        "| samtools view -f 4 --threads=4 -bh > {output.ubam}"
+        " \ \n"
+        "| tee >( samtools view -F 4 --threads=2 -buh {params.auto[annotation_cmd]} ) \ \n"
+        "| samtools view -f 4 --threads=4 -Ch --no-PG > {output.ubam}"
        
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
