@@ -378,8 +378,45 @@ def test_tiles(with_tile_test_data):
     )
 
 
-def test_merge(configured_root):
-    os.chdir(configured_root.as_posix())
+def test_merge(with_species):
+    os.chdir(with_species.as_posix())
+    test_samples = [
+        (
+            "test",
+            "test_01",
+            f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+            "--map-strategy=rRNA:bowtie2->genome:STAR:final",
+            "--species=test_hsa",
+        ),
+        (
+            "test",
+            "test_01b",
+            f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+            "--map-strategy=rRNA:bowtie2->genome:STAR:final",
+            "--species=test_hsa",
+        ),
+        (
+            "test",
+            "test_02",
+            f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+            "--map-strategy=genome:STAR:final",
+            "--species=test_hsa",
+        ),
+    ]
+
+    # add
+    for sample in test_samples:
+        sm(
+            "projects",
+            "add-sample",
+            f"--project-id={sample[0]}",
+            f"--sample-id={sample[1]}",
+            *sample[2:],
+        )
+
     sm(
         "projects",
         "merge-samples",
@@ -399,6 +436,8 @@ def test_merge(configured_root):
         "test_01",
         "test_01b",
     )
+    sm("projects", "delete-sample", f"--project-id=test", f"--sample-id=test_02")
+    sm("run", "-p", "--cores=8")
 
 
 def test_from_scratch(with_species):
