@@ -8,6 +8,7 @@ from spacemake.contrib import __version__, __license__, __author__, __email__
 logger_name = "spacemake.main"
 logger = logging.getLogger(logger_name)
 
+
 def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
     """
     Return a parser for project_id's and sample_id's
@@ -104,7 +105,7 @@ def get_add_sample_sheet_parser():
         required=False,
         dest="sample_sheet",
     )
-    
+
     parser.add_argument(
         "--basecalls-dir",
         type=str,
@@ -429,12 +430,10 @@ def get_action_sample_parser(parent_parser, action, func):
         msg = "merge samples"
         parents = [
             get_project_sample_parser(
-                prepend="merged-",
-                help_extra="of the newly created merged sample"
+                prepend="merged-", help_extra="of the newly created merged sample"
             ),
             get_project_sample_parser(
-                allow_multiple=True,
-                help_extra="of the samples to be merged"
+                allow_multiple=True, help_extra="of the samples to be merged"
             ),
         ]
     else:
@@ -470,7 +469,7 @@ def get_action_sample_parser(parent_parser, action, func):
                 main_variables=["run_mode", "puck"],
             )
         )
-        
+
         # add possibility to add extra info
         parents.append(get_sample_extra_info_parser())
 
@@ -578,7 +577,9 @@ def setup_project_parser(parent_parser_subparsers):
         description=help_desc["add_samples_from_yaml"],
         help=help_desc["add_samples_from_yaml"],
     )
-    sample_add_samples_yaml_legacy = subparsers.add_parser("add_samples_from_yaml",)
+    sample_add_samples_yaml_legacy = subparsers.add_parser(
+        "add_samples_from_yaml",
+    )
     sample_add_samples_yaml.add_argument(
         "--samples_yaml",
         type=str,
@@ -659,7 +660,7 @@ def get_run_parser():
         action="store_true",
         help="rather than running the rules, just touch each file",
     )
-    
+
     parser.add_argument(
         "--with-fastqc",
         "-wfqc",
@@ -699,8 +700,7 @@ def setup_init_parser(parent_parser_subparsers):
         help=argparse.SUPPRESS,
         dest="root_dir",
     )
-    
-    
+
     parser_init.add_argument(
         "--temp-dir",
         default="/tmp",
@@ -713,7 +713,7 @@ def setup_init_parser(parent_parser_subparsers):
         help=argparse.SUPPRESS,
         dest="temp_dir",
     )
-    
+
     parser_init.add_argument(
         "--download-species",
         default=False,
@@ -728,7 +728,7 @@ def setup_init_parser(parent_parser_subparsers):
         action="store_true",
         dest="download_species",
     )
-    
+
     parser_init.add_argument(
         "--dropseq-tools",
         help="absolute path to dropseq_tools directory",
@@ -978,7 +978,9 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
-        # debug_dag=True, verbose=True
+        # rerun_triggers=["mtime"], # needed for newer spacemake
+        # debug_dag=True,
+        # verbose=True,
     )
     if preprocess_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
@@ -1001,7 +1003,9 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
-        # debug_dag=True, verbose=True
+        # rerun_triggers=["mtime"], # needed for newer spacemake
+        # debug_dag=True,
+        # verbose=True,
     )
 
     pdf.update_project_df_barcode_matches()
@@ -1019,8 +1023,9 @@ def spacemake_run(args):
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
         config=config_variables,
-        # debug_dag=True, verbose=True
-
+        # rerun_triggers=["mtime"], # needed for newer spacemake
+        # debug_dag=True,
+        # verbose=True,
     )
 
     if analysis_finished is False:
