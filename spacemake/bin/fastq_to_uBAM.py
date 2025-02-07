@@ -114,6 +114,26 @@ def clip(left=0, right=0):
     return c
 
 
+def nextseq_trim(cutoff=30):
+    from cutadapt.qualtrim import nextseq_trim_index
+    from dnaio import SequenceRecord
+
+    def Q(sdata):
+        end = len(sdata.r2)
+        sr = SequenceRecord(name=sdata.qname, sequence=sdata.r2, qualities=sdata.q2)
+        # we use the cutadapt function here (which implements BWA's logic).
+        new_end = nextseq_trim_index(sr, cutoff=cutoff)
+        n_trimmed = len(sdata.q2) - new_end
+        if n_trimmed:
+            sdata.q2 = sdata.q2[:new_end]
+            sdata.r2 = sdata.r2[:new_end]
+
+            sdata.tags["A3"].append("NextQ")
+            sdata.tags["T3"].append(str(end - new_end))
+
+    return Q
+
+
 def qual_trim(left=0, right=25):
     from cutadapt.qualtrim import quality_trim_index
 
@@ -238,12 +258,14 @@ class PreProcessor(object):
         "left": int,
         "min_overlap": int,
         "bin_width": int,
+        "cutoff": int,
         "max_errors": float,
         "rev_comp": bool,
         "disable_safety": bool,
     }
     fn_dict = {
         "quality": qual_trim,
+        "nextseq_quality": nextseq_trim,
         "polyA": polyA_trim,
         "adapter": adapter_trim,
         "qquant": quantize_quality,
@@ -255,7 +277,7 @@ class PreProcessor(object):
     def __init__(self, processing_str="", flavor_dict={}, **kw):  # , min_len=18):
         self.kw = kw
         # collect statistics here
-        self.stats = defaultdict(lambda: defaultdict(int))
+        self.stats = defaultdict(int)
 
         # parse processing_str and assemble a pre-processing pipeline
         if flavor_dict:
@@ -303,29 +325,31 @@ class PreProcessor(object):
         return pipeline
 
     def process(self, sdata):
-        self.stats["freq"]["N_input"] += 1
-        self.stats["len_in"][len(sdata.r2)] += 1
+        # columns of the stats:
+        # (sample) measure obsname value count
+        self.stats[("reads", "N", "input")] += 1
+        self.stats[("bases", "L_in", len(sdata.r2))] += 1
         for func in self.pipeline:
             func(sdata)  # modifies sdata in-place
             # print(f"after func {func}: {sdata}")
 
         self.record_tag_stats(sdata.tags)
-        self.stats["len_out"][len(sdata.r2)] += 1
+        self.stats[("bases", "L_out", len(sdata.r2))] += 1
 
         return sdata
 
     def record_tag_stats(self, tags):
         if "A5" in tags:
             for a, t in zip(tags["A5"], tags["T5"]):
-                self.stats[f"freq"][a] += 1
-                self.stats[f"bases_{a}"][t] += 1
-                self.stats[f"bases"][a] += int(t)
+                self.stats[("reads", "A5", a)] += 1
+                self.stats[(f"bases", a, t)] += 1
+                self.stats[(f"bases", a, "A5_total")] += int(t)
 
         if "A3" in tags:
             for a, t in zip(tags["A3"], tags["T3"]):
-                self.stats[f"freq"][a] += 1
-                self.stats[f"bases_{a}"][t] += 1
-                self.stats[f"bases"][a] += int(t)
+                self.stats[("reads", "A3", a)] += 1
+                self.stats[(f"bases", a, t)] += 1
+                self.stats[(f"bases", a, "A3_total")] += int(t)
 
 
 def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
@@ -370,17 +394,18 @@ def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
         ),
     )
 
-    N = mf.util.CountDict()
+    # N = mf.util.CountDict()
 
     for sdata in ingress:
-        N.count("total")
+        # N.count("total")
         sdata = pre.process(sdata)
         sam_out.write(sdata.render_SAM(flag=4))
 
-    return N
+    return pre.stats
 
 
 def min_length_filter(input, output, min_len=18):
+    N = 0
     for line in input:
         if not line.startswith("@"):
             seq = line.split("\t")[9]
@@ -388,6 +413,9 @@ def min_length_filter(input, output, min_len=18):
                 continue
 
         output.write(line)
+        N += 1
+
+    return N
 
 
 def main(args):
@@ -470,7 +498,27 @@ def main(args):
         fmt=fmt,
         threads=args.threads_write,
     )
-    return w.run()
+    res = w.run()
+    stats = defaultdict(int)
+    for w, d in res.result_dict.items():
+        if "worker" in w:
+            for k, v in d.items():
+                stats[k] += v
+        elif "funnel0" in w:
+            stats[("reads", "N", "output")] = d
+
+    import pandas as pd
+
+    data = [[args.sample] + list(key) + [value] for key, value in stats.items()]
+    # data.append()
+    df = pd.DataFrame(
+        data, columns=["sample", "measure", "name", "value", "count"]
+    ).sort_values(["name", "value"])
+
+    if args.out_stats:
+        df.to_csv(args.out_stats, sep="\t", index=None)
+
+    return df
 
 
 def get_input_params(args):
@@ -624,12 +672,12 @@ def parse_args():
         help="passed options to `samtools view` as --output-fmt-options",
     )
     parser.add_argument(
-        "--save-stats",
+        "--out-stats",
         default="preprocessing_stats.txt",
         help="store statistics in this file",
     )
     parser.add_argument(
-        "--save-cell-barcodes",
+        "--out-cell-barcodes",
         default="",
         help="store (raw) cell barcode counts in this file. Numbers add up to number of total raw reads. WARNING: may use excessive RAM for Open-ST data!",
     )
@@ -639,13 +687,25 @@ def parse_args():
 
 
 def cmdline():
+    from time import time
+
     args = parse_args()
-    util.setup_logging(args, name="spacemake.bin.fastq_to_uBAM")
+    logger = util.setup_logging(args, name="spacemake.bin.fastq_to_uBAM")
+    for k, v in sorted(vars(args).items()):
+        logger.info(f"cmdline arg\t{k}={v}")
 
-    if not args.read2:
-        raise ValueError("bam output requires --read2 parameter")
-
-    return main(args)
+    t0 = time()
+    df = main(args)
+    dt = time() - t0
+    N = df.query("name == 'N' and value == 'input'")["count"].iloc[0]
+    N_kept = df.query("name == 'N' and value == 'output'")["count"].iloc[0]
+    print(N)
+    rate = N / dt / 1000
+    logger.info(
+        f"processed {N/1e6:.3f} M reads in {dt:.1f} seconds ({rate:.1f} k reads/sec)"
+    )
+    logger.info(f"kept {N_kept/1e6:.3f} M reads in output ({100 * N_kept/N:.2f} %)")
+    return df
 
 
 if __name__ == "__main__":
