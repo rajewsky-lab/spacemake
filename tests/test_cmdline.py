@@ -440,6 +440,20 @@ def test_merge(with_species):
     sm("run", "-p", "--cores=8")
 
 
+def test_downsample(with_species):
+    sm(
+        "projects",
+        "add-sample",
+        f"--project-id=test",
+        f"--sample-id=test_01",
+        f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+        f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+        "--map-strategy=genome:STAR:final",
+        "--species=test_hsa",
+    )
+    sm("run", "downsample", "--sample-id-list", "test_01", "--cores=8", "-p")
+
+
 def test_from_scratch(with_species):
     test_sample(with_species)
     test_run(with_species, dry=False)
