@@ -44,19 +44,26 @@ if __name__ == '__main__':
     bam_out = pysam.AlignmentFile(args.out_bam, 'wb', header= bam_in.header)
     counter = 0
     start_time = datetime.datetime.now()
+    total_start_time = datetime.datetime.now()
+    time_interval = 30
 
     multi_mappers = []
     
     for aln in bam_in.fetch(until_eof=True):
-        counter = counter + 1
+        counter += 1
 
-        if counter % 1000000 == 0:
-            finish_time = datetime.datetime.now()
-            delta_seconds = (finish_time - start_time).seconds
-            # restart time
+        finish_time = datetime.datetime.now()
+        delta_seconds = (finish_time - start_time).seconds
+        total_elapsed_seconds = (finish_time - total_start_time).total_seconds()
+
+        if delta_seconds >= time_interval:
+            formatted_time = finish_time.strftime('%Y-%m-%d %H:%M:%S')
+            records_per_second = counter / delta_seconds
+
+            print(f'Processed {counter:,} records in {total_elapsed_seconds:,.0f} seconds. Average processing rate: {records_per_second:,.0f} records/second. Current time: {formatted_time}')
+            
             start_time = finish_time
-            print(f'Processed 1 millon records in {delta_seconds} seconds, total records processed {counter}. current time: {finish_time}')
-
+        
         mapped_number = aln.get_tag('NH')
 
         if mapped_number == 1:
@@ -80,3 +87,5 @@ if __name__ == '__main__':
                     
                 # reset multimapper list
                 multi_mappers = []
+
+    print(f'Finished processing {counter:,} records in {total_elapsed_seconds:,.0f} seconds. Current time: {formatted_time}')

@@ -3,15 +3,16 @@
 # -- Project information
 
 project = 'spacemake'
-copyright = '2021, Rajewsky lab'
+copyright = '2021-2024, Rajewsky Lab'
 author = 'Tamas Ryszard Sztanka-Toth, Marvin Jens, Nikos Karaiskos, Nikolaus Rajewsky'
 
-version = '0.5.5'
+version = '0.8.0'
 release = version
 
 # -- General configuration
 
 extensions = [
+    "sphinx_rtd_theme",
     'sphinx.ext.duration',
     'sphinx.ext.doctest',
     'sphinx.ext.autodoc',
@@ -31,6 +32,7 @@ intersphinx_disabled_domains = ['std']
 templates_path = ['_templates']
 
 # -- Options for HTML output
+html_theme = "sphinx_rtd_theme"
 html_theme_options = {
     'navigation_depth': 3
 }

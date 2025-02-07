@@ -1,7 +1,6 @@
 After you have installed spacemake as specified :ref:`here <installation>`, you are ready to process and analyze spatial samples.
 
 To initialize spacemake ``cd`` into the directory in which you want to start spacemake. This directory will be your ``project_root``.
-
 Then simply type::
    
    spacemake init \

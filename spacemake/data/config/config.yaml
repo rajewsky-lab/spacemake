@@ -17,10 +17,10 @@ pucks:
     slide_seq:
         width_um: 3000
         spot_diameter_um: 10
-    novaseq_S4:
+    openst:
         width_um: 1200
         spot_diameter_um: 0.6
-        coordinate_system: 'puck_data/novaseq_S4_coordinate_system.csv'
+        coordinate_system: 'puck_data/openst_coordinate_system.csv'
 
 run_modes:
     default:
@@ -67,33 +67,133 @@ run_modes:
         umi_cutoff:
         - 100
         - 300
-
-adapters:
-    smart: 'AAGCAGTGGTATCAACGCAGAGTGAATGGG'
-    optical_primer: 'GAATCACGATACGTACACCA'
+    openst:
+        clean_dge: false
+        count_intronic_reads: true
+        count_mm_reads: true
+        detect_tissue: false
+        mesh_data: true
+        mesh_spot_diameter_um: 7
+        mesh_spot_distance_um: 7
+        mesh_type: hexagon
+        n_beads: 100000
+        polyA_adapter_trimming: true
+        spatial_barcode_min_matches: 0.1
+        umi_cutoff:
+        - 100
+        - 250
+        - 500
+    
 
 barcode_flavors:
     default:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
-        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        #bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+    dropseq:
+        cell: "r1[0:12]"
+        UMI: "r1[12:20]"
+        #bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
     slide_seq_14bc:
         cell: "r1[0:14]"
         UMI: "r1[14:23]"
-        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        #bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
     slide_seq_15bc:
         cell: "r1[0:14]"
         UMI: "r1[15:23]"
-        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        #bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
     visium:
         cell: "r1[0:16]"
         UMI: "r1[16:28]"
-        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        #bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
     sc_10x_v2:
         cell: "r1[0:16]"
         UMI: "r1[16:26]"
-        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        #bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
     seq_scope:
         UMI: "r2[0:9]"
-        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        #bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
         cell: "r1[0:20]"
+    openst:
+        UMI: "r2[0:9]"
+        #bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+        cell: "r1[2:27]"
+
+adapter_flavors:
+  SMARTER:
+    cut_right:
+    - Q:
+        min_base_quality: 30
+    - polyA:
+        max_error: 0.25
+        min_overlap: 3
+    paired_end: replace_N
+  chromium:
+    cut_right:
+    - Q:
+        min_base_quality: 32
+    - polyA:
+        max_error: 0.25
+        min_overlap: 3
+    - polyG:
+        max_error: 0.1
+        min_overlap: 3
+  default:
+    cut_left:
+    - TSO_SMART:
+        max_error: 0.1
+        min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 30
+    - polyA:
+        max_error: 0.25
+        min_overlap: 3
+    - polyG:
+        max_error: 0.1
+        min_overlap: 3
+    paired_end: single-end
+  dropseq:
+    cut_left:
+    - TSO_SMART:
+        max_errors: 0.1
+        min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 30
+    - polyA:
+        max_errors: 0.25
+        min_overlap: 3
+    - polyG:
+        max_errors: 0.1
+        min_overlap: 3
+    paired_end: single-end
+  fc_SMART_UMI_RPE:
+    cut_left:
+    - TSO_SMART:
+        max_errors: 0.1
+        min_overlap: 10
+    cut_right:
+    - Q:
+        min_base_quality: 32
+    - polyG:
+        max_errors: 0.25
+        min_overlap: 3
+    - Q:
+        min_base_quality: 32
+    - polyA:
+        max_errors: 0.25
+        min_overlap: 3
+
+adapters:
+    smart: 'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTC'
+    optical_primer: 'GAATCACGATACGTACACCA'
+    TSO_SMART: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+    SMART: AAGCAGTGGTATCAACGCAGAGTG
+    TSO_10x: AAGCAGTGGTATCAACGCAGAGTACATGGG
+    chromium_bead: CTACACGACGCTCTTCCGATCT
+    dropseq_bead: AAGCAGTGGTATCAACGCAGAGTAC
+    polyA: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    polyG: GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+    nextflex_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACTGACCAATCTCGTATGCCGTCTTCTGCTTGAA
+    truseq_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACCCGTCCA

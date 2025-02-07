@@ -1,5 +1,5 @@
-from anndata import AnnData
-from spacemake.preprocess import calculate_adata_metrics
+# from anndata import AnnData
+from spacemake.preprocess.dge import calculate_adata_metrics
 
 
 def compute_neighbors(adata, min_dist=None, max_dist=None):
@@ -335,10 +335,9 @@ def aggregate_adata_by_indices(
     )
 
     aggregated_adata.obs["n_joined"] = [len(x) for x in ix_array]
-    
-    mesh_bc_ilocs = np.arange(len(idx_to_aggregate))[idx_to_aggregate]
-
-    joined_dict = {i: mesh_bc_ilocs[x] for i, x in enumerate(ix_array)}
+    print(f"ix_array={ix_array} shape={ix_array.shape} dtype={ix_array.dtype}")
+    print(f"idx_to_aggregate={idx_to_aggregate}")
+    joined_dict = {i: idx_to_aggregate[x.astype(int)] for i, x in enumerate(ix_array)}
 
     indices_joined_spatial_units = dok_matrix(
         (len(joined_dict), len(adata.obs_names)), dtype=np.int8
@@ -361,6 +360,7 @@ def aggregate_adata_by_indices(
     ]:
         aggregated_adata.obs[column] = summarise_adata_obs_column(adata, column, mean)
 
+    aggregated_adata.obs['n_counts'] = summarise_adata_obs_column(adata, "n_counts")
     return aggregated_adata
 
 
@@ -475,7 +475,7 @@ def create_meshed_adata(
 
             new_ilocs = [[i] * len(accum[i]) for i in range(len(accum))]
             new_ilocs = np.array([n for new_iloc in new_ilocs for n in new_iloc])
-            original_ilocs = np.array([a for acc in accum for a in acc])
+            original_ilocs = np.concatenate(accum).astype(int)
 
             distance_filter = (
                 np.linalg.norm(
@@ -526,6 +526,7 @@ def create_meshed_adata(
 
     joined_coordinates = mesh_px[np.unique(new_ilocs)]
 
+    adata.obs['n_counts'] = adata.obs['total_counts'] #np.array(adata.X.sum(axis=1))[:, 0]
     meshed_adata = aggregate_adata_by_indices(
         adata,
         idx_to_aggregate=original_ilocs,

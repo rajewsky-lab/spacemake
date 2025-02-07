@@ -288,7 +288,7 @@ def merge_pucks_to_collection(
     no_reset_index: bool = False,
     no_transform: bool = False,
     merge_output: str = "same",
-    join_output: str = "inner",
+    join_output: str = "outer",
 ) -> anndata.AnnData:
     """
     Merge multiple pucks into a single puck collection.

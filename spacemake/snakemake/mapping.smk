@@ -1,3 +1,6 @@
+import tempfile
+import uuid
+
 """
 This module implements the mapping-strategy feature. This gives the freedom to define 
 - for each sample - how reads should be mapped in detail: which mapper to use (currently
@@ -8,6 +11,29 @@ The module takes over after pre-processing is done and hands over a "final.bam" 
 to all downstream steps (DGE generation, qc_sheets, ...).
 """
 
+# This is where all the python functions and string constants
+# live
+from spacemake.map_strategy import *
+
+# used to fetch all info needed to create a BAM file
+MAP_RULES_LKUP = map_data['MAP_RULES_LKUP']
+#   key: path of output BAM file
+#   value: dotdict with plenty of attributes
+
+# used for symlink name to source mapping
+BAM_SYMLINKS = map_data['BAM_SYMLINKS']
+
+# used for automated mapping index generation
+INDEX_FASTA_LKUP = map_data['INDEX_FASTA_LKUP']
+#   key: bt2_index_file or star_index_file
+#   value: dotdict with 
+#       .ref_path: path to genome FASTA
+#       .ann_path: path to annotation file (GTF) [optional]
+
+# needed for later stages of SPACEMAKE which require one "star.Log.final.out" file.
+STAR_FINAL_LOG_SYMLINKS = map_data['STAR_FINAL_LOG_SYMLINKS']
+
+register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
 #####################################
 #### snakemake string templates #####
 #####################################
@@ -37,6 +63,11 @@ bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
 star_index = 'species_data/{species}/{ref_name}/star_index'
 star_index_param = star_index
 star_index_file = star_index + '/SAindex'
+star_index_locked = star_index + '/smk.indexlocked.{species}.{ref_name}'
+star_index_locked_current = star_index_locked + f'.{uuid.uuid4()}'
+star_index_loaded = '{species}.{ref_name}.genomeLoad.done'
+star_index_unloaded = '{species}.{ref_name}.genomeUnload.done'
+star_index_log_location = 'species_data/{species}/{ref_name}/.star_index_logs'
 
 bt2_index = 'species_data/{species}/{ref_name}/bt2_index'
 bt2_index_param = bt2_index + '/{ref_name}'
@@ -44,25 +75,6 @@ bt2_index_file = bt2_index_param + '.1.bt2'
 
 species_reference_sequence = 'species_data/{species}/{ref_name}/sequence.fa'
 species_reference_annotation = 'species_data/{species}/{ref_name}/annotation.gtf'
-
-# used to fetch all info needed to create a BAM file
-MAP_RULES_LKUP = {}
-#   key: path of output BAM file
-#   value: dotdict with plenty of attributes
-
-# used for symlink name to source mapping
-BAM_SYMLINKS = {}
-
-# used for automated mapping index generation
-INDEX_FASTA_LKUP = {}
-#   key: bt2_index_file or star_index_file
-#   value: dotdict with 
-#       .ref_path: path to genome FASTA
-#       .ann_path: path to annotation file (GTF) [optional]
-
-# needed for later stages of SPACEMAKE which require one "star.Log.final.out" file.
-STAR_FINAL_LOG_SYMLINKS = {}
-# We create a symlink from the mapping that was accompanied by the 'final' identifier
 
 default_BT2_MAP_FLAGS = (
     " --local"
@@ -73,7 +85,11 @@ default_BT2_MAP_FLAGS = (
 # original rRNA mapping code used --very-fast-local and that was that.
 
 default_STAR_MAP_FLAGS = (
-    " --genomeLoad NoSharedMemory"
+    # before shared memory
+    # " --genomeLoad NoSharedMemory"
+    # with shared memory
+    " --genomeLoad LoadAndKeep"
+    " --limitBAMsortRAM 5000000000"
     " --outSAMprimaryFlag AllBestScore"
     " --outSAMattributes All"
     " --outSAMunmapped Within"
@@ -82,159 +98,27 @@ default_STAR_MAP_FLAGS = (
     " --limitOutSJcollapsed 5000000"
 )
 
+# TODO: port remaining python code to map_strategy.py
+# to expose it to enable coverage analysis and unit-testing
+# possibly best way is to turn map_strategy into a class-instance that can be set-up with 
+# project_df and config and make all these utility functions methods.
+# that would also remove the need for map_data which is already an attempt to mitigate global
+# variables.
 
-######################################################
-##### Utility functions specific for this module #####
-######################################################
+def is_paired_end(project_id, sample_id):
+    row = project_df.df.loc[(project_id, sample_id)].to_dict()
+    #print(f"{project_id} {sample_id} -> {row['barcode_flavor']}")
+    flavor_d = project_df.config.get_variable("barcode_flavors", name=row['barcode_flavor'])
+    pe = flavor_d.get('paired_end', 'single-end')
 
-def wc_fill(x, wc):
-    """
-    Versatile helper function that can render any string template used in the mapping module,
-    either filling in from a Wildcards object, or from a dotdict.
-    """
-    return x.format(
-        sample_id=getattr(wc, "sample_id", "NO_sample_id"),
-        project_id=getattr(wc, "project_id", "NO_project_id"),
-        species=getattr(wc, "species", "NO_species"),
-        ref_name=getattr(wc, "ref_name", "NO_ref_name"),
-        mapper=getattr(wc, "mapper", "NO_mapper"),
-        link_name=getattr(wc, "link_name", "NO_link_name"),
-        polyA_adapter_trimmed=getattr(wc, "polyA_adapter_trimmed", "")
-    )
+    return pe != 'single-end'
 
-def mapstr_to_targets(mapstr, left="uBAM", final="final"):
-    """
-    Converts a mapping strategy provided as a string into a series of map rules, which translate into 
-    BAM names and their dependencies. Downstream, rule matching is guided by the convention of the 
-    strategy-defined BAM filenames ending in "STAR.bam" or "bowtie2.bam".
-
-    Examples:
-
-        bowtie2:rRNA->STAR:genome:final
-
-    The input to the first mappings is always the uBAM - the CB and UMI tagged, pre-processed, 
-    but unmapped reads.
-    map-rules are composed of two or three paramters, separated by ':'.
-    The first two parameters for the mapping are <mapper>:<reference>. The target BAM will have 
-    the name <reference>.<mapper>.bam.
-    Optionally, a triplet can be used <mapper>:<reference>:<symlink> where the presence of <symlink> 
-    indicates that the BAM file should additionally be made accessible under the name <symlink>.bam, a useful 
-    shorthand or common hook expected by other stages of SPACEMAKE. A special symlink name is "final"
-    which is required by downstream stages of SPACEMAKE. If no "final" is specified, the last map-rule
-    automatically is selected and symlinked as "final".
-    Note, due to the special importance of "final", it may get modified to contain other flags of the run-mode
-    that are presently essential for SPACEMAKE to have in the file name ("final.bam" may in fact be 
-    "final.polyA_adapter_trimmed.bam")
-
-    The example above is going to create
-        
-        (1) rRNA.bowtie2.bam
-        
-            using bowtie2 and the index associated with the "rRNA" reference
-
-
-        (2) genome.STAR.bam 
-        
-            using STAR on the *unmapped* reads from BAM (1)
-
-
-        (3) final..bam
-        
-            a symlink pointing to the actual BAM created in (2).
-
-    Note that one BAM must be designated 'final.bam', or the last BAM file created will be selected as final.
-    (used as input to downstream processing rules for DGE creation, etc.)
-
-    NOTE: Parallel mappings can be implemented by using commata:
-
-        bowtie2:rRNA:rRNA,STAR:genome:final
-
-        This rule differs from the first example because it will align the unmapped reads from the uBAM
-        in parallel to the rRNA reference and to the genome. In this way the same reads can match to both
-        indices.
-
-    NOTE: Gene tagging will be applied automatically if annotation data were provided for the associated 
-    reference index (by using spacemake config add_species --annotation=... )
-    """
-    def process(token, left):
-        """
-        based on the left-hand side name (left) and the rule encoded in token,
-        create one mapping rule and up to one symlink rule.
-        """
-
-        parts = token.split(":")
-        mr = dotdict()
-        lr = None
-
-        if len(parts) == 2:
-            mapper, ref = parts
-            link_name = None
-        elif len(parts) == 3:
-            mapper, ref, link_name = parts
-            link_name = link_name.replace("final", final)
-        else:
-            raise ValueError(f"map_strategy contains a map-rule with unexpected number of parameters: {parts}")
-
-        mr.input_name = left
-        mr.mapper = mapper
-        mr.ref_name = ref
-        mr.out_name = f"{ref}.{mapper}"
-
-        if link_name:
-            lr = dotdict(link_src=mr.out_name, link_name=link_name, ref_name=mr.ref_name)
-
-        return mr, lr
-
-
-    map_rules = []
-    link_rules = []
-
-    chain = mapstr.split("->")
-    final_link = None
-
-    while chain:
-        # print("chain:", chain)
-        right = chain.pop(0)
-        # print(f"left='{left}' right='{right}'")
-        if left == right:
-            continue
-
-        for r in right.split(","):
-            mr, lr = process(r, left=left)
-            map_rules.append(mr)
-            
-            if lr:
-                link_rules.append(lr)
-                # check if we have a "final" mapping
-                if final in lr.link_name:
-                    final_link = lr
-
-        left = mr.out_name
-
-    if not final_link:
-        # we need to manufacture a "final" link_rule by taking the last mapping
-        last = map_rules[-1]
-        link_rules.append(dotdict(link_src=last.out_name, link_name=final, ref_name=last.ref_name))
-
-    return map_rules, link_rules
-
-
-def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
-    """
-    This function is called from main.smk at least once 
-    to determine which output BAM files need to be generated and 
-    to parse the map_strategy into rules and dependencies.
-    """
+def get_star_flag(flag, default_strategy="STAR:genome:final"):
     out_files = []
 
     for index, row in project_df.df.iterrows():
-        # rules so far are "local" to each sample. Here we create full paths, merging with
-        # project_id/sample_id from the project_df
-
         map_strategy = getattr(row, "map_strategy", default_strategy)
-        map_rules, link_rules = mapstr_to_targets(map_strategy, left=ubam_input, final=final_target)
-
-        species_d = project_df.config.get_variable("species", name=row.species)
+        map_rules, _ = mapstr_to_targets(map_strategy, left=ubam_input, final=final_target)
         is_merged = project_df.get_metadata(
             "is_merged", project_id=index[0], sample_id=index[1]
         )
@@ -242,70 +126,10 @@ def get_mapped_BAM_output(default_strategy="STAR:genome:final"):
             continue
 
         for mr in map_rules:
-            mr.project_id = index[0]
-            mr.sample_id = index[1]
-            mr.species = row.species
-            
-            mr.out_path = wc_fill(mapped_bam, mr)
-            
-            mr.link_name = mr.input_name
-            mr.input_path = wc_fill(linked_bam, mr)
+            if mr.mapper == "STAR":
+                out_files += expand(flag, species=row.species, ref_name=mr.ref_name)
 
-            mr.ref_path = species_d[mr.ref_name]["sequence"]
-            mr.ann_path = species_d[mr.ref_name].get("annotation", None)
-            if mr.ann_path:
-                mr.ann_final = wc_fill(species_reference_annotation, mr)
-            else:
-                mr.ann_final = []
-
-            default_STAR_INDEX = wc_fill(star_index, mr)
-            default_BT2_INDEX = wc_fill(bt2_index_param, mr)
-            if mr.mapper == "bowtie2":
-                mr.map_flags = species_d[mr.ref_name].get("BT2_flags", default_BT2_MAP_FLAGS)
-                mr.map_index_param = species_d[mr.ref_name].get("BT2_index", default_BT2_INDEX) # the parameter passed on to the mapper
-                mr.map_index = os.path.dirname(mr.map_index_param) # the index_dir
-                mr.map_index_file = mr.map_index_param + ".1.bt2" # file present if the index is actually there
-
-            elif mr.mapper == "STAR":
-                mr.map_flags = species_d[mr.ref_name].get("STAR_flags", default_STAR_MAP_FLAGS)
-                mr.map_index = species_d[mr.ref_name].get("index_dir", default_STAR_INDEX)
-                mr.map_index_param = mr.map_index
-                mr.map_index_file = mr.map_index + "/SAindex"
-
-            MAP_RULES_LKUP[mr.out_path] = mr
-            INDEX_FASTA_LKUP[mr.map_index_file] = mr
-            #out_files.append(mr.out_path)
-
-        # process all symlink rules
-        for lr in link_rules:
-            lr.link_path = linked_bam.format(project_id=index[0], sample_id=index[1], link_name=lr.link_name)
-            lr.src_path = linked_bam.format(project_id=index[0], sample_id=index[1], link_name=lr.link_src)
-            BAM_SYMLINKS[lr.link_path] = lr.src_path
-
-            if lr.link_name == final_target:
-                final_log_name = star_log_file.format(project_id=index[0], sample_id=index[1])
-                final_log = star_target_log_file.format(ref_name=lr.ref_name, project_id=index[0], sample_id=index[1])
-                # print("STAR_FINAL_LOG_SYMLINKS preparation", target, src, final_log_name, "->", final_log)
-                STAR_FINAL_LOG_SYMLINKS[final_log_name] = final_log
-                
-                out_files.append(lr.link_path)
-
-    # for k,v in sorted(MAP_RULES_LKUP.items()):
-    #     print(f"map_rules for '{k}'")
-    #     print(v)
-
-    # print("BAM_SYMLINKS")
-    # for k, v in BAM_SYMLINKS.items():
-    #     print(f"    output={k} <- source={v}")
-
-    # print("out_files", out_files)
-    return out_files
-
-register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
-
-#############################################
-#### utility functions used by the rules ####
-#############################################
+    return set(out_files)
 
 def get_species_reference_info(species, ref):
     refs_d = project_df.config.get_variable("species", name=species)
@@ -318,7 +142,7 @@ def get_reference_attr_from_wc(wc, attr):
 def get_map_rule(wc):
     output = wc_fill(mapped_bam, wc)
     # print(f"get_map_rules output={output}")
-    return MAP_RULES_LKUP[output]
+    return map_data['MAP_RULES_LKUP'][output]
 
 def get_map_inputs(wc, mapper="STAR"):
     wc = dotdict(wc.items())
@@ -326,8 +150,10 @@ def get_map_inputs(wc, mapper="STAR"):
     mr = get_map_rule(wc)
     d = {
         'bam' : mr.input_path,
-        'index_file' : mr.map_index_file
+        'index_file' : mr.map_index_file,
     }
+    if mapper == 'STAR':
+        d['index_loaded'] = expand(star_index_loaded, species=mr.species, ref_name=mr.ref_name)
     if hasattr(mr, "ann_final"):
         d['annotation'] = mr.ann_final
 
@@ -351,7 +177,6 @@ def get_map_params(wc, output, mapper="STAR"):
         'index' : mr.map_index_param,
         'flags' : mr.map_flags,
     }
-
 
 ##############################################################################
 #### Snakemake rules for mapping, symlinks, and mapping-index generation #####
@@ -445,7 +270,8 @@ rule map_reads_STAR:
     input: 
         # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
-        unpack(get_map_inputs)
+        unpack(get_map_inputs),
+        loaded_flag=get_star_flag(star_index_loaded)
         # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
@@ -465,7 +291,8 @@ rule map_reads_STAR:
         " --readFilesIn {input.bam}"
         " --readFilesCommand samtools view -f 4"
         " --readFilesType SAM SE"
-        " --sjdbGTFfile {params.auto[annotation]}"
+        # this needs to be removed for memory sharing
+        # " --sjdbGTFfile {params.auto[annotation]}"
         " --outFileNamePrefix {params.star_prefix}"
         " --runThreadN {threads}"
         " "
@@ -539,4 +366,44 @@ rule create_star_index:
              --genomeDir {output.index_dir} \
              --genomeFastaFiles {input.sequence} \
              --sjdbGTFfile {input.annotation}
+        """
+
+rule load_genome:
+    input:
+        star_index,
+        star_index_file
+    output:
+        temp(touch(star_index_loaded)),
+    params:
+        f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species),
+        log_dir=lambda wc: expand(star_index_log_location, ref_name=wc.ref_name, species=wc.species)
+    shell:
+        """
+        touch {params.f_locked_current}
+        STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {params.log_dir}/ || echo "Could not load genome into shared memory for {input[0]} - maybe already loaded"
+        """
+
+rule unload_genome_flag:
+    input:
+        get_star_flag(star_index_unloaded)
+
+rule unload_genome:
+    input:
+        bams=ancient(get_mapped_BAM_output(project_df)),
+        index_dir=star_index, # we put last so it is accessible
+    output:
+        temp(touch(star_index_unloaded)),
+    params:
+        f_locked=lambda wc: expand(star_index_locked, ref_name=wc.ref_name, species=wc.species),
+        f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species),
+        log_dir=lambda wc: expand(star_index_log_location, ref_name=wc.ref_name, species=wc.species)
+    shell:
+        """
+        rm {params.f_locked_current}
+        if ls {params.f_locked}* 1> /dev/null 2>&1;
+        then
+            echo 'There are other tasks waiting for the STAR shared memory index. Not removing from {params.f_locked_current}'
+        else
+            STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {params.log_dir}/ || echo "Could not remove genome from shared memory for {input[0]}"
+        fi
         """
