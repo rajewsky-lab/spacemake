@@ -389,24 +389,52 @@ def get_star_input_bam(wildcards):
         return {"reads": tagged_bam}
 
 
-def get_final_bam(wildcards):
-    is_merged = project_df.get_metadata(
+def is_merged(wildcards):
+    return project_df.get_metadata(
         "is_merged", project_id=wildcards.project_id, sample_id=wildcards.sample_id
     )
 
-    if is_merged:
+
+def get_final_bam(wildcards):
+    if is_merged(wildcards):
         res = [final_merged_bam]
     else:
         res = [final_bam]
 
     return res
 
+
 def get_final_bam_reference(wildcards):
     from spacemake.map_strategy import map_data
-    fb = wc_fill(final_bam, wildcards)
-    ref = map_data["REF_FOR_FINAL"][fb]
-    # print(f">>> {fb} {ref}")
+
+    if is_merged(wildcards):
+        merged_from = project_df.get_metadata(
+            "merged_from",
+            project_id=wildcards.project_id,
+            sample_id=wildcards.sample_id,
+        )
+        # collect the main reference to which the constituent
+        # samples were aligned/annotated and make sure it is
+        # the same.
+        refs = set()
+        wc = dotdict(wildcards)
+        for project_id, sample_id in merged_from:
+            wc.project_id = project_id
+            wc.sample_id = sample_id
+            fb = wc_fill(final_bam, wc)
+            ref = map_data["REF_FOR_FINAL"][fb]
+            # print(f">>> merged_from: {wc.sample_id} {fb} {ref}")
+            refs.add(ref)
+
+        assert len(refs) == 1
+        ref = refs.pop()
+    else:
+        fb = wc_fill(final_bam, wildcards)
+        ref = map_data["REF_FOR_FINAL"][fb]
+        # print(f">>> {fb} {ref}")
+
     return ref
+
 
 def get_dge_input_bam(wildcards):
     if wildcards.data_root_type == "complete_data":
