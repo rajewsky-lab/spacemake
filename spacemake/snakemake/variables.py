@@ -222,7 +222,7 @@ automated_report = automated_report_prefix + "automated_report.html"
 automated_analysis_result_file = automated_report_prefix + "results.h5ad"
 
 automated_analysis_processed_data_files = {
-    "cluster_markers": "top10_cluster_markers.csv",
+    "cluster_markers": "top20_cluster_markers.csv",
     "nhood_enrichment": "nhood_enrichment.csv",
     "obs_df": "obs_df.csv",
     "var_df": "var_df.csv",
