@@ -546,8 +546,8 @@ def make_minimal_parser(prog="", usage="", **kw):
     parser = argparse.ArgumentParser(prog=prog, usage=usage, **kw)
     parser.add_argument(
         "--log-file",
-        default=f"{prog}.log",
-        help=f"place log entries in this file (default={prog}.log)",
+        default=f"",
+        help=f"place log entries in this file (default=None)",
     )
     parser.add_argument(
         "--log-level",
