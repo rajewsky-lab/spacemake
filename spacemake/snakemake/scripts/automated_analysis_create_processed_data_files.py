@@ -67,15 +67,18 @@ else:
         top_20_marker_dfs.append(df)
 
         if snakemake.params['is_spatial']:
-        # get nhood data
-            df = pd.DataFrame(adata.uns[f'{res_key}_nhood_enrichment']['zscore'])
-            df = pd.melt(df.reset_index(), id_vars='index')\
-                .rename(columns={'index': 'cluster_a',
-                                 'variable': 'cluster_b',
-                                 'value': 'zscore'})
-            df['resolution'] = res_key.split('_')[1]
+            try:
+            # get nhood data
+                df = pd.DataFrame(adata.uns[f'{res_key}_nhood_enrichment']['zscore'])
+                df = pd.melt(df.reset_index(), id_vars='index')\
+                    .rename(columns={'index': 'cluster_a',
+                                    'variable': 'cluster_b',
+                                    'value': 'zscore'})
+                df['resolution'] = res_key.split('_')[1]
 
-            nhood_enrichment_dfs.append(df)
+                nhood_enrichment_dfs.append(df)
+            except KeyError:
+                pass
         
     pd.concat(top_20_marker_dfs).to_csv(snakemake.output['cluster_markers'], index=False)
 

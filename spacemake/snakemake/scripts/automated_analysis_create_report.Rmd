@@ -299,7 +299,13 @@ cluster_clrs <- unname(glasbey())
 #top20_marker_table <- read_table2(snakemake@input$cluster_markers)
 
 if(is_spatial){
-    nhood_dat <- read_csv(snakemake@input$nhood_enrichment)
+    nhood_dat <- tryCatch({
+        read_csv(snakemake@input$nhood_enrichment)},
+        error = function(e) {
+            message("File not found or could not be read: ", e$message)
+            return(NULL)  # Return NULL or an empty tibble/dataframe if needed
+            }
+    )
 }
 
 for (i in obs_df %$% res %>% unique){
@@ -387,7 +393,8 @@ for (i in obs_df %$% res %>% unique){
                 text = element_text(color='black')) +
             ggtitle('', subtitle=paste0('resolution = ', res))
 
-        dat <- nhood_dat %>%
+        if (!is.null(nhood_dat)) {
+            dat <- nhood_dat %>%
             filter(resolution == res) %>%
             mutate(a = as.character(1000 + cluster_a),
                    b = as.character(1000 + cluster_b)) %>%
@@ -410,9 +417,18 @@ for (i in obs_df %$% res %>% unique){
             ggtitle('', subtitle=paste0('resolution = ', res))+
             coord_equal()+
             theme(plot.subtitle=element_text(size=18))
+        }
+        
         print(umap_plot)
         print(physical_plot)
-        print(nhood_plot)
+        
+        tryCatch({
+            print(nhood_dat)},
+            error = function(e) {
+                pass}
+        )
+                
+
     } else{
         print(umap_plot)
     }
