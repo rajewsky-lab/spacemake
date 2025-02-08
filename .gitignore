@@ -3,6 +3,7 @@ projects
 config.yaml
 samples.yaml
 *.ipynb
+!spacemake/report/notebooks/*.ipynb
 *.tif
 *.jpg
 *.jpeg
