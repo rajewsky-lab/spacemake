@@ -15,7 +15,7 @@ import math
 import scanpy as sc
 
 from spacemake.preprocess.dge import dge_to_sparse_adata, attach_barcode_file,\
-    parse_barcode_file, load_external_dge, attach_puck_variables, attach_puck
+    parse_barcode_file, load_external_dge, attach_puck
 from spacemake.spatial.util import create_meshed_adata
 import spacemake.spatial.puck_collection as puck_collection
 from spacemake.project_df import ProjectDF
@@ -622,7 +622,7 @@ rule puck_collection_stitching_meshed:
         # to avoid losing information from columns that are not numeric
         df._get_numeric_data().to_csv(output[1])
 
-rule create_qc_sheet:
+rule run_qc_sheet:
     input:
         unpack(get_qc_sheet_input_files),
     params:
@@ -631,34 +631,31 @@ rule create_qc_sheet:
                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
         run_modes = lambda wildcards: get_run_modes_from_sample(
             wildcards.project_id, wildcards.sample_id)
+        complete_data_root = complete_data_root
+    output:
+        qc_sheet_notebook_text
+    log:
+        notebook=qc_sheet_notebook
+    script:
+        'report/notebooks/qc_sheet.ipynb'
+
+rule render_qc_sheet:
+    input:
+        qc_sheet_notebook
+    params:
+        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis.html")
     output:
         qc_sheet
-    run:
-        from spacemake.report.automated_analysis import generate_automated_analysis_metadata
-
-        template_file = os.path.join(spacemake_dir, "report/templates/qc_sequencing.html")
-
-        report_metadata = generate_qc_sequencing_metadata(
-            wildcards.project_id,
-            wildcards.sample_id,
-            input,
-            complete_data_root,
-            input['reads_type_out'],
-            wildcards.puck_barcode_file_id_qc,
-            parama['is_spatial'],
-            params['run_modes'],
-        )
-
-        html_report = generate_html_report(report_metadata, template_file)
-
-        with open(output[0], "w") as output:
-            output.write(html_report)
+    shell:
+        "jupyter nbconvert {input} --to html --template custom_template.html.j2 --output {output}"
 
 rule run_automated_analysis:
     input:
         unpack(get_automated_analysis_dge_input)
     output:
         automated_analysis_result_file
+    log:
+        notebook=automated_report_notebook
     params:
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
@@ -666,7 +663,18 @@ rule run_automated_analysis:
         run_mode_variables = lambda wildcards:
             project_df.config.get_run_mode(wildcards.run_mode).variables
     script:
-        'scripts/automated_analysis.py'
+        'report/notebooks/automated_analysis.ipynb'
+
+rule render_automated_analysis:
+    input:
+        automated_report_notebook,
+    threads: 1
+    params:
+        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis.html")
+    output:
+        automated_report
+    shell:
+        "jupyter nbconvert {input} --to html --template custom_template.html.j2 --output {output}"
 
 rule run_novosparc_denovo:
     input:
@@ -690,49 +698,6 @@ rule run_novosparc_with_reference:
         " --single_cell_dataset {input.sc_adata}"
         " --spatial_dataset {input.st_adata}"
         " --output {output}"
-
-rule create_automated_analysis_processed_data_files:
-    input:
-        automated_analysis_result_file
-    output:
-        **automated_analysis_processed_data_files
-    params:
-        is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
-    script:
-        'scripts/automated_analysis_create_processed_data_files.py'
-
-rule create_automated_report:
-    input:
-        **automated_analysis_processed_data_files,
-    threads: 1
-    output:
-        automated_report
-    params:
-        is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
-    run:
-        from spacemake.report.automated_analysis import generate_automated_analysis_metadata
-
-        template_file = os.path.join(spacemake_dir, "report/templates/automated_analysis.html")
-
-        report_metadata = generate_automated_analysis_metadata(
-            wildcards.project_id,
-            wildcards.sample_id,
-            wildcards.run_mode,
-            wildcards.puck_barcode_file_id_qc,
-            input['obs_df'],
-            input['var_df'],
-            input['nhood_enrichment'],
-            params['is_spatial'],
-            wildcards.umi_cutoff,
-        )
-        html_report = generate_html_report(report_metadata, template_file)
-
-        with open(output[0], "w") as output:
-            output.write(html_report)
 
 rule split_final_bam:
     input:
