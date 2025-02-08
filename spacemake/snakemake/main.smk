@@ -633,7 +633,7 @@ rule run_qc_sheet:
             wildcards.project_id, wildcards.sample_id)
         complete_data_root = complete_data_root
     output:
-        qc_sheet_notebook_text
+        temp(touch(qc_sheet_notebook_text))
     log:
         notebook=qc_sheet_notebook
     script:
