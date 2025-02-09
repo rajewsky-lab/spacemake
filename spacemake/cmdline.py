@@ -970,6 +970,7 @@ def spacemake_run(args):
         snakefile,
         configfiles=[var.config_path],
         cores=args["cores"],
+        rerun_triggers=["mtime"],
         dryrun=args["dryrun"],
         targets=["get_stats_prealigned_barcodes", "unload_genome_flag"],
         touch=args["touch"],
@@ -992,6 +993,7 @@ def spacemake_run(args):
     preprocess_finished = snakemake.snakemake(
         snakefile,
         configfiles=[var.config_path],
+        rerun_triggers=["mtime"],
         cores=args["cores"],
         dryrun=args["dryrun"],
         targets=["get_whitelist_barcodes"],
@@ -1009,6 +1011,7 @@ def spacemake_run(args):
     analysis_finished = snakemake.snakemake(
         snakefile,
         configfiles=[var.config_path],
+        rerun_triggers=["mtime"],
         cores=args["cores"],
         dryrun=args["dryrun"],
         targets=targets,
