@@ -445,8 +445,8 @@ rule create_dge:
         unpack(get_top_barcodes),
         unpack(get_dge_input_bam)
     output:
-        dge=dge_out,
-        dge_summary=dge_out_summary
+        dge=temp(dge_out), # we will note have this when dropping DropSeq, anyway
+        dge_summary=temp(dge_out_summary) # same as above, not needed when h5ad is created
     params:
         dge_root = dge_root,
         dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
@@ -630,24 +630,24 @@ rule run_qc_sheet:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
         run_modes = lambda wildcards: get_run_modes_from_sample(
-            wildcards.project_id, wildcards.sample_id)
+            wildcards.project_id, wildcards.sample_id),
         complete_data_root = complete_data_root
     output:
         temp(touch(qc_sheet_notebook_text))
     log:
         notebook=qc_sheet_notebook
-    script:
-        'report/notebooks/qc_sheet.ipynb'
+    notebook:
+        '../report/notebooks/qc_sheet.ipynb'
 
 rule render_qc_sheet:
     input:
         qc_sheet_notebook
     params:
-        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis.html")
+        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis_nbtemplate.html.j2")
     output:
         qc_sheet
     shell:
-        "jupyter nbconvert {input} --to html --template custom_template.html.j2 --output {output}"
+        "jupyter nbconvert {input} --to html --template {params.nbconvert_template_path} --output {output}"
 
 rule run_automated_analysis:
     input:
@@ -662,19 +662,19 @@ rule run_automated_analysis:
                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
         run_mode_variables = lambda wildcards:
             project_df.config.get_run_mode(wildcards.run_mode).variables
-    script:
-        'report/notebooks/automated_analysis.ipynb'
+    notebook:
+        '../report/notebooks/automated_analysis.ipynb'
 
 rule render_automated_analysis:
     input:
         automated_report_notebook,
     threads: 1
     params:
-        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis.html")
+        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis_nbtemplate.html.j2")
     output:
         automated_report
     shell:
-        "jupyter nbconvert {input} --to html --template custom_template.html.j2 --output {output}"
+        "jupyter nbconvert {input} --to html --template {params.nbconvert_template_path} --output {output}"
 
 rule run_novosparc_denovo:
     input:
