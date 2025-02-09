@@ -120,61 +120,12 @@ class TableStyle:
         return " ".join(self.row_classes)
 
 @dataclass
-class Table:
-    """Base class for tables."""
+class DataFrameTable:
+    """A table based on a pandas DataFrame with custom column formatting."""
+    data: pd.DataFrame
     title: str
     description: str
     style: TableStyle = field(default_factory=TableStyle)
-    
-    def generate_html(self):
-        """Generate HTML representation of the table."""
-        raise NotImplementedError("Subclasses must implement generate_html")
-
-@dataclass
-class MetricsTable(Table):
-    """A simple two-column metrics table."""
-    metrics: Dict[str, Any]
-    metric_formatters: Dict[str, Callable[[Any], str]] = field(default_factory=dict)
-    
-    def generate(self):
-        from IPython.display import HTML
-
-        table_html = f"""
-        <div class="{self.style.get_container_class()}">
-            <h4>{self.title}</h4>
-            <p>{self.description}</p>
-            <table class="{self.style.get_table_class()}">
-                <thead class="{self.style.get_header_class()}">
-                    <tr>
-                        <th>Metric</th>
-                        <th>Value</th>
-                    </tr>
-                </thead>
-                <tbody>
-        """
-        
-        for metric_name, value in self.metrics.items():
-            formatter = self.metric_formatters.get(metric_name, str)
-            formatted_value = formatter(value)
-            table_html += f"""
-                    <tr class="{self.style.get_row_class()}">
-                        <td>{metric_name}</td>
-                        <td>{formatted_value}</td>
-                    </tr>
-            """
-        
-        table_html += """
-                </tbody>
-            </table>
-        </div>
-        """
-        
-        return HTML(table_html)
-
-@dataclass
-class DataFrameTable(Table):
-    """A table based on a pandas DataFrame with custom column formatting."""
-    data: pd.DataFrame
     columns: Optional[Dict[str, Column]] = None
     
     def __post_init__(self):
