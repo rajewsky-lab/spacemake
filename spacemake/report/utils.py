@@ -324,3 +324,15 @@ def create_sample_info_df(project_df, project_id, sample_id, puck_barcode_file_i
                 })
 
     return sample_info_df
+
+def create_metrics_table_df(adata, umi_cutoff):
+    metrics_table_df = pd.DataFrame({
+                "UMI filter": umi_cutoff,
+                "Number of genes in data": len(adata.var_names),
+                "Number of spots in data": len(adata),
+                "Median UMI": np.median(adata.obs['total_counts']),
+                "Median Genes": np.median(adata.obs['n_genes_by_counts']),
+                "Puck width (µm)": adata.uns['puck_variables']['width_um'],
+                })
+
+    return metrics_table_df
