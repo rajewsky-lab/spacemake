@@ -373,6 +373,9 @@ rule merge_stats_prealigned_spatial_barcodes:
         min_threshold = lambda wildcards:
             project_df.config.get_run_mode(list(get_run_modes_from_sample(
             wildcards.project_id, wildcards.sample_id).keys())[0]).variables['spatial_barcode_min_matches']
+        puck_adjacency_edgelist = lambda wildcards: project_df.get_puck_variables(
+            project_id = wildcards.project_id,
+            sample_id = wildcards.sample_id)['puck_adjacency_edgelist']
     output:
         puck_count_prealigned_barcode_matches_summary
     # at most 50% of CPU resources allocated to finding tiles
@@ -389,7 +392,8 @@ rule merge_stats_prealigned_spatial_barcodes:
         " --target-column 'cell_bc'"
         " --summary-output {output}"
         " --min-threshold {params.min_threshold}"
-        " --n-jobs {threads}"   
+        " --target-adjacency-file {params.puck_adjacency_edgelist}"
+        " --n-jobs {threads}"
 
 rule create_top_barcode_whitelist:
     input:

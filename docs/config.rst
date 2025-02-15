@@ -292,6 +292,12 @@ Each puck has the following variables:
   IDs and the (x,y,z) position for each, in global coordinates. This coordinate system is analogous
   to the global coordinate system for image stitching. When specified, this 'stitching' is
   automatically performed on ``puck``-s with spatial information.
+- ``puck_adjacency_edgelist`` (optional): the path to a puck adjacency edgelist file, 
+  containing one pair of puck IDs per line (edge connecting two nodes), if these pucks are
+  immediately adjacent in physical space. When specified, spacemake will use the spatial adjacency
+  to filter out false positives and improve true positives when automatically finding tiles matching
+  to a sample; otherwise, the threshold provided in ``spatial_barcode_min_matches`` is the only criterium
+  used for finding tiles with a match.
 
 
 Provided pucks
@@ -301,10 +307,12 @@ Provided pucks
 
   default:
     coordinate_system: ''
+    puck_adjacency_edgelist: ''
     spot_diameter_um: 10
     width_um: 3000
   openst:
     coordinate_system: puck_data/openst_coordinate_system.csv
+    puck_adjacency_edgelist: puck_data/openst_puck_adjacency.edgelist
     spot_diameter_um: 0.6
     width_um: 1200
   seq_scope:
@@ -320,7 +328,8 @@ Provided pucks
 
 The ``visium`` puck comes with a ``barcodes`` variable, which points to
 ``puck_data/visium_barcode_positions.csv``. Similarly, the ``openst`` puck comes with
-a ``coordinate_system`` variable, pointing to ``puck_data/openst_coordinate_system.csv``.
+a ``coordinate_system`` variable, pointing to ``puck_data/openst_coordinate_system.csv``,
+and a ``puck_adjacency_edgelist``, pointing to ``puck_data/openst_puck_adjacency.edgelist``
 
 Upon initiation, these files will automatically placed there by spacemake
 

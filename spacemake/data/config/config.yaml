@@ -7,6 +7,7 @@ pucks:
         width_um: 3000
         spot_diameter_um: 10
         coordinate_system: ''
+        puck_adjacency_edgelist: ''
     visium:
         barcodes: 'puck_data/visium_barcode_positions.csv'
         width_um: 6500
@@ -21,6 +22,7 @@ pucks:
         width_um: 1200
         spot_diameter_um: 0.6
         coordinate_system: 'puck_data/openst_coordinate_system.csv'
+        puck_adjacency_edgelist: 'puck_data/openst_puck_adjacency_edgelist.csv'
 
 run_modes:
     default:
