@@ -33,7 +33,7 @@ def format_func(qname=None, r2_qname=None, r2_qual=None, r1=None, r2=None, R1=No
         UMI={UMI},
         seq={seq},
         qual={qual},
-        fqid=r2_qname,
+        fqid=r2_qname.split()[0],
     )
 
     return attrs
