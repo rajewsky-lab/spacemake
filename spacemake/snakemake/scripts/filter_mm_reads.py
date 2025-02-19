@@ -44,6 +44,7 @@ if __name__ == '__main__':
     bam_out = pysam.AlignmentFile(args.out_bam, 'wb', header= bam_in.header)
     counter = 0
     start_time = datetime.datetime.now()
+    finish_time = start_time
     total_start_time = datetime.datetime.now()
     time_interval = 30
 
@@ -88,4 +89,5 @@ if __name__ == '__main__':
                 # reset multimapper list
                 multi_mappers = []
 
+    formatted_time = finish_time.strftime("%Y-%m-%d %H:%M:%S")
     print(f'Finished processing {counter:,} records in {total_elapsed_seconds:,.0f} seconds. Current time: {formatted_time}')

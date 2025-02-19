@@ -85,7 +85,11 @@ if nrow > 100 and ncol >= 1000:
                 use_raw = False)
             if snakemake.params['is_spatial']:
                 # calculate nhood enrichment from squidpy
-                sq.gr.nhood_enrichment(adata, cluster_key=res_key)
+                try:
+                    sq.gr.nhood_enrichment(adata, cluster_key=res_key)
+                except ValueError:
+                    print('Only one cluster found in the data - skipping neighborhood analysis')
+                    pass
         except ZeroDivisionError as e:
             pass
 
