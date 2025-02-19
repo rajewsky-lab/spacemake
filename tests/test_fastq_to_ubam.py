@@ -75,3 +75,37 @@ def test_minqual():
         "30",
         """--cell='"A"'""",
     )
+
+
+def test_issue135():
+    import spacemake.bin.fastq_to_uBAM as ubam
+    from argparse import Namespace
+
+    args = Namespace(
+        bam_tags="CR:{cell},CB:{cell},MI:{UMI},RG:A",
+        min_len=18,
+        min_qual_trim=0,
+        cell="r1[8:20][::-1]",
+        UMI="r1[0:8]",
+        seq="r2",
+        qual="r2_qual",
+        disable_safety=False,
+    )
+
+    fmt = ubam.make_formatter_from_args(args)
+    attrs = fmt(
+        r2_qname="QNAME MUST NOT HAVE WHITESPACE",
+        r1="ACGTACGT",
+        r1_qual="########",
+        r2="TGCATGCATGCATGCA",
+        r2_qual="################",
+    )
+    sam = ubam.make_sam_record(flag=4, **attrs)
+    cols = sam.split()
+    assert cols[0] == "QNAME"
+    assert cols[1] == "4"
+    # print(sam)
+
+
+# if __name__ == "__main__":
+#     test_issue135()
