@@ -356,7 +356,7 @@ def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
 
     logger = util.setup_logging(args, "fastq_to_uBAM.worker", rename_process=False)
     logger.debug(
-        f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args} _extra_args={_extra_args}"
+        f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args}"
     )
 
     ingress = SeqData.from_paired_end(fq1, fq2) if fq1 else SeqData.from_single_end(fq2)
@@ -416,6 +416,41 @@ def min_length_filter(input, output, min_len=18):
         N += 1
 
     return N
+    # if args.paired_end:
+    #             # if args.paired_end[0] == 'r':
+    #             #     # rev_comp R1 and reverse qual1
+    #             #     q1 = q1[::-1]
+    #             #     r1 = util.rev_comp(r1)
+
+    #             # if args.paired_end[1] == 'r':
+    #             #     # rev_comp R2 and reverse qual2
+    #             #     q2 = q2[::-1]
+    #             #     r2 = util.rev_comp(r2)
+
+    #             rec1 = fmt.make_bam_record(
+    #                 qname=fqid,
+    #                 r1="THISSHOULDNEVERBEREFERENCED",
+    #                 r2=r1,
+    #                 R1=r1,
+    #                 R2=r2,
+    #                 r2_qual=q1,
+    #                 r2_qname=fqid,
+    #                 flag=69,  # unmapped, paired, first in pair
+    #             )
+    #             rec2 = fmt.make_bam_record(
+    #                 qname=fqid,
+    #                 r1="THISSHOULDNEVERBEREFERENCED",
+    #                 r2=r2,
+    #                 R1=r1,
+    #                 R2=r2,
+    #                 r2_qual=q2,
+    #                 r2_qname=fqid,
+    #                 flag=133,  # unmapped, paired, second in pair
+    #             )
+    #             results.append(rec1)
+    #             results.append(rec2)
+
+    #         else:
 
 
 def main(args):
@@ -424,9 +459,7 @@ def main(args):
 
     # queues for communication between processes
     w = (
-        mf.Workflow(
-            f"[{args.sample}]fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer
-        )
+        mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
         # open reads2.fastq.gz
         .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
             input=mf.FIFO("read2", "rt"),

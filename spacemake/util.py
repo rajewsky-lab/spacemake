@@ -2,7 +2,7 @@ import errno
 import os
 import logging
 
-# from contextlib import ContextDecorator, contextmanager
+#from contextlib import ContextDecorator, contextmanager
 from spacemake.errors import SpacemakeError, FileWrongExtensionError
 from spacemake.contrib import __version__, __license__, __author__, __email__
 
@@ -10,15 +10,13 @@ LINE_SEPARATOR = "-" * 50 + "\n"
 
 bool_in_str = ["True", "true", "False", "false"]
 
-
-def generate_kmers(k, nts="ACGT"):
+def generate_kmers(k, nts='ACGT'):
     if k == 0:
-        yield ""
+        yield ''
     elif k > 0:
         for x in nts:
-            for mer in generate_kmers(k - 1, nts=nts):
+            for mer in generate_kmers(k-1, nts=nts):
                 yield x + mer
-
 
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
@@ -51,7 +49,6 @@ def wc_fill(x, wc):
         polyA_adapter_trimmed=getattr(wc, "polyA_adapter_trimmed", ""),
         data_root_type=getattr(wc, "data_root_type", "complete_data"),
     )
-
 
 def quiet_bam_open(*argc, **kw):
     """_summary_
@@ -114,7 +111,6 @@ def ensure_path(path):
     if dirname:
         os.makedirs(dirname, exist_ok=True)
     return path
-
 
 def timed_loop(
     src,
@@ -193,13 +189,7 @@ def read_fq(fname, skim=0):
         src = FASTQ_src(fname)  # assume its a stream or file-like object already
 
     n = 0
-    for record in timed_loop(
-        src,
-        logger,
-        T=15,
-        template="processed {i} reads in {dT:.1f}sec. ({rate:.3f} k rec/sec)",
-        skim=skim,
-    ):
+    for record in timed_loop(src, logger, T=15, template="processed {i} reads in {dT:.1f}sec. ({rate:.3f} k rec/sec)", skim=skim):
         yield record
         n += 1
 
@@ -406,7 +396,6 @@ def fasta_chunks(lines, strip=True, fuse=True):
 #     except SpacemakeError as e:
 #         print(e)
 
-
 def message_aggregation(log_listen="spacemake", print_logger=False, print_success=True):
     from functools import wraps
 
@@ -439,10 +428,9 @@ def message_aggregation(log_listen="spacemake", print_logger=False, print_succes
                     print(f"{LINE_SEPARATOR}SUCCESS!")
                 return res
 
-        return wrapper
+        return wrapper        
 
     return the_decorator
-
 
 def str_to_list(value):
     # if list in string representation, return the list
@@ -489,14 +477,11 @@ def setup_logging(
     name="spacemake.main",
     log_file="",
     FORMAT="%(asctime)-20s\t{sample:30s}\t%(name)-50s\t%(levelname)s\t%(message)s",
-    rename_process=True,
 ):
     sample = getattr(args, "sample", "na")
-    if rename_process:
-        import setproctitle
-
-        if name != "spacemake.main":
-            setproctitle.setproctitle(f"{name} {sample}")
+    import setproctitle
+    if name != "spacemake.main":
+        setproctitle.setproctitle(f"{name} {sample}")
 
     FORMAT = FORMAT.format(sample=sample)
 
@@ -529,13 +514,10 @@ def setup_logging(
 
     return logger
 
-
 def setup_smk_logging(name="spacemake.smk", **kw):
     import argparse
-
     args = argparse.Namespace(**kw)
     return setup_logging(args, name=name)
-
 
 default_log_level = "INFO"
 
