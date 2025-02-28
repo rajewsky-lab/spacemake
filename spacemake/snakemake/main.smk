@@ -28,7 +28,8 @@ project_root = config['root_dir']
 ################
 # Shell prefix #
 ################
-shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
+# shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
+shell.prefix('JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 
 ####
 # this file should contain all sample information, sample name etc.
