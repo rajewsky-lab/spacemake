@@ -1,4 +1,4 @@
-final_merged_bam = complete_data_root + final_bam_suffix + '.merged.bam'
+final_merged_bam = complete_data_root + final_bam_suffix + '.merged.cram'
 merged_ribo_depletion_log = complete_data_root + '/ribo_depletion_log.merged.txt'
 merged_star_log_file = complete_data_root + '/star.merged.Log.final.out'
 
@@ -9,7 +9,7 @@ rule create_final_merged_bam:
         final_merged_bam
     threads: 4
     shell:
-        "samtools merge -n -@ {threads} -o {output} {input}"
+        "samtools merge -n -@ {threads} --output-fmt CRAM --output-fmt-option version=3.1 -o {output} {input}"
 
 rule create_merged_ribo_log:
     input:
