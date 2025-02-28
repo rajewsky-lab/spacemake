@@ -52,14 +52,14 @@ class SeqData(object):
     def from_single_end(cls, fq2):
         fq_src2 = util.FASTQ_src(fq2)
         for fqid, seq, qual in fq_src2:
-            yield cls(fqid, "NA", "##", seq, qual)
+            yield cls(fqid.split()[0], "NA", "##", seq, qual)
 
     @classmethod
     def from_paired_end(cls, fq1, fq2):
         fq_src1 = util.FASTQ_src(fq1)
         fq_src2 = util.FASTQ_src(fq2)
         for (fqid, r1, q1), (_, r2, q2) in zip(fq_src1, fq_src2):
-            yield cls(fqid, r1, q1, r2, q2)
+            yield cls(fqid.split()[0], r1, q1, r2, q2)
 
     @classmethod
     def from_BAM(cls, bam_src):
