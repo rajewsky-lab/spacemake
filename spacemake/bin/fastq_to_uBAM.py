@@ -289,15 +289,26 @@ class PreProcessor(object):
         pipeline = []
         from pprint import pprint
 
+        has_barcode = False
+        # print(flavor_dict)
         for step_d in flavor_dict:
             # this should always only have one item
             for fn_name, kw_d in step_d.items():
+                if fn_name == "barcode":
+                    has_barcode = True
                 kw = self.kw.get(fn_name, {}).copy()
                 if kw_d is not None:
                     kw.update(kw_d)
 
                 fn = self.fn_dict[fn_name]
                 pipeline.append(fn(**kw))
+
+        if not has_barcode:
+            # ensure that we always extract barcodes in the end!
+            # (used for legacy adapter_flavor mode)
+            kw = self.kw.get("barcode", {}).copy()
+            fn = self.fn_dict["barcode"]
+            pipeline.append(fn(**kw))
 
         return pipeline
 
@@ -374,9 +385,34 @@ def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
     if args.flavor:
         args = util.load_config_with_fallbacks(args)
         flavor_dict = args.config["preprocessing_flavors"][args.flavor]
+    elif args.adapter_flavor:
+        # logger.warning(
+        #     "deprecation warning: --adapter-flavor will be replaced by --flavor in the future (with incompatible format in config.yaml)"
+        # )
+        from spacemake.config import ConfigFile
+        import spacemake
+        import os
+
+        builtin = os.path.join(
+            os.path.dirname(spacemake.__file__), "data/config/config.yaml"
+        )
+        builtin_config = ConfigFile.from_yaml(builtin)
+
+        args = util.load_config_with_fallbacks(args)
+        flavor_dict = args.config["adapter_flavors"][args.adapter_flavor]
+        # print(f"THIS IS IT: '{flavor_dict}'")
+        if "cut_left" in flavor_dict or "cut_right" in flavor_dict:
+            logger.warning(
+                f"Your config.yaml contains a deprecated definition for adapter_flavor '{args.adapter_flavor}'. "
+                "this definition will be ignored and replaced by the built-in default. "
+                "Please use `spacemake migrate config09` to migrate your config.yaml to the new format"
+            )
+            flavor_dict = builtin_config["adapter_flavors"][args.adapter_flavor]
+
     else:
         flavor_dict = {}
 
+    # logger.warning(f"flavor_dict={flavor_dict}")
     pre = PreProcessor(
         processing_str=args.processing,
         flavor_dict=flavor_dict,
@@ -549,7 +585,7 @@ def main(args):
     ).sort_values(["name", "value"])
 
     if args.out_stats:
-        df.to_csv(args.out_stats, sep="\t", index=None)
+        df.to_csv(util.ensure_path(args.out_stats), sep="\t", index=None)
 
     return df
 
@@ -643,6 +679,11 @@ def parse_args():
         default="",
     )
     parser.add_argument(
+        "--adapter-flavor",
+        help="read adapter_flavor entry from config.yaml to configure the pre-processing pipeline, instead of parsing --processing [LEGACY option, will be replaced by --flavor]",
+        default="",
+    )
+    parser.add_argument(
         "--min-len",
         default=18,
         type=int,
@@ -732,7 +773,6 @@ def cmdline():
     dt = time() - t0
     N = df.query("name == 'N' and value == 'input'")["count"].iloc[0]
     N_kept = df.query("name == 'N' and value == 'output'")["count"].iloc[0]
-    print(N)
     rate = N / dt / 1000
     logger.info(
         f"processed {N/1e6:.3f} M reads in {dt:.1f} seconds ({rate:.1f} k reads/sec)"
