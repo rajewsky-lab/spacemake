@@ -309,17 +309,18 @@ parsed_ribo_depletion_log = complete_data_root + "/parsed_ribo_depletion_log.txt
 #  dropseq rules and vars #
 # #########################
 tagged_bam = complete_data_root + "/unaligned_bc_tagged.cram"
-unassigned = complete_data_root + "/unaligned_bc_unassigned.cram"
-tagged_bam_log = tagged_bam + ".log"
+# unassigned = complete_data_root + "/unaligned_bc_unassigned.cram"
+# tagged_bam_log = tagged_bam + ".log"
 
 # trim smart adapter from the reads
 tagged_trimmed_bam = complete_data_root + "/unaligned_bc_tagged_trimmed.cram"
-tagged_trimmed_bam_log = tagged_trimmed_bam + ".log"
+preprocessing_log = log_dir + "/preprocessing.log"
 
 # trim polyA overheang if exists
 tagged_polyA_adapter_trimmed_bam = (
     complete_data_root + "/unaligned_bc_tagged.polyA_adapter_trimmed.cram"
 )
+preprocessing_stats = stats_dir + "/preprocessing.tsv"
 
 tagged_bam_pattern = (
     complete_data_root + "/unaligned_bc_tagged{polyA_adapter_trimmed}.cram"

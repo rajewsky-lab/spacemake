@@ -266,11 +266,11 @@ rule link_raw_reads:
             shell("cat {input} > {output}")
             
 
-rule zcat_pipe:
-    input: "{name}.fastq.gz"
-    output: temp("{name}.fastq")
-    threads: 2
-    shell: "unpigz --keep --processes {threads} --stdout $(readlink {input}) >> {output}"
+# rule zcat_pipe:
+#     input: "{name}.fastq.gz"
+#     output: temp("{name}.fastq")
+#     threads: 2
+#     shell: "unpigz --keep --processes {threads} --stdout $(readlink {input}) >> {output}"
 
 rule tag_reads_bc_umi:
     input:
@@ -281,9 +281,8 @@ rule tag_reads_bc_umi:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
         ubam = tagged_polyA_adapter_trimmed_bam,
-        log = tagged_trimmed_bam_log
-    log:
-        reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
+        log = preprocessing_log,
+        stats = preprocessing_stats
     threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
         "python {spacemake_dir}/bin/fastq_to_uBAM.py "
@@ -292,8 +291,10 @@ rule tag_reads_bc_umi:
         "--read2={input.R2} "
         "--threads-work={threads} "
 	    "--out-file={output.ubam} "
+        "--out-stats={output.stats} "
         "--cell='{params.bc.cell}' "
         "--UMI='{params.bc.UMI}' "
+        "--adapter-flavor={params.bc.adapter_flavor} "
         #"--bam-tags='{params.bc.bam_tags}' "
         "--out-fmt=CRAM "
         "--out-fmt-option='version=3.1' " # not supported by DropSeqTools 2.5.1

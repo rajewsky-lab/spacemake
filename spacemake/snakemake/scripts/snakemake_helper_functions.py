@@ -371,6 +371,11 @@ def get_bc_preprocess_settings(wildcards):
 
     settings = bc_flavor_data.preprocess_settings[flavor]
 
+    adapter_flavor = project_df.get_metadata(
+        "adapter_flavor", project_id=wildcards.project_id, sample_id=wildcards.sample_id
+    )
+
+    settings["adapter_flavor"] = adapter_flavor
     return settings
 
 
