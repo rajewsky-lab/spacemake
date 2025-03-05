@@ -441,7 +441,31 @@ rule create_spatial_barcode_whitelist:
 
         # save both the whitelist and the beads in a separate file
         bc[['cell_bc']].to_csv(output[0], header=False, index=False)
-        
+
+import spacemake.map_strategy as ms
+rule count_nongenomes:
+    input:
+        unpack(get_top_barcodes),
+        crams=ms.get_non_genome_alignments,
+    output:
+        dge=ng_dge_h5ad,
+        stats=ng_dge_stats,
+        # dge_summary=ng_dge_summary
+    log: ng_dge_log
+    params:
+        dge_root = dge_root
+    shell:
+        "python -m scbamtools.bin.count "
+        "  --sample {wildcards.sample_id} "
+        "  --worker-threads {threads} "
+        "  --flavor custom_index "
+        "  --cell-bc-allow-list {input.top_barcodes} "
+        "  --dge-out {output.dge}"
+        "  --stats-out {output.stats}"
+        "  --log-file {log}"
+        "  --pipe-buffer-size 4"
+        " {input.crams} "
+
 rule create_dge:
     # creates the dge. depending on if the dge has _cleaned in the end it will require the
     # topBarcodesClean.txt file or just the regular topBarcodes.txt

@@ -103,6 +103,14 @@ def get_all_mapped_bams(wc):
     return {"mapped_bams": sorted(map_data["ALL_BAMS"][(wc.project_id, wc.sample_id)])}
 
 
+def get_non_genome_alignments(wc):
+    mapped = get_all_mapped_bams(wc)["mapped_bams"]
+    annotated = get_annotated_bams(wc)["annotated_bams"]
+    ng = [aln for aln in mapped if aln not in annotated]
+    print(f"{wc} -> ng={ng}")
+    return ng
+
+
 def get_count_flavor_str(wc):
     cflavors = []
     for bam in get_all_mapped_bams(wc)["mapped_bams"]:

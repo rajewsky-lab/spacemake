@@ -766,6 +766,15 @@ def get_dge_from_run_mode(
         )
         for key, pattern in out_files_pattern.items()
     }
+    import spacemake.map_strategy as ms
+
+    if ms.get_non_genome_alignments(
+        dotdict(project_id=project_id, sample_id=sample_id)
+    ):
+        # If we have non-genome alignments, make an h5ad for these too!
+        out_files["dge"].extend(
+            [f.replace(".h5ad", ".ng.h5ad") for f in out_files["dge"]]
+        )
 
     return out_files
 
