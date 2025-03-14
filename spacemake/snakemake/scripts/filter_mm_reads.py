@@ -47,8 +47,8 @@ if __name__ == "__main__":
 
     bam_out = pysam.AlignmentFile(args.out_bam, "wc", header=bam_in.header)
     counter = 0
+    total_records = 0
     start_time = datetime.datetime.now()
-    finish_time = start_time
     total_start_time = datetime.datetime.now()
     time_interval = 30
 
@@ -56,6 +56,7 @@ if __name__ == "__main__":
 
     for aln in bam_in.fetch(until_eof=True):
         counter += 1
+        total_records += 1
 
         finish_time = datetime.datetime.now()
         delta_seconds = (finish_time - start_time).seconds
@@ -66,10 +67,11 @@ if __name__ == "__main__":
             records_per_second = counter / delta_seconds
 
             print(
-                f"Processed {counter:,} records in {total_elapsed_seconds:,.0f} seconds. Average processing rate: {records_per_second:,.0f} records/second. Current time: {formatted_time}"
+                f"Processed {total_records:,} records in {total_elapsed_seconds:,.0f} seconds. Average processing rate: {records_per_second:,.0f} records/second. Current time: {formatted_time}"
             )
 
-            start_time = finish_time
+            start_time = datetime.datetime.now()
+            counter = 0
 
         mapped_number = aln.get_tag("NH")
 
