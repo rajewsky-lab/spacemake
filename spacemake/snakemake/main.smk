@@ -737,7 +737,7 @@ rule split_final_bam:
         prefix=split_reads_root
     shell:
         """
-        samtools view -q 255 -h {input} | \
+        samtools view -q 255 {input} | \
         python {repo_dir}/scripts/split_reads_by_strand_info.py \
         --prefix {params.prefix} /dev/stdin
         """
