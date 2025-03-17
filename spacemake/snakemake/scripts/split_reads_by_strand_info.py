@@ -73,7 +73,7 @@ with open(args.file_in, "r") as fi:
         else:
             gene_strand = "AMB"
 
-        print(f"gene_strand={gene_strand}")
+        # print(f"gene_strand={gene_strand}")
         # set read strand
         if int(elements[1]) & 16:
             read_strand = "minus"
