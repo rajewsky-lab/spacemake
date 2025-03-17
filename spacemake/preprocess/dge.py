@@ -49,18 +49,17 @@ def calculate_shannon_entropy_scompression(adata):
     from collections import Counter
 
     def compute_shannon_entropy(barcode):
-        prob, length = Counter(barcode), float(len(barcode))
-        return -sum(
-            count / length * math.log(count / length, 2) for count in prob.values()
-        )
+        prob, length = Counter(barcode), np.float16(len(barcode))
+        return np.float16(-sum(
+            np.float16(count) / length * np.log2(np.float16(count) / length) for count in prob.values()
+        ))
 
     def compute_string_compression(barcode):
         compressed_barcode = "".join(
             letter + str(len(list(group)))
             for letter, group in itertools.groupby(barcode)
         )
-
-        return len(compressed_barcode)
+        return np.uint8(len(compressed_barcode))
 
     bc = adata.obs.index.to_numpy()
     bc_len = len(bc[0])

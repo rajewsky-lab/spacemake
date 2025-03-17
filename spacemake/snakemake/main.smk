@@ -754,26 +754,26 @@ rule split_final_bam:
     input:
         unpack(get_final_bam)
     output:
-        temp(split_reads_sam_files),
+        # temp(split_reads_sam_files),
         split_reads_read_type,
         split_reads_strand_type
     params:
         prefix=split_reads_root
     shell:
         """
-        samtools view -q 255 -h {input} | \
+        samtools view -q 255 {input} | \
         python {repo_dir}/scripts/split_reads_by_strand_info.py \
         --prefix {params.prefix} /dev/stdin
         """
 
-rule split_reads_sam_to_bam:
-    input:
-        split_reads_sam_pattern
-    output:
-        split_reads_bam_pattern
-    threads: 2
-    shell:
-        "samtools view -Sch --threads {threads} -o {output} {input}"
+# rule split_reads_sam_to_bam:
+#     input:
+#         split_reads_sam_pattern
+#     output:
+#         split_reads_bam_pattern
+#     threads: 2
+#     shell:
+#         "samtools view -Sch --threads {threads} -o {output} {input}"
 
 
 rule count_barcode_matches:
