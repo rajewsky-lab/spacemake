@@ -99,5 +99,5 @@ if __name__ == "__main__":
 
     formatted_time = finish_time.strftime("%Y-%m-%d %H:%M:%S")
     print(
-        f"Finished processing {counter:,} records in {total_elapsed_seconds:,.0f} seconds. Current time: {formatted_time}"
+        f"Finished processing {(total_records+counter):,} records in {total_elapsed_seconds:,.0f} seconds. Current time: {formatted_time}"
     )
