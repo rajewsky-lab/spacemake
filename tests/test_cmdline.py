@@ -378,6 +378,36 @@ def test_tiles(with_tile_test_data):
     )
 
 
+def test_tiles_nomatch(with_species):
+    os.chdir(with_species.as_posix())
+    sm(
+        "config",
+        "add-puck",
+        "--name=openst_min",
+        f"--coordinate_system={spacemake_dir}/test_data/test_coordinate_system.csv",
+        "--width_um=1200",
+        "--spot_diameter_um=0.6",
+    )
+    sm(
+        "projects",
+        "add-sample",
+        "--project-id=fc_test",
+        "--sample-id=fc_test_nomatch",
+        f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+        f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+        "--puck=openst_min",
+        "--run-mode=openst",
+        "--barcode-flavor=openst",
+        "--puck-barcode-file",
+        f"{spacemake_dir}/test_data/tile_1.txt",
+        f"{spacemake_dir}/test_data/tile_2.txt",
+        f"{spacemake_dir}/test_data/tile_3.txt",
+        f"{spacemake_dir}/test_data/tile_4.txt",
+        "--map-strategy=rRNA:bowtie2->genome:STAR:final",
+        "--species=test_hsa",
+    )
+
+
 def test_merge(with_species):
     os.chdir(with_species.as_posix())
     test_samples = [
