@@ -774,6 +774,45 @@ def setup_run_parser(parent_parser_subparsers):
     return parser_run
 
 
+def setup_migrate_parser(parent_parser_subparsers):
+    """setup_migrate_parser
+
+    :param parent_parser_subparsers
+    """
+    parser_migrate = parent_parser_subparsers.add_parser(
+        "migrate",
+        help="migrate spacemake"
+    )
+
+    parser_migrate.add_argument(
+        "--project-id",
+        default="",
+        help="The project-id of the sample to perform the migration",
+        type=str,
+        required=True,
+        dest="project_id",
+    )
+    parser_migrate.add_argument(
+        "--sample-id",
+        default="",
+        help="The sample-id of the sample to perform the migration",
+        type=str,
+        required=True,
+        dest="sample_id",
+    )
+    parser_migrate.add_argument(
+        "--threads",
+        default="1",
+        help="Number of threads to use",
+        type=str,
+        required=False,
+        dest="threads",
+    )
+
+    parser_migrate.set_defaults(func=spacemake_migrate)
+
+    return parser_migrate
+
 #####################################################
 # actual command-line functions, used as call-backs #
 #####################################################
@@ -1155,6 +1194,52 @@ def list_projects_cmdline(args):
     logger.info(df.loc[:, variables].__str__())
 
 
+@message_aggregation(logger_name)
+def spacemake_migrate(args):
+    """spacemake_migrate.
+
+    :param args:
+    """
+    from spacemake.migrate import convert_bam_to_cram
+    from spacemake.project_df import get_global_ProjectDF
+    import time
+    import yaml
+
+    project_id = args['project_id']
+    sample_id = args['sample_id']
+    threads = args['threads']
+
+    pdf = get_global_ProjectDF()
+
+    # Make sure that the project-id and sample-id combination provided exists
+    pdf.assert_sample(project_id, sample_id)
+    project_folder = os.path.join('projects', project_id, 'processed_data', sample_id, 'illumina', 'complete_data')
+    
+    # Begin migration
+    print('Beginning migration ...', time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+    
+    if not os.path.exists(os.path.join(project_id, 'stats.csv')):
+        print(f"Stats file for sample with (project-id, sample-id)=({project_id}, {sample_id}) " 
+              "not found on disk. Will generate it now.")
+        # Execute code written elsewhere to generate the file
+    else:
+        print("Stats file found on disk")
+
+    if not os.path.exists(os.path.join(project_folder, 'final.cram')):
+        # TODO: fix this with a proper check.
+        print(f"CRAM files for sample with (project-id, sample-id)=({project_id}, {sample_id}) "
+              "not found on disk. Will generate them now.")
+        # Execute code to convert to CRAM
+        convert_bam_to_cram(project_id, sample_id, threads)
+    else:
+        print(f"CRAM files for sample with (project-id, sample-id)=({project_id}, {sample_id}) "
+              "already on disk.")
+
+    print("Removing unnecessary files ...", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+
+    print("Migration complete ...", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+
+
 def make_main_parser():
     #################
     # DEFINE PARSER #
@@ -1168,7 +1253,7 @@ def make_main_parser():
 
     parser_main = argparse.ArgumentParser(
         allow_abbrev=False,
-        description="spacemake: bioinformatic pipeline for processing and analysis of spatial-transcriptomics data",
+        description="Spacemake: processing and analysis of large-scale spatial transcriptomics data",
     )
 
     parser_main.add_argument("--version", action="store_true")
@@ -1181,6 +1266,7 @@ def make_main_parser():
     parser_projects = None
     parser_config = None
     parser_init = None
+    parser_migrate = None
     parser_spatial = None
 
     ##################
@@ -1203,13 +1289,18 @@ def make_main_parser():
         # SPACEMAKE PROJECT/SAMPLE #
         ############################
         from spacemake.cmdline import setup_project_parser
-
+ 
         parser_projects = setup_project_parser(parser_main_subparsers)
 
         #################
         # SPACEMAKE RUN #
         #################
         parser_run = setup_run_parser(parser_main_subparsers)
+
+        #####################
+        # SPACEMAKE MIGRATE #
+        #####################
+        parser_migrate = setup_migrate_parser(parser_main_subparsers)
 
         #####################
         # SPACEMAKE SPATIAL #
@@ -1223,6 +1314,7 @@ def make_main_parser():
         "config": parser_config,
         "projects": parser_projects,
         "run": parser_run,
+        "migrate": parser_migrate,
         "main": parser_main,
         "spatial": parser_spatial,
     }
