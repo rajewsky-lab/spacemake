@@ -5,6 +5,8 @@ import pandas as pd
 import logging
 import scanpy as sc
 
+from itertools import cycle
+from scipy.stats import gaussian_kde
 from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional, Callable
 from io import BytesIO
@@ -35,6 +37,21 @@ nucl_clrs = {
     "G": "#7772F5",
     "N": "#999999",
 }
+
+parula_dict = {
+    1: "#352a87",
+    2: "#2058b0",
+    3: "#1f7eb8",
+    4: "#28a7d7",
+    5: "#38d7e3",
+    6: "#99d4d0",
+    7: "#aacca1",
+    8: "#bbcc74",
+    9: "#cbcc49",
+    10: "#e0d317",
+}
+
+PCT_DOWNSAMPLE_TO_PLOT = [20, 40, 60, 80, 100]
 
 logger_name = "spacemake.pl"
 logger = logging.getLogger(logger_name)
@@ -653,3 +670,109 @@ def entropy_compression(adata, nbins=30, figsize=(7, 4), return_fig=True):
 
     if return_fig:
         return fig, axes
+
+
+def plot_density_metric_faceted(values, metric, log_scale=True, color="#000000", title=""):
+    fig, axes = plt.subplots(len(PCT_DOWNSAMPLE_TO_PLOT), 1, figsize=(5, 0.5 * len(PCT_DOWNSAMPLE_TO_PLOT)))
+
+    i = 0
+    for downsample_pct, value_density in values.groupby("_downsample_pct_report"):
+        if int(downsample_pct) in PCT_DOWNSAMPLE_TO_PLOT:
+            density_function = gaussian_kde(np.nan_to_num(value_density[metric]), bw_method=0.1)
+            x = np.linspace(1, max(np.nan_to_num(values[metric])), 100)
+
+            axes[i].plot(x, density_function(x), color="black", linewidth=1)
+            axes[i].fill_between(x, density_function(x), color=color)
+            axes[i].set_yticks([])
+
+            if log_scale:
+                axes[i].set_xscale("log")
+
+            axes[i].spines[["right", "top", "bottom"]].set_visible(False)
+            axes[i].text(1.05, 0.5, f"{downsample_pct}%", transform=axes[i].transAxes, va="center")
+            i += 1
+
+        axes[-1].spines[["right", "top"]].set_visible(False)
+        axes[-1].spines[["left", "bottom"]].set_visible(True)
+        axes[-1].set_xlabel(title)
+
+    for i in range(i - 1):
+        axes[i].set_xticks([])
+
+    fig.text(0.0, 0.6, "density", va="center", rotation="vertical")
+    plt.tight_layout()
+
+    return fig, axes
+
+
+def median_per_run_mode(values, metric, umi_cutoffs, color="#000000", title=""):
+    fig, axes = plt.subplots(1, 1, figsize=(5, 3))
+
+    lines = ["-", "--", "-.", ":"]
+    linecycler = cycle(lines)
+    handles, labels = [], []
+
+    for umi_cutoff in umi_cutoffs:
+        _values = values[values["total_counts"] > umi_cutoff]
+        median_values = (
+            _values[[metric, "_downsample_pct_report"]].groupby("_downsample_pct_report").median().reset_index()
+        )
+
+        linestyle = next(linecycler)
+
+        (line,) = axes.plot(
+            median_values["_downsample_pct_report"], median_values[metric], linestyle, color=color, label=umi_cutoff
+        )
+        axes.scatter(
+            median_values["_downsample_pct_report"], median_values[metric], s=20, color=color, edgecolors="black"
+        )
+
+        handles.append(line)
+        labels.append(umi_cutoff)
+
+    axes.set_xticks(PCT_DOWNSAMPLE_TO_PLOT)
+    axes.set_xticklabels([f"{pct}%" for pct in PCT_DOWNSAMPLE_TO_PLOT])
+    axes.spines[["right", "top"]].set_visible(False)
+    axes.set_xlabel("downsampling percentage")
+    axes.set_ylabel(title)
+
+    legend = axes.legend(handles, labels, loc="lower right", title="UMI cutoff")
+    legend.set_frame_on(False)
+
+    plt.tight_layout()
+    return fig, axes
+
+
+def deciled_median(decile_dat):
+    fig, axes = plt.subplots(3, 2, figsize=(6, 4))
+
+    # Iterate through each unique 'observation' for facetting
+    for i, (obs, data) in enumerate(decile_dat.groupby("observation")):
+        for _obs, _data in data.groupby("decile"):
+            axes.flatten()[i].plot(
+                _data["_downsample_pct_report"], _data["value"], label=_obs, linewidth=0.6, color=parula_dict[_obs]
+            )
+            axes.flatten()[i].scatter(
+                _data["_downsample_pct_report"], _data["value"], s=20, edgecolors="black", color=parula_dict[_obs]
+            )
+
+        axes.flatten()[i].set_xticks([0, 20, 40, 60, 80, 100])
+        axes.flatten()[i].set_xticklabels(["0", "20", "40", "60", "80", "100"])
+        axes.flatten()[i].set_title(obs)
+        axes.flatten()[i].spines[["top", "right"]].set_visible(False)
+
+    axes.flatten()[i].set_xlabel("downsampling percentage")
+    if i % 2 == 0:
+        axes.flatten()[-1].axis("off")
+
+    # Create a single legend at the bottom
+    handles, labels = [], []
+    for obs in parula_dict:
+        handles.append(plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=parula_dict[obs], markersize=8))
+        labels.append(str(obs))
+
+    fig.legend(handles, labels, title="Decile", loc="lower right", ncol=3, bbox_to_anchor=(0.95, 0.02))
+
+    plt.tight_layout()
+
+    return fig, axes

@@ -336,3 +336,50 @@ def create_metrics_table_df(adata, umi_cutoff):
                 })
 
     return metrics_table_df
+
+
+def generate_deciled_data(values):
+    # Group by '_downsample_pct_report' and perform the necessary calculations
+    def calculate_deciles(group):
+        group["cumsum_reads"] = group["n_reads"].cumsum()
+        group["decile_limit"] = group["n_reads"].sum() / 10
+        group["decile"] = (group["cumsum_reads"] / group["decile_limit"]).floordiv(1) + 1
+        return group.loc[group["decile"] < 11]
+
+    # Group by '_downsample_pct_report' and apply the calculate_deciles function
+    decile_dat = values.groupby("_downsample_pct_report").apply(calculate_deciles).reset_index(drop=True)
+
+    # Group by 'percentage' and 'decile' and calculate medians and counts
+    decile_dat = (
+        decile_dat.groupby(["_downsample_pct_report", "decile"])
+        .agg(
+            {
+                "n_reads": "median",
+                "n_genes_by_counts": "median",
+                "reads_per_counts": "median",
+                "total_counts": "median",
+                "cell_bc": "count",
+            }
+        )
+        .reset_index()
+    )
+
+    # Melt the DataFrame to long format
+    decile_dat = pd.melt(
+        decile_dat, id_vars=["_downsample_pct_report", "decile"], var_name="observation", value_name="value"
+    )
+
+    # Convert 'decile' and '_downsample_pct_report' to appropriate data types
+    decile_dat["decile"] = decile_dat["decile"].astype("category")
+    decile_dat["_downsample_pct_report"] = decile_dat["_downsample_pct_report"].astype(int)
+
+    mapping_dict = {
+        "n_reads": "median_reads",
+        "n_genes_by_counts": "median_genes",
+        "reads_per_counts": "median_pcr",
+        "total_counts": "median_umis",
+        "cell_bc": "n_beads",
+    }
+    decile_dat["observation"] = decile_dat["observation"].replace(mapping_dict)
+
+    return decile_dat
