@@ -5,9 +5,7 @@ import yaml
 
 from spacemake.project_df import get_global_ProjectDF
 from spacemake.util import sync_timestamps
-
 import sys
-
 
 def find_bam_files(folder):
     """
@@ -91,6 +89,10 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
     project_folder = os.path.join('projects', project_id, 'processed_data',
                                   sample_id, 'illumina', 'complete_data')    
     bam_files = find_bam_files(project_folder)
+    bam_files = sorted(bam_files, key=lambda x: ("final" not in x[0], x[1])) # sort to make sure final is always checked first
+    
+    # simple dictionary to keep track of which ref_type is final
+    ref_type_final = {}
     
     for idx in range(len(bam_files)):
         bam_filename, bam_file_is_symlink = bam_files[idx]
@@ -103,26 +105,34 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
         elif os.path.exists(cram_filename) and os.path.getsize(cram_filename) == 0:
             print('WARNING: CRAM file', cram_filename, 'already exists, but file size is 0. Possible permission error.')
 
+        # Special case for now
         if 'unaligned' in bam_filename:
-            # Special case for now
-            print('Converting', bam_filename, 'to',
-                  os.path.join(project_folder, 'unaligned_bc_tagged.polyA_adapter_trimmed.cram'),
-                  '...', time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
-            subprocess.run(
-                [
-                    "samtools", "view",
-                    "-T", species_sequences['genome'],
-                    "-C",
-                    "--threads", str(threads),
-                    "-o",  os.path.join(project_folder, 'unaligned_bc_tagged.polyA_adapter_trimmed.cram'),
-                    bam_filename
-                ])
-
-            continue
+            cram_filename = os.path.join(project_folder, 'unaligned_bc_tagged.polyA_adapter_trimmed.cram')
+            if os.path.exists(cram_filename) and os.path.getsize(cram_filename) > 0:
+                print('CRAM file', cram_filename, 'already exists. Skipping conversion.')
+                continue
+            else:
+                print('Converting', bam_filename, 'to', cram_filename,
+                    '...', time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+                subprocess.run(
+                    [
+                        "samtools", "view",
+                        "-T", species_sequences['genome'],
+                        "-C",
+                        "--threads", str(threads),
+                        "-o", cram_filename,
+                        bam_filename
+                    ])
+                continue
         
         if bam_file_is_symlink:
             true_bam_filename = os.readlink(bam_filename)
             true_bam_filename_prefix = true_bam_filename.rsplit('.', 1)[0]
+
+            # Keep track of what's final to split the not_ files later.
+            if 'final' in bam_filename:
+                ref_type_final[true_bam_filename.rsplit('.')[0]] = True
+
             try:
                 os.symlink(true_bam_filename_prefix + '.cram', cram_filename)
             except FileExistsError:
@@ -136,15 +146,45 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
                     ref_sequence = species_sequences[ref_type]
                     break
 
-            subprocess.run(
-                [
-                    "samtools", "view",
-                    "-T", ref_sequence,
-                    "-C",
-                    "--threads", str(threads),
-                    "-o", cram_filename,
-                    bam_filename
-                ])
+            if ref_type in ref_type_final:
+                #split files appropriately
+                subprocess.run(
+                    [
+                        "samtools", "view",
+                        "-T", ref_sequence,
+                        "-C",
+                        "-F 4",
+                        "--threads", str(threads),
+                        "-o", cram_filename,
+                        bam_filename
+                    ])
+                
+                directory, filename = os.path.split(cram_filename)
+                not_filename = 'not_' + filename
+
+                subprocess.run(
+                    [
+                        "samtools", "view",
+                        "-T", ref_sequence,
+                        "-C",
+                        "-f 4",
+                        "--threads", str(threads),
+                        "-o", os.path.join(directory, not_filename),
+                        bam_filename
+                    ])
+                
+                sync_timestamps(bam_filename, os.path.join(directory, not_filename))
+
+            else:
+                subprocess.run(
+                    [
+                        "samtools", "view",
+                        "-T", ref_sequence,
+                        "-C",
+                        "--threads", str(threads),
+                        "-o", cram_filename,
+                        bam_filename
+                    ])
 
         sync_timestamps(bam_filename, cram_filename)
 
@@ -173,11 +213,11 @@ def remove_bam_files(project_folder):
                 os.remove(bam_file[0])
             print("BAM files deleted.")
             print("Total disk space saved through the migration:", 
-                  f"{round((sum(file_sizes_bam)-sum(file_sizes_cram))/(1024*1024)):,}", "MB")
-            return False
+                  f"{round((sum(file_sizes_bam)-sum(file_sizes_cram))/(1024**3), 1):,}", "GB")
+            break
         elif response in ['n', 'no']:
-            print('Deletion aborted. Please run spacemake migrate')
-            return False
+            print('Deletion aborted. Please run spacemake migrate again to complete the process.')
+            break
         else:
             print("Please enter 'y' or 'n'.")
 
