@@ -617,7 +617,7 @@ def sync_timestamps(original_file, new_file):
         os.utime(new_file, (source_times.st_atime, source_times.st_mtime),
                  follow_symlinks=not os.path.islink(original_file))
       
-        print(f"File timestamps of {new_file} set to match {original_file}.")
+        print(f"File timestamp of {new_file} set to match {original_file}.")
     except FileNotFoundError:
         print(f"Error: One or both of the files '{original_file}' or '{new_file}' do not exist.")
     except Exception as e:
