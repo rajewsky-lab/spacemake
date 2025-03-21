@@ -488,10 +488,11 @@ def setup_logging(
     args,
     name="spacemake.main",
     log_file="",
-    FORMAT="%(asctime)-20s\t{sample:30s}\t%(name)-50s\t%(levelname)s\t%(message)s",
+    FORMAT="%(asctime)-20s\t%(levelname)s\t{sample:20s}\t%(name)-30s\t%(message)s",
     rename_process=True,
+    **kwargs,
 ):
-    sample = getattr(args, "sample", "na")
+    sample = getattr(args, "sample", kwargs.get("sample", "na"))
     if rename_process:
         import setproctitle
 
@@ -499,12 +500,15 @@ def setup_logging(
             setproctitle.setproctitle(f"{name} {sample}")
 
     FORMAT = FORMAT.format(sample=sample)
-
     log_level = getattr(args, "log_level", "INFO")
     lvl = getattr(logging, log_level)
-    logging.basicConfig(level=lvl, format=FORMAT)
-    root = logging.getLogger("spacemake")
+    # logging.basicConfig(level=lvl, format=FORMAT)
+    # ^^ above does not mix well with Snakemake code
+    root = logging.getLogger(name)
     root.setLevel(lvl)
+    lh = logging.StreamHandler()
+    lh.setFormatter(logging.Formatter(FORMAT))
+    root.addHandler(lh)
 
     log_file = getattr(args, "log_file", log_file)
     if log_file:
@@ -601,7 +605,7 @@ def load_config_with_fallbacks(args, try_yaml="config.yaml"):
 def sync_timestamps(original_file, new_file):
     """
     Sync the timestamps (access and modification time) of new_file with those of original_file.
-    
+
     Args:
         original_file (str): Path to the file whose timestamps will be copied.
         new_file (str): Path to the file that will have its timestamps updated.
@@ -613,12 +617,17 @@ def sync_timestamps(original_file, new_file):
         else:
             source_times = os.stat(original_file)
 
-        # Set the same access and modification time for new_file 
-        os.utime(new_file, (source_times.st_atime, source_times.st_mtime),
-                 follow_symlinks=not os.path.islink(original_file))
-      
+        # Set the same access and modification time for new_file
+        os.utime(
+            new_file,
+            (source_times.st_atime, source_times.st_mtime),
+            follow_symlinks=not os.path.islink(original_file),
+        )
+
         print(f"File timestamp of {new_file} set to match {original_file}.")
     except FileNotFoundError:
-        print(f"Error: One or both of the files '{original_file}' or '{new_file}' do not exist.")
+        print(
+            f"Error: One or both of the files '{original_file}' or '{new_file}' do not exist."
+        )
     except Exception as e:
         print(f"An error occurred: {e}")
