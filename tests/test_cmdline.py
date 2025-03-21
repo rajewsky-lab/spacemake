@@ -410,6 +410,12 @@ def test_tiles_nomatch(with_species, dry=False):
         sm("run", "-np", "--cores=8")
     else:
         sm("run", "-p", "--cores=8")
+        assert os.path.exists(
+            "projects/fc_test/processed_data/fc_test_nomatch/illumina/complete_data/dge/dge.all.polyA_adapter_trimmed.mm_included.100000_beads_no_spatial_data.h5ad"
+        )
+        assert not os.path.exists(
+            "projects/fc_test/processed_data/fc_test_nomatch/illumina/complete_data/dge/dge.all.polyA_adapter_trimmed.mm_included.spatial_beads.mesh_7_hexagon_puck_collection.h5ad"
+        )
 
 
 def test_puck_collection(with_species, dry=False):
@@ -478,6 +484,9 @@ def test_puck_single_tile(with_species, dry=False):
         sm("run", "-np", "--cores=8")
     else:
         sm("run", "-p", "--cores=8")
+        assert os.path.exists(
+            "projects/fc_test/processed_data/fc_test_single_tile/illumina/complete_data/dge/dge.all.polyA_adapter_trimmed.mm_included.spatial_beads.mesh_7_hexagon_puck_collection.h5ad"
+        )
 
 
 def test_merge(with_species):
