@@ -67,6 +67,11 @@ def get_output_files(
             ):
                 continue
 
+            if (len(puck_barcode_file_ids) > 0) and (
+                puck_barcode_file_ids[0] == "no_spatial_data"
+            ):
+                continue
+
             coordinate_system = puck_vars["coordinate_system"]
             if coordinate_system == "":
                 continue
