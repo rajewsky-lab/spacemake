@@ -82,8 +82,11 @@ with open(args.file_in, "r") as fi:
 
         # get read type
         if read_overlaps_gene:
-            read_type = get_tag_unique(line_stripped, tag="XF")
-            print(f"read_type={read_type}")
+            if gf := get_tag_unique(line_stripped, tag="gf"):
+                read_type = gf
+            else:
+                read_type = "AMB"
+            # print(f"read_type={read_type}")
             # return_collapsed(elements[-3].split(":")[-1].split(","))
         else:
             # if read do not overlap a gene, it is clearly intergenic
