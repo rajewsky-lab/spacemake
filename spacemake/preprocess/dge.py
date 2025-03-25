@@ -3,6 +3,7 @@ import logging
 logger_name = "spacemake.preprocess.dge"
 logger = logging.getLogger(logger_name)
 
+
 def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
     import scanpy as sc
     import pandas as pd
@@ -17,6 +18,9 @@ def calculate_adata_metrics(adata, dge_summary_path=None, n_reads=None):
     sc.pp.calculate_qc_metrics(
         adata, qc_vars=["mt"], percent_top=None, log1p=False, inplace=True
     )
+
+    # how was that not here before???
+    adata.obs["total_counts"] = adata.X.sum(axis=1)
 
     add_reads = False
     if dge_summary_path is not None:
@@ -50,9 +54,12 @@ def calculate_shannon_entropy_scompression(adata):
 
     def compute_shannon_entropy(barcode):
         prob, length = Counter(barcode), np.float16(len(barcode))
-        return np.float16(-sum(
-            np.float16(count) / length * np.log2(np.float16(count) / length) for count in prob.values()
-        ))
+        return np.float16(
+            -sum(
+                np.float16(count) / length * np.log2(np.float16(count) / length)
+                for count in prob.values()
+            )
+        )
 
     def compute_string_compression(barcode):
         compressed_barcode = "".join(
@@ -114,24 +121,33 @@ def dge_to_sparse_adata(dge_path, dge_summary_path):
 
             if _gene_name.lower().startswith("mt-"):
                 has_mt = True
-                
+
             # store counts as np.array
-            _vals = np.fromstring(vals[_idx_tab:], dtype=np.int32, count=N_bc, sep='\t').flatten()
+            _vals = np.fromstring(
+                vals[_idx_tab:], dtype=np.int32, count=N_bc, sep="\t"
+            ).flatten()
             _idx_nonzero = np.argwhere(_vals != 0).flatten()
 
             if len(_idx_nonzero) > 0:
-                gene_sp = coo_matrix((_vals[_idx_nonzero].astype(np.int32), (_idx_nonzero, np.zeros(len(_idx_nonzero)))), shape=(N_bc, 1), dtype=np.int32)
+                gene_sp = coo_matrix(
+                    (
+                        _vals[_idx_nonzero].astype(np.int32),
+                        (_idx_nonzero, np.zeros(len(_idx_nonzero))),
+                    ),
+                    shape=(N_bc, 1),
+                    dtype=np.int32,
+                )
             else:
                 gene_sp = coo_matrix((N_bc, 1), dtype=np.int32)
 
             if X is None:
-                 X = gene_sp
+                X = gene_sp
             else:
-                 X = hstack([X, gene_sp])
+                X = hstack([X, gene_sp])
 
         if X is None:
             X = coo_matrix((len(barcodes), 0), dtype=np.int32)
-    
+
         if not has_mt:
             # ensure we have an entry for mitochondrial transcripts even if it's just all zeros
             print(
@@ -193,7 +209,7 @@ def load_external_dge(dge_path):
 def parse_barcode_file(barcode_file):
     import pandas as pd
 
-    bc = pd.read_csv(barcode_file, sep="[,|\t]", engine='python')
+    bc = pd.read_csv(barcode_file, sep="[,|\t]", engine="python")
 
     # rename columns
     bc = (
@@ -240,7 +256,7 @@ def attach_puck_variables(adata, puck_variables):
 
     x_pos_max, y_pos_max = tuple(adata.obsm["spatial"].max(axis=0))
     x_pos_min, y_pos_min = tuple(adata.obsm["spatial"].min(axis=0))
-    #print(f"PUCK VARS {puck_variables} X MIN {x_pos_min} X MAX {x_pos_max} Y MIN {y_pos_min} Y MAX {y_pos_max}")
+    # print(f"PUCK VARS {puck_variables} X MIN {x_pos_min} X MAX {x_pos_max} Y MIN {y_pos_min} Y MAX {y_pos_max}")
 
     width_um = adata.uns["puck_variables"]["width_um"]
     coord_by_um = (x_pos_max - x_pos_min) / width_um
@@ -249,7 +265,7 @@ def attach_puck_variables(adata, puck_variables):
     if coord_by_um > 0:
         height_um = int((y_pos_max - y_pos_min) / coord_by_um)
     else:
-        height_um = 1 # avoid division by zero and error in reports
+        height_um = 1  # avoid division by zero and error in reports
         coord_by_um = 1
 
     adata.uns["puck_variables"]["height_um"] = height_um

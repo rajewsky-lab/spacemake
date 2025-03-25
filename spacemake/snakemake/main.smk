@@ -505,6 +505,17 @@ rule create_dge:
         {params.dge_extra_params}
         """
 
+
+def merge_non_genome(ad, ng):
+    import scanpy as sc
+    adata = sc.concat([ad, ng], axis=1, join='outer')
+    from spacemake.preprocess.dge import calculate_adata_metrics, calculate_shannon_entropy_scompression
+    calculate_adata_metrics(adata)
+    calculate_shannon_entropy_scompression(adata)
+    print(">>>>merge_non_genome()")
+    print(adata)
+    return adata
+
 rule create_h5ad_dge:
     input:
         unpack(get_puck_file),
@@ -519,6 +530,13 @@ rule create_h5ad_dge:
             adata = dge_to_sparse_adata(
                 input['dge'],
                 input['dge_summary'])
+        # merge non-genome alignment counts
+        if 'ng' in input.keys():
+            print(f"trying to load non-genome h5ad as external {input['ng']}")
+            adng = load_external_dge(input['ng'])
+            adata = merge_non_genome(adata, adng)
+            print(">>>post merge:", adata.obs)
+
         # attach barcodes
         if 'barcode_file' in input.keys() and wildcards.n_beads == 'spatial':
             adata = attach_barcode_file(adata, input['barcode_file'])
@@ -535,6 +553,7 @@ rule create_h5ad_dge:
         # this also ensures compatibility with qc_sequencing_create_sheet.Rmd
         adata.write(output[0])
         adata.obs.to_csv(output[1])
+
 
 rule create_mesh_spatial_dge:
     input:
