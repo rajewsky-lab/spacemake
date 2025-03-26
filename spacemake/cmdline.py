@@ -984,9 +984,10 @@ def spacemake_run(args):
 
     # update valid pucks (above threshold) before continuing to downstream
     # this performs counting of matching barcodes after alignment
-    pdf.update_project_df_barcode_matches(prealigned=True)
-    pdf.consolidate_pucks_merged_samples()
-    pdf.dump()
+    if not args["dryrun"]:
+        pdf.update_project_df_barcode_matches(prealigned=True)
+        pdf.consolidate_pucks_merged_samples()
+        pdf.dump()
 
     # whitelisting of barcodes
     preprocess_finished = snakemake.snakemake(
@@ -1002,8 +1003,9 @@ def spacemake_run(args):
         config=config_variables,
     )
 
-    pdf.update_project_df_barcode_matches()
-    pdf.dump()
+    if not args["dryrun"]:
+        pdf.update_project_df_barcode_matches()
+        pdf.dump()
 
     # run snakemake quantification and reports
     analysis_finished = snakemake.snakemake(
@@ -1023,7 +1025,8 @@ def spacemake_run(args):
         raise SpacemakeError("an error occurred while snakemake() ran")
 
     # at the very end dump the project_data_frame
-    pdf.dump()
+    if not args["dryrun"]:
+        pdf.dump()
 
 
 @message_aggregation(logger_name)
