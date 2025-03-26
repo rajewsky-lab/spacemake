@@ -2,6 +2,7 @@ import os
 
 # import yaml
 import argparse
+from spacemake.contrib import __version__
 import re
 import logging
 
@@ -493,6 +494,7 @@ class ConfigFile:
 
     def __init__(self):
         self.variables = {
+            "spacemake_version": __version__,
             "root_dir": ".",
             "temp_dir": "/tmp",
             "species": {},
