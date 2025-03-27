@@ -38,28 +38,36 @@ Spacemake is actively maintained by Dani, Marvin and Nikos.
 roadmap = [
     (
         "0.5.5",
-        "universal ST support and utility, novosparc integration. Sztanka-Toth et al. 2022",
+        "universal ST support and utility, "
+        "novosparc integration. Sztanka-Toth et al. 2022",
     ),
     (
         "0.7",
-        "support multiple mapping indices, bulk samples, custom user-defined snakemake rules",
+        "support multiple mapping indices, "
+        "bulk samples, custom user-defined snakemake rules",
     ),
     ("0.7.7", "much lower RAM usage and speed boost"),
     (
         "0.8",
-        "much faster cmdline. 10x speed-up for fastq_to_uBAM. Lower memory for BamTagHistogram replacement",
+        "much faster cmdline. 10x speed-up for fastq_to_uBAM. "
+        "Lower memory for BamTagHistogram replacement",
     ),
     (
         "0.9",
-        "CRAM on-disk format together with other tweaks -> disk footprint down to 1/3 of 0.8. Replace pre-processing with cutadapt code",
+        "CRAM on-disk format together with other tweaks "
+        "-> disk footprint down to 1/3 of 0.8. "
+        "Replace pre-processing with cutadapt code",
     ),
     (
         "0.9.1",
-        "also count alignments against non-genome indices, using scbamtools.count. Spatial output is merged from genome and non-genome alignments.",
+        "also count alignments against non-genome indices, "
+        "using scbamtools.count. Spatial output is merged "
+        "from genome and non-genome alignments.",
     ),
     (
         "1.x",
-        "completely replace dropseq tools. Own annotator and towards entirely scanpy workflow",
+        "completely replace dropseq tools. "
+        "Own annotator and towards entirely scanpy workflow.",
     ),
     ("1.x", "efficient handling of 1E8+ spatial barcodes (seq-scope etc.)"),
     ("1.x", "add interactive data exploration support (shiny?)"),
