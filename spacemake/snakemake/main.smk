@@ -512,10 +512,10 @@ def merge_non_genome(ad, ng):
     from spacemake.preprocess.dge import calculate_adata_metrics, calculate_shannon_entropy_scompression
     calculate_adata_metrics(adata)
     calculate_shannon_entropy_scompression(adata)
-    print(">>>>merge_non_genome()")
+    #print(">>>>merge_non_genome()")
     adata.obs.loc[ad.obs_names, 'n_reads'] = ad.obs['n_reads']
     adata.obs['reads_per_counts'] = adata.obs['n_reads'] / adata.obs['total_counts']
-    print(adata)
+    #print(adata)
     return adata
 
 rule create_h5ad_dge:
@@ -534,10 +534,10 @@ rule create_h5ad_dge:
                 input['dge_summary'])
         # merge non-genome alignment counts
         if 'ng' in input.keys():
-            print(f"trying to load non-genome h5ad as external {input['ng']}")
+            #print(f"trying to load non-genome h5ad as external {input['ng']}")
             adng = load_external_dge(input['ng'])
             adata = merge_non_genome(adata, adng)
-            print(">>>post merge:", adata.obs)
+            #print(">>>post merge:", adata.obs)
 
         # attach barcodes
         if 'barcode_file' in input.keys() and wildcards.n_beads == 'spatial':

@@ -202,13 +202,6 @@ ng_dge_h5ad = dge_out_h5ad.replace(".h5ad", ".ng.h5ad")
 ng_dge_stats = dge_out_h5ad.replace("/dge/", "/stats/").replace(".ng.h5ad", ".tsv")
 ng_dge_log = ng_dge_stats.replace("/stats/", "/log/").replace(".tsv", ".log")
 
-# ng_dge_out_h5ad = dge_out_h5ad.replace(".h5ad", ".ng.h5ad")
-# ng_dge_out_h5ad_obs = dge_out_h5ad_obs.replace(".obs.csv", ".ng.obs.csv")
-
-# print(ng_dge_h5ad)
-# print(ng_dge_stats)
-# print(ng_dge_log)
-
 # spatial dge
 dge_spatial = (
     dge_out_prefix
