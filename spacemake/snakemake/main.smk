@@ -513,6 +513,8 @@ def merge_non_genome(ad, ng):
     calculate_adata_metrics(adata)
     calculate_shannon_entropy_scompression(adata)
     print(">>>>merge_non_genome()")
+    adata.obs.loc[ad.obs_names, 'n_reads'] = ad.obs['n_reads']
+    adata.obs['reads_per_counts'] = adata.obs['n_reads'] / adata.obs['total_counts']
     print(adata)
     return adata
 
