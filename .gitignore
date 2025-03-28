@@ -10,6 +10,7 @@ samples.yaml
 *.png
 *.rds
 *.html
+!spacemake/report/templates/*.html.j2
 !spacemake/report/templates/*.html
 *.csv
 *.pdf
