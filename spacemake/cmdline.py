@@ -792,12 +792,27 @@ def setup_migrate_parser(parent_parser_subparsers):
     )
 
     parser_migrate.add_argument(
+        "--project-id",
+        help="project-id to migrate",
+        type=str,
+        dest="project_id",
+    )
+    parser_migrate.add_argument(
+        "--sample-id",
+        help="sample-id to migrate",
+        type=str,
+        dest="sample_id",
+    )
+    parser_migrate.add_argument(
         "--cores",
         default="4",
         help="number of cores to use",
-        type=str,
-        required=False,
-        dest="cores",
+        type=int,
+    )
+    parser_migrate.add_argument(
+        "--all",
+        action="store_true",
+        help="if set, spacemake migrates all samples",
     )
     parser_migrate.add_argument(
         "--dryrun",
@@ -1005,9 +1020,9 @@ def spacemake_run(args):
         print("""
         ###############################################################
         #                                                             #
-        #      WARNING: Incompatible Version Detected                 #
+        #      WARNING: incompatible version detected                 #
         #                                                             #
-        #   You are using a newer version of spacemakewhich is        #
+        #   You are using a newer version of spacemake which is       #
         #   incompatible with your current project setup.             #
         #                                                             #
         #     Please migrate your projects using:                     #
@@ -1052,10 +1067,7 @@ def spacemake_run(args):
     }
 
     # join config_variables and novosparc_variables
-    # to flatten the dictionary
-    config_variables = {**config_variables, **novosparc_variables}
-
-    # get the snakefile
+    # to flatten the diunpack(get_final_bam)e
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
     # run snakemake
 
@@ -1079,9 +1091,10 @@ def spacemake_run(args):
 
     # update valid pucks (above threshold) before continuing to downstream
     # this performs counting of matching barcodes after alignment
-    pdf.update_project_df_barcode_matches(prealigned=True)
-    pdf.consolidate_pucks_merged_samples()
-    pdf.dump()
+    if not args["dryrun"]:
+        pdf.update_project_df_barcode_matches(prealigned=True)
+        pdf.consolidate_pucks_merged_samples()
+        pdf.dump()
 
     # whitelisting of barcodes
     preprocess_finished = snakemake.snakemake(
@@ -1100,8 +1113,9 @@ def spacemake_run(args):
         # verbose=True,
     )
 
-    pdf.update_project_df_barcode_matches()
-    pdf.dump()
+    if not args["dryrun"]:
+        pdf.update_project_df_barcode_matches()
+        pdf.dump()
 
     # run snakemake quantification and reports
     analysis_finished = snakemake.snakemake(
@@ -1124,7 +1138,8 @@ def spacemake_run(args):
         raise SpacemakeError("an error occurred while snakemake() ran")
 
     # at the very end dump the project_data_frame
-    pdf.dump()
+    if not args["dryrun"]:
+        pdf.dump()
 
 
 @message_aggregation(logger_name)
@@ -1265,6 +1280,7 @@ def spacemake_migrate(args):
     from spacemake.project_df import get_global_ProjectDF
     import time
 
+    # check if it's a legit spacemake folder
     if not os.path.isfile(var.config_path):
         msg = "spacemake has not been initalised yet in this folder.\n"
         msg += "please run `spacemake init` to start a new project"
@@ -1272,25 +1288,47 @@ def spacemake_migrate(args):
     
     pdf = get_global_ProjectDF()
 
-    projects = []
-    samples = []
-    # targets = ["run_analysis"]
-    
+    def build_sample_info(project_id, sample_id):
+        """Helper function to extract project_folder and target."""
+        project_folder = os.path.join(
+            f"projects/{project_id}/processed_data/{sample_id}/illumina/complete_data"
+        )
+        target = os.path.join(project_folder, "final.polyA_adapter_trimmed.cram")
+        return project_id, sample_id, project_folder, target
+
+    # check if either the (--project_id, --sample_id) OR the --all flag were provided
+    if args.get("all"):
+        if args.get("project_id") or args.get("sample_id"):
+            raise ValueError("Do not provide --project-id or --sample-id when using --all.")
+        sample_records = pdf.df.index.tolist()
+    else:
+        if not args.get("project_id") or not args.get("sample_id"):
+            raise ValueError("Both --project-id and --sample-id are required unless using --all.")
+        sample_records = [(args["project_id"], args["sample_id"])]
+
+    # build per-sample info
+    sample_infos = [build_sample_info(p, s) for p, s in sample_records]
+    projects, samples, project_folders, targets = map(list, zip(*sample_infos))
+
+    # build config
     config_variables = {
         "project_df": pdf.file_path,
-        "samples": samples,
-        "projects": projects,
         "pwd": os.getcwd(),
+        "projects": projects,
+        "samples": samples,
+        "project_folders": project_folders,
+        "targets": targets,
+        "project_sample_folder_triplets": list(zip(projects, samples, project_folders)),
     }
 
-    # Get the migration snakefile
+    # get the migration snakefile
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/migrate.smk")
 
-    # Run snakemake
+    # run snakemake
     migration_finished = snakemake.snakemake(
         snakefile,
         configfiles=[var.config_path],
-        # cores=args["cores"], # TODO: why does this raise an error uncommented?
+        cores=args["cores"],
         dryrun=args["dryrun"],
         targets=["all"],
         touch=args["touch"],
@@ -1301,7 +1339,6 @@ def spacemake_migrate(args):
     )
     if migration_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
-
 
     return
 
