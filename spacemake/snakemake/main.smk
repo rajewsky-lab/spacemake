@@ -625,56 +625,124 @@ rule puck_collection_stitching_meshed:
 rule run_qc_sheet:
     input:
         unpack(get_qc_sheet_input_files),
+        notebook_template = os.path.join(spacemake_dir, "report/notebooks/qc_sheet.ipynb")
     params:
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
+                                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
         run_modes = lambda wildcards: get_run_modes_from_sample(
             wildcards.project_id, wildcards.sample_id),
         complete_data_root = complete_data_root
     output:
-        temp(touch(qc_sheet_notebook_text))
-    log:
-        notebook=qc_sheet_notebook
-    notebook:
-        '../report/notebooks/qc_sheet.ipynb'
+        notebook = qc_sheet_notebook
+    run:
+        import papermill as pm
+        
+        adata_paths = []
+        
+        for run_mode in params.run_modes:
+            adata_paths.append(input[f"{run_mode}.dge"][0])
+
+        pm.execute_notebook(
+            input.notebook_template,
+            output.notebook,
+            parameters={
+                'run_modes': params.run_modes,
+                'adata_paths': adata_paths,
+                'split_reads_read_type': input.reads_type_out,
+                'project_id': wildcards.project_id,
+                'sample_id': wildcards.sample_id,
+                'puck_barcode_file_id_qc': wildcards.puck_barcode_file_id_qc,
+                'complete_data_root': params.complete_data_root,
+                'is_spatial': params.is_spatial,
+                'config_yaml_path': "config.yaml",
+                'project_df_path': "project_df.csv"
+            }
+        )
 
 rule render_qc_sheet:
     input:
         qc_sheet_notebook
-    params:
-        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis_nbtemplate.html.j2")
     output:
-        qc_sheet
-    shell:
-        "jupyter nbconvert {input} --to html --template {params.nbconvert_template_path} --output {output}"
+        html = qc_sheet
+    run:
+        import nbformat
+        from nbconvert import HTMLExporter
+        from traitlets.config import Config
+        
+        # Read the notebook
+        with open(input[0], 'r', encoding='utf-8') as f:
+            nb = nbformat.read(f, as_version=4)
+        
+        # Create a completely custom config
+        c = Config()
+        c.HTMLExporter.exclude_input = True
+        c.HTMLExporter.exclude_input_prompt = True
+        c.HTMLExporter.exclude_code_cell = True  # This is more aggressive
+        
+        # Create exporter with the config
+        html_exporter = HTMLExporter(config=c)
+        
+        # Convert notebook to HTML
+        (html_output, resources) = html_exporter.from_notebook_node(nb)
+        
+        # Write output
+        with open(output.html, 'w', encoding='utf-8') as f:
+            f.write(html_output)
 
 rule run_automated_analysis:
     input:
-        unpack(get_automated_analysis_dge_input)
-    output:
-        automated_analysis_result_file
-    log:
-        notebook=automated_report_notebook
+        unpack(get_automated_analysis_dge_input),
+        notebook_template = os.path.join(spacemake_dir, "report/notebooks/automated_analysis.ipynb")
     params:
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
+                                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
         run_mode_variables = lambda wildcards:
             project_df.config.get_run_mode(wildcards.run_mode).variables
-    notebook:
-        '../report/notebooks/automated_analysis.ipynb'
+    output:
+        result_file = automated_analysis_result_file,
+        notebook = automated_report_notebook
+    run:
+        import papermill as pm
+
+        pm.execute_notebook(
+            input.notebook_template,
+            output.notebook,
+            parameters={
+                'adata_path': input[0],
+                'umi_cutoff': int(wildcards.umi_cutoff),
+                'clustering_resolutions': [0.4, 0.6, 0.8, 1.0, 1.2],
+                'detect_tissue': params.run_mode_variables.get('detect_tissue', False),
+                'adata_output': output.result_file,
+                'is_spatial': params.is_spatial
+            }
+        )
 
 rule render_automated_analysis:
     input:
-        automated_report_notebook,
-    threads: 1
-    params:
-        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis_nbtemplate.html.j2")
+        automated_report_notebook
     output:
-        automated_report
-    shell:
-        "jupyter nbconvert {input} --to html --template {params.nbconvert_template_path} --output {output}"
+        html = automated_report
+    run:
+        import nbformat
+        from nbconvert import HTMLExporter
+        from traitlets.config import Config
+        
+        with open(input[0], 'r', encoding='utf-8') as f:
+            nb = nbformat.read(f, as_version=4)
+        
+        c = Config()
+        c.HTMLExporter.exclude_input = True
+        c.HTMLExporter.exclude_input_prompt = True
+        c.HTMLExporter.exclude_raw = True
+
+        html_exporter = HTMLExporter(config=c)
+
+        (html_output, resources) = html_exporter.from_notebook_node(nb)
+        
+        with open(output.html, 'w', encoding='utf-8') as f:
+            f.write(html_output)
 
 rule run_novosparc_denovo:
     input:
