@@ -142,7 +142,7 @@ def read_star_log_file(log_file):
             _log_id = line.strip().split("|")[0].strip()
             if _log_id in log_name_stat.keys():
                 if _log_id == "Average mapped length":
-                    star_stats[log_name_stat[_log_id]] = line.strip().split("|")[1]
+                    star_stats[log_name_stat[_log_id]] = float(line.strip().split("|")[1].lstrip().rstrip())
                 else:
                     star_stats[log_name_stat[_log_id]] = round(int(line.strip().split("|")[1]) / 1e6, 2)
                 # Do not convert to millions the Average mapped length
@@ -271,18 +271,108 @@ def create_mapping_stats_df(split_reads_read_type, data_root):
         all_stats.append(stats)
     
     combined_stats = pd.concat(all_stats, axis=0)
+
+    # Extract only the rows for rRNA and STAR mapper (genome)
+    rRNA_data = combined_stats[combined_stats['name'] == 'rRNA']
+    STAR_data = combined_stats[combined_stats['mapper'] == 'STAR']
+    reads_type_data = combined_stats[combined_stats['name'] == 'reads_type']
     
-    # Reshape the DataFrame to have mapping strategies as columns
-    metric_columns = [col for col in combined_stats.columns if col != 'Mapping Strategy']
+    # Get the mapping strategy (assuming it's the same for all)
+    mapping_strategy = combined_stats['Mapping Strategy'].iloc[0]
     
-    pivot_stats = combined_stats.pivot(
-        columns='Mapping Strategy',
-        values=metric_columns
-    )
+    # Create the DataFrame structure with index as metrics and a single column for mapping_strategy
+    metrics = [
+        'input_reads',
+        'uniq_mapped_reads',
+        'as.cds',
+        'as.utr',
+        'intronic',
+        'intergenic',
+        'ambiguous',
+        'avg_mapped_length',
+        'multi_mapped_reads',
+        'unmapped_too_short',
+        'mapped_to_rRNA'
+    ]
     
-    pivot_stats.columns = pivot_stats.columns.get_level_values(1)
+    # Create empty DataFrame with metrics as index and mapping_strategy as column
+    result_df = pd.DataFrame(index=metrics, columns=[mapping_strategy])
     
-    return pivot_stats
+    # Variables to store
+    input_reads = 0
+    
+    # Get values from STAR mapper
+    if not STAR_data.empty:
+        star_row = STAR_data.iloc[0]
+        
+        # Extract the metrics we want
+        input_reads = star_row.get('input_reads', 0)
+        uniq_mapped_reads = star_row.get('uniq_mapped_reads', 0)
+        multi_mapped_reads = star_row.get('multi_mapped_reads', 0)
+        unmapped_too_short = star_row.get('unmapped_too_short', 0)
+        avg_mapped_length = star_row.get('avg_mapped_length', 0)
+        
+        # Calculate percentages
+        if input_reads > 0:
+            uniq_pct = (uniq_mapped_reads / input_reads) * 100
+            multi_pct = (multi_mapped_reads / input_reads) * 100
+            too_short_pct = (unmapped_too_short / input_reads) * 100
+        else:
+            uniq_pct = multi_pct = too_short_pct = 0
+            
+        # Add to result DataFrame
+        result_df.loc['input_reads', mapping_strategy] = f"{input_reads:.2f}"
+        result_df.loc['uniq_mapped_reads', mapping_strategy] = f"{uniq_mapped_reads:.2f} ({uniq_pct:.1f}%)"
+        result_df.loc['avg_mapped_length', mapping_strategy] = f"{avg_mapped_length:.2f}"
+        result_df.loc['multi_mapped_reads', mapping_strategy] = f"{multi_mapped_reads:.2f} ({multi_pct:.1f}%)"
+        result_df.loc['unmapped_too_short', mapping_strategy] = f"{unmapped_too_short:.2f} ({too_short_pct:.1f}%)"
+    
+    # Get values from reads_type
+    if not reads_type_data.empty:
+        type_row = reads_type_data.iloc[0]
+        
+        # Extract the metrics
+        coding = type_row.get('CODING', 0)
+        utr = type_row.get('UTR', 0)
+        intronic = type_row.get('INTRONIC', 0)
+        intergenic = type_row.get('INTERGENIC', 0)
+        ambiguous = type_row.get('AMB', 0)
+        
+        # Calculate percentages
+        if input_reads > 0:
+            coding_pct = (coding / input_reads) * 100
+            utr_pct = (utr / input_reads) * 100
+            intronic_pct = (intronic / input_reads) * 100
+            intergenic_pct = (intergenic / input_reads) * 100
+            ambiguous_pct = (ambiguous / input_reads) * 100
+        else:
+            coding_pct = utr_pct = intronic_pct = intergenic_pct = ambiguous_pct = 0
+            
+        # Add to result DataFrame
+        result_df.loc['as.cds', mapping_strategy] = f"{coding:.2f} ({coding_pct:.1f}%)"
+        result_df.loc['as.utr', mapping_strategy] = f"{utr:.2f} ({utr_pct:.1f}%)"
+        result_df.loc['intronic', mapping_strategy] = f"{intronic:.2f} ({intronic_pct:.1f}%)"
+        result_df.loc['intergenic', mapping_strategy] = f"{intergenic:.2f} ({intergenic_pct:.1f}%)"
+        result_df.loc['ambiguous', mapping_strategy] = f"{ambiguous:.2f} ({ambiguous_pct:.1f}%)"
+    
+    # Get values from rRNA
+    if not rRNA_data.empty:
+        rRNA_row = rRNA_data.iloc[0]
+        rRNA_reads = rRNA_row.get('unique_aligned', 0)
+        
+        # Calculate percentage
+        if input_reads > 0:
+            rRNA_pct = (rRNA_reads / input_reads) * 100
+        else:
+            rRNA_pct = 0
+            
+        # Add to result DataFrame
+        result_df.loc['mapped_to_rRNA', mapping_strategy] = f"{rRNA_reads:.2f} ({rRNA_pct:.1f}%)"
+    
+    # Reset the index to make it a regular DataFrame column
+    result_df = result_df.rename_axis('Metric').reset_index()
+    
+    return result_df
 
 
 def create_summary_beads_df(run_modes_adatas):
