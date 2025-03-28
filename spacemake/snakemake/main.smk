@@ -663,32 +663,20 @@ rule run_qc_sheet:
 rule render_qc_sheet:
     input:
         qc_sheet_notebook
+    params:
+        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis_nbtemplate.html.j2")
     output:
         html = qc_sheet
-    run:
-        import nbformat
-        from nbconvert import HTMLExporter
-        from traitlets.config import Config
-        
-        # Read the notebook
-        with open(input[0], 'r', encoding='utf-8') as f:
-            nb = nbformat.read(f, as_version=4)
-        
-        # Create a completely custom config
-        c = Config()
-        c.HTMLExporter.exclude_input = True
-        c.HTMLExporter.exclude_input_prompt = True
-        c.HTMLExporter.exclude_code_cell = True  # This is more aggressive
-        
-        # Create exporter with the config
-        html_exporter = HTMLExporter(config=c)
-        
-        # Convert notebook to HTML
-        (html_output, resources) = html_exporter.from_notebook_node(nb)
-        
-        # Write output
-        with open(output.html, 'w', encoding='utf-8') as f:
-            f.write(html_output)
+    shell:
+        """
+        jupyter nbconvert {input} \
+            --to html \
+            --output-dir $(dirname {output.html}) \
+            --output $(basename {output.html}) \
+            --no-input && \
+        sed -i '/<\\/head>/i <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">' {output.html} && \
+        sed -i '/<\\/head>/i <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>' {output.html}
+        """
 
 rule run_automated_analysis:
     input:
@@ -722,27 +710,18 @@ rule run_automated_analysis:
 rule render_automated_analysis:
     input:
         automated_report_notebook
+    params:
+        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis_nbtemplate.html.j2")
     output:
         html = automated_report
-    run:
-        import nbformat
-        from nbconvert import HTMLExporter
-        from traitlets.config import Config
-        
-        with open(input[0], 'r', encoding='utf-8') as f:
-            nb = nbformat.read(f, as_version=4)
-        
-        c = Config()
-        c.HTMLExporter.exclude_input = True
-        c.HTMLExporter.exclude_input_prompt = True
-        c.HTMLExporter.exclude_raw = True
-
-        html_exporter = HTMLExporter(config=c)
-
-        (html_output, resources) = html_exporter.from_notebook_node(nb)
-        
-        with open(output.html, 'w', encoding='utf-8') as f:
-            f.write(html_output)
+    shell:
+        """
+        jupyter nbconvert {input} \
+            --to html \
+            --output-dir $(dirname {output.html}) \
+            --output $(basename {output.html}) \
+            --no-input
+        """
 
 rule run_novosparc_denovo:
     input:

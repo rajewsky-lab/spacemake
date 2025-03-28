@@ -87,16 +87,17 @@ class Plot:
     
     def _get_plot_html(self) -> str:
         """Convert matplotlib figure to HTML."""
-        if self.plot_func() is None:
-            return f'<div class="plot-container">No plot available</div>'
-        fig, ax = self.plot_func()
-        
-        buf = BytesIO()
-        fig.savefig(buf, format='png', bbox_inches='tight')
-        plt.close(fig)
-        
-        data = base64.b64encode(buf.getvalue()).decode('utf-8')
-        return f'<div class="plot-container"><img src="data:image/png;base64,{data}"/></div>'
+        with plt.ioff():
+            if self.plot_func() is None:
+                return f'<div class="plot-container">No plot available</div>'
+            fig, ax = self.plot_func()
+            
+            buf = BytesIO()
+            fig.savefig(buf, format='png', bbox_inches='tight')
+            plt.close(fig)
+            
+            data = base64.b64encode(buf.getvalue()).decode('utf-8')
+            return f'<div class="plot-container"><img src="data:image/png;base64,{data}"/></div>'
     
 @dataclass
 class PlotGroup:
@@ -193,9 +194,11 @@ class DataFrameTable:
                 </thead>
                 <tbody>
         """
+
+        display_data = self.data.reset_index()
         
         # Add data rows
-        for _, row in self.data.iterrows():
+        for _, row in display_data.iterrows():
             table_html += f"""
                     <tr class="{self.style.get_row_class()}">
             """
