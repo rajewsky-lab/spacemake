@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import logging
 import scanpy as sc
+import functools
+import anndata as ad
 
 from itertools import cycle
 from scipy.stats import gaussian_kde
@@ -56,6 +58,18 @@ PCT_DOWNSAMPLE_TO_PLOT = [20, 40, 60, 80, 100]
 logger_name = "spacemake.pl"
 logger = logging.getLogger(logger_name)
 
+def ensure_anndata(func):
+    """
+    Decorator to ensure the first argument is an AnnData object.
+    If a string is provided, it will load the file as AnnData.
+    """
+    @functools.wraps(func)
+    def wrapper(adata, *args, **kwargs):
+        if isinstance(adata, str):
+            adata = ad.read_h5ad(adata)
+        return func(adata, *args, **kwargs)
+    return wrapper
+
 @dataclass
 class Plot:
     """Represents a single plot with its metadata."""
@@ -73,6 +87,8 @@ class Plot:
     
     def _get_plot_html(self) -> str:
         """Convert matplotlib figure to HTML."""
+        if self.plot_func() is None:
+            return f'<div class="plot-container">No plot available</div>'
         fig, ax = self.plot_func()
         
         buf = BytesIO()
@@ -194,7 +210,7 @@ class DataFrameTable:
         </div>
         """
         
-        return HTML(table_html)
+        return table_html
     
 
 class TabVisualizer:
@@ -251,10 +267,10 @@ def histogram(values, axis, nbins=100, color="#000000", log=False, auto_log=True
     # decide linear or logarithmic scale
     min_difference = values.max() - values.min()
 
-    hist, bins = np.histogram(values, bins=nbins)
     if log == False or (auto_log == True and np.abs(min_difference) < 100):
-        axis.bar(bins[:-1], hist, color=color)
-
+        hist, bins = np.histogram(values, bins=nbins)
+        width = bins[1] - bins[0]
+        axis.bar(bins[:-1], hist, width=width, color=color, align='edge')
     else:
         logbins = np.logspace(np.log10(bins[0] + 1), np.log10(bins[-1]), nbins)
         axis.hist(values, bins=logbins, color=color)
@@ -262,13 +278,14 @@ def histogram(values, axis, nbins=100, color="#000000", log=False, auto_log=True
 
     axis.spines[["right", "top"]].set_visible(False)
 
-
+@ensure_anndata
 def _scales_for_spatial_plot(adata):
     n_cells = len(adata)
 
     px_by_um = adata.uns["puck_variables"]["coord_by_um"]
     spot_diameter_um = adata.uns["puck_variables"]["spot_diameter_um"]
 
+    meshed = False
     if "mesh_variables" in adata.uns.keys():
         meshed = True
         mesh_spot_diameter_um = adata.uns["mesh_variables"]["spot_diameter_um"]
@@ -308,10 +325,14 @@ def _scales_for_spatial_plot(adata):
             "puck_bead_size": puck_bead_size,
             "px_by_um": px_by_um}
 
-
+@ensure_anndata
 def spatial(adata, spot_size=1.5, color="total_counts", cmap="magma", figsize=(5, 5), return_fig=True, **kwargs):
     if spot_size <= 0:
         raise ValueError("spot_size must be > 0")
+    
+    if (color not in adata.obs) and (color not in adata.var) and (color not in adata.var_names):
+        logger.warning(f"No '{color}' found in adata")
+        return None
     
     scales = _scales_for_spatial_plot(adata)
 
@@ -338,7 +359,7 @@ def spatial(adata, spot_size=1.5, color="total_counts", cmap="magma", figsize=(5
     if return_fig:
         return fig, axes
 
-
+@ensure_anndata
 def neighborhood_enrichment(adata, key=None, spot_size=1.5, color="total_counts", cmap="magma", figsize=(4, 4), return_fig=True, **kwargs):
     if key is None or key == "":
         raise ValueError("`key` must be a valid .uns key")
@@ -375,7 +396,7 @@ def neighborhood_enrichment(adata, key=None, spot_size=1.5, color="total_counts"
     if return_fig:
         return fig, axes
 
-
+@ensure_anndata
 def umap(adata, color=None, return_fig=True, **kwargs):
     if color is None or color == "":
         raise ValueError("`color` must be a valid adata.obs or adata.var key")
@@ -390,7 +411,7 @@ def umap(adata, color=None, return_fig=True, **kwargs):
     if return_fig:
         return fig, axes
 
-
+@ensure_anndata
 def marker_gene_table(adata, rank_key=None):
     if rank_key is None or rank_key == "":
         raise ValueError("`rank_key` must be a valid adata.uns key")
@@ -419,7 +440,7 @@ def marker_gene_table(adata, rank_key=None):
     df.reset_index(inplace=True)
     return df
 
-
+@ensure_anndata
 def knee_plot(adata, figsize=(5, 3), return_fig=True):
     fig, axis = plt.subplots(1, 1, figsize=figsize)
     axis.plot(
@@ -436,6 +457,7 @@ def knee_plot(adata, figsize=(5, 3), return_fig=True):
     if return_fig:
         return fig, axis
 
+@ensure_anndata
 def umi_cutoff(adata, figsize=(8, 4), return_fig=True):
     umi_cutoffs = np.arange(10, 20000, 10)
 
@@ -529,7 +551,7 @@ def umi_cutoff(adata, figsize=(8, 4), return_fig=True):
     if return_fig:
         return fig, axes
 
-
+@ensure_anndata
 def plot_histogram_beads(adata, figsize=(7, 3.5), return_fig=True):
     fig, axes = plt.subplots(2, 2, figsize=figsize)
     histogram(adata.obs["n_reads"], axes[0, 0], 100, metrics_colors["reads"])
@@ -555,7 +577,7 @@ def plot_histogram_beads(adata, figsize=(7, 3.5), return_fig=True):
     if return_fig:
         return fig, axes
 
-
+@ensure_anndata
 def nucleotide_distribution_per_bead(adata, figsize=(8, 4), return_fig=True):
     adata.obs["reads_cumsum"] = adata.obs["n_reads"].cumsum()
     adata.obs["quartile"] = pd.cut(
@@ -624,7 +646,7 @@ def nucleotide_distribution_per_bead(adata, figsize=(8, 4), return_fig=True):
     if return_fig:
         return fig, axes
 
-
+@ensure_anndata
 def entropy_compression(adata, nbins=30, figsize=(7, 4), return_fig=True):
     fig, axes = plt.subplots(2, 1, figsize=figsize)
     axes[0].hist(

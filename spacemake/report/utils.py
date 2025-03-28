@@ -301,7 +301,7 @@ def create_summary_beads_df(run_modes_adatas):
             all_variables["median_reads"][run_mode] = np.median(_adata_f['obs/n_reads'])
             all_variables["median_umis"][run_mode] = np.median(_adata_f['obs/total_counts'])
             all_variables["n_beads"][run_mode] = len(_adata_f['obs/total_counts'])
-            all_variables["sum_reads"][run_mode] = np.round(_adata_f['obs/n_reads'].sum()/1e6, 3)
+            all_variables["sum_reads"][run_mode] = np.round(_adata_f['obs/n_reads'][:].sum()/1e6, 3)
     
     run_modes_df = pd.DataFrame.from_dict(all_variables, orient='index')
     
@@ -314,27 +314,31 @@ def create_summary_beads_df(run_modes_adatas):
 
 def create_sample_info_df(project_df, project_id, sample_id, puck_barcode_file_id_qc):
     sample_info = project_df.get_sample_info(project_id, sample_id)
-    sample_info_df = pd.DataFrame({"project_id": project_id,
-                "sample_id": sample_id,
-                "puck_barcode_file_id": puck_barcode_file_id_qc,
-                "species": sample_info['species'],
-                "sequencing_date": sample_info['sequencing_date'],
-                "investigator": sample_info['investigator'],
-                "experiment": sample_info['experiment'],
+    sample_info_df = pd.DataFrame({"project_id": [project_id],
+                "sample_id": [sample_id],
+                "puck_barcode_file_id": [puck_barcode_file_id_qc],
+                "species": [sample_info['species']],
+                "sequencing_date": [sample_info['sequencing_date']],
+                "investigator": [sample_info['investigator']],
+                "experiment": [sample_info['experiment']],
                 })
 
     return sample_info_df
 
 def create_metrics_table_df(adata, umi_cutoff):
-    metrics_table_df = pd.DataFrame({
-                "UMI filter": umi_cutoff,
-                "Number of genes in data": len(adata.var_names),
-                "Number of spots in data": len(adata),
-                "Median UMI": np.median(adata.obs['total_counts']),
-                "Median Genes": np.median(adata.obs['n_genes_by_counts']),
-                "Puck width (µm)": adata.uns['puck_variables']['width_um'],
-                })
-
+    metrics_dict = {
+        "UMI filter": [umi_cutoff],
+        "Number of genes in data": [len(adata.var_names)],
+        "Number of spots in data": [len(adata)],
+        "Median UMI": [np.median(adata.obs['total_counts'])],
+        "Median Genes": [np.median(adata.obs['n_genes_by_counts'])]
+    }
+    
+    if 'puck_variables' in adata.uns and 'width_um' in adata.uns['puck_variables']:
+        metrics_dict["Puck width (µm)"] = [adata.uns['puck_variables']['width_um']]
+    
+    metrics_table_df = pd.DataFrame(metrics_dict)
+    
     return metrics_table_df
 
 
