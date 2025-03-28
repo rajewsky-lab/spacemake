@@ -662,9 +662,7 @@ rule run_qc_sheet:
 
 rule render_qc_sheet:
     input:
-        qc_sheet_notebook
-    params:
-        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis_nbtemplate.html.j2")
+        qc_sheet_notebook,
     output:
         html = qc_sheet
     shell:
@@ -673,9 +671,7 @@ rule render_qc_sheet:
             --to html \
             --output-dir $(dirname {output.html}) \
             --output $(basename {output.html}) \
-            --no-input && \
-        sed -i '/<\\/head>/i <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">' {output.html} && \
-        sed -i '/<\\/head>/i <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>' {output.html}
+            --no-input
         """
 
 rule run_automated_analysis:

@@ -180,9 +180,10 @@ class DataFrameTable:
         <div class="{self.style.get_container_class()}">
             <h4>{self.title}</h4>
             <p>{self.description}</p>
-            <table class="{self.style.get_table_class()}">
-                <thead class="{self.style.get_header_class()}">
-                    <tr>
+            <div class="table-responsive" style="max-width:800px;">
+                <table class="{self.style.get_table_class()}" style="width:auto;">
+                    <thead class="{self.style.get_header_class()}">
+                        <tr>
         """
         
         # Add headers
@@ -208,8 +209,9 @@ class DataFrameTable:
             table_html += "</tr>"
         
         table_html += """
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            </div>
         </div>
         """
         
@@ -230,6 +232,16 @@ class TabVisualizer:
         """Generate complete HTML with tabs for all plot groups."""
         from IPython.display import HTML
 
+        # Add Bootstrap CSS and JS dependencies
+        dependencies = """
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+        <style>
+            .tab-content { padding: 20px 0; }
+            .table-container { max-width: 800px; }
+        </style>
+        """
+        
         # Create tab navigation
         tabs_html = """
         <ul class="nav nav-tabs" role="tablist">
@@ -263,8 +275,8 @@ class TabVisualizer:
         
         tabs_html += "</ul>"
         content_html += "</div>"
-        
-        return HTML(tabs_html + content_html)
+
+        return HTML(dependencies + tabs_html + content_html)
 
 def histogram(values, axis, nbins=100, color="#000000", log=False, auto_log=True):
     # decide linear or logarithmic scale
