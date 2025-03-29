@@ -1318,7 +1318,7 @@ def spacemake_migrate(args):
         "samples": samples,
         "project_folders": project_folders,
         "targets": targets,
-        "project_sample_folder_triplets": list(zip(projects, samples, project_folders)),
+        # "project_sample_folder_triplets": list(zip(projects, samples, project_folders)),
     }
 
     # get the migration snakefile

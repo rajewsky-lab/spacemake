@@ -188,36 +188,39 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
 
         sync_timestamps(bam_filename, cram_filename)
 
-
-def remove_bam_files(project_folder):
-    file_sizes_cram = [
-        os.path.getsize(os.path.join(project_folder, f))
+def remove_bam_files(project_folder, output_file_path):
+    bam_files = find_bam_files(project_folder)
+    cram_files = [
+        os.path.join(project_folder, f)
         for f in os.listdir(project_folder)
         if f.endswith(".cram") and os.path.isfile(os.path.join(project_folder, f))
-        ]
-    
-    file_sizes_bam = [
-        os.path.getsize(os.path.join(project_folder, f))
-        for f in os.listdir(project_folder)
-        if f.endswith(".bam") and os.path.isfile(os.path.join(project_folder, f))
-        ]
-    
-    # Remove BAM files
-    while True:
-        response = input("This action will permanently delete the BAM files from the sample. "
-        "Are you sure that all necessary CRAM files have been created? [y/n]: ").strip().lower()
-        if response in ['y', 'yes']:
-            # Remove files
-            bam_files = find_bam_files(project_folder)
-            for bam_file in bam_files:
-                os.remove(bam_file[0])
-            print("BAM files deleted.")
-            print("Total disk space saved through the migration:", 
-                  f"{round((sum(file_sizes_bam)-sum(file_sizes_cram))/(1024**3), 1):,}", "GB")
-            break
-        elif response in ['n', 'no']:
-            print('Deletion aborted. Please run spacemake migrate again to complete the process.')
-            break
-        else:
-            print("Please enter 'y' or 'n'.")
+    ]
+
+    total_bam_size = sum(
+        os.path.getsize(bam[0]) for bam in bam_files if os.path.exists(bam[0])
+    )
+    total_cram_size = sum(
+        os.path.getsize(cram) for cram in cram_files if os.path.exists(cram)
+    )
+
+    # remove BAM files
+    deleted_files = []
+    for bam in bam_files:
+        if os.path.exists(bam[0]):
+            os.remove(bam[0])
+            deleted_files.append(bam[0])
+
+    saved_bytes = total_bam_size - total_cram_size
+    saved_gb = saved_bytes / (1024 ** 3)
+
+    # write report
+    with open(output_file_path, "w") as out:
+        out.write(f"BAM files removed: {len(deleted_files)}\n")
+        out.write("Files:\n")
+        for f in deleted_files:
+            out.write(f"  - {f}\n")
+        out.write(f"Total disk space saved: {saved_gb:.2f} GB\n")
+
+    print(f"Deleted {len(deleted_files)} BAM files, saved ~{saved_gb:.2f} GB")
+
 
