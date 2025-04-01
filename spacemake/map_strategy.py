@@ -107,7 +107,7 @@ def get_non_genome_alignments(wc):
     mapped = get_all_mapped_bams(wc)["mapped_bams"]
     annotated = get_annotated_bams(wc)["annotated_bams"]
     ng = [aln for aln in mapped if aln not in annotated]
-    print(f"get_non_genome_alignments({wc}) -> ng={ng}")
+    # print(f"get_non_genome_alignments({wc}) -> ng={ng}")
     return ng
 
 
