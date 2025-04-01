@@ -604,30 +604,50 @@ def load_config_with_fallbacks(args, try_yaml="config.yaml"):
 
 def sync_timestamps(original_file, new_file):
     """
-    Sync the timestamps (access and modification time) of new_file with those of original_file.
-
-    Args:
-        original_file (str): Path to the file whose timestamps will be copied.
-        new_file (str): Path to the file that will have its timestamps updated.
+    Sync only the mtime of new_file to match original_file.
+    For symlinks, mtime of the link itself is set (not the target).
     """
+    import time
+
     try:
-        # Get the access time and modification time from original_file
-        if os.path.islink(original_file):
-            source_times = os.lstat(original_file)
+        source_stat = os.lstat(original_file)
+        mtime = source_stat.st_mtime
+
+        if os.path.islink(new_file):
+            os.utime(new_file, (mtime, mtime), follow_symlinks=False)
         else:
-            source_times = os.stat(original_file)
+            os.utime(new_file, (mtime, mtime), follow_symlinks=True)
 
-        # Set the same access and modification time for new_file
-        os.utime(
-            new_file,
-            (source_times.st_atime, source_times.st_mtime),
-            follow_symlinks=not os.path.islink(original_file),
-        )
-
-        print(f"File timestamp of {new_file} set to match {original_file}.")
-    except FileNotFoundError:
-        print(
-            f"Error: One or both of the files '{original_file}' or '{new_file}' do not exist."
-        )
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"[sync] Failed to sync timestamps for {new_file}: {e}")
+
+
+def sync_symlink_mtime(source_symlink, target_symlink):
+    """
+    Set the mtime of a symlink to match another symlink using `touch -h`.
+    Prints detailed debug info.
+    """
+    import subprocess
+    import time
+
+    try:
+        # Format the timestamp in touch-compatible form: YYYYMMDDhhmm.ss
+        mtime = os.lstat(source_symlink).st_mtime
+        timestamp = time.strftime("%Y%m%d%H%M.%S", time.localtime(mtime))
+
+        # Run touch
+        result = subprocess.run(
+            ["touch", "-h", "-t", timestamp, target_symlink],
+            capture_output=True,
+            text=True,
+            check=False  # don't raise exception yet
+        )
+
+        if result.returncode != 0:
+            print("[sync_symlink_mtime] touch failed.")
+        else:
+            print("[sync_symlink_mtime] touch succeeded.")
+
+    except Exception as e:
+        print(f"[sync_symlink_mtime] Exception occurred: {e}")
+

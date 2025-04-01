@@ -3,9 +3,9 @@ import subprocess
 import time
 import yaml
 
+from spacemake.contrib import __version__
 from spacemake.project_df import get_global_ProjectDF
-from spacemake.util import sync_timestamps
-import sys
+from spacemake.util import sync_timestamps, sync_symlink_mtime
 
 def find_bam_files(folder):
     """
@@ -123,6 +123,7 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
                         "-o", cram_filename,
                         bam_filename
                     ])
+                sync_timestamps(bam_filename, cram_filename)
                 continue
         
         if bam_file_is_symlink:
@@ -135,8 +136,11 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
 
             try:
                 os.symlink(true_bam_filename_prefix + '.cram', cram_filename)
+                sync_symlink_mtime(bam_filename, cram_filename)
+
             except FileExistsError:
                 print('CRAM symlink already exists.')
+
         else:
             print('Converting', bam_filename, 'to', cram_filename, 
             '...', time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
@@ -185,16 +189,19 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
                         "-o", cram_filename,
                         bam_filename
                     ])
+                
+            sync_timestamps(bam_filename, cram_filename)
 
-        sync_timestamps(bam_filename, cram_filename)
 
 def remove_bam_files(project_folder, output_file_path):
     bam_files = find_bam_files(project_folder)
+
     cram_files = [
         os.path.join(project_folder, f)
         for f in os.listdir(project_folder)
         if f.endswith(".cram") and os.path.isfile(os.path.join(project_folder, f))
     ]
+
 
     total_bam_size = sum(
         os.path.getsize(bam[0]) for bam in bam_files if os.path.exists(bam[0])
@@ -222,5 +229,36 @@ def remove_bam_files(project_folder, output_file_path):
         out.write(f"Total disk space saved: {saved_gb:.2f} GB\n")
 
     print(f"Deleted {len(deleted_files)} BAM files, saved ~{saved_gb:.2f} GB")
+
+
+def update_version_in_config():
+    """
+    Starting with v0.9, the spacemake version is recorded inside the config.yaml
+    as 'spacemake_version: '.
+
+    For migration of earlier 0.8x -> 0.9, this entry has to be added.
+    For future mirgations, the record is updated. 
+    """
+    # save original timestamps
+    try:
+        original_stat = os.stat("config.yaml")
+    except FileNotFoundError:
+        print("config.yaml not found.")
+        return
+    
+    with open("config.yaml", "r") as f:
+        config = yaml.safe_load(f)
+
+    if "spacemake_version" not in config:
+        config["spacemake_version"] = __version__
+        with open("config.yaml", "w") as f:
+            yaml.dump(config, f)
+
+        # restore timestamps
+        os.utime("config.yaml", (original_stat.st_atime, original_stat.st_mtime))
+
+    else:
+        # placeholder for future migrations
+        return
 
 
