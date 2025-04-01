@@ -1016,6 +1016,7 @@ def spacemake_run(args):
         force_incomplete=args["rerun_incomplete"],
         keepgoing=args["keep_going"],
         printshellcmds=args["printshellcmds"],
+        printreason=True,
         config=config_variables,
         # rerun_triggers=["mtime"], # needed for newer spacemake
         # debug_dag=True,
