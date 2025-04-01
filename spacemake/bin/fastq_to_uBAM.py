@@ -557,7 +557,7 @@ def main(args):
     )
     # compress to BAM
     fmt_opt = " ".join([f"--output-fmt-option {o}" for o in args.out_fmt_option])
-    fmt = f"Sh -O {args.out_fmt} {fmt_opt}"
+    fmt = f"Sh -O {args.out_fmt} {fmt_opt} --verbosity 1"
 
     w.funnel(
         func=mf.parts.bam_writer,  # mf.parts.null_writer, #
