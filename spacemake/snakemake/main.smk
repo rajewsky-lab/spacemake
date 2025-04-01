@@ -508,6 +508,11 @@ rule create_dge:
 
 def merge_non_genome(ad, ng):
     import scanpy as sc
+    ad.obs_names_make_unique()
+    ng.obs_names_make_unique()
+    ad.var_names_make_unique()
+    ng.var_names_make_unique()
+
     adata = sc.concat([ad, ng], axis=1, join='outer')
     from spacemake.preprocess.dge import calculate_adata_metrics, calculate_shannon_entropy_scompression
     calculate_adata_metrics(adata)
