@@ -32,6 +32,8 @@ rule convert_bam_to_cram:
             print(f"CRAM {output[0]} already exists. Skipping conversion.")
         else:
             convert_bam_to_cram(project_id, sample_id, threads)
+        
+        rename_log_files(project_id, sample_id)
 
 rule remove_bam_files:
     input:

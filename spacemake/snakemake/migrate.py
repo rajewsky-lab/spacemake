@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 import time
 import yaml
 
@@ -58,7 +59,7 @@ def check_if_all_files_exist(project_id, sample_id, file_type):
     pdf = get_global_ProjectDF()
     sample_is_merged = pdf.get_sample_info(project_id, sample_id)['is_merged']
     map_strategy = pdf.get_sample_info(project_id, sample_id)['map_strategy']
-    
+
     aligner = [mapping.split(':')[0] for mapping in map_strategy.split('->')]
     sequence_type = [mapping.split(':')[1] for mapping in map_strategy.split('->')]
 
@@ -160,6 +161,12 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
                 if ref_type in bam_filename:
                     ref_sequence = species_sequences[ref_type]
                     break
+            
+            # warn if reference is gzip-compressed
+            if ref_sequence.endswith('.gz'):
+                print(f"ERROR: Reference file '{ref_sequence}' is gzip-compressed (.gz), which samtools cannot use for CRAM conversion.", file=sys.stderr)
+                print("Please use an uncompressed FASTA (.fa) or bgzip-compressed version with proper indexing (.fai and .gzi).", file=sys.stderr)
+                sys.exit(1)
 
             if ref_type in ref_type_final:
                 #split files appropriately
@@ -196,10 +203,12 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
                         "samtools", "view",
                         "-T", ref_sequence,
                         "-C",
+                        "-F 4",
                         "--threads", str(threads),
                         "-o", cram_filename,
                         bam_filename
                     ])
+
                 if sample_is_merged:
                     subprocess.run(
                         [
@@ -207,6 +216,23 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
                         ])
                 
             sync_timestamps(bam_filename, cram_filename)
+
+
+def rename_log_files(project_id, sample_id):
+    """
+    Rename any .bam.log files (created by bowtie) so that qc_sheets and other reports
+    generation downstream does not fail.
+    """
+    project_folder = os.path.join('projects', project_id, 'processed_data',
+                                  sample_id, 'illumina', 'complete_data')    
+    
+    log_files = [f for f in os.listdir(project_folder) if f.endswith('.bam.log')]
+
+    for log_filename in log_files:
+        log_filename_prefix = log_filename.rsplit('.', 2)[0]
+        new_log_filename = log_filename_prefix + '.cram.log'
+        os.rename(os.path.join(project_folder, log_filename),
+                  os.path.join(project_folder, new_log_filename))
 
 
 def remove_bam_files(project_folder, output_file_path):
@@ -217,7 +243,6 @@ def remove_bam_files(project_folder, output_file_path):
         for f in os.listdir(project_folder)
         if f.endswith(".cram") and os.path.isfile(os.path.join(project_folder, f))
     ]
-
 
     total_bam_size = sum(
         os.path.getsize(bam[0]) for bam in bam_files if os.path.exists(bam[0])
@@ -276,5 +301,3 @@ def update_version_in_config():
     else:
         # placeholder for future migrations
         return
-
-
