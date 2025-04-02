@@ -52,15 +52,20 @@ def check_if_all_files_exist(project_id, sample_id, file_type):
     Returns:
         bool: True if all required files exist. False otherwise.
     """
-    project_folder = os.path.join('projects', project_id, 'processed_data', sample_id, 'illumina', 'complete_data')
+    project_folder = os.path.join('projects', project_id, 'processed_data',
+                                  sample_id, 'illumina', 'complete_data')
 
     pdf = get_global_ProjectDF()
+    sample_is_merged = pdf.get_sample_info(project_id, sample_id)['is_merged']
     map_strategy = pdf.get_sample_info(project_id, sample_id)['map_strategy']
-
+    
     aligner = [mapping.split(':')[0] for mapping in map_strategy.split('->')]
     sequence_type = [mapping.split(':')[1] for mapping in map_strategy.split('->')]
 
     files_expected = [f"{x}.{y}.{file_type}" for x, y in zip(sequence_type, aligner)]
+
+    if sample_is_merged:
+        files_expected = ['final.polyA_adapter_trimmed.merged.' + file_type]
 
     all_files_exist = True
     for file in files_expected:
@@ -78,6 +83,9 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
     Converts all BAM files to CRAM and updates the timestamps to those of the
     original files. Symbolic links are treated as such.
     """
+    pdf = get_global_ProjectDF()
+    sample_is_merged = pdf.get_sample_info(project_id, sample_id)['is_merged']
+    
     species_sequences = get_map_strategy_sequences(project_id, sample_id)
 
     if check_if_all_files_exist(project_id, sample_id, 'bam'):
@@ -146,6 +154,9 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
             '...', time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
 
             for ref_type in species_sequences:
+                if sample_is_merged:
+                    ref_sequence = species_sequences['genome']
+                    break
                 if ref_type in bam_filename:
                     ref_sequence = species_sequences[ref_type]
                     break
@@ -189,6 +200,11 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
                         "-o", cram_filename,
                         bam_filename
                     ])
+                if sample_is_merged:
+                    subprocess.run(
+                        [
+                            "touch", os.path.join(project_folder, 'final.polyA_adapter_trimmed.cram')
+                        ])
                 
             sync_timestamps(bam_filename, cram_filename)
 

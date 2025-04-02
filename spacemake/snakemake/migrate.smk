@@ -29,7 +29,7 @@ rule convert_bam_to_cram:
         sample_id = project_folder.split("/")[3]
 
         if check_if_all_files_exist(project_id, sample_id, "cram"):
-            print("CRAM already exists. Skipping conversion.")
+            print(f"CRAM {output[0]} already exists. Skipping conversion.")
         else:
             convert_bam_to_cram(project_id, sample_id, threads)
 
