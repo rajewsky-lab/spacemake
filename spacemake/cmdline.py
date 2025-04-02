@@ -1343,49 +1343,6 @@ def spacemake_migrate(args):
     return
 
 
-    # Begin migration
-    print(
-        "Beginning migration ...", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    )
-
-    if not os.path.exists(os.path.join(project_id, "stats.csv")):
-        print(
-            f"Stats file for sample with (project-id, sample-id)=({project_id}, {sample_id}) "
-            "not found on disk. Will generate it now."
-        )
-        # Execute code written elsewhere to generate the file TODO
-    else:
-        print("Stats file found on disk")
-
-    # Check if all CRAMs already exist
-    if check_if_all_files_exist(project_id, sample_id, "cram"):
-        print(
-            "All CRAM files already exist on disk. Now checking for unnecessary remaining BAM files."
-        )
-        # Check if any BAMs are present
-        bam_files = find_bam_files(project_folder)
-        if len(bam_files) > 0:
-            print(
-                "Removing unnecessary files ...",
-                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-            )
-            remove_bam_files(project_folder)
-        else:
-            print("No remaining BAM files found on disk.")
-
-    else:
-        convert_bam_to_cram(project_id, sample_id, threads)
-        print(
-            "Removing unnecessary files ...",
-            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-        )
-        remove_bam_files(project_folder)
-
-    print(
-        "Migration complete ...", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    )
-
-
 def make_main_parser():
     #################
     # DEFINE PARSER #
