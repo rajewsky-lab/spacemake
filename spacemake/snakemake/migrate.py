@@ -1,11 +1,12 @@
 import os
 import subprocess
+import sys
 import time
 import yaml
 
+from spacemake.contrib import __version__
 from spacemake.project_df import get_global_ProjectDF
-from spacemake.util import sync_timestamps
-import sys
+from spacemake.util import sync_timestamps, sync_symlink_mtime
 
 def find_bam_files(folder):
     """
@@ -52,15 +53,20 @@ def check_if_all_files_exist(project_id, sample_id, file_type):
     Returns:
         bool: True if all required files exist. False otherwise.
     """
-    project_folder = os.path.join('projects', project_id, 'processed_data', sample_id, 'illumina', 'complete_data')
+    project_folder = os.path.join('projects', project_id, 'processed_data',
+                                  sample_id, 'illumina', 'complete_data')
 
     pdf = get_global_ProjectDF()
+    sample_is_merged = pdf.get_sample_info(project_id, sample_id)['is_merged']
     map_strategy = pdf.get_sample_info(project_id, sample_id)['map_strategy']
 
     aligner = [mapping.split(':')[0] for mapping in map_strategy.split('->')]
     sequence_type = [mapping.split(':')[1] for mapping in map_strategy.split('->')]
 
     files_expected = [f"{x}.{y}.{file_type}" for x, y in zip(sequence_type, aligner)]
+
+    if sample_is_merged:
+        files_expected = ['final.polyA_adapter_trimmed.merged.' + file_type]
 
     all_files_exist = True
     for file in files_expected:
@@ -78,6 +84,9 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
     Converts all BAM files to CRAM and updates the timestamps to those of the
     original files. Symbolic links are treated as such.
     """
+    pdf = get_global_ProjectDF()
+    sample_is_merged = pdf.get_sample_info(project_id, sample_id)['is_merged']
+    
     species_sequences = get_map_strategy_sequences(project_id, sample_id)
 
     if check_if_all_files_exist(project_id, sample_id, 'bam'):
@@ -123,6 +132,7 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
                         "-o", cram_filename,
                         bam_filename
                     ])
+                sync_timestamps(bam_filename, cram_filename)
                 continue
         
         if bam_file_is_symlink:
@@ -135,16 +145,28 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
 
             try:
                 os.symlink(true_bam_filename_prefix + '.cram', cram_filename)
+                sync_symlink_mtime(bam_filename, cram_filename)
+
             except FileExistsError:
                 print('CRAM symlink already exists.')
+
         else:
             print('Converting', bam_filename, 'to', cram_filename, 
             '...', time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
 
             for ref_type in species_sequences:
+                if sample_is_merged:
+                    ref_sequence = species_sequences['genome']
+                    break
                 if ref_type in bam_filename:
                     ref_sequence = species_sequences[ref_type]
                     break
+            
+            # warn if reference is gzip-compressed
+            if ref_sequence.endswith('.gz'):
+                print(f"ERROR: Reference file '{ref_sequence}' is gzip-compressed (.gz), which samtools cannot use for CRAM conversion.", file=sys.stderr)
+                print("Please use an uncompressed FASTA (.fa) or bgzip-compressed version with proper indexing (.fai and .gzi).", file=sys.stderr)
+                sys.exit(1)
 
             if ref_type in ref_type_final:
                 #split files appropriately
@@ -181,43 +203,101 @@ def convert_bam_to_cram(project_id, sample_id, threads=4):
                         "samtools", "view",
                         "-T", ref_sequence,
                         "-C",
+                        "-F 4",
                         "--threads", str(threads),
                         "-o", cram_filename,
                         bam_filename
                     ])
 
-        sync_timestamps(bam_filename, cram_filename)
+                if sample_is_merged:
+                    subprocess.run(
+                        [
+                            "touch", os.path.join(project_folder, 'final.polyA_adapter_trimmed.cram')
+                        ])
+                
+            sync_timestamps(bam_filename, cram_filename)
 
 
-def remove_bam_files(project_folder):
-    file_sizes_cram = [
-        os.path.getsize(os.path.join(project_folder, f))
+def rename_log_files(project_id, sample_id):
+    """
+    Rename any .bam.log files (created by bowtie) so that qc_sheets and other reports
+    generation downstream does not fail.
+    """
+    project_folder = os.path.join('projects', project_id, 'processed_data',
+                                  sample_id, 'illumina', 'complete_data')    
+    
+    log_files = [f for f in os.listdir(project_folder) if f.endswith('.bam.log')]
+
+    for log_filename in log_files:
+        log_filename_prefix = log_filename.rsplit('.', 2)[0]
+        new_log_filename = log_filename_prefix + '.cram.log'
+        os.rename(os.path.join(project_folder, log_filename),
+                  os.path.join(project_folder, new_log_filename))
+
+
+def remove_bam_files(project_folder, output_file_path):
+    bam_files = find_bam_files(project_folder)
+
+    cram_files = [
+        os.path.join(project_folder, f)
         for f in os.listdir(project_folder)
         if f.endswith(".cram") and os.path.isfile(os.path.join(project_folder, f))
-        ]
-    
-    file_sizes_bam = [
-        os.path.getsize(os.path.join(project_folder, f))
-        for f in os.listdir(project_folder)
-        if f.endswith(".bam") and os.path.isfile(os.path.join(project_folder, f))
-        ]
-    
-    # Remove BAM files
-    while True:
-        response = input("This action will permanently delete the BAM files from the sample. "
-        "Are you sure that all necessary CRAM files have been created? [y/n]: ").strip().lower()
-        if response in ['y', 'yes']:
-            # Remove files
-            bam_files = find_bam_files(project_folder)
-            for bam_file in bam_files:
-                os.remove(bam_file[0])
-            print("BAM files deleted.")
-            print("Total disk space saved through the migration:", 
-                  f"{round((sum(file_sizes_bam)-sum(file_sizes_cram))/(1024**3), 1):,}", "GB")
-            break
-        elif response in ['n', 'no']:
-            print('Deletion aborted. Please run spacemake migrate again to complete the process.')
-            break
-        else:
-            print("Please enter 'y' or 'n'.")
+    ]
 
+    total_bam_size = sum(
+        os.path.getsize(bam[0]) for bam in bam_files if os.path.exists(bam[0])
+    )
+    total_cram_size = sum(
+        os.path.getsize(cram) for cram in cram_files if os.path.exists(cram)
+    )
+
+    # remove BAM files
+    deleted_files = []
+    for bam in bam_files:
+        if os.path.exists(bam[0]):
+            os.remove(bam[0])
+            deleted_files.append(bam[0])
+
+    saved_bytes = total_bam_size - total_cram_size
+    saved_gb = saved_bytes / (1024 ** 3)
+
+    # write report
+    with open(output_file_path, "w") as out:
+        out.write(f"BAM files removed: {len(deleted_files)}\n")
+        out.write("Files:\n")
+        for f in deleted_files:
+            out.write(f"  - {f}\n")
+        out.write(f"Total disk space saved: {saved_gb:.2f} GB\n")
+
+    print(f"Deleted {len(deleted_files)} BAM files, saved ~{saved_gb:.2f} GB")
+
+
+def update_version_in_config():
+    """
+    Starting with v0.9, the spacemake version is recorded inside the config.yaml
+    as 'spacemake_version: '.
+
+    For migration of earlier 0.8x -> 0.9, this entry has to be added.
+    For future mirgations, the record is updated. 
+    """
+    # save original timestamps
+    try:
+        original_stat = os.stat("config.yaml")
+    except FileNotFoundError:
+        print("config.yaml not found.")
+        return
+    
+    with open("config.yaml", "r") as f:
+        config = yaml.safe_load(f)
+
+    if "spacemake_version" not in config:
+        config["spacemake_version"] = __version__
+        with open("config.yaml", "w") as f:
+            yaml.dump(config, f)
+
+        # restore timestamps
+        os.utime("config.yaml", (original_stat.st_atime, original_stat.st_mtime))
+
+    else:
+        # placeholder for future migrations
+        return
