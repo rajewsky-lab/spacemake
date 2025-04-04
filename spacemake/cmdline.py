@@ -1271,14 +1271,7 @@ def spacemake_migrate(args):
     import snakemake
     from spacemake.errors import SpacemakeError
     import spacemake.snakemake.variables as var
-    from spacemake.migrate import (
-        find_bam_files,
-        check_if_all_files_exist,
-        convert_bam_to_cram,
-        remove_bam_files,
-    )
     from spacemake.project_df import get_global_ProjectDF
-    import time
 
     # check if it's a legit spacemake folder
     if not os.path.isfile(var.config_path):
