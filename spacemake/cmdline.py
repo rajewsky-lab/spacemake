@@ -1316,7 +1316,6 @@ def spacemake_migrate(args):
     migration_finished = snakemake.snakemake(
         snakefile,
         config=config_variables,
-        config=config_variables,
         **collect_smk_options(args),
     )
     if migration_finished is False:
