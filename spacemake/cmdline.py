@@ -899,15 +899,12 @@ def spacemake_init(args):
 
         # add keys as species to config
         species = list(species_data_config.keys())
-        snakemake_config = {"root_dir": ""}
-        snakemake_config["species"] = species
-
-        # define the pattern
-        snakemake_config["annotation_file_pattern"] = (
-            "species_data/{species}/{species}_{data_type}.gtf"
-        )
-        snakemake_config["genome_file_pattern"] = (
-            "species_data/{species}/{species}_{data_type}.fa"
+        snakemake_config = dict(
+            root_dir="",
+            species=species,
+            # define the pattern
+            annotation_file_pattern="species_data/{species}/{species}_{data_type}.gtf",
+            genome_file_pattern="species_data/{species}/{species}_{data_type}.fa",
         )
 
         # the to be saved file paths
@@ -1098,6 +1095,7 @@ def spacemake_run(args):
     preprocess_finished = snakemake.snakemake(
         snakefile,
         targets=["get_stats_prealigned_barcodes", "unload_genome_flag"],
+        config=config_variables,
         **smk_options,
     )
     if preprocess_finished is False:
@@ -1112,7 +1110,10 @@ def spacemake_run(args):
 
     # whitelisting of barcodes
     preprocess_finished = snakemake.snakemake(
-        snakefile, targets=["get_whitelist_barcodes"], **smk_options
+        snakefile,
+        targets=["get_whitelist_barcodes"],
+        config=config_variables,
+        **smk_options,
     )
 
     if not args["dryrun"]:
@@ -1120,7 +1121,9 @@ def spacemake_run(args):
         pdf.dump()
 
     # run snakemake quantification and reports
-    analysis_finished = snakemake.snakemake(snakefile, targets=targets, **smk_options)
+    analysis_finished = snakemake.snakemake(
+        snakefile, targets=targets, config=config_variables, **smk_options
+    )
 
     if analysis_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
@@ -1311,7 +1314,10 @@ def spacemake_migrate(args):
 
     # run snakemake
     migration_finished = snakemake.snakemake(
-        snakefile, config=config_variables, **collect_smk_options(args)
+        snakefile,
+        config=config_variables,
+        config=config_variables,
+        **collect_smk_options(args),
     )
     if migration_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
