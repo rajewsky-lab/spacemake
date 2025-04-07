@@ -29,16 +29,20 @@ def get_map_strategy_sequences(project_id, sample_id):
     """
     Returns a dictionary of reference_types and their location, e.g. {rRNA : /path/to/disk/sequence.fa}
     """
+    import sys
     pdf = get_global_ProjectDF()
 
+    species = pdf.get_sample_info(project_id, sample_id)['species']
     map_strategy = pdf.get_sample_info(project_id, sample_id)['map_strategy']
     sequence_type = [mapping.split(':')[1] for mapping in map_strategy.split('->')]
 
-    with open("config.yaml") as yamlfile:
-        cf = yaml.safe_load(yamlfile.read())
-    sample_species = pdf.get_sample_info(project_id, sample_id)['species']
+    reference_type = {st : f"species_data/{species}/{st}/sequence.fa" for st in sequence_type}
 
-    reference_type = {st : cf['species'][sample_species][st]['sequence'] for st in sequence_type}
+    # with open("config.yaml") as yamlfile:
+    #     cf = yaml.safe_load(yamlfile.read())
+    
+
+    # reference_type = {st : cf['species'][sample_species][st]['sequence'] for st in sequence_type}
 
     return reference_type
 
