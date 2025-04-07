@@ -938,7 +938,9 @@ def spacemake_init(args):
                 os.path.dirname(__file__), "snakemake/species_init.smk"
             )
             # run snakemake: download species data and place them in the right place
-            snakemake.snakemake(snakefile, cores=1, config=snakemake_config)
+            snakemake.snakemake(
+                snakefile, cores=1, config=snakemake_config, rerun_triggers=["mtime"]
+            )
 
         for key, value in species_info.items():
             cf.add_variable(
@@ -948,10 +950,10 @@ def spacemake_init(args):
                 sequence=value["genome"],
                 annotation=value["annotation"],
             )
-    
+
     if "species_directory" in args:
         # future code to create the species folder appropriately and symlink inside etc
-        print('')
+        print("")
 
     # copy visium_puck_barcode_file
     dest_visium_path = "puck_data/visium_barcode_positions.csv"
@@ -980,6 +982,24 @@ def spacemake_init(args):
 
     # save
     cf.dump()
+
+
+def collect_smk_options(args):
+    import spacemake.snakemake.variables as var
+
+    smk_options = dict(
+        configfiles=[var.config_path],
+        cores=args["cores"],
+        dryrun=args["dryrun"],
+        touch=args["touch"],
+        force_incomplete=args["rerun_incomplete"],
+        keepgoing=args["keep_going"],
+        printshellcmds=args["printshellcmds"],
+        rerun_triggers=["mtime"],  # needed for newer spacemake
+        debug_dag=True,
+        verbose=True,
+    )
+    return smk_options
 
 
 @message_aggregation(logger_name)
@@ -1017,7 +1037,8 @@ def spacemake_run(args):
     with open("config.yaml") as yamlfile:
         cf = yaml.safe_load(yamlfile.read())
     if "spacemake_version" not in cf:
-        print("""
+        print(
+            """
         ###############################################################
         #                                                             #
         #      WARNING: incompatible version detected                 #
@@ -1032,7 +1053,8 @@ def spacemake_run(args):
         #   https://spacemake.readthedocs.io/en/latest/migrate.html   #
         #                                                             #
         ###############################################################
-        """)
+        """
+        )
         return
 
     pdf = get_global_ProjectDF()
@@ -1071,20 +1093,12 @@ def spacemake_run(args):
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
     # run snakemake
 
+    smk_options = collect_smk_options(args)
+
     preprocess_finished = snakemake.snakemake(
         snakefile,
-        configfiles=[var.config_path],
-        cores=args["cores"],
-        dryrun=args["dryrun"],
         targets=["get_stats_prealigned_barcodes", "unload_genome_flag"],
-        touch=args["touch"],
-        force_incomplete=args["rerun_incomplete"],
-        keepgoing=args["keep_going"],
-        printshellcmds=args["printshellcmds"],
-        config=config_variables,
-        # rerun_triggers=["mtime"], # needed for newer spacemake
-        # debug_dag=True,
-        # verbose=True,
+        **smk_options,
     )
     if preprocess_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
@@ -1098,19 +1112,7 @@ def spacemake_run(args):
 
     # whitelisting of barcodes
     preprocess_finished = snakemake.snakemake(
-        snakefile,
-        configfiles=[var.config_path],
-        cores=args["cores"],
-        dryrun=args["dryrun"],
-        targets=["get_whitelist_barcodes"],
-        touch=args["touch"],
-        force_incomplete=args["rerun_incomplete"],
-        keepgoing=args["keep_going"],
-        printshellcmds=args["printshellcmds"],
-        config=config_variables,
-        # rerun_triggers=["mtime"], # needed for newer spacemake
-        # debug_dag=True,
-        # verbose=True,
+        snakefile, targets=["get_whitelist_barcodes"], **smk_options
     )
 
     if not args["dryrun"]:
@@ -1118,21 +1120,7 @@ def spacemake_run(args):
         pdf.dump()
 
     # run snakemake quantification and reports
-    analysis_finished = snakemake.snakemake(
-        snakefile,
-        configfiles=[var.config_path],
-        cores=args["cores"],
-        dryrun=args["dryrun"],
-        targets=targets,
-        touch=args["touch"],
-        force_incomplete=args["rerun_incomplete"],
-        keepgoing=args["keep_going"],
-        printshellcmds=args["printshellcmds"],
-        config=config_variables,
-        # rerun_triggers=["mtime"], # needed for newer spacemake
-        # debug_dag=True,
-        # verbose=True,
-    )
+    analysis_finished = snakemake.snakemake(snakefile, targets=targets, **smk_options)
 
     if analysis_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
@@ -1278,7 +1266,7 @@ def spacemake_migrate(args):
         msg = "spacemake has not been initalised yet in this folder.\n"
         msg += "please run `spacemake init` to start a new project"
         raise SpacemakeError(msg)
-    
+
     pdf = get_global_ProjectDF()
 
     def build_sample_info(project_id, sample_id):
@@ -1292,11 +1280,15 @@ def spacemake_migrate(args):
     # check if either the (--project_id, --sample_id) OR the --all flag were provided
     if args.get("all"):
         if args.get("project_id") or args.get("sample_id"):
-            raise ValueError("Do not provide --project-id or --sample-id when using --all.")
+            raise ValueError(
+                "Do not provide --project-id or --sample-id when using --all."
+            )
         sample_records = pdf.df.index.tolist()
     else:
         if not args.get("project_id") or not args.get("sample_id"):
-            raise ValueError("Both --project-id and --sample-id are required unless using --all.")
+            raise ValueError(
+                "Both --project-id and --sample-id are required unless using --all."
+            )
         sample_records = [(args["project_id"], args["sample_id"])]
 
     # build per-sample info
@@ -1319,16 +1311,7 @@ def spacemake_migrate(args):
 
     # run snakemake
     migration_finished = snakemake.snakemake(
-        snakefile,
-        configfiles=[var.config_path],
-        cores=args["cores"],
-        dryrun=args["dryrun"],
-        targets=["all"],
-        touch=args["touch"],
-        force_incomplete=args["rerun_incomplete"],
-        keepgoing=args["keep_going"],
-        printshellcmds=args["printshellcmds"],
-        config=config_variables,
+        snakefile, config=config_variables, **collect_smk_options(args)
     )
     if migration_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
