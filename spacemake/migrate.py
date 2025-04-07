@@ -29,7 +29,6 @@ def get_map_strategy_sequences(project_id, sample_id):
     """
     Returns a dictionary of reference_types and their location, e.g. {rRNA : /path/to/disk/sequence.fa}
     """
-    import sys
     pdf = get_global_ProjectDF()
 
     species = pdf.get_sample_info(project_id, sample_id)['species']
@@ -37,12 +36,6 @@ def get_map_strategy_sequences(project_id, sample_id):
     sequence_type = [mapping.split(':')[1] for mapping in map_strategy.split('->')]
 
     reference_type = {st : f"species_data/{species}/{st}/sequence.fa" for st in sequence_type}
-
-    # with open("config.yaml") as yamlfile:
-    #     cf = yaml.safe_load(yamlfile.read())
-    
-
-    # reference_type = {st : cf['species'][sample_species][st]['sequence'] for st in sequence_type}
 
     return reference_type
 
@@ -274,6 +267,23 @@ def remove_bam_files(project_folder, output_file_path):
         out.write(f"Total disk space saved: {saved_gb:.2f} GB\n")
 
     print(f"Deleted {len(deleted_files)} BAM files, saved ~{saved_gb:.2f} GB")
+
+
+def update_adapters_in_config():
+    """
+    Update the adapters seciton of the config to current version.
+    """
+    initial_config = os.path.join(os.path.dirname(__file__), "data/config/config.yaml")
+
+    with open("config.yaml", "r") as f1, open(initial_config, "r") as f2:
+        config = yaml.safe_load(f1)
+        config_latest = yaml.safe_load(f2)
+
+    if config["adapter_flavors"] != config_latest["adapter_flavors"]:
+        print("Outdated config.yaml was identified. Will migrate to the latest version.")
+        config["adapter_flavors"] = config_latest["adapter_flavors"]
+        with open("config.yaml", "w") as f:
+            yaml.dump(config, f)
 
 
 def update_version_in_config():

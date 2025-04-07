@@ -7,6 +7,7 @@ from spacemake.migrate import (
     convert_bam_to_cram,
     rename_log_files,
     remove_bam_files,
+    update_adapters_in_config,
     update_version_in_config
     )
 
@@ -57,7 +58,8 @@ rule update_config:
     output:
         touch("version_update_done.txt")
     run:
-        print("Updating version in config.yaml ...")
+        print("Updating config.yaml ...")
+        update_adapters_in_config()
         update_version_in_config()
 
 rule generate_dummy_files:
