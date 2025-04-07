@@ -656,6 +656,11 @@ def get_run_parser():
         help="print shell commands for each rule, if exist",
     )
     parser.add_argument(
+        "--debug-smk",
+        action="store_true",
+        help="activate extended snakemake debug output on DAG construction and resons for running rules etc...",
+    )
+    parser.add_argument(
         "--touch",
         "-t",
         action="store_true",
@@ -988,14 +993,20 @@ def collect_smk_options(args):
         configfiles=[var.config_path],
         cores=args["cores"],
         dryrun=args["dryrun"],
-        touch=args["touch"],
-        force_incomplete=args["rerun_incomplete"],
-        keepgoing=args["keep_going"],
-        printshellcmds=args["printshellcmds"],
+        touch=args.get("touch", False),
+        force_incomplete=args.get("rerun_incomplete", False),
+        keepgoing=args.get("keep_going", False),
+        printshellcmds=args.get("printshellcmds", False),
         rerun_triggers=["mtime"],  # needed for newer spacemake
-        debug_dag=True,
-        verbose=True,
     )
+    if args.get("debug_smk", False):
+        smk_options.update(
+            dict(
+                debug_dag=True,  # TODO: make these configureable
+                verbose=True,
+            )
+        )
+
     return smk_options
 
 
