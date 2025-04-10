@@ -997,7 +997,7 @@ def collect_smk_options(args):
         force_incomplete=args.get("rerun_incomplete", False),
         keepgoing=args.get("keep_going", False),
         printshellcmds=args.get("printshellcmds", False),
-        rerun_triggers=["mtime"],  # needed for newer spacemake
+        rerun_triggers=["mtime"],  # needed for newer snakemake
     )
     if args.get("debug_smk", False):
         smk_options.update(

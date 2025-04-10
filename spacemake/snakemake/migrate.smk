@@ -2,7 +2,15 @@ __version__ = "0.1"
 __author__ = ["Nikos Karaiskos"]
 __license__ = "GPL"
 
-include: "migrate.py"
+from spacemake.migrate import (
+    check_if_all_files_exist,
+    convert_bam_to_cram,
+    rename_log_files,
+    remove_bam_files,
+    update_adapters_in_config,
+    update_version_in_config
+    )
+
 include: "scripts/snakemake_helper_functions.py"
 include: "variables.py"
 
@@ -43,14 +51,15 @@ rule remove_bam_files:
     run:
         remove_bam_files(wildcards.project_folder, output[0])
 
-rule update_version_in_config:
+rule update_config:
     input:
         bam_cleanup_markers,
         expand("{project_folder}/.unmapped_removed", project_folder=project_folders)
     output:
         touch("version_update_done.txt")
     run:
-        print("Updating version in config.yaml ...")
+        print("Updating config.yaml ...")
+        update_adapters_in_config()
         update_version_in_config()
 
 rule generate_dummy_files:
