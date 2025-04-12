@@ -31,7 +31,7 @@ dependencies:
         - isal
         - pytest
         - pytest-cov
-        - mrfifo>=0.3.0
+        - mrfifo>=0.8.22
         - scbamtools>=0.8.2
         - pandas>2
         - scanpy>=1.8.1
