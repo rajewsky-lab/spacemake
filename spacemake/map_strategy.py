@@ -21,6 +21,20 @@ map_data = {
     "BAM_UNMAPPED_KEEP": set(),
     # used for automated mapping index generation
     "INDEX_FASTA_LKUP": {},
+    # maps cram/bam path names to the name of the reference ("genome", "rRNA",...)
+    "REFNAME_FOR_BAM": {},
+    "QFLAVOR_FOR_BAM": {},
+    # maps cram/bam path names to a quantification flavor
+    # if set in map_str, for example by:
+    #
+    #   rRNA:bowtie2@count_first_chrom->genome:STAR@count_unique
+    #
+    # This would inform the count utility from scbamtools about which rules
+    # to use for counting alignments.
+    #
+    #   genome:STAR@digital_expression
+    #
+    # would force the legacy dropseq-tools behavior for annotation and counting (maybe)
     "REF_FOR_FINAL": {},
     #   key: bt2_index_file or star_index_file
     #   value: dotdict with
@@ -105,9 +119,10 @@ def get_all_mapped_bams(wc):
 
 def get_non_genome_alignments(wc):
     mapped = get_all_mapped_bams(wc)["mapped_bams"]
-    annotated = get_annotated_bams(wc)["annotated_bams"]
-    ng = [aln for aln in mapped if aln not in annotated]
-    # print(f"get_non_genome_alignments({wc}) -> ng={ng}")
+    # refnames = [map_data["REFNAME_FOR_BAM"][bam] for bam in mapped]
+    # annotated = get_annotated_bams(wc)["annotated_bams"]
+    ng = [aln for aln in mapped if map_data["REFNAME_FOR_BAM"][aln] != "genome"]
+    # print(f"{wc} -> ng={ng}")
     return ng
 
 
@@ -162,22 +177,22 @@ def validate_mapstr(mapstr, config={}, species=None):
 
         if "@" in mapper:
             # we have a counting-flavor directive
-            mapper, cflavor = mapper.split("@")
+            mapper, qflavor = mapper.split("@")
             if config:
-                config.assert_variable("quant", cflavor)
+                config.assert_variable("quant", qflavor)
         else:
-            cflavor = None
+            qflavor = None
 
-        if cflavor:
-            cfstr = f"@{cflavor}"
+        if qflavor:
+            qfstr = f"@{qflavor}"
         else:
-            cfstr = ""
+            qfstr = ""
         if link_name:
             lnkstr = f":{link_name}"
         else:
             lnkstr = ""
 
-        return f"{mapper}{cfstr}:{ref}{lnkstr}"
+        return f"{mapper}{qfstr}:{ref}{lnkstr}"
 
     chain_rebuild = []
     for tokens in mapstr.split("->"):
@@ -265,13 +280,13 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
 
         if "@" in mapper:
             # we have a counting-flavor directive
-            mapper, cflavor = mapper.split("@")
+            mapper, qflavor = mapper.split("@")
         else:
-            cflavor = "auto"
+            qflavor = "auto"
 
         mr.input_name = left
         mr.mapper = mapper
-        mr.cflavor = cflavor
+        mr.qflavor = qflavor
         mr.ref_name = ref
         mr.out_name = f"{ref}.{mapper}"
         mr.keep_unmapped = False
@@ -397,9 +412,12 @@ def get_mapped_BAM_output(
                 # keep track of all annotated BAM files we are going to create
                 # for subsequent counting into DGE matrices/h5ad
                 map_data["ANNOTATED_BAMS"][(index[0], index[1])].add(mr.out_path)
-                map_data["REF_NAMES"][(index[0], index[1])].add(mr.ref_name)
             else:
                 mr.ann_final = []
+
+            map_data["REF_NAMES"][(index[0], index[1])].add(mr.ref_name)
+            map_data["REFNAME_FOR_BAM"][mr.out_path] = mr.ref_name
+            map_data["QFLAVOR_FOR_BAM"][mr.out_path] = mr.qflavor
 
             default_STAR_INDEX = wc_fill(smv.star_index, mr)
             default_BT2_INDEX = wc_fill(smv.bt2_index_param, mr)

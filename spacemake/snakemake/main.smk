@@ -442,7 +442,12 @@ rule create_spatial_barcode_whitelist:
         # save both the whitelist and the beads in a separate file
         bc[['cell_bc']].to_csv(output[0], header=False, index=False)
 
+
 import spacemake.map_strategy as ms
+def get_flavors_for_bams(wc, input):
+    flavors = [ms.map_data["QFLAVOR_FOR_BAM"][bam] for bam in input["crams"]]
+    return ",".join(flavors)
+
 rule count_nongenomes:
     input:
         unpack(get_top_barcodes),
@@ -452,13 +457,16 @@ rule count_nongenomes:
         stats=ng_dge_stats,
         # dge_summary=ng_dge_summary
     log: ng_dge_log
+    threads: 8
     params:
-        dge_root = dge_root
+        dge_root = dge_root,
+        flavors = get_flavors_for_bams
     shell:
         "python -m scbamtools.bin.count "
+        # "  --debug {log_debug} "
         "  --sample {wildcards.sample_id} "
         "  --worker-threads {threads} "
-        "  --flavor custom_index "
+        "  --flavors {params.flavors} "
         "  --cell-bc-allow-list {input.top_barcodes} "
         "  --dge-out {output.dge}"
         "  --stats-out {output.stats}"

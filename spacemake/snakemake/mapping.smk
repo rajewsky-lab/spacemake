@@ -123,12 +123,12 @@ def get_map_inputs(wc, mapper="STAR"):
     mr = get_map_rule(wc)
     d = {
         'bam' : mr.input_path,
-        'index_file' : mr.map_index_file,
+        'index_file' : ancient(mr.map_index_file),
     }
     if mapper == 'STAR':
         d['index_loaded'] = expand(star_index_loaded, species=mr.species, ref_name=mr.ref_name)
     if hasattr(mr, "ann_final"):
-        d['annotation'] = mr.ann_final
+        d['annotation'] = ancient(mr.ann_final)
 
     return d
 

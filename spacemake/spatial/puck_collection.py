@@ -126,6 +126,7 @@ def _transform_puck(puck: anndata.AnnData, pucks_transform: dict) -> anndata.Ann
     if not check_obs_unique(puck, "puck_id"):
         raise ValueError(f"puck_id exists in AnnData object but are not unique")
 
+    print(pucks_transform)
     _puck_id = np.unique(puck.obs["puck_id"])[0]
     x_ofs = pucks_transform["x_offset"][_puck_id]
     y_ofs = pucks_transform["y_offset"][_puck_id]
@@ -335,9 +336,12 @@ def merge_pucks_to_collection(
         puck_collection_list, merge=merge_output, join=join_output
     )
 
-    puck_collection.uns = {np.unique(puck.obs[puck_id_key])[0]: puck.uns for puck in puck_collection_list}
+    puck_collection.uns = {
+        np.unique(puck.obs[puck_id_key])[0]: puck.uns for puck in puck_collection_list
+    }
 
     return puck_collection
+
 
 @message_aggregation(logger_name)
 def cmdline():
