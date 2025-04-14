@@ -390,11 +390,11 @@ def get_mapped_BAM_output(
                 mr.out_unmapped_path
             )
 
-            if mr.cflavor == "auto":
+            if mr.qflavor == "auto":
                 # if we have annotation use the actual default, which works for complex
                 # gene models
                 # if we do NOT have annotation, assume custom_index (rRNA, spikes, CITE-seq tags etc.)
-                mr.cflavor = (
+                mr.qflavor = (
                     default_counting_flavor_with_annotation
                     if mr.ann_path
                     else default_counting_flavor_no_annotation
