@@ -4,7 +4,14 @@ Migrate
 =======
 
 Starting with v0.9, spacemake adopts the ``cram`` format to reduce disk requirements.
-To smoothly migrate existing proejct structures created with earlier versions (v0.8x)
+
+.. note::
+
+    In addition to the ``.fa`` genome sequence, the ``cram`` format requires an index file, 
+    ``.fai``. If the file does not exist, it will be created during the ``spacemake run``.
+    In that case, ensure you have write permissions for the directory containing the sequence file.
+
+To smoothly migrate existing project structures created with earlier versions (v0.8x)
 and make them compatible with v0.9, spacemake offers the ``migrate`` tool.
 
 If you attempt to run a newer spacemake version inside a proejct directory created
@@ -25,8 +32,8 @@ with an older one, you'll get the following warning::
     #                                                             #
     ###############################################################
 
-To reshape the existing processed data so that it is compatible with the latest
-spacemake version, you can use ``spacemake migrate``::
+To reshape the existing processed data and make it compatible with the latest
+spacemake version, use ``spacemake migrate``::
 
     spacemake migrate \
         --project-id                # the project-id of the sample to migrate
