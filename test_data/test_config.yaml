@@ -1,3 +1,4 @@
+spacemake_version: 0.9.1
 root_dir: '.'
 temp_dir: '/tmp'
 external_bin: 
