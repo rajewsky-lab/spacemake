@@ -74,6 +74,7 @@ def get_saturation_analysis_input(wildcards):
 
     return files
 
+
 rule create_saturation_analysis:
     input:
         unpack(get_saturation_analysis_input)
@@ -84,5 +85,20 @@ rule create_saturation_analysis:
             wildcards.project_id, wildcards.sample_id),
         run_modes = lambda wildcards: get_run_modes_from_sample(
             wildcards.project_id, wildcards.sample_id)
-    script:
-        "scripts/saturation_analysis.Rmd"
+    run:
+        from spacemake.report.saturation_analysis import generate_saturation_analysis_metadata
+
+        template_file = os.path.join(spacemake_dir, "report/templates/saturation_analysis.html")
+
+        report_metadata = generate_saturation_analysis_metadata(
+            wildcards.project_id,
+            wildcards.sample_id,
+            params['run_modes'],
+            input,
+            wildcards.puck_barcode_file_id_qc
+        )
+
+        html_report = generate_html_report(report_metadata, template_file)
+
+        with open(output[0], "w") as output:
+            output.write(html_report)

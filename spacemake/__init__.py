@@ -4,3 +4,4 @@
 # from . import spatial as sp
 
 # from .smk import Spacemake
+from . import plotting as pl

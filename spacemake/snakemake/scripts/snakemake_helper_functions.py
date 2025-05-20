@@ -960,6 +960,7 @@ def get_qc_sheet_input_files(wildcards):
             )
 
         to_return[f"{run_mode}.dge_summary"] = run_mode_dge["dge_summary"]
+        to_return[f"{run_mode}.dge"] = run_mode_dge["dge"]
 
     return to_return
 
