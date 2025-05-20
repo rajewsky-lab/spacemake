@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import pandas as pd
+
 # we use this instead of anndata, so we can load faster...
 # safe assumption: the h5ad file is properly formatted...
 import h5py
@@ -64,10 +65,7 @@ SPATIAL_METRICS_TITLES = {
 }
 
 
-STRTOBOOL = {
-    "False": False,
-    "True": True
-}
+STRTOBOOL = {"False": False, "True": True}
 
 
 logger_name = "spacemake.report.qc_sequencing"
@@ -141,10 +139,13 @@ def read_star_log_file(log_file):
         for line in fi:
             _log_id = line.strip().split("|")[0].strip()
             if _log_id in log_name_stat.keys():
+                val_str = line.strip().split("|")[1].strip()
+                key = log_name_stat[_log_id]
+                value = float(val_str) if val_str != "NA" else np.nan
                 if _log_id == "Average mapped length":
-                    star_stats[log_name_stat[_log_id]] = float(line.strip().split("|")[1].lstrip().rstrip())
+                    star_stats[key] = value
                 else:
-                    star_stats[log_name_stat[_log_id]] = round(int(line.strip().split("|")[1]) / 1e6, 2)
+                    star_stats[key] = round(value / 1e6, 2)
                 # Do not convert to millions the Average mapped length
 
             idx += 1
@@ -183,7 +184,9 @@ def read_bowtie_log_file(log_file):
     idx = 0
     for line in reverse_readline(file):
         if idx in log_line_stat.keys():
-            bowtie_stats[log_line_stat[idx]] = round(int(line.strip().split(" ")[0]) / 1e6, 2)
+            bowtie_stats[log_line_stat[idx]] = round(
+                int(line.strip().split(" ")[0]) / 1e6, 2
+            )
         idx += 1
         if max_line < idx:
             break
@@ -191,7 +194,9 @@ def read_bowtie_log_file(log_file):
     return bowtie_stats
 
 
-def generate_table_mapping_statistics(complete_data_root: str, split_reads_read_type: str):
+def generate_table_mapping_statistics(
+    complete_data_root: str, split_reads_read_type: str
+):
     # Initialize empty lists to store the filenames
     bowtie_log_files = []
     star_log_files = []
@@ -207,7 +212,9 @@ def generate_table_mapping_statistics(complete_data_root: str, split_reads_read_
 
     bowtie_logs = []
     for bowtie_log_file in bowtie_log_files:
-        bowtie_log = read_bowtie_log_file(os.path.join(complete_data_root, bowtie_log_file))
+        bowtie_log = read_bowtie_log_file(
+            os.path.join(complete_data_root, bowtie_log_file)
+        )
         bowtie_log["name"] = bowtie_log_file.split(".")[0]
         bowtie_log["mapper"] = "bowtie2"
         bowtie_logs.append(bowtie_log)
@@ -234,7 +241,7 @@ def generate_table_mapping_statistics(complete_data_root: str, split_reads_read_
 
 def create_run_modes_df(run_modes, project_df):
     all_variables = {}
-    
+
     # Collect variables from all run modes
     for run_mode in run_modes:
         run_mode_vars = project_df.config.get_run_mode(run_mode)
@@ -242,76 +249,76 @@ def create_run_modes_df(run_modes, project_df):
             if var_name not in all_variables:
                 all_variables[var_name] = {}
             all_variables[var_name][run_mode] = var_value
-    
-    run_modes_df = pd.DataFrame.from_dict(all_variables, orient='index')
-    
+
+    run_modes_df = pd.DataFrame.from_dict(all_variables, orient="index")
+
     for mode in run_modes:
         if mode not in run_modes_df.columns:
             run_modes_df[mode] = None
-            
+
     return run_modes_df
 
 
 def create_mapping_stats_df(split_reads_read_type, data_root):
     if isinstance(split_reads_read_type, str):
         split_reads_read_type = [split_reads_read_type]
-    
+
     all_stats = []
-    
+
     for s in split_reads_read_type:
         strategy_name = os.path.basename(os.path.dirname(s))
-        
+
         stats = generate_table_mapping_statistics(data_root, s)
-        
+
         if not isinstance(stats, pd.DataFrame):
             stats = pd.DataFrame(stats)
-        
-        stats['Mapping Strategy'] = strategy_name
-        
+
+        stats["Mapping Strategy"] = strategy_name
+
         all_stats.append(stats)
-    
+
     combined_stats = pd.concat(all_stats, axis=0)
 
     # Extract only the rows for rRNA and STAR mapper (genome)
-    rRNA_data = combined_stats[combined_stats['name'] == 'rRNA']
-    STAR_data = combined_stats[combined_stats['mapper'] == 'STAR']
-    reads_type_data = combined_stats[combined_stats['name'] == 'reads_type']
-    
+    rRNA_data = combined_stats[combined_stats["name"] == "rRNA"]
+    STAR_data = combined_stats[combined_stats["mapper"] == "STAR"]
+    reads_type_data = combined_stats[combined_stats["name"] == "reads_type"]
+
     # Get the mapping strategy (assuming it's the same for all)
-    mapping_strategy = combined_stats['Mapping Strategy'].iloc[0]
-    
+    mapping_strategy = combined_stats["Mapping Strategy"].iloc[0]
+
     # Create the DataFrame structure with index as metrics and a single column for mapping_strategy
     metrics = [
-        'input_reads',
-        'uniq_mapped_reads',
-        'as.cds',
-        'as.utr',
-        'intronic',
-        'intergenic',
-        'ambiguous',
-        'avg_mapped_length',
-        'multi_mapped_reads',
-        'unmapped_too_short',
-        'mapped_to_rRNA'
+        "input_reads",
+        "uniq_mapped_reads",
+        "as.cds",
+        "as.utr",
+        "intronic",
+        "intergenic",
+        "ambiguous",
+        "avg_mapped_length",
+        "multi_mapped_reads",
+        "unmapped_too_short",
+        "mapped_to_rRNA",
     ]
-    
+
     # Create empty DataFrame with metrics as index and mapping_strategy as column
     result_df = pd.DataFrame(index=metrics, columns=[mapping_strategy])
-    
+
     # Variables to store
     input_reads = 0
-    
+
     # Get values from STAR mapper
     if not STAR_data.empty:
         star_row = STAR_data.iloc[0]
-        
+
         # Extract the metrics we want
-        input_reads = star_row.get('input_reads', 0)
-        uniq_mapped_reads = star_row.get('uniq_mapped_reads', 0)
-        multi_mapped_reads = star_row.get('multi_mapped_reads', 0)
-        unmapped_too_short = star_row.get('unmapped_too_short', 0)
-        avg_mapped_length = star_row.get('avg_mapped_length', 0)
-        
+        input_reads = star_row.get("input_reads", 0)
+        uniq_mapped_reads = star_row.get("uniq_mapped_reads", 0)
+        multi_mapped_reads = star_row.get("multi_mapped_reads", 0)
+        unmapped_too_short = star_row.get("unmapped_too_short", 0)
+        avg_mapped_length = star_row.get("avg_mapped_length", 0)
+
         # Calculate percentages
         if input_reads > 0:
             uniq_pct = (uniq_mapped_reads / input_reads) * 100
@@ -319,25 +326,33 @@ def create_mapping_stats_df(split_reads_read_type, data_root):
             too_short_pct = (unmapped_too_short / input_reads) * 100
         else:
             uniq_pct = multi_pct = too_short_pct = 0
-            
+
         # Add to result DataFrame
-        result_df.loc['input_reads', mapping_strategy] = f"{input_reads:.2f}"
-        result_df.loc['uniq_mapped_reads', mapping_strategy] = f"{uniq_mapped_reads:.2f} ({uniq_pct:.1f}%)"
-        result_df.loc['avg_mapped_length', mapping_strategy] = f"{avg_mapped_length:.2f}"
-        result_df.loc['multi_mapped_reads', mapping_strategy] = f"{multi_mapped_reads:.2f} ({multi_pct:.1f}%)"
-        result_df.loc['unmapped_too_short', mapping_strategy] = f"{unmapped_too_short:.2f} ({too_short_pct:.1f}%)"
-    
+        result_df.loc["input_reads", mapping_strategy] = f"{input_reads:.2f}"
+        result_df.loc["uniq_mapped_reads", mapping_strategy] = (
+            f"{uniq_mapped_reads:.2f} ({uniq_pct:.1f}%)"
+        )
+        result_df.loc["avg_mapped_length", mapping_strategy] = (
+            f"{avg_mapped_length:.2f}"
+        )
+        result_df.loc["multi_mapped_reads", mapping_strategy] = (
+            f"{multi_mapped_reads:.2f} ({multi_pct:.1f}%)"
+        )
+        result_df.loc["unmapped_too_short", mapping_strategy] = (
+            f"{unmapped_too_short:.2f} ({too_short_pct:.1f}%)"
+        )
+
     # Get values from reads_type
     if not reads_type_data.empty:
         type_row = reads_type_data.iloc[0]
-        
+
         # Extract the metrics
-        coding = type_row.get('CODING', 0)
-        utr = type_row.get('UTR', 0)
-        intronic = type_row.get('INTRONIC', 0)
-        intergenic = type_row.get('INTERGENIC', 0)
-        ambiguous = type_row.get('AMB', 0)
-        
+        coding = type_row.get("CODING", 0)
+        utr = type_row.get("UTR", 0)
+        intronic = type_row.get("INTRONIC", 0)
+        intergenic = type_row.get("INTERGENIC", 0)
+        ambiguous = type_row.get("AMB", 0)
+
         # Calculate percentages
         if input_reads > 0:
             coding_pct = (coding / input_reads) * 100
@@ -347,88 +362,110 @@ def create_mapping_stats_df(split_reads_read_type, data_root):
             ambiguous_pct = (ambiguous / input_reads) * 100
         else:
             coding_pct = utr_pct = intronic_pct = intergenic_pct = ambiguous_pct = 0
-            
+
         # Add to result DataFrame
-        result_df.loc['as.cds', mapping_strategy] = f"{coding:.2f} ({coding_pct:.1f}%)"
-        result_df.loc['as.utr', mapping_strategy] = f"{utr:.2f} ({utr_pct:.1f}%)"
-        result_df.loc['intronic', mapping_strategy] = f"{intronic:.2f} ({intronic_pct:.1f}%)"
-        result_df.loc['intergenic', mapping_strategy] = f"{intergenic:.2f} ({intergenic_pct:.1f}%)"
-        result_df.loc['ambiguous', mapping_strategy] = f"{ambiguous:.2f} ({ambiguous_pct:.1f}%)"
-    
+        result_df.loc["as.cds", mapping_strategy] = f"{coding:.2f} ({coding_pct:.1f}%)"
+        result_df.loc["as.utr", mapping_strategy] = f"{utr:.2f} ({utr_pct:.1f}%)"
+        result_df.loc["intronic", mapping_strategy] = (
+            f"{intronic:.2f} ({intronic_pct:.1f}%)"
+        )
+        result_df.loc["intergenic", mapping_strategy] = (
+            f"{intergenic:.2f} ({intergenic_pct:.1f}%)"
+        )
+        result_df.loc["ambiguous", mapping_strategy] = (
+            f"{ambiguous:.2f} ({ambiguous_pct:.1f}%)"
+        )
+
     # Get values from rRNA
     if not rRNA_data.empty:
         rRNA_row = rRNA_data.iloc[0]
-        rRNA_reads = rRNA_row.get('unique_aligned', 0)
-        
+        rRNA_reads = rRNA_row.get("unique_aligned", 0)
+
         # Calculate percentage
         if input_reads > 0:
             rRNA_pct = (rRNA_reads / input_reads) * 100
         else:
             rRNA_pct = 0
-            
+
         # Add to result DataFrame
-        result_df.loc['mapped_to_rRNA', mapping_strategy] = f"{rRNA_reads:.2f} ({rRNA_pct:.1f}%)"
-    
+        result_df.loc["mapped_to_rRNA", mapping_strategy] = (
+            f"{rRNA_reads:.2f} ({rRNA_pct:.1f}%)"
+        )
+
     # Reset the index to make it a regular DataFrame column
-    result_df = result_df.rename_axis('Metric').reset_index()
-    
+    result_df = result_df.rename_axis("Metric").reset_index()
+
     return result_df
 
 
 def create_summary_beads_df(run_modes_adatas):
-    all_variables = {"median_genes": {},
-                     "median_pcr": {},
-                     "median_reads": {},
-                     "median_umis": {},
-                     "n_beads": {},
-                     "sum_reads": {}}
-    
+    all_variables = {
+        "median_genes": {},
+        "median_pcr": {},
+        "median_reads": {},
+        "median_umis": {},
+        "n_beads": {},
+        "sum_reads": {},
+    }
+
     # Collect variables from all run modes
     for run_mode, adata in run_modes_adatas.items():
         with h5py.File(adata) as _adata_f:
-            all_variables["median_genes"][run_mode] = np.median(_adata_f['obs/n_genes_by_counts'])
-            all_variables["median_pcr"][run_mode] = np.median(_adata_f['obs/reads_per_counts'])
-            all_variables["median_reads"][run_mode] = np.median(_adata_f['obs/n_reads'])
-            all_variables["median_umis"][run_mode] = np.median(_adata_f['obs/total_counts'])
-            all_variables["n_beads"][run_mode] = len(_adata_f['obs/total_counts'])
-            all_variables["sum_reads"][run_mode] = np.round(_adata_f['obs/n_reads'][:].sum()/1e6, 3)
-    
-    run_modes_df = pd.DataFrame.from_dict(all_variables, orient='index')
-    
+            all_variables["median_genes"][run_mode] = np.median(
+                _adata_f["obs/n_genes_by_counts"]
+            )
+            all_variables["median_pcr"][run_mode] = np.median(
+                _adata_f["obs/reads_per_counts"]
+            )
+            all_variables["median_reads"][run_mode] = np.median(_adata_f["obs/n_reads"])
+            all_variables["median_umis"][run_mode] = np.median(
+                _adata_f["obs/total_counts"]
+            )
+            all_variables["n_beads"][run_mode] = len(_adata_f["obs/total_counts"])
+            all_variables["sum_reads"][run_mode] = np.round(
+                _adata_f["obs/n_reads"][:].sum() / 1e6, 3
+            )
+
+    run_modes_df = pd.DataFrame.from_dict(all_variables, orient="index")
+
     for mode in run_modes_adatas.keys():
         if mode not in run_modes_df.columns:
             run_modes_df[mode] = None
-            
+
     return run_modes_df
 
 
 def create_sample_info_df(project_df, project_id, sample_id, puck_barcode_file_id_qc):
     sample_info = project_df.get_sample_info(project_id, sample_id)
-    sample_info_df = pd.DataFrame({"project_id": [project_id],
-                "sample_id": [sample_id],
-                "puck_barcode_file_id": [puck_barcode_file_id_qc],
-                "species": [sample_info['species']],
-                "sequencing_date": [sample_info['sequencing_date']],
-                "investigator": [sample_info['investigator']],
-                "experiment": [sample_info['experiment']],
-                })
+    sample_info_df = pd.DataFrame(
+        {
+            "project_id": [project_id],
+            "sample_id": [sample_id],
+            "puck_barcode_file_id": [puck_barcode_file_id_qc],
+            "species": [sample_info["species"]],
+            "sequencing_date": [sample_info["sequencing_date"]],
+            "investigator": [sample_info["investigator"]],
+            "experiment": [sample_info["experiment"]],
+        }
+    )
 
     return sample_info_df
+
 
 def create_metrics_table_df(adata, umi_cutoff):
     metrics_dict = {
         "UMI filter": [umi_cutoff],
         "Number of genes in data": [len(adata.var_names)],
         "Number of spots in data": [len(adata)],
-        "Median UMI": [np.median(adata.obs['total_counts'])],
-        "Median Genes": [np.median(adata.obs['n_genes_by_counts'])]
+        "Median UMI": [np.median(adata.obs["total_counts"])],
+        "Median Genes": [np.median(adata.obs["n_genes_by_counts"])],
     }
-    
-    if 'puck_variables' in adata.uns and 'width_um' in adata.uns['puck_variables']:
-        metrics_dict["Puck width (µm)"] = [adata.uns['puck_variables']['width_um']]
-    
+
+    if "puck_variables" in adata.uns and "width_um" in adata.uns["puck_variables"]:
+        metrics_dict["Puck width (µm)"] = [adata.uns["puck_variables"]["width_um"]]
+
     metrics_table_df = pd.DataFrame(metrics_dict)
-    
+
     return metrics_table_df
 
 
@@ -437,11 +474,17 @@ def generate_deciled_data(values):
     def calculate_deciles(group):
         group["cumsum_reads"] = group["n_reads"].cumsum()
         group["decile_limit"] = group["n_reads"].sum() / 10
-        group["decile"] = (group["cumsum_reads"] / group["decile_limit"]).floordiv(1) + 1
+        group["decile"] = (group["cumsum_reads"] / group["decile_limit"]).floordiv(
+            1
+        ) + 1
         return group.loc[group["decile"] < 11]
 
     # Group by '_downsample_pct_report' and apply the calculate_deciles function
-    decile_dat = values.groupby("_downsample_pct_report").apply(calculate_deciles).reset_index(drop=True)
+    decile_dat = (
+        values.groupby("_downsample_pct_report")
+        .apply(calculate_deciles)
+        .reset_index(drop=True)
+    )
 
     # Group by 'percentage' and 'decile' and calculate medians and counts
     decile_dat = (
@@ -460,12 +503,17 @@ def generate_deciled_data(values):
 
     # Melt the DataFrame to long format
     decile_dat = pd.melt(
-        decile_dat, id_vars=["_downsample_pct_report", "decile"], var_name="observation", value_name="value"
+        decile_dat,
+        id_vars=["_downsample_pct_report", "decile"],
+        var_name="observation",
+        value_name="value",
     )
 
     # Convert 'decile' and '_downsample_pct_report' to appropriate data types
     decile_dat["decile"] = decile_dat["decile"].astype("category")
-    decile_dat["_downsample_pct_report"] = decile_dat["_downsample_pct_report"].astype(int)
+    decile_dat["_downsample_pct_report"] = decile_dat["_downsample_pct_report"].astype(
+        int
+    )
 
     mapping_dict = {
         "n_reads": "median_reads",
