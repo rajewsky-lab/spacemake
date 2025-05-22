@@ -4,6 +4,7 @@ import logging
 from spacemake.util import message_aggregation
 from spacemake.config import ConfigFile
 from spacemake.contrib import __version__, __license__, __author__, __email__
+import yaml
 
 logger_name = "spacemake.main"
 logger = logging.getLogger(logger_name)
@@ -38,21 +39,40 @@ def get_project_sample_parser(allow_multiple=False, prepend="", help_extra=""):
         default = []
 
     parser.add_argument(
-        f"--{prepend}{project_argument}",
+        f"--{prepend}{project_argument.replace('_', '-')}",
         type=str,
         required=required,
         nargs=nargs,
         default=default,
         help=f"{project_argument} {help_extra}",
+        dest=f"{prepend.replace('-', '_')}{project_argument}",
     )
-
     parser.add_argument(
-        f"--{prepend}{sample_argument}",
+        f"--{prepend}{sample_argument.replace('_', '-')}",
         type=str,
         required=required,
         nargs=nargs,
         default=default,
         help=f"{sample_argument} {help_extra}",
+        dest=f"{prepend.replace('-', '_')}{sample_argument}",
+    )
+
+    # Add legacy snake_case arguments
+    parser.add_argument(
+        f"--{prepend}{project_argument}",
+        type=str,
+        required=False,  # Not required since kebab-case takes precedence
+        nargs=nargs,
+        default=None,  # No default here; rely on kebab-case
+        dest=f"{prepend.replace('-', '_')}{project_argument}",
+    )
+    parser.add_argument(
+        f"--{prepend}{sample_argument}",
+        type=str,
+        required=False,
+        nargs=nargs,
+        default=None,
+        dest=f"{prepend.replace('-', '_')}{sample_argument}",
     )
 
     return parser
@@ -73,16 +93,33 @@ def get_add_sample_sheet_parser():
     )
 
     parser.add_argument(
-        "--sample_sheet",
+        "--sample-sheet",
         type=str,
         help="the path to the Illumina sample sheet",
         required=True,
+        dest="sample_sheet",
+    )
+    parser.add_argument(
+        "--sample_sheet",
+        type=str,
+        help=argparse.SUPPRESS,
+        required=False,
+        dest="sample_sheet",
+    )
+
+    parser.add_argument(
+        "--basecalls-dir",
+        type=str,
+        help="path to the basecalls directory",
+        required=True,
+        dest="basecalls_dir",
     )
     parser.add_argument(
         "--basecalls_dir",
         type=str,
-        help="path to the basecalls directory",
-        required=True,
+        help=argparse.SUPPRESS,
+        required=False,
+        dest="basecalls_dir",
     )
 
     return parser
@@ -107,18 +144,34 @@ def get_sample_main_variables_parser(
 
     if "barcode_flavor" in main_variables:
         parser.add_argument(
-            "--barcode_flavor",
+            "--barcode-flavor",
             type=str,
             default="default" if defaults else None,
             help="barcode flavor for this sample",
+            dest="barcode_flavor",
+        )
+        parser.add_argument(
+            "--barcode_flavor",
+            type=str,
+            default="default" if defaults else None,
+            help=argparse.SUPPRESS,
+            dest="barcode_flavor",
         )
 
     if "adapter_flavor" in main_variables:
         parser.add_argument(
-            "--adapter_flavor",
+            "--adapter-flavor",
             type=str,
             default="default" if defaults else None,
             help="barcode flavor for this sample",
+            dest="adapter_flavor",
+        )
+        parser.add_argument(
+            "--adapter_flavor",
+            type=str,
+            default="default" if defaults else None,
+            help=argparse.SUPPRESS,
+            dest="adapter_flavor",
         )
 
     if "species" in main_variables:
@@ -131,11 +184,20 @@ def get_sample_main_variables_parser(
 
     if "map_strategy" in main_variables:
         parser.add_argument(
-            "--map_strategy",
+            "--map-strategy",
             type=str,
             help="string constant definining mapping strategy. Can be multi-stage and use bowtie2 or STAR (see documentation)",
             required=False,
+            default="STAR:genome",
+            dest="map_strategy",
+        )
+        parser.add_argument(
+            "--map_strategy",
+            type=str,
+            help=argparse.SUPPRESS,
+            required=False,
             default=None,
+            dest="map_strategy",
         )
 
     if "puck" in main_variables:
@@ -150,28 +212,52 @@ def get_sample_main_variables_parser(
         )
 
         parser.add_argument(
-            "--puck_barcode_file_id",
+            "--puck-barcode-file-id",
             type=str,
             help="puck_barcode_file_id of the sample to be added/update",
             nargs="+",
+            dest="puck_barcode_file_id",
+        )
+        parser.add_argument(
+            "--puck_barcode_file_id",
+            type=str,
+            help=argparse.SUPPRESS,
+            nargs="+",
+            dest="puck_barcode_file_id",
         )
 
+    parser.add_argument(
+        "--puck-barcode-file",
+        type=str,
+        nargs="+",
+        help="the path to the file contining (x,y) positions of the barcodes",
+        dest="puck_barcode_file",
+    )
     parser.add_argument(
         "--puck_barcode_file",
         type=str,
         nargs="+",
-        help="the path to the file contining (x,y) positions of the barcodes",
+        help=argparse.SUPPRESS,
+        dest="puck_barcode_file",
     )
 
     if "run_mode" in main_variables:
         parser.add_argument(
-            "--run_mode",
+            "--run-mode",
             type=str,
             nargs="+",
             help="run_mode names for this sample.\n"
             + "the sample will be processed using the provided run_modes.\n"
             + "for merged samples, if left empty, the run_modes of the \n"
             + "merged (input) samples will be intersected.\n",
+            dest="run_mode",
+        )
+        parser.add_argument(
+            "--run_mode",
+            type=str,
+            nargs="+",
+            help=argparse.SUPPRESS,
+            dest="run_mode",
         )
 
     return parser
@@ -192,9 +278,16 @@ def get_sample_extra_info_parser():
     import datetime
 
     parser.add_argument(
-        "--sequencing_date",
+        "--sequencing-date",
         type=datetime.date.fromisoformat,
         help="sequencing date of the sample. format: YYYY-MM-DD",
+        dest="sequencing_date",
+    )
+    parser.add_argument(
+        "--sequencing_date",
+        type=datetime.date.fromisoformat,
+        help=argparse.SUPPRESS,
+        dest="sequencing_date",
     )
 
     return parser
@@ -282,19 +375,33 @@ def get_set_remove_variable_subparsers(
     logger.debug(f"get_set_remove_variable_subparsers(varname={variable_name}) called")
 
     def get_action_parser(action):
-        """get_action_parser.
+        """Create and return a parser for a specific action.
 
-        :param action:
+        :param action: The action (e.g., "set" or "remove")
         """
+        # Convert `action` and `variable_name` to kebab-case for subcommand
+        kebab_action_variable = f"{action}-{variable_name.replace('_', '-')}"
+        snake_action_variable = f"{action}_{variable_name}"
+
+        # Add the parser for the action
         action_parser = parent_parser.add_parser(
-            f"{action}_{variable_name}",
+            kebab_action_variable,
             parents=[get_project_sample_parser(allow_multiple=True)],
             description=f"{action} {variable_name} for several projects/samples",
             help=f"{action} {variable_name} for several projects/samples",
         )
+
+        # Add the kebab-case and legacy snake_case arguments
         action_parser.add_argument(
-            f"--{variable_name}", type=str, required=True, nargs=nargs
+            f"--{prepend}{variable_name.replace('_', '-')}",
+            f"--{prepend}{variable_name}",  # Legacy argument
+            type=str,
+            required=True,
+            nargs=nargs,
+            help=f"Specify the {variable_name} to {action}",
+            dest=variable_name,  # Unified destination
         )
+
         action_parser.set_defaults(func=func, variable=variable_name, action=action)
 
         return action_parser
@@ -302,7 +409,7 @@ def get_set_remove_variable_subparsers(
     set_parser = get_action_parser("set")
 
     if allow_multiple:
-        set_parser.add_argument("--keep_old", action="store_true")
+        set_parser.add_argument("--keep-old", action="store_true")
 
         remove_parser = get_action_parser("remove")
 
@@ -315,25 +422,27 @@ def get_action_sample_parser(parent_parser, action, func):
     :param func:
     """
     logger.debug(f"get_action_sample_parser(action={action}) called")
+
     if action not in ["add", "update", "delete", "merge"]:
         raise ValueError(f"Invalid action: {action}")
 
     if action == "merge":
-        parser_name = "merge_samples"
+        parser_name = "merge-samples"
         msg = "merge samples"
         parents = [
             get_project_sample_parser(
-                prepend="merged_", help_extra="of the newly created merged sample"
+                prepend="merged-", help_extra="of the newly created merged sample"
             ),
             get_project_sample_parser(
                 allow_multiple=True, help_extra="of the samples to be merged"
             ),
         ]
     else:
-        parser_name = f"{action}_sample"
+        parser_name = f"{action}-sample"
         msg = f"{action} a sample"
         parents = [get_project_sample_parser()]
 
+    # Add additional arguments based on action
     if action == "add":
         # add arguments for species, run_mode, barcode_flavor and puck
         parents.append(
@@ -365,9 +474,15 @@ def get_action_sample_parser(parent_parser, action, func):
         # add possibility to add extra info
         parents.append(get_sample_extra_info_parser())
 
+    # Add the parser with kebab-case name and backward-compatible snake_case alias
     sample_parser = parent_parser.add_parser(
-        parser_name, description=msg, help=msg, parents=parents
+        parser_name,
+        description=msg,
+        help=msg,
+        parents=parents,
+        aliases=[f"{action}_sample"],
     )
+
     sample_parser.set_defaults(func=func, action=action)
 
 
@@ -408,14 +523,12 @@ def setup_project_parser(parent_parser_subparsers):
     # LIST PROJECTS
     # always show these variables
     always_show = [
-        "puck_barcode_file_id",
         "species",
-        "investigator",
-        "sequencing_date",
-        "experiment",
-        "run_mode",
         "barcode_flavor",
+        "run_mode",
         "map_strategy",
+        "puck",
+        "puck_barcode_file_id",
     ]
     import spacemake.project_df as spdf
 
@@ -447,18 +560,26 @@ def setup_project_parser(parent_parser_subparsers):
 
     # ADD SAMPLE SHEET
     sample_add_sample_sheet = subparsers.add_parser(
-        "add_sample_sheet",
+        "add-sample-sheet",
         description=help_desc["add_sample_sheet"],
         help=help_desc["add_sample_sheet"],
         parents=[get_add_sample_sheet_parser()],
     )
+    sample_add_sample_sheet_legacy = subparsers.add_parser(
+        "add_sample_sheet",
+        parents=[get_add_sample_sheet_parser()],
+    )
     sample_add_sample_sheet.set_defaults(func=add_sample_sheet_cmdline)
+    sample_add_sample_sheet_legacy.set_defaults(func=add_sample_sheet_cmdline)
 
     # ADD SAMPLES FROM YAML
     sample_add_samples_yaml = subparsers.add_parser(
-        "add_samples_from_yaml",
+        "add-samples-from-yaml",
         description=help_desc["add_samples_from_yaml"],
         help=help_desc["add_samples_from_yaml"],
+    )
+    sample_add_samples_yaml_legacy = subparsers.add_parser(
+        "add_samples_from_yaml",
     )
     sample_add_samples_yaml.add_argument(
         "--samples_yaml",
@@ -466,7 +587,14 @@ def setup_project_parser(parent_parser_subparsers):
         required=True,
         help="path to the .yaml file containing sample info",
     )
+    sample_add_samples_yaml_legacy.add_argument(
+        "--samples_yaml",
+        type=str,
+        required=True,
+        help="path to the .yaml file containing sample info",
+    )
     sample_add_samples_yaml.set_defaults(func=add_samples_from_yaml_cmdline)
+    sample_add_samples_yaml_legacy.set_defaults(func=add_samples_from_yaml_cmdline)
 
     # get set/remove parser for each main variable
     # this will add parser for:
@@ -528,16 +656,29 @@ def get_run_parser():
         help="print shell commands for each rule, if exist",
     )
     parser.add_argument(
+        "--debug-smk",
+        action="store_true",
+        help="activate extended snakemake debug output on DAG construction and resons for running rules etc...",
+    )
+    parser.add_argument(
         "--touch",
         "-t",
         action="store_true",
         help="rather than running the rules, just touch each file",
     )
+
     parser.add_argument(
-        "--with_fastqc",
+        "--with-fastqc",
         "-wfqc",
         action="store_true",
         help="Run also fastqc as part of the spacemake run",
+        dest="with_fastqc",
+    )
+    parser.add_argument(
+        "--with_fastqc",
+        action="store_true",
+        help=argparse.SUPPRESS,
+        dest="with_fastqc",
     )
 
     return parser
@@ -552,27 +693,68 @@ def setup_init_parser(parent_parser_subparsers):
         "init",
         help="initialise spacemake: create config files, download genomes and annotations",
     )
+
+    parser_init.add_argument(
+        "--root-dir",
+        default="",
+        help="where to output the results of the spacemake run. defaults to .",
+        dest="root_dir",
+    )
     parser_init.add_argument(
         "--root_dir",
         default="",
-        help="where to output the results of the spacemake run. defaults to .",
+        help=argparse.SUPPRESS,
+        dest="root_dir",
+    )
+
+    parser_init.add_argument(
+        "--temp-dir",
+        default="/tmp",
+        help="temporary directory used when running spacemake. defaults to /tmp",
+        dest="temp_dir",
     )
     parser_init.add_argument(
         "--temp_dir",
         default="/tmp",
-        help="temporary directory used when running spacemake. defaults to /tmp",
+        help=argparse.SUPPRESS,
+        dest="temp_dir",
+    )
+
+    parser_init.add_argument(
+        "--download-species",
+        default=False,
+        help="if set, upon initialisation, spacemake will download the mouse and human genome and index",
+        action="store_true",
+        dest="download_species",
     )
     parser_init.add_argument(
         "--download_species",
         default=False,
-        help="if set, upon initialisation, spacemake will download the mouse and human genome and index",
+        help=argparse.SUPPRESS,
         action="store_true",
+        dest="download_species",
+    )
+
+    parser_init.add_argument(
+        "--dropseq-tools",
+        help="absolute path to dropseq_tools directory",
+        required=True,
+        dest="dropseq_tools",
     )
     parser_init.add_argument(
         "--dropseq_tools",
-        help="absolute path to dropseq_tools directory",
-        required=True,
+        help=argparse.SUPPRESS,
+        required=False,
+        dest="dropseq_tools",
     )
+
+    parser_init.add_argument(
+        "--species-directory",
+        help="absolute path to directory containing species information (sequences, annotation, and indices)",
+        required=False,
+        dest="species_directory",
+    )
+
     parser_init.set_defaults(func=spacemake_init)
 
     return parser_init
@@ -603,6 +785,78 @@ def setup_run_parser(parent_parser_subparsers):
     #    func=lambda args: spacemake_run(pdf, args))
 
     return parser_run
+
+
+def setup_migrate_parser(parent_parser_subparsers):
+    """setup_migrate_parser
+
+    :param parent_parser_subparsers
+    """
+    parser_migrate = parent_parser_subparsers.add_parser(
+        "migrate", help="migrate spacemake to the latest version"
+    )
+
+    parser_migrate.add_argument(
+        "--project-id",
+        help="project-id to migrate",
+        type=str,
+        dest="project_id",
+    )
+    parser_migrate.add_argument(
+        "--sample-id",
+        help="sample-id to migrate",
+        type=str,
+        dest="sample_id",
+    )
+    parser_migrate.add_argument(
+        "--cores",
+        default="4",
+        help="number of cores to use",
+        type=int,
+    )
+    parser_migrate.add_argument(
+        "--all",
+        action="store_true",
+        help="if set, spacemake migrates all samples",
+    )
+    parser_migrate.add_argument(
+        "--dryrun",
+        "-n",
+        action="store_true",
+        help="invokes a dry snakemake run, printing only commands",
+    )
+    parser_migrate.add_argument(
+        "--debug",
+        default="",
+        help=f"comma-separated list of logging-domains for which you want DEBUG output",
+    )
+    parser_migrate.add_argument(
+        "--rerun-incomplete",
+        "--ri",
+        action="store_true",
+        help="forces snakemake to rerun incompletely generated files",
+    )
+    parser_migrate.add_argument(
+        "--keep-going",
+        action="store_true",
+        help="if a job fails, keep executing independent jobs",
+    )
+    parser_migrate.add_argument(
+        "--printshellcmds",
+        "-p",
+        action="store_true",
+        help="print shell commands for each rule, if exist",
+    )
+    parser_migrate.add_argument(
+        "--touch",
+        "-t",
+        action="store_true",
+        help="rather than running the rules, just touch each file",
+    )
+
+    parser_migrate.set_defaults(func=spacemake_migrate)
+
+    return parser_migrate
 
 
 #####################################################
@@ -650,15 +904,12 @@ def spacemake_init(args):
 
         # add keys as species to config
         species = list(species_data_config.keys())
-        snakemake_config = {"root_dir": ""}
-        snakemake_config["species"] = species
-
-        # define the pattern
-        snakemake_config["annotation_file_pattern"] = (
-            "species_data/{species}/{species}_{data_type}.gtf"
-        )
-        snakemake_config["genome_file_pattern"] = (
-            "species_data/{species}/{species}_{data_type}.fa"
+        snakemake_config = dict(
+            root_dir="",
+            species=species,
+            # define the pattern
+            annotation_file_pattern="species_data/{species}/{species}_{data_type}.gtf",
+            genome_file_pattern="species_data/{species}/{species}_{data_type}.fa",
         )
 
         # the to be saved file paths
@@ -689,7 +940,9 @@ def spacemake_init(args):
                 os.path.dirname(__file__), "snakemake/species_init.smk"
             )
             # run snakemake: download species data and place them in the right place
-            snakemake.snakemake(snakefile, cores=1, config=snakemake_config)
+            snakemake.snakemake(
+                snakefile, cores=1, config=snakemake_config, rerun_triggers=["mtime"]
+            )
 
         for key, value in species_info.items():
             cf.add_variable(
@@ -699,6 +952,10 @@ def spacemake_init(args):
                 sequence=value["genome"],
                 annotation=value["annotation"],
             )
+
+    if "species_directory" in args:
+        # future code to create the species folder appropriately and symlink inside etc
+        print("")
 
     # copy visium_puck_barcode_file
     dest_visium_path = "puck_data/visium_barcode_positions.csv"
@@ -727,6 +984,30 @@ def spacemake_init(args):
 
     # save
     cf.dump()
+
+
+def collect_smk_options(args):
+    import spacemake.snakemake.variables as var
+
+    smk_options = dict(
+        configfiles=[var.config_path],
+        cores=args["cores"],
+        dryrun=args["dryrun"],
+        touch=args.get("touch", False),
+        force_incomplete=args.get("rerun_incomplete", False),
+        keepgoing=args.get("keep_going", False),
+        printshellcmds=args.get("printshellcmds", False),
+        rerun_triggers=["mtime"],  # needed for newer snakemake
+    )
+    if args.get("debug_smk", False):
+        smk_options.update(
+            dict(
+                debug_dag=True,  # TODO: make these configureable
+                verbose=True,
+            )
+        )
+
+    return smk_options
 
 
 @message_aggregation(logger_name)
@@ -758,6 +1039,31 @@ def spacemake_run(args):
                 logging.getLogger(logger_name.replace("root", "")).setLevel(
                     logging.DEBUG
                 )
+
+    # Check if latest version spacemake is installed. If not: exit and ask for migration.
+    # Current logic applies to versions 0.8x vs 0.9
+    with open("config.yaml") as yamlfile:
+        cf = yaml.safe_load(yamlfile.read())
+    if "spacemake_version" not in cf:
+        print(
+            """
+        ###############################################################
+        #                                                             #
+        #      WARNING: incompatible version detected                 #
+        #                                                             #
+        #   You are using a newer version of spacemake which is       #
+        #   incompatible with your current project setup.             #
+        #                                                             #
+        #     Please migrate your projects using:                     #
+        #      $ spacemake migrate                                    #
+        #                                                             #
+        #   For more info, see:                                       #
+        #   https://spacemake.readthedocs.io/en/latest/migrate.html   #
+        #                                                             #
+        ###############################################################
+        """
+        )
+        return
 
     pdf = get_global_ProjectDF()
     samples = []
@@ -791,70 +1097,51 @@ def spacemake_run(args):
     }
 
     # join config_variables and novosparc_variables
-    # to flatten the dictionary
-    config_variables = {**config_variables, **novosparc_variables}
-
-    # get the snakefile
+    # to flatten the diunpack(get_final_bam)e
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
     # run snakemake
+
+    smk_options = collect_smk_options(args)
+
     preprocess_finished = snakemake.snakemake(
         snakefile,
-        configfiles=[var.config_path],
-        cores=args["cores"],
-        dryrun=args["dryrun"],
         targets=["get_stats_prealigned_barcodes", "unload_genome_flag"],
-        touch=args["touch"],
-        force_incomplete=args["rerun_incomplete"],
-        keepgoing=args["keep_going"],
-        printshellcmds=args["printshellcmds"],
         config=config_variables,
+        **smk_options,
     )
-
     if preprocess_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
 
     # update valid pucks (above threshold) before continuing to downstream
     # this performs counting of matching barcodes after alignment
-    pdf.update_project_df_barcode_matches(prealigned=True)
-    pdf.consolidate_pucks_merged_samples()
-    pdf.dump()
+    if not args["dryrun"]:
+        pdf.update_project_df_barcode_matches(prealigned=True)
+        pdf.consolidate_pucks_merged_samples()
+        pdf.dump()
 
     # whitelisting of barcodes
     preprocess_finished = snakemake.snakemake(
         snakefile,
-        configfiles=[var.config_path],
-        cores=args["cores"],
-        dryrun=args["dryrun"],
         targets=["get_whitelist_barcodes"],
-        touch=args["touch"],
-        force_incomplete=args["rerun_incomplete"],
-        keepgoing=args["keep_going"],
-        printshellcmds=args["printshellcmds"],
         config=config_variables,
+        **smk_options,
     )
 
-    pdf.update_project_df_barcode_matches()
-    pdf.dump()
+    if not args["dryrun"]:
+        pdf.update_project_df_barcode_matches()
+        pdf.dump()
 
     # run snakemake quantification and reports
     analysis_finished = snakemake.snakemake(
-        snakefile,
-        configfiles=[var.config_path],
-        cores=args["cores"],
-        dryrun=args["dryrun"],
-        targets=targets,
-        touch=args["touch"],
-        force_incomplete=args["rerun_incomplete"],
-        keepgoing=args["keep_going"],
-        printshellcmds=args["printshellcmds"],
-        config=config_variables,
+        snakefile, targets=targets, config=config_variables, **smk_options
     )
 
     if analysis_finished is False:
         raise SpacemakeError("an error occurred while snakemake() ran")
 
     # at the very end dump the project_data_frame
-    pdf.dump()
+    if not args["dryrun"]:
+        pdf.dump()
 
 
 @message_aggregation(logger_name)
@@ -977,6 +1264,77 @@ def list_projects_cmdline(args):
     logger.info(df.loc[:, variables].__str__())
 
 
+@message_aggregation(logger_name)
+def spacemake_migrate(args):
+    """spacemake_migrate.
+
+    :param args:
+    """
+    import snakemake
+    from spacemake.errors import SpacemakeError
+    import spacemake.snakemake.variables as var
+    from spacemake.project_df import get_global_ProjectDF
+
+    # check if it's a legit spacemake folder
+    if not os.path.isfile(var.config_path):
+        msg = "spacemake has not been initalised yet in this folder.\n"
+        msg += "please run `spacemake init` to start a new project"
+        raise SpacemakeError(msg)
+
+    pdf = get_global_ProjectDF()
+
+    def build_sample_info(project_id, sample_id):
+        """Helper function to extract project_folder and target."""
+        project_folder = os.path.join(
+            f"projects/{project_id}/processed_data/{sample_id}/illumina/complete_data"
+        )
+        target = os.path.join(project_folder, "final.polyA_adapter_trimmed.cram")
+        return project_id, sample_id, project_folder, target
+
+    # check if either the (--project_id, --sample_id) OR the --all flag were provided
+    if args.get("all"):
+        if args.get("project_id") or args.get("sample_id"):
+            raise ValueError(
+                "Do not provide --project-id or --sample-id when using --all."
+            )
+        sample_records = pdf.df.index.tolist()
+    else:
+        if not args.get("project_id") or not args.get("sample_id"):
+            raise ValueError(
+                "Both --project-id and --sample-id are required unless using --all."
+            )
+        sample_records = [(args["project_id"], args["sample_id"])]
+
+    # build per-sample info
+    sample_infos = [build_sample_info(p, s) for p, s in sample_records]
+    projects, samples, project_folders, targets = map(list, zip(*sample_infos))
+
+    # build config
+    config_variables = {
+        "project_df": pdf.file_path,
+        "pwd": os.getcwd(),
+        "projects": projects,
+        "samples": samples,
+        "project_folders": project_folders,
+        "targets": targets,
+        # "project_sample_folder_triplets": list(zip(projects, samples, project_folders)),
+    }
+
+    # get the migration snakefile
+    snakefile = os.path.join(os.path.dirname(__file__), "snakemake/migrate.smk")
+
+    # run snakemake
+    migration_finished = snakemake.snakemake(
+        snakefile,
+        config=config_variables,
+        **collect_smk_options(args),
+    )
+    if migration_finished is False:
+        raise SpacemakeError("an error occurred while snakemake() ran")
+
+    return
+
+
 def make_main_parser():
     #################
     # DEFINE PARSER #
@@ -990,7 +1348,7 @@ def make_main_parser():
 
     parser_main = argparse.ArgumentParser(
         allow_abbrev=False,
-        description="spacemake: bioinformatic pipeline for processing and analysis of spatial-transcriptomics data",
+        description="Spacemake: processing and analysis of large-scale spatial transcriptomics data",
     )
 
     parser_main.add_argument("--version", action="store_true")
@@ -1003,6 +1361,7 @@ def make_main_parser():
     parser_projects = None
     parser_config = None
     parser_init = None
+    parser_migrate = None
     parser_spatial = None
 
     ##################
@@ -1034,6 +1393,11 @@ def make_main_parser():
         parser_run = setup_run_parser(parser_main_subparsers)
 
         #####################
+        # SPACEMAKE MIGRATE #
+        #####################
+        parser_migrate = setup_migrate_parser(parser_main_subparsers)
+
+        #####################
         # SPACEMAKE SPATIAL #
         #####################
         from spacemake.spatial.cmdline import setup_spatial_parser
@@ -1045,6 +1409,7 @@ def make_main_parser():
         "config": parser_config,
         "projects": parser_projects,
         "run": parser_run,
+        "migrate": parser_migrate,
         "main": parser_main,
         "spatial": parser_spatial,
     }
@@ -1066,6 +1431,9 @@ def cmdline():
     else:
         del args.version
 
+    from spacemake.util import setup_logging
+
+    setup_logging(args, name="spacemake", rename_process=False, sample="cmdline()")
     # get the function to be run
     if "func" in args:
         func = args.func

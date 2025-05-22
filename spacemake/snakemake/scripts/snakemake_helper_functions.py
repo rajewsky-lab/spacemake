@@ -67,6 +67,11 @@ def get_output_files(
             ):
                 continue
 
+            if (len(puck_barcode_file_ids) > 0) and (
+                puck_barcode_file_ids[0] == "no_spatial_data"
+            ):
+                continue
+
             coordinate_system = puck_vars["coordinate_system"]
             if coordinate_system == "":
                 continue
@@ -371,6 +376,11 @@ def get_bc_preprocess_settings(wildcards):
 
     settings = bc_flavor_data.preprocess_settings[flavor]
 
+    adapter_flavor = project_df.get_metadata(
+        "adapter_flavor", project_id=wildcards.project_id, sample_id=wildcards.sample_id
+    )
+
+    settings["adapter_flavor"] = adapter_flavor
     return settings
 
 
@@ -389,17 +399,51 @@ def get_star_input_bam(wildcards):
         return {"reads": tagged_bam}
 
 
-def get_final_bam(wildcards):
-    is_merged = project_df.get_metadata(
+def is_merged(wildcards):
+    return project_df.get_metadata(
         "is_merged", project_id=wildcards.project_id, sample_id=wildcards.sample_id
     )
 
-    if is_merged:
+
+def get_final_bam(wildcards):
+    if is_merged(wildcards):
         res = [final_merged_bam]
     else:
         res = [final_bam]
 
     return res
+
+
+def get_final_bam_reference(wildcards):
+    from spacemake.map_strategy import map_data
+
+    if is_merged(wildcards):
+        merged_from = project_df.get_metadata(
+            "merged_from",
+            project_id=wildcards.project_id,
+            sample_id=wildcards.sample_id,
+        )
+        # collect the main reference to which the constituent
+        # samples were aligned/annotated and make sure it is
+        # the same.
+        refs = set()
+        wc = dotdict(wildcards)
+        for project_id, sample_id in merged_from:
+            wc.project_id = project_id
+            wc.sample_id = sample_id
+            fb = wc_fill(final_bam, wc)
+            ref = map_data["REF_FOR_FINAL"][fb]
+            # print(f">>> merged_from: {wc.sample_id} {fb} {ref}")
+            refs.add(ref)
+
+        assert len(refs) == 1
+        ref = refs.pop()
+    else:
+        fb = wc_fill(final_bam, wildcards)
+        ref = map_data["REF_FOR_FINAL"][fb]
+        # print(f">>> {fb} {ref}")
+
+    return ref
 
 
 def get_dge_input_bam(wildcards):

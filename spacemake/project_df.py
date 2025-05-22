@@ -247,13 +247,22 @@ class ProjectDF:
                     project_id=index[0], sample_id=index[1]
                 )
                 if _puck_vars.get("coordinate_system", "") != "":
-                    raise SystemExit(
-                        SpacemakeError(
-                            f"At {index}, the selected puck '{row['puck']}' "
-                            + "contains a coordinate_system "
-                            + "but no 'puck_barcode_files' are specified"
-                        )
+                    # TODO: This can arise if no tiles have sufficient overlap
+                    # instead of repeatedly complaining, we should
+                    # * issue a big fat warning!
+                    # * replace 'puck_barcode_file_id' with ['no_spatial_data'] and
+                    # * set 'puck' to empty?? (I would like to keep the warning in subsequent
+                    # runs, rather than pretending that this always was 'no_spatial_data')
+                    self.logger.warning(
+                        f"At {index}, the selected puck '{row['puck']}' "
+                        "contains a coordinate_system "
+                        "but no 'puck_barcode_files' are specified. "
+                        "no spatial information will be available."
                     )
+                    self.df.at[index, "puck_barcode_file"] = None
+                    self.df.at[index, "puck_barcode_file_id"] = []
+
+            # print(self.df[["puck_barcode_file_id", "puck_barcode_file", "puck"]])
 
     def _check_unique_samples(self):
         for index, _ in self.df.iterrows():
@@ -660,7 +669,16 @@ class ProjectDF:
                         + "only should be one id available"
                     )
 
-                pbf_id = row["puck_barcode_file_id"][0]
+                elif len(row["puck_barcode_file_id"]) < 1:
+                    self.logger.warning(
+                        "empty puck_barcode_file_id list detected. "
+                        "Perhaps something went wrong intersecting your samples barcodes with your sample? "
+                        "No spatial data will be available."
+                    )
+                    pbf_id = "no_spatial_data"
+                else:
+                    pbf_id = row["puck_barcode_file_id"][0]
+
                 if pbf_id not in self.project_df_default_values["puck_barcode_file_id"]:
                     puck = self.config.get_puck(pbf_id)
 
@@ -1433,7 +1451,7 @@ class ProjectDF:
         sample_id_list=[],
         **kwargs,
     ):
-        """merge_samples.
+        """merge samples.
 
         :param merged_project_id:
         :param merged_sample_id:
@@ -1453,7 +1471,7 @@ class ProjectDF:
         consistent_variables.remove("adapter")
         consistent_variables.remove("quant")
 
-        # append variable "map_strategy" manually.
+        # append variable "map-strategy" manually.
         # TODO: consider moving "map_strategy" into the main_variables_sg2pl, needs additional parser etc.
         consistent_variables.append("map_strategy")
 

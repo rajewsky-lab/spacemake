@@ -37,7 +37,6 @@ register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
 #####################################
 #### snakemake string templates #####
 #####################################
-# (may eventually move to variables.py)
 
 # The entry point: pre-processed, unmapped reads in a uBAM
 ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
@@ -49,32 +48,6 @@ ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
 final_target = "final.polyA_adapter_trimmed"
 # ubam_input = "unaligned_bc_tagged{polyA_adapter_trimmed}"
 # final_target = "final{polyA_adapter_trimmed}"
-
-# patterns for auto-generated BAM file names and symlinks
-linked_bam = complete_data_root + "/{link_name}.bam"
-mapped_bam = complete_data_root + "/{ref_name}.{mapper}.bam"
-star_mapped_bam = complete_data_root + "/{ref_name}.STAR.bam"
-bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.bam"
-
-# special log file used for rRNA "ribo depletion" stats
-bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.bam.log"
-
-# default places for mapping indices, unless specified differently in the config.yaml
-star_index = 'species_data/{species}/{ref_name}/star_index'
-star_index_param = star_index
-star_index_file = star_index + '/SAindex'
-star_index_locked = star_index + '/smk.indexlocked.{species}.{ref_name}'
-star_index_locked_current = star_index_locked + f'.{uuid.uuid4()}'
-star_index_loaded = '{species}.{ref_name}.genomeLoad.done'
-star_index_unloaded = '{species}.{ref_name}.genomeUnload.done'
-star_index_log_location = 'species_data/{species}/{ref_name}/.star_index_logs'
-
-bt2_index = 'species_data/{species}/{ref_name}/bt2_index'
-bt2_index_param = bt2_index + '/{ref_name}'
-bt2_index_file = bt2_index_param + '.1.bt2'
-
-species_reference_sequence = 'species_data/{species}/{ref_name}/sequence.fa'
-species_reference_annotation = 'species_data/{species}/{ref_name}/annotation.gtf'
 
 default_BT2_MAP_FLAGS = (
     " --local"
@@ -163,13 +136,17 @@ def get_map_params(wc, output, mapper="STAR"):
     wc = dotdict(wc.items())
     wc.mapper = mapper
     mr = get_map_rule(wc)
-    annotation_cmd = f"| samtools view --threads=4 -bh /dev/stdin > {output}"
+    ref = species_reference_sequence.format(species=mr.species, ref_name=mr.ref_name)
+    annotation_cmd = f"samtools view --no-PG -F4 --threads=4 -Ch -T {ref} /dev/stdin > {output.bam}"
     # this is a stub for "no annotation tagging"
     if hasattr(mr, "ann_final"):
         ann = mr.ann_final
         if ann and ann.lower().endswith(".gtf"):
-            tagging_cmd =  "| {dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O={mr.out_path} ANNOTATIONS_FILE={mr.ann_final}"
-            annotation_cmd = tagging_cmd.format(dropseq_tools=dropseq_tools, mr=mr)
+            annotation_cmd =  (
+                "samtools view --no-PG -F4 --threads=2 -buh | "
+                f"{dropseq_tools}/TagReadWithGeneFunction I=/dev/stdin O=/dev/stdout COMPRESSION_LEVEL=0 ANNOTATIONS_FILE={mr.ann_final} | "
+                f"samtools view --no-PG --threads=4 -T {ref} -C /dev/stdin -o {mr.out_path}"
+            )
 
     return {
         'annotation_cmd' : annotation_cmd,
@@ -210,30 +187,33 @@ rule map_reads_bowtie2:
         # index=lambda wc: BAM_IDX_LKUP[wc_fill(bt2_mapped_bam, wc)],
         unpack(lambda wc: get_map_inputs(wc, mapper='bowtie2')),
     output:
-        bam=bt2_mapped_bam
+        bam=bt2_mapped_bam,
+        ubam=bt2_unmapped_bam
     log: bt2_mapped_bam + ".log"
     params:
         auto = lambda wc, output: get_map_params(wc, output, mapper='bowtie2'),
     threads: 32 
     shell:
-        # 1) decompress unmapped reads from existing BAM
-        "samtools view -f 4 {input.bam}"
+        # 1) decompress unmapped reads from existing BAM/CRAM
+        "samtools view -f 4 {input.bam} "
         # 2) re-convert SAM into uncompressed BAM.
         #     Somehow needed for bowtie2 2.4.5. If we don't do this
         #     bowtie2 just says "0 reads"
         " "
-        "| samtools view --no-PG --threads=2 -Sbu" 
+        "| samtools view --no-PG --threads=2 -Sbu " 
         " "
         # 3) align reads with bowtie2, *preserving the original BAM tags*
-        "| bowtie2 -p {threads} --reorder --mm"
-        "  -x {params.auto[index]} -b /dev/stdin --preserve-tags"
-        "  {params.auto[flags]} 2> {log}"
+        "| bowtie2 -p {threads} --reorder --mm "
+        "  -x {params.auto[index]} -b /dev/stdin --preserve-tags "
+        "  {params.auto[flags]} 2> {log} "
         " "
         # fix the BAM header to accurately reflect the entire history of processing via PG records.
-        "| python {repo_dir}/scripts/splice_bam_header.py"
+        "| python {repo_dir}/scripts/splice_bam_header.py "
         "  --in-ubam {input.bam}"
         " "
-        "{params.auto[annotation_cmd]}"
+        "| tee >( {params.auto[annotation_cmd]} ) "
+        "| samtools view -f 4 --threads=4 -Ch --no-PG > {output.ubam}"
+       
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
 
@@ -276,6 +256,7 @@ rule map_reads_STAR:
         # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
         bam=star_mapped_bam,
+        ubam=star_unmapped_bam,
         log=star_target_log_file,
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
     params:
@@ -299,7 +280,8 @@ rule map_reads_STAR:
         "| python {repo_dir}/scripts/splice_bam_header.py"
         " --in-ubam {input.bam}"
         " "
-        "{params.auto[annotation_cmd]}"
+        "| tee >( {params.auto[annotation_cmd]} ) "
+        "| samtools view -f 4 --threads=4 -Ch > {output.ubam}"
         " "
         "; rm -rf {params.tmp_dir}"
 
@@ -307,6 +289,32 @@ rule map_reads_STAR:
 ## Automatic index generation requires
 # a) that the reference sequence has already been provided (by user or another rule)
 # b) that the index is to be placed in the default location
+
+from spacemake.map_strategy import get_all_mapped_bams
+import spacemake.snakemake.variables as smv
+
+def get_unmapped_cleanup_cmd(wc):
+    key = (wc.project_id, wc.sample_id)
+    bams = map_data["ALL_UNMAPPED_BAMS"]
+    keep = map_data["BAM_IS_NOT_TEMP"]
+    slated = sorted(bams[key] - keep)
+    # print(f"bams={bams[key]}")
+    # print(f"keep={keep}")
+    # print(f"slated for removal: {slated}")
+    if slated:
+        return f"rm {' '.join(slated)} && "
+    else:
+        return ""
+
+rule remove_unmapped:
+    input:
+        unpack(get_all_mapped_bams)
+    output:
+        smv.unmapped_removed_flag
+    params:
+        cleanup_cmd=get_unmapped_cleanup_cmd
+    shell:
+        "{params.cleanup_cmd}touch {output}"
 
 
 rule prepare_species_reference_sequence:

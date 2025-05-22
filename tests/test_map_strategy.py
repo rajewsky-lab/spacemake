@@ -57,7 +57,7 @@ def test_mapstr(configured_root):
     for name, mapstr, expect in data:
         mr, lr = mapstr_to_targets(mapstr)
         assert mr[0].input_name == "uBAM"
-        assert mr[-1].input_name == "rRNA.bowtie2"
+        assert mr[-1].input_name == "not_rRNA.bowtie2"
         assert lr[0].link_src == "genome.STAR"
         assert lr[0].link_name == "final"
 
@@ -96,10 +96,10 @@ def test_validation_cmdline_issue_54(configured_root):
         # add
         sm(
             "projects",
-            "add_sample",
-            "--project_id=test",
-            f"--sample_id={name}",
-            f"--map_strategy={mapstr}",
+            "add-sample",
+            "--project-id=test",
+            f"--sample-id={name}",
+            f"--map-strategy={mapstr}",
             f"--R1={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
             f"--R2={spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
             f"--species={species}",

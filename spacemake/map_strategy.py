@@ -2,12 +2,7 @@ import os
 from collections import defaultdict
 from spacemake.errors import *
 from spacemake.util import dotdict, wc_fill
-from spacemake.snakemake.variables import (
-    complete_data_root,
-    log_dir,
-    star_log_file,
-    star_target_log_file,
-)
+import spacemake.snakemake.variables as smv
 
 map_data = {
     # used to fetch all info needed to create a BAM file
@@ -18,6 +13,7 @@ map_data = {
     "ANNOTATED_BAMS": defaultdict(set),
     "REF_NAMES": defaultdict(set),
     "ALL_BAMS": defaultdict(set),
+    "ALL_UNMAPPED_BAMS": defaultdict(set),
     "BAM_IS_NOT_TEMP": set(),
     "SAMPLE_MAP_STRATEGY": {},
     # used for symlink name to source mapping
@@ -25,6 +21,7 @@ map_data = {
     "BAM_UNMAPPED_KEEP": set(),
     # used for automated mapping index generation
     "INDEX_FASTA_LKUP": {},
+    "REF_FOR_FINAL": {},
     #   key: bt2_index_file or star_index_file
     #   value: dotdict with
     #       .ref_path: path to genome FASTA
@@ -46,40 +43,6 @@ ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
 # The end-point. Usually annotation-tagged genome alignments
 final_target = "final.polyA_adapter_trimmed"
 
-# patterns for auto-generated BAM file names and symlinks
-linked_bam = complete_data_root + "/{link_name}.bam"
-mapped_bam = complete_data_root + "/{ref_name}.{mapper}.bam"
-unmapped_bam = complete_data_root + "/not_{ref_name}.{mapper}.bam"
-star_mapped_bam = complete_data_root + "/{ref_name}.STAR.bam"
-star_unmapped_bam = complete_data_root + "/not_{ref_name}.STAR.bam"
-bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.bam"
-bt2_unmapped_bam = complete_data_root + "/not_{ref_name}.bowtie2.bam"
-
-bt2_mapped_log = log_dir + "/{ref_name}.bowtie2.log"
-
-# special log file used for rRNA "ribo depletion" stats
-bt2_rRNA_log = log_dir + "/rRNA.bowtie2.bam.log"
-
-# default places for mapping indices, unless specified differently in the config.yaml
-star_index = "species_data/{species}/{ref_name}/star_index"
-star_index_log = star_index + ".log"
-
-star_index_param = star_index
-star_index_file = star_index + "/SAindex"
-
-bt2_index = "species_data/{species}/{ref_name}/bt2_index"
-bt2_index_param = bt2_index + "/{ref_name}"
-bt2_index_file = bt2_index_param + ".1.bt2"
-bt2_index_log = bt2_index_param + ".log"
-species_reference_sequence = "species_data/{species}/{ref_name}/sequence.fa"
-star_idx_service = "{species}.{ref_name}.STAR_index_loaded"
-species_reference_annotation = "species_data/{species}/{ref_name}/annotation.gtf"
-species_reference_annotation_compiled = (
-    "species_data/{species}/{ref_name}/compiled_annotation"
-)
-species_reference_annotation_compiled_target = (
-    "species_data/{species}/{ref_name}/compiled_annotation/non_overlapping.csv"
-)
 
 #########################
 ### Default settings  ###
@@ -335,8 +298,8 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
                 if final in lr.link_name:
                     final_link = lr
 
-        # left = f"not_{mr.out_name}"
-        left = mr.out_name
+        left = f"not_{mr.out_name}"
+        # left = mr.out_name
 
     for mr in last_mr:
         mr.keep_unmapped = True
@@ -387,17 +350,22 @@ def get_mapped_BAM_output(
             mr.sample_id = index[1]
             mr.species = row.species
 
-            mr.out_path = wc_fill(mapped_bam, mr)
-            mr.out_unmapped_path = wc_fill(unmapped_bam, mr)
+            out_files.append(wc_fill(smv.unmapped_removed_flag, mr))
+
+            mr.out_path = wc_fill(smv.mapped_bam, mr)
+            mr.out_unmapped_path = wc_fill(smv.unmapped_bam, mr)
             if mr.keep_unmapped:
                 map_data["BAM_IS_NOT_TEMP"].add(mr.out_unmapped_path)
 
             mr.link_name = mr.input_name
-            mr.input_path = wc_fill(linked_bam, mr)
+            mr.input_path = wc_fill(smv.linked_bam, mr)
 
             mr.ref_path = species_d[mr.ref_name]["sequence"]
             mr.ann_path = species_d[mr.ref_name].get("annotation", None)
             map_data["ALL_BAMS"][(index[0], index[1])].add(mr.out_path)
+            map_data["ALL_UNMAPPED_BAMS"][(index[0], index[1])].add(
+                mr.out_unmapped_path
+            )
 
             if mr.cflavor == "auto":
                 # if we have annotation use the actual default, which works for complex
@@ -410,12 +378,12 @@ def get_mapped_BAM_output(
                 )
 
             if mr.ann_path:
-                mr.ann_final = wc_fill(species_reference_annotation, mr)
+                mr.ann_final = wc_fill(smv.species_reference_annotation, mr)
                 mr.ann_final_compiled = wc_fill(
-                    species_reference_annotation_compiled, mr
+                    smv.species_reference_annotation_compiled, mr
                 )
                 mr.ann_final_compiled_target = wc_fill(
-                    species_reference_annotation_compiled_target, mr
+                    smv.species_reference_annotation_compiled_target, mr
                 )
 
                 # keep track of all annotated BAM files we are going to create
@@ -425,8 +393,8 @@ def get_mapped_BAM_output(
             else:
                 mr.ann_final = []
 
-            default_STAR_INDEX = wc_fill(star_index, mr)
-            default_BT2_INDEX = wc_fill(bt2_index_param, mr)
+            default_STAR_INDEX = wc_fill(smv.star_index, mr)
+            default_BT2_INDEX = wc_fill(smv.bt2_index_param, mr)
             if mr.mapper == "bowtie2":
                 mr.map_index_param = species_d[mr.ref_name].get(
                     "BT2_index", default_BT2_INDEX
@@ -445,7 +413,7 @@ def get_mapped_BAM_output(
                 )
                 mr.map_index_param = mr.map_index
                 mr.map_index_file = mr.map_index + "/SAindex"
-                mr.star_idx_service = star_idx_service.format(**mr)
+                mr.star_idx_service = smv.star_idx_service.format(**mr)
                 mr.map_flags = species_d[mr.ref_name].get(
                     "STAR_flags", default_STAR_MAP_FLAGS
                 )
@@ -460,32 +428,33 @@ def get_mapped_BAM_output(
 
         # process all symlink rules
         for lr in link_rules:
-            lr.link_path = linked_bam.format(
+            lr.link_path = smv.linked_bam.format(
                 project_id=index[0], sample_id=index[1], link_name=lr.link_name
             )
-            lr.src_path = linked_bam.format(
+            lr.src_path = smv.linked_bam.format(
                 project_id=index[0], sample_id=index[1], link_name=lr.link_src
             )
             map_data["BAM_SYMLINKS"][lr.link_path] = lr.src_path
 
             if lr.link_name == final_target:
-                final_log_name = star_log_file.format(
+                final_log_name = smv.star_log_file.format(
                     project_id=index[0], sample_id=index[1]
                 )
-                final_log = star_target_log_file.format(
+                final_log = smv.star_target_log_file.format(
                     ref_name=lr.ref_name, project_id=index[0], sample_id=index[1]
                 )
                 # print("STAR_FINAL_LOG_SYMLINKS preparation", final_target, final_log_name, "->", final_log)
                 map_data["STAR_FINAL_LOG_SYMLINKS"][final_log_name] = final_log
+                map_data["REF_FOR_FINAL"][lr.link_path] = mr.ref_path
 
                 out_files.append(lr.link_path)
 
-    # for k,v in sorted(map_data['MAP_RULES_LKUP'].items()):
+    # for k, v in sorted(map_data["MAP_RULES_LKUP"].items()):
     #     print(f"map_rules for '{k}'")
     #     print(v)
 
     # print("BAM_SYMLINKS")
-    # for k, v in map_data['BAM_SYMLINKS'].items():
+    # for k, v in map_data["BAM_SYMLINKS"].items():
     #     print(f"    output={k} <- source={v}")
 
     # print("out_files", out_files)

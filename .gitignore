@@ -21,6 +21,7 @@ samples.yaml
 .coverage*
 .snakemake
 build
+docs/_build
 __pycache__
 spacemake.egg-info
 scratch
