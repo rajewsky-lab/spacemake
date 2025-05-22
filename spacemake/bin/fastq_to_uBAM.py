@@ -62,9 +62,24 @@ class SeqData(object):
             yield cls(fqid.split()[0], r1, q1, r2, q2)
 
     @classmethod
-    def from_BAM(cls, bam_src):
-        "TODO: allow pre-processing of raw data that is already in BAM format"
-        pass
+    def from_SAM(cls, sam_src):
+        "allow pre-processing of raw data that is already in BAM format"
+        header = []
+        for line in sam_src:
+            if line.startswith("@"):
+                header.append(line)
+                continue
+
+            cols = line.rstrip().split("\t")
+            qname = cols[0]
+            seq = cols[9]
+            qual = cols[10]
+            sd = cls(qname, "NA", "##", seq, qual)
+            tags = cols[11:]
+            # sd.raw_tags = tags
+            # sd.tags.update({tag.split(":")[0]: tag.split(":")[2] for tag in tags})
+            # sd.header = header
+            yield sd
 
 
 ## Preprocessing is done by sequentially acting on a SeqData object to modify
@@ -370,7 +385,17 @@ def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
         f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args}"
     )
 
-    ingress = SeqData.from_paired_end(fq1, fq2) if fq1 else SeqData.from_single_end(fq2)
+    if args.input_format == "BAM":
+        ingress = SeqData.from_SAM(fq2)
+    else:
+        if fq2:
+            ingress = (
+                SeqData.from_paired_end(fq1, fq2)
+                if fq1
+                else SeqData.from_single_end(fq2)
+            )
+        else:
+            raise ValueError("no input data provided")
 
     # TODO:
     # decide how we want to handle multiple input files
@@ -494,15 +519,30 @@ def main(args):
     have_read1 = set([str(r1) != "None" for r1 in input_reads1]) == set([True])
 
     # queues for communication between processes
-    w = (
-        mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
-        # open reads2.fastq.gz
-        .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
-            input=mf.FIFO("read2", "rt"),
-            outputs=mf.FIFO("r2_{n}", "wt", n=args.threads_work),
-            chunk_size=args.chunk_size * 4,
+    if args.input_format == "BAM":
+        w = (
+            mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
+            # open reads2.fastq.gz
+            .BAM_reader(
+                input=input_reads2[0], output=mf.FIFO("read2", "wb")
+            ).distribute(
+                input=mf.FIFO("read2", "rt"),
+                outputs=mf.FIFO("r2_{n}", "wt", n=args.threads_work),
+                header_broadcast=True,
+                header_detect_func=mf.util.is_header,
+                chunk_size=args.chunk_size,
+            )
         )
-    )
+    else:
+        w = (
+            mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
+            # open reads2.fastq.gz
+            .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
+                input=mf.FIFO("read2", "rt"),
+                outputs=mf.FIFO("r2_{n}", "wt", n=args.threads_work),
+                chunk_size=args.chunk_size * 4,
+            )
+        )
 
     if have_read1:
         # open reads1.fastq.gz
@@ -661,7 +701,12 @@ def parse_args():
         type=int,
         help="phred quality base in the input (default=33)",
     )
-
+    parser.add_argument(
+        "--input-format",
+        default="FASTQ",
+        choices=["FASTQ", "BAM"],
+        help="input format (default=FASTQ)",
+    )
     ## pre-processing options
     parser.add_argument(
         "--processing",
