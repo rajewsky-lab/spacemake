@@ -5,6 +5,7 @@ import pandas as pd
 import logging
 import scanpy as sc
 import functools
+import uuid
 import anndata as ad
 
 from itertools import cycle
@@ -231,13 +232,13 @@ class DataFrameTable:
         """
         
         return table_html
-    
 
 class TabVisualizer:
     """Manages tabbed visualization of plot groups with simple, clean styling."""
     def __init__(self, title: str = "Spacemake QC Report"):
         self.title = title
         self.plot_groups: List[PlotGroup] = []
+        self.unique_id = str(uuid.uuid4())[:8]
     
     def add_plot_group(self, group: PlotGroup) -> None:
         """Add a plot group to the visualizer."""
@@ -247,43 +248,50 @@ class TabVisualizer:
         """Generate complete HTML with simple, clean styling."""
         from IPython.display import HTML
 
-        # Generate tab navigation
-        tabs_html = '<ul class="nav nav-tabs" role="tablist">'
+        tabs_html = f'<ul class="nav nav-tabs nav-tabs-{self.unique_id}" role="tablist">'
         
-        # Generate tab content
-        content_html = '<div class="tab-content mt-3">'
+        content_html = f'<div class="tab-content tab-content-{self.unique_id} mt-3">'
         
         for i, group in enumerate(self.plot_groups):
             active = i == 0
             clean_id = group.get_clean_id()
+            unique_clean_id = f"{clean_id}-{self.unique_id}"
             
             # Add tab navigation item
             tabs_html += f"""
             <li class="nav-item" role="presentation">
                 <button class="nav-link {'active' if active else ''}"
-                        id="{clean_id}-tab"
+                        id="{unique_clean_id}-tab"
                         data-bs-toggle="tab"
-                        data-bs-target="#{clean_id}"
+                        data-bs-target="#{unique_clean_id}"
+                        data-tab-container="{self.unique_id}"
                         type="button"
                         role="tab"
-                        aria-controls="{clean_id}"
+                        aria-controls="{unique_clean_id}"
                         aria-selected="{'true' if active else 'false'}">
                     {group.name}
                 </button>
             </li>
             """
             
-            # Add tab content
-            content_html += group.generate(active=active)
+            content_html += f"""
+            <div class="tab-pane fade {'show active' if active else ''}" 
+                 id="{unique_clean_id}" 
+                 role="tabpanel" 
+                 aria-labelledby="{unique_clean_id}-tab">
+                <h3>{group.name}</h3>
+                <p class="lead text-muted">{group.description}</p>
+                {chr(10).join(plot.generate() for plot in group.plots)}
+            </div>
+            """
         
         tabs_html += '</ul>'
         content_html += '</div>'
 
-        # Simple, clean HTML template with working JavaScript
         html_template = f"""
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         
-        <div class="container-fluid">
+        <div class="container-fluid tabvisualizer-{self.unique_id}">
             <div class="row">
                 <div class="col-12">
                     <div class="card-body">
@@ -315,24 +323,24 @@ class TabVisualizer:
             overflow-x: auto;
         }}
         
-        .nav-tabs .nav-link {{
+        .nav-tabs-{self.unique_id} .nav-link {{
             color: #495057;
             cursor: pointer;
         }}
 
-        .nav-tabs .nav-link::before {{
+        .nav-tabs-{self.unique_id} .nav-link::before {{
             content: none !important;
         }}
 
-        .nav-tabs .nav-item {{
+        .nav-tabs-{self.unique_id} .nav-item {{
             list-style: none !important;
         }}
 
-        .nav-tabs {{
+        .nav-tabs-{self.unique_id} {{
             list-style-type: none !important;
         }}
         
-        .nav-tabs .nav-link.active {{
+        .nav-tabs-{self.unique_id} .nav-link.active {{
             color: #495057;
             background-color: #fff;
             border-color: #dee2e6 #dee2e6 #fff;
@@ -351,33 +359,39 @@ class TabVisualizer:
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         
         <script>
-        // Initialize Bootstrap tabs manually for Jupyter environment
+        // Initialize Bootstrap tabs manually for this specific TabVisualizer instance
         document.addEventListener('DOMContentLoaded', function() {{
-            const tabButtons = document.querySelectorAll('[data-bs-toggle="tab"]');
+            const tabButtons_{self.unique_id} = document.querySelectorAll('.tabvisualizer-{self.unique_id} [data-bs-toggle="tab"]');
             
-            tabButtons.forEach(button => {{
+            tabButtons_{self.unique_id}.forEach(button => {{
                 button.addEventListener('click', function(e) {{
                     e.preventDefault();
                     
-                    // Remove active class from all tabs and content
-                    document.querySelectorAll('.nav-link').forEach(link => {{
-                        link.classList.remove('active');
-                        link.setAttribute('aria-selected', 'false');
-                    }});
+                    const containerId = this.getAttribute('data-tab-container');
+                    const container = document.querySelector('.tabvisualizer-' + containerId);
                     
-                    document.querySelectorAll('.tab-pane').forEach(pane => {{
-                        pane.classList.remove('show', 'active');
-                    }});
-                    
-                    // Add active class to clicked tab
-                    this.classList.add('active');
-                    this.setAttribute('aria-selected', 'true');
-                    
-                    // Show corresponding content
-                    const targetId = this.getAttribute('data-bs-target');
-                    const targetPane = document.querySelector(targetId);
-                    if (targetPane) {{
-                        targetPane.classList.add('show', 'active');
+                    if (container) {{
+                        // Remove active class from all tabs in THIS container only
+                        container.querySelectorAll('.nav-tabs-{self.unique_id} .nav-link').forEach(link => {{
+                            link.classList.remove('active');
+                            link.setAttribute('aria-selected', 'false');
+                        }});
+
+                        // Hide tab content in THIS specific container only
+                        container.querySelectorAll('.tab-content-{self.unique_id} .tab-pane').forEach(pane => {{
+                            pane.classList.remove('show', 'active');
+                        }});
+                        
+                        // Add active class to clicked tab
+                        this.classList.add('active');
+                        this.setAttribute('aria-selected', 'true');
+                        
+                        // Show corresponding content
+                        const targetId = this.getAttribute('data-bs-target');
+                        const targetPane = container.querySelector(targetId);
+                        if (targetPane) {{
+                            targetPane.classList.add('show', 'active');
+                        }}
                     }}
                 }});
             }});
