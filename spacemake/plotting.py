@@ -6,6 +6,7 @@ import logging
 import scanpy as sc
 import functools
 import uuid
+import math
 import anndata as ad
 
 from itertools import cycle
@@ -229,6 +230,264 @@ class DataFrameTable:
                 </table>
             </div>
         </div>
+        """
+        
+        return table_html
+    
+class PaginatedDataFrameTable(DataFrameTable):
+    """A paginated version of DataFrameTable for handling large datasets."""
+    
+    def __init__(self, data, title, description, rows_per_page=20, **kwargs):
+        super().__init__(data=data, title=title, description=description, **kwargs)
+        self.rows_per_page = rows_per_page
+        self.total_rows = len(data)
+        self.total_pages = math.ceil(self.total_rows / self.rows_per_page)
+        self.table_id = f"table-{hash(title)}-{id(self)}"
+    
+    def generate(self):
+        from IPython.display import HTML
+        
+        if self.total_rows <= self.rows_per_page:
+            # If data fits in one page, use the regular table
+            return super().generate()
+        
+        # Generate paginated table
+        table_html = f"""
+        <div class="table-section">
+            <h4>{self.title}</h4>
+            <p class="text-muted">{self.description}</p>
+            
+            <!-- Pagination info -->
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <small class="text-muted">
+                    Showing <span id="{self.table_id}-start">1</span> to 
+                    <span id="{self.table_id}-end">{min(self.rows_per_page, self.total_rows)}</span> 
+                    of {self.total_rows} entries
+                </small>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm btn-outline-secondary" id="{self.table_id}-prev" disabled>Previous</button>
+                    <span class="mx-2">Page <span id="{self.table_id}-current">1</span> of {self.total_pages}</span>
+                    <button class="btn btn-sm btn-outline-secondary" id="{self.table_id}-next" {'disabled' if self.total_pages <= 1 else ''}>Next</button>
+                </div>
+            </div>
+            
+            <div class="{self.style.get_container_class()}">
+                <table class="{self.style.get_table_class()}" id="{self.table_id}">
+                    <thead class="{self.style.get_header_class()}">
+                        <tr>
+        """
+        
+        # Add sortable headers
+        for col_name, col in self.columns.items():
+            table_html += f'''<th scope="col" title="{col.description}" class="sortable-header" data-column="{col_name}" style="cursor: pointer; user-select: none;">
+                {col.name} <span class="sort-indicator"></span>
+            </th>'''
+        
+        table_html += """
+                        </tr>
+                    </thead>
+                    <tbody id="{}-body">
+        """.format(self.table_id)
+        
+        # Add all data rows (we'll show/hide via JavaScript)
+        display_data = self.data.reset_index(drop=True)
+        for idx, (_, row) in enumerate(display_data.iterrows()):
+            page_num = idx // self.rows_per_page + 1
+            row_class = self.style.get_row_class()
+            table_html += f'<tr class="{row_class}" data-page="{page_num}" style="{"" if page_num == 1 else "display: none;"}">'
+            for col_name, col in self.columns.items():
+                formatted_value = col.format_value(row[col_name])
+                table_html += f"<td>{formatted_value}</td>"
+            table_html += "</tr>"
+        
+        table_html += f"""
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <style>
+        .sortable-header:hover {{
+            background-color: #f8f9fa;
+        }}
+        
+        .sort-indicator {{
+            font-size: 0.8em;
+            color: #6c757d;
+            margin-left: 5px;
+        }}
+        
+        .sort-asc .sort-indicator::after {{
+            content: '▲';
+        }}
+        
+        .sort-desc .sort-indicator::after {{
+            content: '▼';
+        }}
+        </style>
+        
+        <script>
+        (function() {{
+            const tableId = '{self.table_id}';
+            const rowsPerPage = {self.rows_per_page};
+            const totalPages = {self.total_pages};
+            let currentPage = 1;
+            let currentSort = {{ column: null, direction: 'asc' }};
+            
+            const prevBtn = document.getElementById(tableId + '-prev');
+            const nextBtn = document.getElementById(tableId + '-next');
+            const currentSpan = document.getElementById(tableId + '-current');
+            const startSpan = document.getElementById(tableId + '-start');
+            const endSpan = document.getElementById(tableId + '-end');
+            const tbody = document.getElementById(tableId + '-body');
+            const table = document.getElementById(tableId);
+            
+            // Store original row data for sorting
+            const originalRows = Array.from(tbody.querySelectorAll('tr')).map((row, idx) => ({{
+                element: row.cloneNode(true),
+                data: {{}},
+                originalIndex: idx
+            }}));
+            
+            // Extract data from each row for sorting
+            const headers = table.querySelectorAll('th[data-column]');
+            headers.forEach((header, colIdx) => {{
+                const columnName = header.dataset.column;
+                originalRows.forEach((rowData, rowIdx) => {{
+                    const cellText = rowData.element.cells[colIdx].textContent.trim();
+                    // Try to parse as number, otherwise keep as string
+                    rowData.data[columnName] = isNaN(cellText) || cellText === '' ? cellText : parseFloat(cellText);
+                }});
+            }});
+            
+            function sortData(column, direction) {{
+                return [...originalRows].sort((a, b) => {{
+                    let aVal = a.data[column];
+                    let bVal = b.data[column];
+                    
+                    // Handle different data types
+                    if (typeof aVal === 'string' && typeof bVal === 'string') {{
+                        aVal = aVal.toLowerCase();
+                        bVal = bVal.toLowerCase();
+                    }}
+                    
+                    let comparison = 0;
+                    if (aVal < bVal) comparison = -1;
+                    else if (aVal > bVal) comparison = 1;
+                    
+                    return direction === 'desc' ? -comparison : comparison;
+                }});
+            }}
+            
+            function redistributePages(sortedRows) {{
+                // Clear current tbody
+                tbody.innerHTML = '';
+                
+                // Add sorted rows back with new page assignments
+                sortedRows.forEach((rowData, idx) => {{
+                    const newPageNum = Math.floor(idx / rowsPerPage) + 1;
+                    const row = rowData.element.cloneNode(true);
+                    row.setAttribute('data-page', newPageNum);
+                    row.style.display = newPageNum === currentPage ? '' : 'none';
+                    tbody.appendChild(row);
+                }});
+                
+                // Update total pages if needed
+                const newTotalPages = Math.ceil(sortedRows.length / rowsPerPage);
+                if (currentPage > newTotalPages) {{
+                    currentPage = Math.max(1, newTotalPages);
+                }}
+            }}
+            
+            function updateSortIndicators(activeColumn, direction) {{
+                // Clear all sort indicators
+                headers.forEach(header => {{
+                    header.classList.remove('sort-asc', 'sort-desc');
+                }});
+                
+                // Set active sort indicator
+                if (activeColumn) {{
+                    const activeHeader = table.querySelector(`th[data-column="${{activeColumn}}"]`);
+                    if (activeHeader) {{
+                        activeHeader.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+                    }}
+                }}
+            }}
+            
+            function updateTable() {{
+                // Hide all rows
+                const rows = tbody.querySelectorAll('tr');
+                rows.forEach(row => row.style.display = 'none');
+                
+                // Show current page rows
+                const pageRows = tbody.querySelectorAll(`tr[data-page="${{currentPage}}"]`);
+                pageRows.forEach(row => row.style.display = '');
+                
+                // Update pagination info
+                const totalCurrentRows = tbody.querySelectorAll('tr').length;
+                const start = (currentPage - 1) * rowsPerPage + 1;
+                const end = Math.min(currentPage * rowsPerPage, totalCurrentRows);
+                const currentTotalPages = Math.ceil(totalCurrentRows / rowsPerPage);
+                
+                startSpan.textContent = start;
+                endSpan.textContent = end;
+                currentSpan.textContent = currentPage;
+                
+                // Update button states
+                prevBtn.disabled = currentPage === 1;
+                nextBtn.disabled = currentPage === currentTotalPages || currentTotalPages === 0;
+            }}
+            
+            // Add click event listeners to sortable headers
+            headers.forEach(header => {{
+                header.addEventListener('click', () => {{
+                    const column = header.dataset.column;
+                    
+                    // Determine sort direction
+                    if (currentSort.column === column) {{
+                        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                    }} else {{
+                        currentSort.column = column;
+                        currentSort.direction = 'asc';
+                    }}
+                    
+                    // Sort the data
+                    const sortedRows = sortData(currentSort.column, currentSort.direction);
+                    
+                    // Reset to first page after sorting
+                    currentPage = 1;
+                    
+                    // Redistribute rows across pages
+                    redistributePages(sortedRows);
+                    
+                    // Update sort indicators
+                    updateSortIndicators(currentSort.column, currentSort.direction);
+                    
+                    // Update table display
+                    updateTable();
+                }});
+            }});
+            
+            prevBtn.addEventListener('click', () => {{
+                if (currentPage > 1) {{
+                    currentPage--;
+                    updateTable();
+                }}
+            }});
+            
+            nextBtn.addEventListener('click', () => {{
+                const totalCurrentRows = tbody.querySelectorAll('tr').length;
+                const currentTotalPages = Math.ceil(totalCurrentRows / rowsPerPage);
+                if (currentPage < currentTotalPages) {{
+                    currentPage++;
+                    updateTable();
+                }}
+            }});
+            
+            // Initial table update
+            updateTable();
+        }})();
+        </script>
         """
         
         return table_html
