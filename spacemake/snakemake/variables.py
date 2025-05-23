@@ -357,6 +357,7 @@ downsample_saturation_analysis = (
     downsampled_data_prefix
     + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.html"
 )
+saturation_analysis_notebook = downsampled_data_prefix + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.ipynb"
 
 
 # bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'

@@ -80,24 +80,35 @@ class Plot:
     def generate(self) -> str:
         """Generate the HTML for this plot."""
         return f"""
-        <h4>{self.title}</h4>
-        <p>{self.description}</p>
-        {self._get_plot_html()}
+        <div class="plot-section">
+            <h4>{self.title}</h4>
+            <p class="text-muted">{self.description}</p>
+            {self._get_plot_html()}
+        </div>
         """
     
     def _get_plot_html(self) -> str:
         """Convert matplotlib figure to HTML."""
-        with plt.ioff():
-            if self.plot_func() is None:
-                return f'<div class="plot-container">No plot available</div>'
-            fig, ax = self.plot_func()
-            
-            buf = BytesIO()
-            fig.savefig(buf, format='png', bbox_inches='tight')
-            plt.close(fig)
-            
-            data = base64.b64encode(buf.getvalue()).decode('utf-8')
-            return f'<div class="plot-container"><img src="data:image/png;base64,{data}"/></div>'
+        try:
+            with plt.ioff():
+                result = self.plot_func()
+                if result is None:
+                    return '<div class="alert alert-warning">No plot data available</div>'
+                
+                if isinstance(result, tuple) and len(result) == 2:
+                    fig, ax = result
+                else:
+                    fig = result
+                
+                buf = BytesIO()
+                fig.savefig(buf, format='png', bbox_inches='tight', dpi=150, facecolor='white')
+                plt.close(fig)
+                
+                data = base64.b64encode(buf.getvalue()).decode('utf-8')
+                return f'<div class="text-center"><img src="data:image/png;base64,{data}" class="img-fluid" style="max-width: 100%; height: auto;"/></div>'
+        except Exception as e:
+            logger.error(f"Error generating plot: {e}")
+            return f'<div class="alert alert-danger">Error generating plot: {str(e)}</div>'
     
 @dataclass
 class PlotGroup:
@@ -106,16 +117,22 @@ class PlotGroup:
     description: str
     plots: List[Plot]
     
+    def get_clean_id(self) -> str:
+        """Get a clean ID for HTML use."""
+        return "".join(c.lower() if c.isalnum() else "-" for c in self.name).strip("-")
+    
     def generate(self, active: bool = False) -> str:
         """Generate HTML for all plots in the group."""
         plots_html = "\n".join(plot.generate() for plot in self.plots)
+        clean_id = self.get_clean_id()
         
         return f"""
-        <div class="tab-pane fade show {'active' if active else ''}" 
-             id="group-{self.name}" 
-             role="tabpanel">
+        <div class="tab-pane fade {'show active' if active else ''}" 
+             id="{clean_id}" 
+             role="tabpanel" 
+             aria-labelledby="{clean_id}-tab">
             <h3>{self.name}</h3>
-            <p>{self.description}</p>
+            <p class="lead text-muted">{self.description}</p>
             {plots_html}
         </div>
         """
@@ -177,32 +194,30 @@ class DataFrameTable:
         from IPython.display import HTML
 
         table_html = f"""
-        <div class="{self.style.get_container_class()}">
+        <div class="table-section">
             <h4>{self.title}</h4>
-            <p>{self.description}</p>
-            <div class="table-responsive" style="max-width:800px;">
-                <table class="{self.style.get_table_class()}" style="width:auto;">
+            <p class="text-muted">{self.description}</p>
+            <div class="{self.style.get_container_class()}">
+                <table class="{self.style.get_table_class()}">
                     <thead class="{self.style.get_header_class()}">
                         <tr>
         """
         
         # Add headers
         for col_name, col in self.columns.items():
-            table_html += f"<th title='{col.description}'>{col.name}</th>"
+            table_html += f'<th scope="col" title="{col.description}">{col.name}</th>'
         
         table_html += """
-                    </tr>
-                </thead>
-                <tbody>
+                        </tr>
+                    </thead>
+                    <tbody>
         """
 
         display_data = self.data.reset_index()
         
         # Add data rows
         for _, row in display_data.iterrows():
-            table_html += f"""
-                    <tr class="{self.style.get_row_class()}">
-            """
+            table_html += f'<tr class="{self.style.get_row_class()}">'
             for col_name, col in self.columns.items():
                 formatted_value = col.format_value(row[col_name])
                 table_html += f"<td>{formatted_value}</td>"
@@ -219,8 +234,8 @@ class DataFrameTable:
     
 
 class TabVisualizer:
-    """Manages tabbed visualization of plot groups."""
-    def __init__(self, title: str = "Visualization"):
+    """Manages tabbed visualization of plot groups with simple, clean styling."""
+    def __init__(self, title: str = "Spacemake QC Report"):
         self.title = title
         self.plot_groups: List[PlotGroup] = []
     
@@ -229,54 +244,148 @@ class TabVisualizer:
         self.plot_groups.append(group)
     
     def generate_html(self):
-        """Generate complete HTML with tabs for all plot groups."""
+        """Generate complete HTML with simple, clean styling."""
         from IPython.display import HTML
 
-        # Add Bootstrap CSS and JS dependencies
-        dependencies = """
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-        <style>
-            .tab-content { padding: 20px 0; }
-            .table-container { max-width: 800px; }
-        </style>
-        """
+        # Generate tab navigation
+        tabs_html = '<ul class="nav nav-tabs" role="tablist">'
         
-        # Create tab navigation
-        tabs_html = """
-        <ul class="nav nav-tabs" role="tablist">
-        """
+        # Generate tab content
+        content_html = '<div class="tab-content mt-3">'
         
-        # Create tab content
-        content_html = """
-        <div class="tab-content">
-        """
-        
-        # Generate tabs and content
         for i, group in enumerate(self.plot_groups):
-            active = 'active' if i == 0 else ''
+            active = i == 0
+            clean_id = group.get_clean_id()
             
-            # Add tab
+            # Add tab navigation item
             tabs_html += f"""
             <li class="nav-item" role="presentation">
-                <button class="nav-link {active}"
-                        id="group-{group.name}-tab"
+                <button class="nav-link {'active' if active else ''}"
+                        id="{clean_id}-tab"
                         data-bs-toggle="tab"
-                        data-bs-target="#group-{group.name}"
+                        data-bs-target="#{clean_id}"
                         type="button"
-                        role="tab">
+                        role="tab"
+                        aria-controls="{clean_id}"
+                        aria-selected="{'true' if active else 'false'}">
                     {group.name}
                 </button>
             </li>
             """
             
-            # Add content
-            content_html += group.generate(active=(i == 0))
+            # Add tab content
+            content_html += group.generate(active=active)
         
-        tabs_html += "</ul>"
-        content_html += "</div>"
+        tabs_html += '</ul>'
+        content_html += '</div>'
 
-        return HTML(dependencies + tabs_html + content_html)
+        # Simple, clean HTML template with working JavaScript
+        html_template = f"""
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card-body">
+                        {tabs_html}
+                        {content_html}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <style>
+        .plot-section {{
+            background: #f8f9fa;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid #dee2e6;
+        }}
+        
+        .table-section {{
+            background: #f8f9fa;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid #dee2e6;
+        }}
+        
+        .table-container {{
+            overflow-x: auto;
+        }}
+        
+        .nav-tabs .nav-link {{
+            color: #495057;
+            cursor: pointer;
+        }}
+
+        .nav-tabs .nav-link::before {{
+            content: none !important;
+        }}
+
+        .nav-tabs .nav-item {{
+            list-style: none !important;
+        }}
+
+        .nav-tabs {{
+            list-style-type: none !important;
+        }}
+        
+        .nav-tabs .nav-link.active {{
+            color: #495057;
+            background-color: #fff;
+            border-color: #dee2e6 #dee2e6 #fff;
+        }}
+        
+        .card {{
+            border: none;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }}
+        
+        .table {{
+            background: white;
+        }}
+        </style>
+        
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        
+        <script>
+        // Initialize Bootstrap tabs manually for Jupyter environment
+        document.addEventListener('DOMContentLoaded', function() {{
+            const tabButtons = document.querySelectorAll('[data-bs-toggle="tab"]');
+            
+            tabButtons.forEach(button => {{
+                button.addEventListener('click', function(e) {{
+                    e.preventDefault();
+                    
+                    // Remove active class from all tabs and content
+                    document.querySelectorAll('.nav-link').forEach(link => {{
+                        link.classList.remove('active');
+                        link.setAttribute('aria-selected', 'false');
+                    }});
+                    
+                    document.querySelectorAll('.tab-pane').forEach(pane => {{
+                        pane.classList.remove('show', 'active');
+                    }});
+                    
+                    // Add active class to clicked tab
+                    this.classList.add('active');
+                    this.setAttribute('aria-selected', 'true');
+                    
+                    // Show corresponding content
+                    const targetId = this.getAttribute('data-bs-target');
+                    const targetPane = document.querySelector(targetId);
+                    if (targetPane) {{
+                        targetPane.classList.add('show', 'active');
+                    }}
+                }});
+            }});
+        }});
+        </script>
+        """
+
+        return HTML(html_template)
 
 def histogram(values, axis, nbins=100, color="#000000", log=False, auto_log=True):
     # decide linear or logarithmic scale
@@ -297,15 +406,18 @@ def histogram(values, axis, nbins=100, color="#000000", log=False, auto_log=True
 def _scales_for_spatial_plot(adata):
     n_cells = len(adata)
 
-    px_by_um = adata.uns["puck_variables"]["coord_by_um"]
-    spot_diameter_um = adata.uns["puck_variables"]["spot_diameter_um"]
-
+    try:
+        px_by_um = adata.uns["puck_variables"]["coord_by_um"]
+        spot_diameter_um = adata.uns["puck_variables"]["spot_diameter_um"]
+    except:
+        logging.warning("Could not find 'coord_by_um' in the 'puck_variables' from the AnnData file. Setting to 1 as default")
+        px_by_um = 1
+        spot_diameter_um = 1
+    
     meshed = False
     if "mesh_variables" in adata.uns.keys():
         meshed = True
         mesh_spot_diameter_um = adata.uns["mesh_variables"]["spot_diameter_um"]
-
-    adata.obsm["spatial"] = adata.obs[["x_pos", "y_pos"]].values
 
     # Set limits and axes units for the spatial plots
     x_limits = adata.obsm["spatial"][:, 0].min(), adata.obsm["spatial"][:, 0].max()
@@ -349,9 +461,12 @@ def spatial(adata, spot_size=1.5, color="total_counts", cmap="magma", figsize=(5
         logger.warning(f"No '{color}' found in adata")
         return None
     
+    fig, axes = plt.subplots(1, 1, figsize=figsize)
+    if len(adata) < 2:
+        return fig, axes
+
     scales = _scales_for_spatial_plot(adata)
 
-    fig, axes = plt.subplots(1, 1, figsize=figsize)
     sc.pl.spatial(
         adata,
         img_key=None,
@@ -709,7 +824,7 @@ def entropy_compression(adata, nbins=30, figsize=(7, 4), return_fig=True):
         return fig, axes
 
 
-def plot_density_metric_faceted(values, metric, log_scale=True, color="#000000", title=""):
+def density_per_downsampling(values, metric, log_scale=True, color="#000000", title=""):
     fig, axes = plt.subplots(len(PCT_DOWNSAMPLE_TO_PLOT), 1, figsize=(5, 0.5 * len(PCT_DOWNSAMPLE_TO_PLOT)))
 
     i = 0
@@ -742,7 +857,7 @@ def plot_density_metric_faceted(values, metric, log_scale=True, color="#000000",
     return fig, axes
 
 
-def median_per_run_mode(values, metric, umi_cutoffs, color="#000000", title=""):
+def median_per_downsampling(values, metric, umi_cutoffs, color="#000000", title=""):
     fig, axes = plt.subplots(1, 1, figsize=(5, 3))
 
     lines = ["-", "--", "-.", ":"]

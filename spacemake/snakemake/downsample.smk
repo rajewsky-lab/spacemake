@@ -74,31 +74,51 @@ def get_saturation_analysis_input(wildcards):
 
     return files
 
-
-rule create_saturation_analysis:
+rule run_saturation_analysis:
     input:
-        unpack(get_saturation_analysis_input)
-    output:
-        downsample_saturation_analysis
+        unpack(get_saturation_analysis_input),
+        notebook_template = os.path.join(spacemake_dir, "report/notebooks/saturation_analysis.ipynb")
     params:
-        sample_info = lambda wildcards: project_df.get_sample_info(
-            wildcards.project_id, wildcards.sample_id),
+        is_spatial = lambda wildcards:
+            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
+                                 puck_barcode_file_id=wildcards.puck_barcode_file_id),
         run_modes = lambda wildcards: get_run_modes_from_sample(
-            wildcards.project_id, wildcards.sample_id)
+            wildcards.project_id, wildcards.sample_id),
+        complete_data_root = complete_data_root
+    output:
+        notebook = saturation_analysis_notebook
     run:
-        from spacemake.report.saturation_analysis import generate_saturation_analysis_metadata
+        import papermill as pm
+        
+        adata_paths = []
+        
+        for run_mode in params.run_modes:
+            adata_paths.append(input[f"{run_mode}.dge"][0])
 
-        template_file = os.path.join(spacemake_dir, "report/templates/saturation_analysis.html")
-
-        report_metadata = generate_saturation_analysis_metadata(
-            wildcards.project_id,
-            wildcards.sample_id,
-            params['run_modes'],
-            input,
-            wildcards.puck_barcode_file_id_qc
+        pm.execute_notebook(
+            input.notebook_template,
+            output.notebook,
+            parameters={
+                'run_modes': params.run_modes,
+                'adata_paths': adata_paths,
+                'project_id': wildcards.project_id,
+                'sample_id': wildcards.sample_id,
+                'puck_barcode_file_id': wildcards.puck_barcode_file_id,
+                'config_yaml_path': "config.yaml",
+                'project_df_path': "project_df.csv"
+            }
         )
 
-        html_report = generate_html_report(report_metadata, template_file)
-
-        with open(output[0], "w") as output:
-            output.write(html_report)
+rule render_saturation_analysis:
+    input:
+        saturation_analysis_notebook,
+    output:
+        html = downsample_saturation_analysis
+    shell:
+        """
+        jupyter nbconvert {input} \
+            --to html \
+            --output-dir $(dirname {output.html}) \
+            --output $(basename {output.html}) \
+            --no-input
+        """
