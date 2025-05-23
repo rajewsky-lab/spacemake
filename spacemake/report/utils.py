@@ -529,12 +529,12 @@ def generate_deciled_data(values):
 
 def load_dge_summary_downsampling(dge_summaries, run_mode, downsample_pcts, puck_barcode_file_id):
     obs_df = pd.DataFrame()
-    for dge_summary in dge_summaries:
-        for downsample_pct in downsample_pcts:
-            _obs_df = pd.read_csv(
-                dge_summary[f"downsampled_dge_summary.{run_mode}.{downsample_pct}.{puck_barcode_file_id}"]
-            )
-            _obs_df["_downsample_pct_report"] = downsample_pct
-            obs_df = pd.concat([obs_df, _obs_df])
+    for downsample_pct in downsample_pcts:
+        _path = dge_summaries[f"downsampled_dge_summary.{run_mode}.{downsample_pct}.{puck_barcode_file_id}"]
+        if isinstance(_path, list):
+            _path = _path[0]
+        _obs_df = pd.read_csv(_path)
+        _obs_df["_downsample_pct_report"] = downsample_pct
+        obs_df = pd.concat([obs_df, _obs_df])
 
     return obs_df

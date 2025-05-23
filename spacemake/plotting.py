@@ -824,8 +824,11 @@ def entropy_compression(adata, nbins=30, figsize=(7, 4), return_fig=True):
         return fig, axes
 
 
-def density_per_downsampling(values, metric, log_scale=True, color="#000000", title=""):
-    fig, axes = plt.subplots(len(PCT_DOWNSAMPLE_TO_PLOT), 1, figsize=(5, 0.5 * len(PCT_DOWNSAMPLE_TO_PLOT)))
+def density_per_downsampling(values, metric, log_scale=True, color="#000000", title="", figsize=None, return_fig=True):
+    if figsize is None:
+        figsize = (5, 0.5 * len(PCT_DOWNSAMPLE_TO_PLOT))
+        
+    fig, axes = plt.subplots(len(PCT_DOWNSAMPLE_TO_PLOT), 1, figsize=figsize)
 
     i = 0
     for downsample_pct, value_density in values.groupby("_downsample_pct_report"):
@@ -854,11 +857,12 @@ def density_per_downsampling(values, metric, log_scale=True, color="#000000", ti
     fig.text(0.0, 0.6, "density", va="center", rotation="vertical")
     plt.tight_layout()
 
-    return fig, axes
+    if return_fig:
+        return fig, axes
 
 
-def median_per_downsampling(values, metric, umi_cutoffs, color="#000000", title=""):
-    fig, axes = plt.subplots(1, 1, figsize=(5, 3))
+def median_per_downsampling(values, metric, umi_cutoffs, color="#000000", title="", figsize=(5, 3), return_fig=True):
+    fig, axes = plt.subplots(1, 1, figsize=figsize)
 
     lines = ["-", "--", "-.", ":"]
     linecycler = cycle(lines)
@@ -892,11 +896,12 @@ def median_per_downsampling(values, metric, umi_cutoffs, color="#000000", title=
     legend.set_frame_on(False)
 
     plt.tight_layout()
-    return fig, axes
+    if return_fig:
+        return fig, axes
 
 
-def deciled_median(decile_dat):
-    fig, axes = plt.subplots(3, 2, figsize=(6, 4))
+def deciled_median(decile_dat, figsize=(6, 4), return_fig=True):
+    fig, axes = plt.subplots(3, 2, figsize=figsize)
 
     # Iterate through each unique 'observation' for facetting
     for i, (obs, data) in enumerate(decile_dat.groupby("observation")):
@@ -927,4 +932,5 @@ def deciled_median(decile_dat):
 
     plt.tight_layout()
 
-    return fig, axes
+    if return_fig:
+        return fig, axes

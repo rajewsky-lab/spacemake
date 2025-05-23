@@ -89,18 +89,16 @@ rule run_saturation_analysis:
         notebook = saturation_analysis_notebook
     run:
         import papermill as pm
-        
-        adata_paths = []
-        
-        for run_mode in params.run_modes:
-            adata_paths.append(input[f"{run_mode}.dge"][0])
+
+        input_dict = dict(input)
+        input_dict.pop('notebook_template', None)
 
         pm.execute_notebook(
             input.notebook_template,
             output.notebook,
             parameters={
                 'run_modes': params.run_modes,
-                'adata_paths': adata_paths,
+                'downsampled_dge_summary': input_dict,
                 'project_id': wildcards.project_id,
                 'sample_id': wildcards.sample_id,
                 'puck_barcode_file_id': wildcards.puck_barcode_file_id,
