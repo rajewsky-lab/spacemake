@@ -204,7 +204,7 @@ def generate_table_mapping_statistics(
     # Iterate over the files in the folder
     for filename in os.listdir(complete_data_root):
         # Check if the file ends with .bam.log
-        if filename.endswith(".bam.log") and "final" not in filename:
+        if filename.endswith(".cram.log") and "final" not in filename:
             bowtie_log_files.append(filename)
         # Check if the file ends with .Log.final.out
         elif filename.endswith(".Log.final.out") and filename != "star.Log.final.out":
@@ -278,6 +278,7 @@ def create_mapping_stats_df(split_reads_read_type, data_root):
         all_stats.append(stats)
 
     combined_stats = pd.concat(all_stats, axis=0)
+    print(combined_stats)
 
     # Extract only the rows for rRNA and STAR mapper (genome)
     rRNA_data = combined_stats[combined_stats["name"] == "rRNA"]
