@@ -643,6 +643,7 @@ rule run_qc_sheet:
         complete_data_root = complete_data_root
     output:
         notebook = qc_sheet_notebook
+    retries: 5
     run:
         import papermill as pm
         
@@ -695,7 +696,17 @@ rule run_automated_analysis:
     output:
         result_file = automated_analysis_result_file,
         notebook = automated_report_notebook
+    retries: 5
     run:
+        import os
+
+        os.environ['OMP_NUM_THREADS'] = '1'
+        os.environ['OPENBLAS_NUM_THREADS'] = '1'
+        os.environ['MKL_NUM_THREADS'] = '1'
+        os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
+        os.environ['NUMEXPR_NUM_THREADS'] = '1'
+        os.environ['NUMBA_NUM_THREADS'] = '1'
+
         import papermill as pm
 
         pm.execute_notebook(
