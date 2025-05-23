@@ -741,18 +741,8 @@ rule render_automated_analysis:
             --output $(basename {output.html}) \
             --no-input
 
-        sed -i '/<\/head>/i\\
-        <style>\\
-        #notebook-container {{ max-width: 1400px !important; margin: 0 auto !important; padding: 2rem !important; margin-left: 300px !important; }}\\
-        .nav-sidebar {{ position: fixed; top: 0; left: 0; width: 280px; height: 100vh; background: #f8f9fa; border-right: 1px solid #dee2e6; z-index: 1001; padding: 1rem; overflow-y: auto; }}\\
-        .nav-item {{ display: block; padding: 0.5rem 0.75rem; color: #6c757d; font-size: 0.9rem; cursor: pointer; }}\\
-        .nav-item:hover {{ background: #e9ecef; color: #495057; }}\\
-        .nav-item.active {{ background: #007bff; color: white; }}\\
-        </style>' {output.html}
-        
-        sed -i '/<\/body>/i\\
-        <div class="nav-sidebar"><h4>Navigation</h4><div id="navItems"></div></div>\\
-        <script>/* Add the JavaScript from above */</script>' {output.html}
+        chmod +x {spacemake_dir}/report/scripts/inject_navigation.sh
+        {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
         """
 
 rule run_novosparc_denovo:
