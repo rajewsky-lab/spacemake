@@ -87,6 +87,7 @@ rule run_saturation_analysis:
         complete_data_root = complete_data_root
     output:
         notebook = saturation_analysis_notebook
+    retries: 5
     run:
         import papermill as pm
 
@@ -119,4 +120,7 @@ rule render_saturation_analysis:
             --output-dir $(dirname {output.html}) \
             --output $(basename {output.html}) \
             --no-input
+
+        chmod +x {spacemake_dir}/report/scripts/inject_navigation.sh
+        {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
         """
