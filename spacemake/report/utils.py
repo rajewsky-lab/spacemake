@@ -278,7 +278,6 @@ def create_mapping_stats_df(split_reads_read_type, data_root):
         all_stats.append(stats)
 
     combined_stats = pd.concat(all_stats, axis=0)
-    print(combined_stats)
 
     # Extract only the rows for rRNA and STAR mapper (genome)
     rRNA_data = combined_stats[combined_stats["name"] == "rRNA"]
@@ -380,7 +379,7 @@ def create_mapping_stats_df(split_reads_read_type, data_root):
     # Get values from rRNA
     if not rRNA_data.empty:
         rRNA_row = rRNA_data.iloc[0]
-        rRNA_reads = rRNA_row.get("unique_aligned", 0)
+        rRNA_reads = rRNA_row.get("unique_aligned", 0) + rRNA_row.get("multimapper", 0)
 
         # Calculate percentage
         if input_reads > 0:
