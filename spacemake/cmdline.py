@@ -1271,7 +1271,8 @@ def list_projects_cmdline(args):
     logger.info(f"variables used: {variables}")
 
     # print the table
-    logger.info(df.loc[:, variables].__str__())
+    print(df.loc[:, variables].__str__())
+    # logger.info()
 
 
 @message_aggregation(logger_name)
