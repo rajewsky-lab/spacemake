@@ -683,8 +683,7 @@ rule render_qc_sheet:
             --no-input
         
         # Inject navigation
-        chmod +x {spacemake_dir}/report/scripts/inject_navigation.sh
-        {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
+        bash {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
         """
 
 rule run_automated_analysis:
