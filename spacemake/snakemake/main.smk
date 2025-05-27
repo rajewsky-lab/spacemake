@@ -740,8 +740,7 @@ rule render_automated_analysis:
             --output $(basename {output.html}) \
             --no-input
 
-        chmod +x {spacemake_dir}/report/scripts/inject_navigation.sh
-        {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
+        bash {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
         """
 
 rule run_novosparc_denovo:
