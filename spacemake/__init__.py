@@ -4,4 +4,13 @@
 # from . import spatial as sp
 
 # from .smk import Spacemake
-from . import plotting as pl
+import importlib
+
+__all__ = ['pl']
+
+def __getattr__(name):
+    if name == "pl":
+        mod = importlib.import_module(".plotting", __name__)
+        globals()[name] = mod
+        return mod
+    raise AttributeError(f"module {__name__} has no attribute {name}")
