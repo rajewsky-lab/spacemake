@@ -81,13 +81,13 @@ def unique_IDs(pg_list1, pg_list2):
 
     id_renames = {}
     ids1 = set([pg["ID"] for pg in pg_list1])
-    print(f"pre-existing IDs: {ids1}")
+    # print(f"pre-existing IDs: {ids1}")
     for pg in pg_list2:
         id2 = pg["ID"]
         id2_ = str(id2)
         n = 0
         while id2_ in ids1:
-            print(f"while enter: {id2_}")
+            # print(f"while enter: {id2_}")
             try:
                 if "." in id2_:
                     n = int(id2_.split(".")[-1])
@@ -98,7 +98,7 @@ def unique_IDs(pg_list1, pg_list2):
             n += 1
             id2_ = f"{id2_}.{n}"
 
-        print(f"end result: {id2} -> {id2_}")
+        # print(f"end result: {id2} -> {id2_}")
         if id2_ != id2:
             ids1.add(id2_)
             id_renames[id2] = id2_
