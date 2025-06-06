@@ -109,8 +109,8 @@ class Plot:
                 data = base64.b64encode(buf.getvalue()).decode('utf-8')
                 return f'<div class="text-center"><img src="data:image/png;base64,{data}" class="img-fluid" style="max-width: 100%; height: auto;"/></div>'
         except Exception as e:
-            logger.error(f"Error generating plot: {e}")
-            return f'<div class="alert alert-danger">Error generating plot: {str(e)}</div>'
+            # just empty if plot cannot be shown
+            return f'<div class="alert alert-primary">Plot not available for this configuration</div>'
     
 @dataclass
 class PlotGroup:
