@@ -93,7 +93,6 @@ def repair_PG_lines(pg_list, fix=False):
 
                 if fix:
                     pg["PP"] = best_guess
-                    print(pg["PP"])
 
         if pg["ID"] in ids_seen:
             issues.append(f"multiple use of ID {pg['ID']}.")
@@ -225,13 +224,40 @@ def merge_PG_lists(orig, other):
     return first + last
 
 
-def fix_PP(hdr):
+def fix_PP(repair_header, fix=False):
     """
     Due to a bug in previous versions, we may end up with ID:bowtie2.2 and PP:bowtie2.2
     in the same PG entry. This breaks samtools view (unless --no-PG is used). So, here we
     detect this very specific error and fix it.
     """
-    pass
+    import pysam
+
+    bam = pysam.AlignmentFile(repair_header, "rc", check_sq=False)
+    hdr = bam.header.to_dict()
+    issues, pg_list = repair_PG_lines(hdr["PG"], fix=True)
+    for iss in issues:
+        print(f"Header issue detected: '{iss}'.")
+
+    if len(issues) == 0:
+        print("No issues detected.")
+    else:
+        issues_after_fix, pg_list = repair_PG_lines(hdr["PG"], fix=False)
+        assert len(issues_after_fix) == 0
+        print(f"Successfully generated a fixed header.")
+
+        from tempfile import NamedTemporaryFile
+
+        if fix:
+            with NamedTemporaryFile(mode="tw") as tmp_hdr:
+                tmp_hdr.write("\n".join(header_to_SAM(hdr)) + "\n")
+                tmp_hdr.flush()
+                # tmp_hdr.close()
+                import pysam
+
+                pysam.samtools.reheader("-P", "-i", tmp_hdr.name, args.repair_header)
+                print(
+                    f"Replaced original header of '{args.repair_header}' with fixed header."
+                )
 
 
 def merge_headers(orig, other, enforce_RG=True):
@@ -281,6 +307,7 @@ if __name__ == "__main__":
     parser.add_argument("--in-header1", help="first header")
     parser.add_argument("--in-header2", help="second header")
     parser.add_argument("--repair-header", default="")
+    parser.add_argument("--check-header", default="")
 
     args = parser.parse_args()
 
@@ -288,63 +315,39 @@ if __name__ == "__main__":
     header2 = None
 
     if args.repair_header:
-        bam = pysam.AlignmentFile(args.repair_header, "rc", check_sq=False)
-        hdr = bam.header.to_dict()
-        issues, pg_list = repair_PG_lines(hdr["PG"], fix=True)
-        for iss in issues:
-            print(iss)
+        fix_PP(args.repair_header, fix=True)
+    elif args.check_header:
+        fix_PP(args.check_header, fix=False)
+    else:
+        if args.in_bam and args.in_ubam:
+            mbam = pysam.AlignmentFile(args.in_bam, "r")
+            ubam = pysam.AlignmentFile(args.in_ubam, "rc", check_sq=False)
+            header1 = ubam.header.to_dict()
+            header2 = mbam.header.to_dict()
 
-        if len(issues) == 0:
-            print("no issues detected.")
-        else:
-            issues_after_fix, pg_list = repair_PG_lines(hdr["PG"], fix=False)
-            assert len(issues_after_fix) == 0
-            print(f"generated fixed header.")
+        if args.in_header1 and args.in_header2:
+            # overwrite headers if so desired
+            header1 = read_header(args.in_header1)
+            header2 = read_header(args.in_header2)
 
-            from tempfile import NamedTemporaryFile
+        # print_header(header1)
+        # print_header(header2)
+        if header1 and header2:
+            merged_header = merge_headers(header1, header2)
+        # print_header(merged_header)
+        # print(f"mapped BAM header")
+        # print_header(header1)
 
-            with NamedTemporaryFile(mode="tw") as tmp_hdr:
-                tmp_hdr = open("bla.sam", "wt")
-                tmp_hdr.write("\n".join(header_to_SAM(hdr)) + "\n")
-                tmp_hdr.flush()
-                tmp_hdr.close()
-                import pysam
+        # print(f"original uBAM header")
+        # print_header(ubam_header)
 
-                pysam.samtools.reheader("-P", "-i", tmp_hdr.name, args.repair_header)
-                print("replaced original header with fixed header.")
-                # cmd = f"samtools reheader --no-PG -i {tmp_hdr.name} {args.repair_header}"
-                # print(cmd)
-                # print(os.system(cmd))
+        # print("merged header")
+        # print_header(merged_header)
 
-    if args.in_bam and args.in_ubam:
-        mbam = pysam.AlignmentFile(args.in_bam, "r")
-        ubam = pysam.AlignmentFile(args.in_ubam, "rc", check_sq=False)
-        header1 = ubam.header.to_dict()
-        header2 = mbam.header.to_dict()
-
-    if args.in_header1 and args.in_header2:
-        # overwrite headers if so desired
-        header1 = read_header(args.in_header1)
-        header2 = read_header(args.in_header2)
-
-    # print_header(header1)
-    # print_header(header2)
-    if header1 and header2:
-        merged_header = merge_headers(header1, header2)
-    # print_header(merged_header)
-    # print(f"mapped BAM header")
-    # print_header(header1)
-
-    # print(f"original uBAM header")
-    # print_header(ubam_header)
-
-    # print("merged header")
-    # print_header(merged_header)
-
-    # copy input to output, just with the new header
-    if args.in_bam and header1 and header2:
-        bam_out = pysam.AlignmentFile(
-            args.out_bam, f"w{args.out_mode}", header=merged_header
-        )
-        for aln in mbam.fetch(until_eof=True):
-            bam_out.write(aln)
+        # copy input to output, just with the new header
+        if args.in_bam and header1 and header2:
+            bam_out = pysam.AlignmentFile(
+                args.out_bam, f"w{args.out_mode}", header=merged_header
+            )
+            for aln in mbam.fetch(until_eof=True):
+                bam_out.write(aln)
