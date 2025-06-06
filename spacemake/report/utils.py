@@ -411,16 +411,16 @@ def create_summary_beads_df(run_modes_adatas):
     # Collect variables from all run modes
     for run_mode, adata in run_modes_adatas.items():
         with h5py.File(adata) as _adata_f:
-            all_variables["median_genes"][run_mode] = np.nanmedian(
+            all_variables["median_genes"][run_mode] = np.round(np.nanmedian(
                 _adata_f["obs/n_genes_by_counts"]
-            )
-            all_variables["median_pcr"][run_mode] = np.nanmedian(
+            ), 3)
+            all_variables["median_pcr"][run_mode] = np.round(np.nanmedian(
                 _adata_f["obs/reads_per_counts"]
-            )
-            all_variables["median_reads"][run_mode] = np.nanmedian(_adata_f["obs/n_reads"])
-            all_variables["median_umis"][run_mode] = np.nanmedian(
+            ), 3)
+            all_variables["median_reads"][run_mode] = np.round(np.nanmedian(_adata_f["obs/n_reads"]), 3)
+            all_variables["median_umis"][run_mode] = np.round(np.nanmedian(
                 _adata_f["obs/total_counts"]
-            )
+            ), 3)
             all_variables["n_beads"][run_mode] = len(_adata_f["obs/total_counts"])
             all_variables["sum_reads"][run_mode] = np.round(
                 _adata_f["obs/n_reads"][:].sum() / 1e6, 3
