@@ -3,12 +3,15 @@ projects
 config.yaml
 samples.yaml
 *.ipynb
+!spacemake/report/notebooks/*.ipynb
 *.tif
 *.jpg
 *.jpeg
 *.png
 *.rds
 *.html
+!spacemake/report/templates/*.html.j2
+!spacemake/report/templates/*.html
 *.csv
 *.pdf
 *.txt.gz

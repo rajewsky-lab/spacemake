@@ -6,7 +6,7 @@ Version 0.9
 0.9.0
 ~~~~~
 * Uses ``cram`` instead of ``bam`` to significantly reduce disk space.
-* The ``migrate`` tool enable updating of v0.8x processed data into 0.9.
+* The ``migrate`` tool enables updating data processed with v0.8x to be compatible with v0.9.
 * Fixed bugs.
 
 Version 0.8

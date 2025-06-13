@@ -56,10 +56,18 @@ roadmap = [
         "0.9",
         "CRAM on-disk format together with other tweaks "
         "-> disk footprint down to 1/3 of 0.8. "
-        "Replace pre-processing with cutadapt code",
+        "Requires migration of directory structure via "
+        "new `spacemake migrate` command."
+        "Replace DropSeq pre-processing tools with cutadapt "
+        "code for polyA-trimming and adapter removal.",
     ),
     (
         "0.9.1",
+        "QC reports are now produced with python/notebooks. "
+        "Completely dropped dependencies on all R packages."
+    ),
+    (
+        "0.9.2",
         "also count alignments against non-genome indices, "
         "using scbamtools.count. Spatial output is merged "
         "from genome and non-genome alignments.",

@@ -128,6 +128,8 @@ split_reads_read_type = split_reads_root + "read_type_num.txt"
 #######################
 
 qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.html"
+qc_sheet_notebook = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.ipynb"
+qc_sheet_notebook_text = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.ipynb.txt"
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = "{polyA_adapter_trimmed}.txt.gz"
 barcode_readcounts = complete_data_root + "/out_readcounts" + barcode_readcounts_suffix
@@ -278,6 +280,7 @@ automated_report_prefix = (
     automated_analysis_root + "/{sample_id}_{puck_barcode_file_id_qc}_"
 )
 automated_report = automated_report_prefix + "automated_report.html"
+automated_report_notebook = automated_report_prefix + "automated_report.ipynb"
 automated_analysis_result_file = automated_report_prefix + "results.h5ad"
 
 automated_analysis_processed_data_files = {
@@ -359,6 +362,7 @@ downsample_saturation_analysis = (
     downsampled_data_prefix
     + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.html"
 )
+saturation_analysis_notebook = downsampled_data_prefix + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.ipynb"
 
 
 # bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'

@@ -238,7 +238,7 @@ def test_sample(configured_root):
         "update-sample",
         "--project-id=test",
         "--sample-id=test1",
-        "--map-strategy=rRNA:bowtie2->genome:STAR",
+        "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR",
     )
     # add a second run mode to the sample
     sm(
