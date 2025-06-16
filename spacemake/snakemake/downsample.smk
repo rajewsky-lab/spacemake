@@ -74,15 +74,52 @@ def get_saturation_analysis_input(wildcards):
 
     return files
 
-rule create_saturation_analysis:
+rule run_saturation_analysis:
     input:
-        unpack(get_saturation_analysis_input)
-    output:
-        downsample_saturation_analysis
+        unpack(get_saturation_analysis_input),
+        notebook_template = os.path.join(spacemake_dir, "report/notebooks/saturation_analysis.ipynb")
     params:
-        sample_info = lambda wildcards: project_df.get_sample_info(
-            wildcards.project_id, wildcards.sample_id),
+        is_spatial = lambda wildcards:
+            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
+                                 puck_barcode_file_id=wildcards.puck_barcode_file_id),
         run_modes = lambda wildcards: get_run_modes_from_sample(
-            wildcards.project_id, wildcards.sample_id)
-    script:
-        "scripts/saturation_analysis.Rmd"
+            wildcards.project_id, wildcards.sample_id),
+        complete_data_root = complete_data_root
+    output:
+        notebook = saturation_analysis_notebook
+    retries: 5
+    run:
+        import papermill as pm
+
+        input_dict = dict(input)
+        input_dict.pop('notebook_template', None)
+
+        pm.execute_notebook(
+            input.notebook_template,
+            output.notebook,
+            parameters={
+                'run_modes': params.run_modes,
+                'downsampled_dge_summary': input_dict,
+                'project_id': wildcards.project_id,
+                'sample_id': wildcards.sample_id,
+                'puck_barcode_file_id': wildcards.puck_barcode_file_id,
+                'config_yaml_path': "config.yaml",
+                'project_df_path': "project_df.csv"
+            }
+        )
+
+rule render_saturation_analysis:
+    input:
+        saturation_analysis_notebook,
+    output:
+        html = downsample_saturation_analysis
+    shell:
+        """
+        jupyter nbconvert {input} \
+            --to html \
+            --output-dir $(dirname {output.html}) \
+            --output $(basename {output.html}) \
+            --no-input
+
+        bash {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
+        """

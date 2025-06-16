@@ -735,16 +735,26 @@ def setup_init_parser(parent_parser_subparsers):
         dest="download_species",
     )
 
-    parser_init.add_argument(
-        "--dropseq-tools",
-        help="absolute path to dropseq_tools directory",
-        required=True,
-        dest="dropseq_tools",
-    )
+    # This enables a pre-configured container
+    DST_from_env = os.environ.get("DROPSEQ_TOOLS", "")
+    if DST_from_env:
+        parser_init.add_argument(
+            "--dropseq-tools",
+            help="absolute path to dropseq_tools directory",
+            required=False,
+            default=DST_from_env,
+            dest="dropseq_tools",
+        )
+    else:
+        parser_init.add_argument(
+            "--dropseq-tools",
+            help="absolute path to dropseq_tools directory",
+            required=True,
+            dest="dropseq_tools",
+        )
     parser_init.add_argument(
         "--dropseq_tools",
         help=argparse.SUPPRESS,
-        required=False,
         dest="dropseq_tools",
     )
 
@@ -1261,7 +1271,8 @@ def list_projects_cmdline(args):
     logger.info(f"variables used: {variables}")
 
     # print the table
-    logger.info(df.loc[:, variables].__str__())
+    print(df.loc[:, variables].__str__())
+    # logger.info()
 
 
 @message_aggregation(logger_name)

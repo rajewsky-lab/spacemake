@@ -349,6 +349,10 @@ def aggregate_adata_by_indices(
     indices_joined_spatial_units = indices_joined_spatial_units.tocsr()
     aggregated_adata.uns["spatial_units_obs_names"] = np.array(adata.obs_names)
     aggregated_adata.uns["indices_joined_spatial_units"] = indices_joined_spatial_units
+    
+    # carry the variables for the original puck variables
+    if "puck_variables" in adata.uns:
+        aggregated_adata.uns["puck_variables"] = adata.uns["puck_variables"]
 
     from statistics import mean
 
@@ -538,5 +542,15 @@ def create_meshed_adata(
         idx_aggregated=new_ilocs,
         coordinates_aggregated=joined_coordinates,
     )
+
+    # set the meshing variables
+    meshed_adata.uns["mesh_variables"]  = { 
+        "px_by_um": px_by_um,
+        "spot_diameter_um": spot_diameter_um,
+        "spot_distance_um": spot_distance_um,
+        "bead_diameter_um": bead_diameter_um,
+        "mesh_type": mesh_type,
+        "start_at_minimum": start_at_minimum
+    }
 
     return meshed_adata
