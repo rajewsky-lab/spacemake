@@ -189,9 +189,11 @@ def polyA_trim(rev_comp=False):
             sdata.tags["T3"].append(str(n_trimmed))
 
     return polyA
-
-
-def adapter_trim(
+#                          AAGCAGTGGTATCAACGCAGAGTGGACGTTGTACTCTCC
+#                          AAGCAGTGGTATCAACGCAGAGTCAGACATACTGTTCCGATCT
+#                          AAGCAGTGGTATCAACGCAGAGTCAGACGTGTGCTCTTCCGATCT
+#                          AAGCAGTGGTATCAACGCAGAGTCAGACGT
+def adapter_trim(         #AAGCAGTGGTATCAACGCAGAGTCAGACGT
     name="SMART_TSO", seq="AAGCAGTGGTATCAACGCAGAGTGAATGGG", where="right", **kw
 ):
     import cutadapt.adapters
@@ -218,6 +220,120 @@ def adapter_trim(
                 sdata.q2 = sdata.q2[: match.rstart]
 
     return adap
+
+def require_handles(name="ONT_openst", k=10, handles=[
+    ('OpenST', "GCGAGAGTCGAGGGTGCTGTAGTCACAAGA"),
+    ('ONT', "AGATCGGAAGAGCGTCGTGTAG"), #AATGATACGGCGACCACCGAGATC TACACTCTTTCCCTACACGACGCTCTTCCGATCT
+    #('ONT_3p', "AGATCGGAAGAGCACACGTCTGACTCTGCGTTGATACCACTGCTT"),
+]):
+    """
+    kmer-lookup based detection of required adapter sequences. Can add tags, orient the sequence and
+    discard incomplete reads if desired.
+    """
+
+    from collections import defaultdict
+    kmer_dict = {}
+    kmer_count = defaultdict(int)
+    names = []
+    for name, seq in handles:
+        names.append(name)
+        for i in range(len(seq) - k + 1):
+            kmer_count[name] += 1
+            kmer = seq[i:i+k]
+            kmer_dict[kmer] = (name, i)
+    
+    from spacemake.util import rev_comp
+    
+    # print(">>> SET UP HANDLES")
+    # print(names)
+    # print(kmer_dict)
+    # print(kmer_count)
+    kmer_thresh = 0.6 * len(kmer_dict)
+
+    def _scan_seq(seq):
+        hits = defaultdict(int)
+        pos = defaultdict(lambda : defaultdict(int))
+        total_hits = 0
+
+        for i in range(len(seq) - k + 1):
+            kmer = seq[i:i+k]
+            name, j = kmer_dict.get(kmer, (None, 0) )
+            if name:
+                hits[name] += 1
+                total_hits += 1
+                pos[name][i-j] += 1
+
+        return total_hits, hits, pos
+    
+    def scan(sdata):
+        seq = sdata.r2
+        total_hits, hits, pos = _scan_seq(seq)
+        if total_hits < kmer_thresh:
+            _seq = rev_comp(seq)
+            _total_hits, _hits, _pos = _scan_seq(_seq)
+            if _total_hits > total_hits:
+                # Yes, we want the rev-comp!
+                sdata.r2 = _seq
+                sdata.q2 = sdata.q2[::-1]
+                sdata.tags['rc'] = ["true"]
+
+                seq = _seq
+                total_hits = _total_hits
+                hits = _hits
+                pos = _pos
+        
+        fractions = {}
+        pos_guess = {}
+        for name in names:
+            N = kmer_count[name]
+            fractions[name] = hits[name] / N
+            if pos[name]:
+                pos_hits = sorted([(f,x) for x, f in pos[name].items()], reverse=True)
+                pos_guess[name] = pos_hits[0][1]
+            
+        # for name in names:
+        #     print(f">> {name}: f={fractions[name]} x_guess={pos_guess.get(name,'na')} x={pos[name]}")
+
+        sdata.tags['kf'] = [f"{int(100*fractions[name])}" for name in names]
+        sdata.tags['kp'] = [f"{pos_guess.get(name, 'na')}" for name in names]
+        sdata.tags['kh'] = names
+        # print(f">> TAGS kh: {sdata.tags['kh']} kf: {sdata.tags['kf']} kp: {sdata.tags['kp']}")
+
+    return scan
+
+def find_BC_between(left="GCGAGAGTCGAGGGTGCTGTAGTCACAAGA", right="AGATCGGAAGAGCGTCGTGTAG", anchor_kh="OpenST", k=32, left_kw={}, right_kw={}):
+    import cutadapt.adapters
+
+    left_adap = cutadapt.adapters.NonInternalFrontAdapter(left, name="left", max_errors=0.3, **left_kw)
+    right_adap = cutadapt.adapters.BackAdapter(right, name="right", max_errors=0.3, **right_kw)
+
+    L = len(left) + len(right) + k
+    def adap(sdata):
+        seq = sdata.r2
+        if "kh" in sdata.tags:
+            kh = sdata.tags["kh"]
+            kp = sdata.tags["kp"]
+            kf = sdata.tags["kf"]
+            i = kh.index(anchor_kh)
+            if int(kf[i]) > 10: # at least 10% of kmers were seen
+                anchor = int(kp[i])
+
+                window = seq[anchor:anchor+L]
+                match_left = left_adap.match_to(window)
+                match_right = right_adap.match_to(window)
+
+                if match_left and match_right:
+                    sdata.tags["BC"] = [window[match_left.rstop:match_right.rstart]]
+                    # clip everything right of the match_left.rstart
+                    n_keep = anchor + match_left.rstart
+                    n_trimmed = len(sdata.r2) - n_keep
+                    sdata.tags["A3"].append(anchor_kh)
+                    sdata.tags["T3"].append(str(n_trimmed))
+                    sdata.r2 = sdata.r2[: n_keep]
+                    sdata.q2 = sdata.q2[: n_keep]
+
+    return adap
+
 
 
 format_func_template = """
@@ -287,6 +403,8 @@ class PreProcessor(object):
         "simple_name": name_simplifier,
         "barcode": barcode,
         "clip": clip,
+        "handles": require_handles,
+        "BCsearch": find_BC_between,
     }
 
     def __init__(self, processing_str="", flavor_dict={}, **kw):  # , min_len=18):
@@ -378,7 +496,7 @@ class PreProcessor(object):
                 self.stats[(f"bases", a, "A3_total")] += int(t)
 
 
-def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
+def process_reads(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
 
     logger = util.setup_logging(args, "fastq_to_uBAM.worker", rename_process=False)
     logger.debug(
@@ -554,7 +672,7 @@ def main(args):
         )
         # process in parallel workers
         w.workers(
-            func=process_fastq,
+            func=process_reads,
             fq1=mf.FIFO("r1_{n}", "rt"),
             fq2=mf.FIFO("r2_{n}", "rt"),
             sam_out=mf.FIFO("sam_{n}", "wt"),
@@ -564,7 +682,7 @@ def main(args):
     else:
         # process in parallel workers
         w.workers(
-            func=process_fastq,
+            func=process_reads,
             fq1=None,
             fq2=mf.FIFO("r2_{n}", "rt"),
             sam_out=mf.FIFO("sam_{n}", "wt"),
