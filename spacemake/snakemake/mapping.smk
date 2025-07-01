@@ -102,7 +102,9 @@ def get_star_flag(flag, default_strategy="STAR:genome:final"):
             if mr.mapper == "STAR":
                 out_files += expand(flag, species=row.species, ref_name=mr.ref_name)
 
-    return set(out_files)
+    out_files = sorted(set(out_files))
+    # print(f"get_star_flag -> out_files={out_files}")
+    return out_files
 
 def get_species_reference_info(species, ref):
     refs_d = project_df.config.get_variable("species", name=species)
@@ -125,8 +127,8 @@ def get_map_inputs(wc, mapper="STAR"):
         'bam' : mr.input_path,
         'index_file' : mr.map_index_file,
     }
-    if mapper == 'STAR':
-        d['index_loaded'] = expand(star_index_loaded, species=mr.species, ref_name=mr.ref_name)
+    # if mapper == 'STAR':
+    #     d['index_loaded'] = load_index_if_needed(expand(star_index_loaded, species=mr.species, ref_name=mr.ref_name))
     if hasattr(mr, "ann_final"):
         d['annotation'] = mr.ann_final
 
@@ -248,12 +250,7 @@ rule parse_ribo_log:
 
 rule map_reads_STAR:
     input: 
-        # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
-        # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
         unpack(get_map_inputs),
-        loaded_flag=get_star_flag(star_index_loaded)
-        # bam=lambda wc: BAM_DEP_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't_find_bam_{wc}"),
-        # index=lambda wc: BAM_IDX_LKUP.get(wc_fill(star_mapped_bam, wc), f"can't find_idx_{wc}"),
     output:
         bam=star_mapped_bam,
         ubam=star_unmapped_bam,
@@ -261,14 +258,12 @@ rule map_reads_STAR:
     threads: 16 # bottleneck is annotation! We could push to 32 on murphy
     params:
         auto=get_map_params,
-        # annotation_cmd=lambda wildcards, output: get_annotation_command(output.bam),
-        # annotation=lambda wilcards, output: BAM_ANN_LKUP.get(output.bam, "can't_find_annotation"),
-        # flags=lambda wildcards, output: BAM_MAP_FLAGS_LKUP.get(output.bam, "can't_find_flags"),
         tmp_dir = star_tmp_dir,
         star_prefix = star_prefix
     shell:
         "STAR {params.auto[flags]}"
         " --genomeDir {params.auto[index]}"
+        " --genomeLoad LoadAndKeep"
         " --readFilesIn {input.bam}"
         " --readFilesCommand samtools view -f 4"
         " --readFilesType SAM SE"
@@ -376,42 +371,33 @@ rule create_star_index:
              --sjdbGTFfile {input.annotation}
         """
 
-rule load_genome:
-    input:
-        star_index,
-        star_index_file
-    output:
-        temp(touch(star_index_loaded)),
-    params:
-        f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species),
-        log_dir=lambda wc: expand(star_index_log_location, ref_name=wc.ref_name, species=wc.species)
-    shell:
-        """
-        touch {params.f_locked_current}
-        STAR --genomeLoad LoadAndExit --genomeDir {input[0]}  --outFileNamePrefix {params.log_dir}/ || echo "Could not load genome into shared memory for {input[0]} - maybe already loaded"
-        """
+
+from spacemake.map_strategy import map_data
+# print(map_data["STAR_INDICES"])
+
+def get_unload_flags(wildcards, groupid):
+    flags = []
+    for (species, ref_name) in map_data["STAR_INDICES"].keys():
+        flags.extend(expand(star_index_unloaded, groupid=groupid, species=species, ref_name=ref_name))
+
+    return flags
 
 rule unload_genome_flag:
-    input:
-        get_star_flag(star_index_unloaded)
+    input: get_unload_flags
 
-rule unload_genome:
-    input:
-        bams=ancient(get_mapped_BAM_output(project_df)),
-        index_dir=star_index, # we put last so it is accessible
+rule unload_STAR_indices_group:
+    input: 
+        bams = ancient(get_mapped_BAM_output(project_df))
+        #get_unload_input 
+        # index_dir=star_index, # we put last so it is accessible
     output:
         temp(touch(star_index_unloaded)),
     params:
-        f_locked=lambda wc: expand(star_index_locked, ref_name=wc.ref_name, species=wc.species),
-        f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species),
-        log_dir=lambda wc: expand(star_index_log_location, ref_name=wc.ref_name, species=wc.species)
+        # f_locked=lambda wc: expand(star_index_locked, ref_name=wc.ref_name, species=wc.species),
+        # f_locked_current=lambda wc: expand(star_index_locked_current, ref_name=wc.ref_name, species=wc.species),
+        log_dir=lambda wc: expand(star_index_log_location, ref_name=wc.ref_name, species=wc.species),
+        index_dir = lambda wc: map_data["STAR_INDICES"][(wc.species, wc.ref_name)]
     shell:
         """
-        rm {params.f_locked_current}
-        if ls {params.f_locked}* 1> /dev/null 2>&1;
-        then
-            echo 'There are other tasks waiting for the STAR shared memory index. Not removing from {params.f_locked_current}'
-        else
-            STAR --genomeLoad Remove --genomeDir {input.index_dir} --outFileNamePrefix {params.log_dir}/ || echo "Could not remove genome from shared memory for {input[0]}"
-        fi
+        STAR --genomeLoad Remove --genomeDir {params.index_dir} --outFileNamePrefix {params.log_dir}/ || echo "Could not remove genome from shared memory for {output}"
         """

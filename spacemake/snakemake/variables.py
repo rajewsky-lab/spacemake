@@ -52,9 +52,9 @@ star_index_file = star_index + "/SAindex"
 star_index_locked = star_index + "/smk.indexlocked.{species}.{ref_name}"
 import uuid
 
-star_index_locked_current = star_index_locked + f".{uuid.uuid4()}"
-star_index_loaded = "{species}.{ref_name}.genomeLoad.done"
-star_index_unloaded = "{species}.{ref_name}.genomeUnload.done"
+#star_index_locked_current = star_index_locked + f".{uuid.uuid4()}"
+#star_index_loaded = "{species}.{ref_name}.genomeLoad.done"
+star_index_unloaded = ".{species}.{ref_name}.genomeUnload.done.{groupid}"
 star_index_log_location = "species_data/{species}/{ref_name}/.star_index_logs"
 star_idx_service = "{species}.{ref_name}.STAR_index_loaded"
 
