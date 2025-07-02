@@ -3,6 +3,7 @@ __author__ = ["Nikos Karaiskos"]
 __license__ = "GPL"
 
 from spacemake.migrate import (
+    check_if_sample_is_processed,
     check_if_all_files_exist,
     convert_bam_to_cram,
     rename_log_files,
@@ -18,13 +19,27 @@ project_folders = config["project_folders"]
 projects = config["projects"]
 samples = config["samples"]
 
+def get_cram_targets():
+    """Helper function to only collect samples that have been processed."""
+    targets = []
+    for folder in project_folders:
+        project_id = folder.split("/")[1]
+        sample_id = folder.split("/")[3]
+        if check_if_sample_is_processed(project_id, sample_id):
+            targets.append(f"{folder}/final.polyA_adapter_trimmed.cram")
+    return targets
+
+cram_targets = get_cram_targets()
+
+processed_folders = [os.path.dirname(f) for f in cram_targets]
 bam_cleanup_markers = [
-    f"{folder}/bam_files_removed.txt" for folder in config["project_folders"]
+    f"{folder}/bam_files_removed.txt" for folder in processed_folders
 ]
 
 rule all:
     input:
-        config["targets"],
+        cram_targets,
+        bam_cleanup_markers,
         "version_update_done.txt"
 
 rule convert_bam_to_cram:
