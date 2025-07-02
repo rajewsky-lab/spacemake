@@ -399,5 +399,6 @@ rule unload_STAR_indices_group:
         index_dir = lambda wc: map_data["STAR_INDICES"][(wc.species, wc.ref_name)]
     shell:
         """
+        mkdir -p {params.log_dir}
         STAR --genomeLoad Remove --genomeDir {params.index_dir} --outFileNamePrefix {params.log_dir}/ || echo "Could not remove genome from shared memory for {output}"
         """
