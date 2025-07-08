@@ -40,6 +40,23 @@ def get_map_strategy_sequences(project_id, sample_id):
     return reference_type
 
 
+def check_if_sample_is_processed(project_id, sample_id):
+    """
+    Checks if the sample is newly added and spacemake has not been run yet.
+    Most likely to happen when the sample is added with a newer version of
+    spacemake compared to the existing project_df.
+
+    Returns:
+        bool: True if sample has been already processed.
+    """
+    sample_folder = os.path.join('projects', project_id, 'processed_data',
+                                  sample_id, 'illumina', 'complete_data')
+    if not os.path.isdir(sample_folder):
+        return False
+    else:
+        return len(os.listdir(sample_folder)) > 1
+
+
 def check_if_all_files_exist(project_id, sample_id, file_type):
     """
     Checks if all required files exist for the map_strategy of the sample.
