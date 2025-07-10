@@ -296,8 +296,13 @@ def update_adapters_in_config():
         config = yaml.safe_load(f1)
         config_latest = yaml.safe_load(f2)
 
-    if config["adapter_flavors"] != config_latest["adapter_flavors"]:
-        print("Outdated config.yaml was identified. Will migrate to the latest version.")
+    outdated = (
+        "adapter_flavors" not in config or
+        config.get("adapter_flavors") != config_latest.get("adapter_flavors")
+    )
+
+    if outdated:
+        print("Outdated config.yaml was identified. Migrating to the latest version.")
         config["adapter_flavors"] = config_latest["adapter_flavors"]
         with open("config.yaml", "w") as f:
             yaml.dump(config, f)
