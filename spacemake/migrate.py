@@ -258,6 +258,11 @@ def remove_bam_files(project_folder, output_file_path):
         if f.endswith(".cram") and os.path.isfile(os.path.join(project_folder, f))
     ]
 
+    # make sure the generated CRAMs are not empty -- otherwise raise an error and do not remove any BAMs
+    for cram_file in cram_files:
+        if os.path.getsize(cram_file) == 0:
+            raise ValueError(f"CRAM file is empty: {cram_file}. Aborting BAM file removal.")
+
     total_bam_size = sum(
         os.path.getsize(bam[0]) for bam in bam_files if os.path.exists(bam[0])
     )
