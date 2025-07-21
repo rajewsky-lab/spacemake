@@ -2,6 +2,7 @@ import os
 
 # import yaml
 import argparse
+from spacemake.contrib import __version__
 import re
 import logging
 
@@ -21,6 +22,7 @@ def get_global_config(root="."):
         __global_config = ConfigFile.from_yaml(f"{root}/config.yaml")
 
     return __global_config
+
 
 def get_puck_parser(required=True):
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
@@ -50,6 +52,7 @@ def get_puck_parser(required=True):
     )
 
     return parser
+
 
 def get_run_mode_parser(required=True):
     parser = argparse.ArgumentParser(
@@ -376,6 +379,7 @@ def list_variables_cmdline(config, args):
     variable = args["variable"]
     del args["variable"]
     import yaml
+
     config.logger.info(f"Listing {variable}")
     config.logger.info(yaml.dump(config.variables[variable]))
 
@@ -437,7 +441,12 @@ class RunMode(ConfigMainVariable):
 
 
 class Puck(ConfigMainVariable):
-    variable_types = {"barcodes": str, "spot_diameter_um": float, "width_um": int, "coordinate_system": str}
+    variable_types = {
+        "barcodes": str,
+        "spot_diameter_um": float,
+        "width_um": int,
+        "coordinate_system": str,
+    }
 
     @property
     def has_barcodes(self):
@@ -446,7 +455,7 @@ class Puck(ConfigMainVariable):
             and self.variables["barcodes"]
             and self.variables["barcodes"] != "None"
         )
-    
+
     @property
     def has_coordinate_system(self):
         return (
@@ -485,6 +494,7 @@ class ConfigFile:
 
     def __init__(self):
         self.variables = {
+            "spacemake_version": __version__,
             "root_dir": ".",
             "temp_dir": "/tmp",
             "species": {},
@@ -540,17 +550,33 @@ class ConfigFile:
                 if "default" not in cf.variables[var_with_default]:
                     cf.variables[var_with_default]["default"] = default_val
                 else:
+                    user_val = cf.variables[var_with_default]["default"]
                     # update default run mode with missing values
-                    default_val.update(cf.variables[var_with_default]["default"])
+                    if type(default_val) is dict:
+                        default_val.update(user_val)
+                    elif type(default_val) is list:
+                        if type(user_val) is list:
+                            default_val = user_val
+                        else:
+                            cf.logger.warning(
+                                f"Trying to set list type entry {var_with_default}['default'] "
+                                f"with a dict-type entry in user-defined '{file_path}'. "
+                                "it looks like you may have a legacy config.yaml. Reverting to default values. "
+                                "Please run 'spacemake migrate config' to get rid of this warning."
+                            )
+                    # print(default_val)
                     cf.variables[var_with_default]["default"] = default_val
 
         cf.expand_strings()
         return cf
 
     def expand_strings(self, **kw):
-        kw['spacemake_dir'] = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
+        kw["spacemake_dir"] = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../")
+        )
         # print(f"expanding strings in config with context={kw}")
         import collections.abc as abc
+
         def recurse(d):
             if type(d) == str:
                 try:
@@ -707,14 +733,16 @@ class ConfigFile:
 
         variable_data = self.variables[variable_name][variable_key]
         if variable_name == "species":
-            ref_name = kw['reference']
+            ref_name = kw["reference"]
             if ref_name in self.variables[variable_name][variable_key]:
-                del self.variables[variable_name][variable_key][kw['reference']]
+                del self.variables[variable_name][variable_key][kw["reference"]]
             else:
-                logging.warning(f"reference {ref_name} is not registered under species {variable_key}")
+                logging.warning(
+                    f"reference {ref_name} is not registered under species {variable_key}"
+                )
 
             if len(self.variables[variable_name][variable_key]) == 0:
-                # this was the last reference entry. 
+                # this was the last reference entry.
                 # Let's remove the species altogether
                 del self.variables[variable_name][variable_key]
         else:
@@ -734,10 +762,10 @@ class ConfigFile:
 
     def process_barcode_flavor_args(self, **kw):
         bam_tags = "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
-        
+
         # r(1|2) and then string slice
-        # this is too restrictive. What about umi = "r1[12:20] + r2[:8]" ? 
-        # would be perfectly reasonable 
+        # this is too restrictive. What about umi = "r1[12:20] + r2[:8]" ?
+        # would be perfectly reasonable
         # to_match = r"r(1|2)(\[((?=-)-\d+|\d)*\:((?=-)-\d+|\d*)(\:((?=-)-\d+|\d*))*\])+$"
 
         UMI = kw.get("UMI", None)
@@ -850,7 +878,14 @@ class ConfigFile:
         self.variables["species"][name] = species_refs
         return species_refs
 
-    def process_puck_args(self, width_um=None, spot_diameter_um=None, barcodes=None, coordinate_system=None, name=None):
+    def process_puck_args(
+        self,
+        width_um=None,
+        spot_diameter_um=None,
+        barcodes=None,
+        coordinate_system=None,
+        name=None,
+    ):
         assert_file(barcodes, default_value=None, extension="all")
         assert_file(coordinate_system, default_value=None, extension="all")
 
@@ -866,7 +901,6 @@ class ConfigFile:
 
         if coordinate_system is not None:
             puck["coordinate_system"] = coordinate_system
-
 
         return puck
 
@@ -995,7 +1029,7 @@ class ConfigFile:
         # populate each adapter clip definition in this flavor with the full sequence of the adapter
         for section, entries in af.items():
             if section in add_adapter_sequences:
-                for (name, d_adap) in entries.items():
+                for name, d_adap in entries.items():
                     if name == "Q":
                         continue
                     d_adap["seq"] = adapter_sequences.get(
@@ -1350,13 +1384,12 @@ def get_quant_parser(required=True):
     )
     parser.add_argument(
         "--name",
-        help=(
-            "name of the counting flavor."
-        ),
+        help=("name of the counting flavor."),
         type=str,
         required=True,
     )
     return parser
+
 
 def get_variable_action_subparsers(parent_parser, variable):
 
@@ -1400,7 +1433,9 @@ def get_variable_action_subparsers(parent_parser, variable):
     )
     list_parser.set_defaults(func=list_variables_cmdline, variable=variable)
     # snake_case for backward compatibility. remove in a future update
-    list_parser_legacy = parent_parser.add_parser(f"list_{variable}",)
+    list_parser_legacy = parent_parser.add_parser(
+        f"list_{variable}",
+    )
     list_parser_legacy.set_defaults(func=list_variables_cmdline, variable=variable)
 
     func = add_update_delete_variable_cmdline
@@ -1411,7 +1446,9 @@ def get_variable_action_subparsers(parent_parser, variable):
         description=command_help["delete"],
         help=command_help["delete"],
     )
-    delete_parser_legacy = parent_parser.add_parser(f"delete_{variable_singular}",) 
+    delete_parser_legacy = parent_parser.add_parser(
+        f"delete_{variable_singular}",
+    )
     delete_parser.add_argument(
         "--name",
         help=f"name of the {variable_singular} to be deleted",
@@ -1463,7 +1500,8 @@ def get_variable_action_subparsers(parent_parser, variable):
     )
     update_parser_legacy = parent_parser.add_parser(
         f"update_{variable_singular}",
-        parents=[variable_add_update_parser(False)],)
+        parents=[variable_add_update_parser(False)],
+    )
     update_parser.set_defaults(func=func, action="update", variable=variable)
     update_parser_legacy.set_defaults(func=func, action="update", variable=variable)
 

@@ -340,7 +340,7 @@ def aggregate_adata_by_indices(
     joined_dict = {i: idx_to_aggregate[x.astype(int)] for i, x in enumerate(ix_array)}
 
     indices_joined_spatial_units = dok_matrix(
-        (len(joined_dict), len(adata.obs_names)), dtype=np.int8
+        (len(joined_dict), len(adata.obs_names)), dtype=np.uint16
     )
 
     for obs_name_aggregate, obs_name_to_aggregate in joined_dict.items():
@@ -349,6 +349,10 @@ def aggregate_adata_by_indices(
     indices_joined_spatial_units = indices_joined_spatial_units.tocsr()
     aggregated_adata.uns["spatial_units_obs_names"] = np.array(adata.obs_names)
     aggregated_adata.uns["indices_joined_spatial_units"] = indices_joined_spatial_units
+    
+    # carry the variables for the original puck variables
+    if "puck_variables" in adata.uns:
+        aggregated_adata.uns["puck_variables"] = adata.uns["puck_variables"]
 
     from statistics import mean
 
@@ -359,6 +363,11 @@ def aggregate_adata_by_indices(
         "theoretical_compression",
     ]:
         aggregated_adata.obs[column] = summarise_adata_obs_column(adata, column, mean)
+
+    aggregated_adata.obs['exact_entropy'] = aggregated_adata.obs['exact_entropy'].astype(np.float16)
+    aggregated_adata.obs['theoretical_entropy'] = aggregated_adata.obs['theoretical_entropy'].astype(np.float16)
+    aggregated_adata.obs['exact_compression'] = aggregated_adata.obs['exact_compression'].astype(np.uint16)
+    aggregated_adata.obs['theoretical_compression'] = aggregated_adata.obs['theoretical_compression'].astype(np.uint16)
 
     aggregated_adata.obs['n_counts'] = summarise_adata_obs_column(adata, "n_counts")
     return aggregated_adata
@@ -533,5 +542,15 @@ def create_meshed_adata(
         idx_aggregated=new_ilocs,
         coordinates_aggregated=joined_coordinates,
     )
+
+    # set the meshing variables
+    meshed_adata.uns["mesh_variables"]  = { 
+        "px_by_um": px_by_um,
+        "spot_diameter_um": spot_diameter_um,
+        "spot_distance_um": spot_distance_um,
+        "bead_diameter_um": bead_diameter_um,
+        "mesh_type": mesh_type,
+        "start_at_minimum": start_at_minimum
+    }
 
     return meshed_adata

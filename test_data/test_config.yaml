@@ -1,3 +1,4 @@
+spacemake_version: 0.9.1
 root_dir: '.'
 temp_dir: '/tmp'
 external_bin: 
@@ -35,7 +36,7 @@ pucks:
 run_modes:
     default:
         n_beads: 100000
-        umi_cutoff: [100, 300, 500]
+        umi_cutoff: [100, 300, 500] # < remove
         clean_dge: False
         detect_tissue: False
         count_intronic_reads: True
@@ -47,10 +48,10 @@ run_modes:
     visium:
         n_beads: 10000
         umi_cutoff: [1000]
-        clean_dge: False
+        clean_dge: False # < remove
         detect_tissue: True
-        count_intronic_reads: False
-        count_mm_reads: True
+        count_intronic_reads: False # < goes to quant.py
+        count_mm_reads: True # < goes to quant.py
     slide_seq:
         n_beads: 100000
         umi_cutoff: [50]
@@ -106,6 +107,48 @@ run_modes:
         - 500
   
 
+adapter_flavors:
+    default:
+        - quality:
+            right: 25
+        - polyA:
+        - adapter:
+            name: SMART
+            seq: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+            min_overlap: 10
+            max_errors: 0.1
+        - barcode:
+            cell: "r1[0:12]"
+            UMI: "r1[12:20]"
+    openst:
+        - quality:
+            right: 25
+        - polyA:
+        - adapter:
+            name: SMART
+            seq: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+            min_overlap: 10
+            max_errors: 0.1
+        - barcode:
+            UMI: "r2[0:9]"
+            cell: "r1[2:27]"
+        - clip:
+            left: 12
+
+    dropseq:
+        - quality:
+            right: 25
+        - polyA:
+        - adapter:
+            name: SMART
+            seq: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+            min_overlap: 10
+            max_errors: 0.1
+        - barcode:
+            cell: "r1[0:12]"
+            UMI: "r1[12:20]"
+
+
 barcode_flavors:
     default:
         cell: "r1[0:12]"
@@ -135,10 +178,7 @@ barcode_flavors:
         UMI: "r2[:4] + r2[-4:]"
         seq: "r2[4:-4]"
         qual: "r2_qual[4:-4]"
-    openst:
-        UMI: "r2[0:9]"
-        bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
-        cell: "r1[2:27]"
+
 
 adapters:
     optical_primer: GAATCACGATACGTACACCA
@@ -153,56 +193,6 @@ adapters:
     nextflex_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACTGACCAATCTCGTATGCCGTCTTCTGCTTGAA
     truseq_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACCCGTCCA
 
-adapter_flavors:
-  SMARTER:
-    cut_right:
-    - Q:
-        min_base_quality: 30
-    - polyA:
-        max_error: 0.25
-        min_overlap: 3
-    paired_end: replace_N
-  chromium:
-    cut_right:
-    - Q:
-        min_base_quality: 32
-    - polyA:
-        max_error: 0.25
-        min_overlap: 3
-    - polyG:
-        max_error: 0.1
-        min_overlap: 3
-  dropseq:
-    cut_left:
-    - TSO_SMART:
-        max_error: 0.1
-        min_overlap: 10
-    cut_right:
-    - Q:
-        min_base_quality: 30
-    - polyA:
-        max_error: 0.25
-        min_overlap: 3
-    - polyG:
-        max_error: 0.1
-        min_overlap: 3
-    paired_end: single-end
-  default:
-    cut_left:
-    - TSO_SMART:
-          max_error: 0.1
-          min_overlap: 10
-    cut_right:
-    - Q:
-        min_base_quality: 30
-    - polyA:
-        max_error: 0.25
-        min_overlap: 3
-    - polyG:
-        max_error: 0.1
-        min_overlap: 3
-    paired_end: single-end
-        
 quant:
   default:
     counter_class: "spacemake.quant.DefaultCounter"
@@ -254,8 +244,8 @@ quant:
 species:
     test_hsa:
         genome:
-            annotation: "{spacemake_dir}/test_data/test_genome.gtf.gz"
-            sequence: "{spacemake_dir}/test_data/test_genome.fa.gz"
+            annotation: "{spacemake_dir}/test_data/simple_annotation.gtf"
+            sequence: "{spacemake_dir}/test_data/simple_genome.fa"
         miRNA:
             annotation: "{spacemake_dir}/test_data/mirgenedb.hsa.mature.gtf.gz"
             sequence: "{spacemake_dir}/test_data/mirgenedb.hsa.mature.fa.gz"

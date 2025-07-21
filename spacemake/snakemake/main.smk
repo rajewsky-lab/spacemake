@@ -15,7 +15,7 @@ import math
 import scanpy as sc
 
 from spacemake.preprocess.dge import dge_to_sparse_adata, attach_barcode_file,\
-    parse_barcode_file, load_external_dge, attach_puck_variables, attach_puck
+    parse_barcode_file, load_external_dge, attach_puck
 from spacemake.spatial.util import create_meshed_adata
 import spacemake.spatial.puck_collection as puck_collection
 from spacemake.project_df import ProjectDF
@@ -28,7 +28,8 @@ project_root = config['root_dir']
 ################
 # Shell prefix #
 ################
-shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
+# shell.prefix('set +o pipefail; JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
+shell.prefix('JAVA_TOOL_OPTIONS="-Xmx8g -Xss2560k" ; ')
 
 ####
 # this file should contain all sample information, sample name etc.
@@ -140,17 +141,17 @@ rule run_analysis:
                     filter_merged=True) 
                 if config['with_fastqc'] else []
         ),
-        get_output_files(automated_report, 
-            data_root_type = 'complete_data', downsampling_percentage='', 
+        get_output_files(automated_report,
+            data_root_type = 'complete_data', downsampling_percentage='',
             puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(automated_report, 
-            data_root_type = 'complete_data', downsampling_percentage='', 
+        get_output_files(automated_report,
+            data_root_type = 'complete_data', downsampling_percentage='',
             check_puck_collection=True,
             puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet, 
+        get_output_files(qc_sheet,
             data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
             puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet, 
+        get_output_files(qc_sheet,
             data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
             check_puck_collection=True,
             puck_barcode_file_matching_type='spatial_matching'),
@@ -265,11 +266,11 @@ rule link_raw_reads:
             shell("cat {input} > {output}")
             
 
-rule zcat_pipe:
-    input: "{name}.fastq.gz"
-    output: temp("{name}.fastq")
-    threads: 2
-    shell: "unpigz --keep --processes {threads} --stdout $(readlink {input}) >> {output}"
+# rule zcat_pipe:
+#     input: "{name}.fastq.gz"
+#     output: temp("{name}.fastq")
+#     threads: 2
+#     shell: "unpigz --keep --processes {threads} --stdout $(readlink {input}) >> {output}"
 
 rule tag_reads_bc_umi:
     input:
@@ -279,21 +280,24 @@ rule tag_reads_bc_umi:
     params:
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
-        assigned = tagged_bam,
-        log = tagged_bam_log
-    log:
-        reverse_reads_mate_1.replace(reads_suffix, ".preprocessing.log")
+        ubam = tagged_polyA_adapter_trimmed_bam,
+        log = preprocessing_log,
+        stats = preprocessing_stats
     threads: max(min(workflow.cores * 0.5, 16), 1)
     shell:
         "python {spacemake_dir}/bin/fastq_to_uBAM.py "
         "--sample={wildcards.sample_id} "
         "--read1={input.R1} "
         "--read2={input.R2} "
-        "--parallel={threads} "
-	    "--out-bam={output.assigned} "
+        "--threads-work={threads} "
+	    "--out-file={output.ubam} "
+        "--out-stats={output.stats} "
         "--cell='{params.bc.cell}' "
         "--UMI='{params.bc.UMI}' "
-        "--bam-tags='{params.bc.bam_tags}' "
+        "--adapter-flavor={params.bc.adapter_flavor} "
+        #"--bam-tags='{params.bc.bam_tags}' "
+        "--out-fmt=CRAM "
+        "--out-fmt-option='version=3.1' " # not supported by DropSeqTools 2.5.1
         "--log-file='{output.log}' "
 
 rule run_fastqc:
@@ -341,7 +345,7 @@ rule get_barcode_readcounts:
 rule get_barcode_readcounts_prealigned:
     # we perform some preliminary counting on the prealigned reads
     input:
-        tagged_bam
+        tagged_polyA_adapter_trimmed_bam
     output:
         barcode_readcounts_prealigned,
         barcode_readcounts_prealigned_log
@@ -445,9 +449,10 @@ rule create_dge:
         unpack(get_top_barcodes),
         unpack(get_dge_input_bam)
     output:
-        dge=dge_out,
-        dge_summary=dge_out_summary
+        dge=temp(dge_out), # we will note have this when dropping DropSeq, anyway
+        dge_summary=temp(dge_out_summary) # same as above, not needed when h5ad is created
     params:
+        reference=lambda wildcards: get_final_bam_reference(wildcards),
         dge_root = dge_root,
         dge_extra_params = lambda wildcards: get_dge_extra_params(wildcards),
         cell_barcode_tag = lambda wildcards: get_bam_tag_names(
@@ -458,12 +463,15 @@ rule create_dge:
             sample_id = wildcards.sample_id)['{UMI}']
     threads: 1
     shell:
+        #R={params.reference} \
+        #I= {input.reads}\
+        # -m 16g \
         """
         mkdir -p {params.dge_root}
 
+        samtools view -h {input.reads} -T {params.reference} --threads=2 | \
         {dropseq_tools}/DigitalExpression \
-        -m 16g \
-        I= {input.reads}\
+        I= /dev/stdin \
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
         CELL_BC_FILE={input.top_barcodes} \
@@ -622,43 +630,118 @@ rule puck_collection_stitching_meshed:
         # to avoid losing information from columns that are not numeric
         df._get_numeric_data().to_csv(output[1])
 
-rule create_qc_sheet:
+rule run_qc_sheet:
     input:
         unpack(get_qc_sheet_input_files),
-        ribo_log=parsed_ribo_depletion_log
+        notebook_template = os.path.join(spacemake_dir, "report/notebooks/qc_sheet.ipynb")
     params:
-        sample_info = lambda wildcards: project_df.get_sample_info(
-            wildcards.project_id, wildcards.sample_id),
-        puck_variables = lambda wildcards:
-            project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
-                return_empty=True),
-        pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id,
-            puck_barcode_file_id = wildcards.puck_barcode_file_id_qc),
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
+                                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
         run_modes = lambda wildcards: get_run_modes_from_sample(
-            wildcards.project_id, wildcards.sample_id)
+            wildcards.project_id, wildcards.sample_id),
+        complete_data_root = complete_data_root
     output:
-        qc_sheet
-    script:
-        "scripts/qc_sequencing_create_sheet.Rmd"
+        notebook = qc_sheet_notebook
+    retries: 5
+    run:
+        import papermill as pm
+        
+        adata_paths = []
+        
+        for run_mode in params.run_modes:
+            adata_paths.append(input[f"{run_mode}.dge"][0])
+
+        pm.execute_notebook(
+            input.notebook_template,
+            output.notebook,
+            parameters={
+                'run_modes': params.run_modes,
+                'adata_paths': adata_paths,
+                'split_reads_read_type': input.reads_type_out,
+                'project_id': wildcards.project_id,
+                'sample_id': wildcards.sample_id,
+                'puck_barcode_file_id_qc': wildcards.puck_barcode_file_id_qc,
+                'complete_data_root': params.complete_data_root,
+                'is_spatial': params.is_spatial,
+                'config_yaml_path': "config.yaml",
+                'project_df_path': "project_df.csv"
+            }
+        )
+
+rule render_qc_sheet:
+    input:
+        qc_sheet_notebook,
+    output:
+        html = qc_sheet
+    shell:
+        """
+        jupyter nbconvert {input} \
+            --to html \
+            --output-dir $(dirname {output.html}) \
+            --output $(basename {output.html}) \
+            --no-input
+        
+        # Inject navigation
+        bash {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
+        """
 
 rule run_automated_analysis:
     input:
-        unpack(get_automated_analysis_dge_input)
-    output:
-        automated_analysis_result_file
+        unpack(get_automated_analysis_dge_input),
+        notebook_template = os.path.join(spacemake_dir, "report/notebooks/automated_analysis.ipynb")
     params:
         is_spatial = lambda wildcards:
             project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
+                                 puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
         run_mode_variables = lambda wildcards:
             project_df.config.get_run_mode(wildcards.run_mode).variables
-    script:
-        'scripts/automated_analysis.py'
+    output:
+        result_file = automated_analysis_result_file,
+        notebook = automated_report_notebook
+    retries: 5
+    run:
+        import os
+
+        os.environ['OMP_NUM_THREADS'] = '1'
+        os.environ['OPENBLAS_NUM_THREADS'] = '1'
+        os.environ['MKL_NUM_THREADS'] = '1'
+        os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
+        os.environ['NUMEXPR_NUM_THREADS'] = '1'
+        os.environ['NUMBA_NUM_THREADS'] = '1'
+
+        import papermill as pm
+
+        pm.execute_notebook(
+            input.notebook_template,
+            output.notebook,
+            parameters={
+                'adata_path': input[0],
+                'umi_cutoff': int(wildcards.umi_cutoff),
+                'clustering_resolutions': [0.4, 0.6, 0.8, 1.0, 1.2],
+                'detect_tissue': params.run_mode_variables.get('detect_tissue', False),
+                'adata_output': output.result_file,
+                'is_spatial': params.is_spatial
+            }
+        )
+
+rule render_automated_analysis:
+    input:
+        automated_report_notebook
+    params:
+        nbconvert_template_path = os.path.join(spacemake_dir, "report/templates/automated_analysis_nbtemplate.html.j2")
+    output:
+        html = automated_report
+    shell:
+        """
+        jupyter nbconvert {input} \
+            --to html \
+            --output-dir $(dirname {output.html}) \
+            --output $(basename {output.html}) \
+            --no-input
+
+        bash {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
+        """
 
 rule run_novosparc_denovo:
     input:
@@ -683,65 +766,30 @@ rule run_novosparc_with_reference:
         " --spatial_dataset {input.st_adata}"
         " --output {output}"
 
-rule create_automated_analysis_processed_data_files:
-    input:
-        automated_analysis_result_file
-    output:
-        **automated_analysis_processed_data_files
-    params:
-        is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
-    script:
-        'scripts/automated_analysis_create_processed_data_files.py'
-        
-rule create_automated_report:
-    input:
-        **automated_analysis_processed_data_files,
-    threads: 1
-    output:
-        automated_report
-    params:
-        run_mode_variables = lambda wildcards:
-            project_df.config.get_run_mode(wildcards.run_mode).variables,
-        puck_variables = lambda wildcards:
-            project_df.get_puck_variables(wildcards.project_id, wildcards.sample_id,
-                return_empty=True),
-        pbf_metrics = lambda wildcards: project_df.get_puck_barcode_file_metrics(
-            project_id = wildcards.project_id,
-            sample_id = wildcards.sample_id,
-            puck_barcode_file_id = wildcards.puck_barcode_file_id_qc),
-        is_spatial = lambda wildcards:
-            project_df.is_spatial(wildcards.project_id, wildcards.sample_id,
-                puck_barcode_file_id=wildcards.puck_barcode_file_id_qc),
-        r_shared_scripts= repo_dir + '/scripts/shared_functions.R'
-    script:
-        'scripts/automated_analysis_create_report.Rmd'
-
 rule split_final_bam:
     input:
         unpack(get_final_bam)
     output:
-        temp(split_reads_sam_files),
+        # temp(split_reads_sam_files),
         split_reads_read_type,
         split_reads_strand_type
     params:
         prefix=split_reads_root
     shell:
         """
-        sambamba view -F 'mapping_quality==255' -h {input} | \
+        samtools view -q 255 {input} | \
         python {repo_dir}/scripts/split_reads_by_strand_info.py \
         --prefix {params.prefix} /dev/stdin
         """
 
-rule split_reads_sam_to_bam:
-    input:
-        split_reads_sam_pattern
-    output:
-        split_reads_bam_pattern
-    threads: 2
-    shell:
-        "sambamba view -S -h -f bam -t {threads} -o {output} {input}"
+# rule split_reads_sam_to_bam:
+#     input:
+#         split_reads_sam_pattern
+#     output:
+#         split_reads_bam_pattern
+#     threads: 2
+#     shell:
+#         "samtools view -Sch --threads {threads} -o {output} {input}"
 
 
 rule count_barcode_matches:

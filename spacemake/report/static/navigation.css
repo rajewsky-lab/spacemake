@@ -1,0 +1,139 @@
+/* Navigation and layout styles for Spacemake reports */
+
+body {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+main, .jp-Notebook {
+    max-width: min(1200px, calc(100vw - 320px)) !important;
+    margin: 0 auto !important;
+    margin-left: 150px !important;
+    margin-right: 2rem !important;
+    padding: 2rem !important;
+    background: white !important;
+    min-height: 100vh !important;
+}
+
+.jp-RenderedMarkdown h1,
+.jp-RenderedMarkdown h2, 
+.jp-RenderedMarkdown h3 {
+    scroll-margin-top: 20px;
+}
+
+.nav-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    height: 100vh;
+    background: #f8f9fa;
+    border-right: 1px solid #dee2e6;
+    z-index: 1001;
+    padding: 1rem;
+    overflow-y: auto;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+}
+
+.nav-sidebar h4 {
+    color: #495057;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+}
+
+.nav-item {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    color: #6c757d;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-radius: 4px;
+    margin-bottom: 0.25rem;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+
+.nav-item:hover {
+    background: #e9ecef;
+    color: #495057;
+    text-decoration: none;
+}
+
+.nav-item.active {
+    background: #007bff;
+    color: white;
+}
+
+.nav-item.level-2 {
+    padding-left: 1.5rem;
+    font-size: 0.85rem;
+}
+
+.nav-item.level-3 {
+    padding-left: 2rem;
+    font-size: 0.8rem;
+}
+
+/* Mobile toggle button */
+.mobile-nav-toggle {
+    display: none;
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    z-index: 1002;
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.2rem;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .nav-sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+    
+    .nav-sidebar.show {
+        transform: translateX(0);
+    }
+    
+    main, .jp-Notebook {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        max-width: 100% !important;
+        padding: 1rem !important;
+    }
+    
+    .mobile-nav-toggle {
+        display: block !important;
+    }
+}
+
+/* Enhanced notebook styling */
+.text_cell_render {
+    line-height: 1.6 !important;
+}
+
+.text_cell_render h1 {
+    color: #2c3e50 !important;
+    border-bottom: 2px solid #3498db !important;
+    padding-bottom: 0.5rem !important;
+}
+
+.text_cell_render h2 {
+    color: #2c3e50 !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    padding-bottom: 0.3rem !important;
+}
+
+.text_cell_render h3 {
+    color: #495057 !important;
+}

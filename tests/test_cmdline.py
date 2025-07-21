@@ -215,9 +215,9 @@ def test_issue_88(initialized_root):
 def test_sample(configured_root):
     os.chdir(configured_root.as_posix())
     test_sample = (
-        f"--R1={spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-        f"--R2={spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
-        "--map-strategy=genome:STAR:final",
+        f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+        f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+        "--map-strategy=rRNA:bowtie2->genome:STAR:final",
         "--species=test_hsa",
     )
 
@@ -238,7 +238,7 @@ def test_sample(configured_root):
         "update-sample",
         "--project-id=test",
         "--sample-id=test1",
-        "--map-strategy=rRNA:bowtie2->genome:STAR",
+        "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR",
     )
     # add a second run mode to the sample
     sm(
@@ -246,7 +246,9 @@ def test_sample(configured_root):
         "update-sample",
         "--project-id=test",
         "--sample-id=test1",
-        "--run-mode", "openst", "default",
+        "--run-mode",
+        "openst",
+        "default",
     )
 
 
@@ -257,24 +259,24 @@ def test_fill_project_df(with_species):
             "test_hsa",
             "test",
             "test_01",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             "--map-strategy=genome:STAR:final",
         ),
         (
             "test_hsa",
             "test",
             "test_02.2",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final",
         ),
         (
             "test_hsa",
             "test",
             "test_03_nofinal",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR",
         ),
         (
@@ -282,7 +284,7 @@ def test_fill_project_df(with_species):
             "test",
             "test_bulk",
             "None",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
             " --barcode_flavor=visium",
         ),
@@ -290,8 +292,8 @@ def test_fill_project_df(with_species):
             "test_hsa",
             "tile",
             "tile_1",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
                 f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt"
@@ -302,8 +304,8 @@ def test_fill_project_df(with_species):
             "test_hsa",
             "tile",
             "tile_2",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
                 f" --puck-barcode-file {spacemake_dir}/test_data/tile_2.txt"
@@ -314,8 +316,8 @@ def test_fill_project_df(with_species):
             "test_hsa",
             "tile",
             "tile_both",
-            f"{spacemake_dir}/test_data/reads_chr22_R1.fastq.gz",
-            f"{spacemake_dir}/test_data/reads_chr22_R2.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
                 f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt {spacemake_dir}/test_data/tile_2.txt"
@@ -376,8 +378,156 @@ def test_tiles(with_tile_test_data):
     )
 
 
-def test_merge(configured_root):
-    os.chdir(configured_root.as_posix())
+def test_tiles_nomatch(with_species, dry=False):
+    os.chdir(with_species.as_posix())
+    sm(
+        "config",
+        "add-puck",
+        "--name=openst_min",
+        f"--coordinate_system={spacemake_dir}/test_data/test_coordinate_system.csv",
+        "--width_um=1200",
+        "--spot_diameter_um=0.6",
+    )
+    sm(
+        "projects",
+        "add-sample",
+        "--project-id=fc_test",
+        "--sample-id=fc_test_nomatch",
+        f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+        f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+        "--puck=openst_min",
+        "--run-mode=openst",
+        "--barcode-flavor=openst",
+        "--puck-barcode-file",
+        f"{spacemake_dir}/test_data/tile_1.txt",
+        f"{spacemake_dir}/test_data/tile_2.txt",
+        f"{spacemake_dir}/test_data/tile_3.txt",
+        f"{spacemake_dir}/test_data/tile_4.txt",
+        "--map-strategy=rRNA:bowtie2->genome:STAR:final",
+        "--species=test_hsa",
+    )
+    if dry:
+        sm("run", "-np", "--cores=8")
+    else:
+        sm("run", "-p", "--cores=8")
+        assert os.path.exists(
+            "projects/fc_test/processed_data/fc_test_nomatch/illumina/complete_data/dge/dge.all.polyA_adapter_trimmed.mm_included.100000_beads_no_spatial_data.h5ad"
+        )
+        assert not os.path.exists(
+            "projects/fc_test/processed_data/fc_test_nomatch/illumina/complete_data/dge/dge.all.polyA_adapter_trimmed.mm_included.spatial_beads.mesh_7_hexagon_puck_collection.h5ad"
+        )
+
+
+def test_puck_collection(with_species, dry=False):
+    sm(
+        "config",
+        "add-puck",
+        "--name=openst_min",
+        f"--coordinate_system={spacemake_dir}/test_data/test_coordinate_system.csv",
+        "--width_um=1200",
+        "--spot_diameter_um=0.6",
+    )
+    sm(
+        "projects",
+        "add-sample",
+        "--project-id=fc_test",
+        "--sample-id=fc_test_collection",
+        f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+        f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+        "--puck=openst_min",
+        "--run-mode=openst",
+        "--barcode-flavor=openst",
+        "--puck-barcode-file",
+        f"{spacemake_dir}/test_data/tile_1.txt",
+        f"{spacemake_dir}/test_data/tile_2.txt",
+        f"{spacemake_dir}/test_data/tile_3.txt",
+        f"{spacemake_dir}/test_data/tile_4.txt",
+        f"{spacemake_dir}/test_data/tile_5.txt",
+        f"{spacemake_dir}/test_data/tile_6.txt",
+        "--map-strategy=rRNA:bowtie2->genome:STAR:final",
+        "--species=test_hsa",
+    )
+    if dry:
+        sm("run", "-np", "--cores=8")
+    else:
+        sm("run", "-p", "--cores=8")
+        assert os.path.exists(
+            "projects/fc_test/processed_data/fc_test_collection/illumina/complete_data/dge/dge.all.polyA_adapter_trimmed.mm_included.spatial_beads.mesh_7_hexagon_puck_collection.h5ad"
+        )
+
+
+def test_puck_single_tile(with_species, dry=False):
+    sm(
+        "config",
+        "add-puck",
+        "--name=openst_min",
+        f"--coordinate_system={spacemake_dir}/test_data/test_coordinate_system.csv",
+        "--width_um=1200",
+        "--spot_diameter_um=0.6",
+    )
+    sm(
+        "projects",
+        "add-sample",
+        "--project-id=fc_test",
+        "--sample-id=fc_test_single_tile",
+        f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+        f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+        "--puck=openst_min",
+        "--run-mode=openst",
+        "--barcode-flavor=openst",
+        "--puck-barcode-file",
+        f"{spacemake_dir}/test_data/tile_5.txt",
+        "--map-strategy=rRNA:bowtie2->genome:STAR:final",
+        "--species=test_hsa",
+    )
+    if dry:
+        sm("run", "-np", "--cores=8")
+    else:
+        sm("run", "-p", "--cores=8")
+        assert os.path.exists(
+            "projects/fc_test/processed_data/fc_test_single_tile/illumina/complete_data/dge/dge.all.polyA_adapter_trimmed.mm_included.spatial_beads.mesh_7_hexagon_puck_collection.h5ad"
+        )
+
+
+def test_merge(with_species):
+    os.chdir(with_species.as_posix())
+    test_samples = [
+        (
+            "test",
+            "test_01",
+            f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+            "--map-strategy=rRNA:bowtie2->genome:STAR:final",
+            "--species=test_hsa",
+        ),
+        (
+            "test",
+            "test_01b",
+            f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+            "--map-strategy=rRNA:bowtie2->genome:STAR:final",
+            "--species=test_hsa",
+        ),
+        (
+            "test",
+            "test_02",
+            f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+            f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+            "--map-strategy=genome:STAR:final",
+            "--species=test_hsa",
+        ),
+    ]
+
+    # add
+    for sample in test_samples:
+        sm(
+            "projects",
+            "add-sample",
+            f"--project-id={sample[0]}",
+            f"--sample-id={sample[1]}",
+            *sample[2:],
+        )
+
     sm(
         "projects",
         "merge-samples",
@@ -397,6 +547,22 @@ def test_merge(configured_root):
         "test_01",
         "test_01b",
     )
+    sm("projects", "delete-sample", f"--project-id=test", f"--sample-id=test_02")
+    sm("run", "-p", "--cores=8")
+
+
+def test_downsample(with_species):
+    sm(
+        "projects",
+        "add-sample",
+        f"--project-id=test",
+        f"--sample-id=test_01",
+        f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+        f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+        "--map-strategy=genome:STAR:final",
+        "--species=test_hsa",
+    )
+    sm("run", "downsample", "--sample-id-list", "test_01", "--cores=8", "-p")
 
 
 def test_from_scratch(with_species):

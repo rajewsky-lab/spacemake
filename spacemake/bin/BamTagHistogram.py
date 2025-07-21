@@ -77,7 +77,7 @@ def CB_distributor(
     return res
 
 
-def tag_counter(input, output, tag="CB", min_count=10):
+def tag_counter(input, output, tag="CB", min_count=10, **kw):
     from collections import defaultdict
 
     counter = defaultdict(int)

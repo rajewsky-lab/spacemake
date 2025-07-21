@@ -336,6 +336,15 @@ def merge_pucks_to_collection(
     )
 
     puck_collection.uns = {np.unique(puck.obs[puck_id_key])[0]: puck.uns for puck in puck_collection_list}
+    
+    # we select the first puck from the collection, we assume the variables will be very similar across
+    _current_puck = puck_collection_list[0]
+
+    if "mesh_variables" in _current_puck.uns:
+        puck_collection.uns["mesh_variables"] = _current_puck.uns["mesh_variables"]
+
+    if "puck_variables" in _current_puck.uns:
+        puck_collection.uns["puck_variables"] = _current_puck.uns["puck_variables"]
 
     return puck_collection
 

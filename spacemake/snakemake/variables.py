@@ -3,6 +3,7 @@ project_dir = "projects/{project_id}"
 config_path = "config.yaml"
 project_df = "project_df.csv"
 
+
 #################
 # DIRECTORY STR #
 #################
@@ -19,9 +20,58 @@ data_root = illumina_root + "/{data_root_type}{downsampling_percentage}"
 downsampled_data_prefix = illumina_root + "/downsampled_data"
 downsampled_data_root = downsampled_data_prefix + "{downsampling_percentage}"
 
-log_dir = complete_data_root + '/logs'
-stats_dir = complete_data_root + '/stats'
-plots_dir = complete_data_root + '/plots'
+log_dir = complete_data_root + "/logs"
+stats_dir = complete_data_root + "/stats"
+plots_dir = complete_data_root + "/plots"
+
+########################################
+#### map_strategy string templates #####
+########################################
+
+# patterns for auto-generated BAM file names and symlinks
+linked_bam = complete_data_root + "/{link_name}.cram"
+mapped_bam = complete_data_root + "/{ref_name}.{mapper}.cram"
+unmapped_bam = complete_data_root + "/not_{ref_name}.{mapper}.cram"
+star_mapped_bam = complete_data_root + "/{ref_name}.STAR.cram"
+star_unmapped_bam = complete_data_root + "/not_{ref_name}.STAR.cram"
+bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.cram"
+bt2_unmapped_bam = complete_data_root + "/not_{ref_name}.bowtie2.cram"
+bt2_mapped_log = log_dir + "/{ref_name}.bowtie2.log"
+
+# special log file used for rRNA "ribo depletion" stats
+bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.cram.log"
+
+# special flag to indicate that intermediate non_...cram files have been removed
+unmapped_removed_flag = complete_data_root + "/.unmapped_removed"
+
+# default places for mapping indices, unless specified differently in the config.yaml
+star_index = "species_data/{species}/{ref_name}/star_index"
+star_index_param = star_index
+star_index_log = star_index + ".log"
+star_index_file = star_index + "/SAindex"
+star_index_locked = star_index + "/smk.indexlocked.{species}.{ref_name}"
+import uuid
+
+#star_index_locked_current = star_index_locked + f".{uuid.uuid4()}"
+#star_index_loaded = "{species}.{ref_name}.genomeLoad.done"
+star_index_unloaded = ".{species}.{ref_name}.genomeUnload.done.{groupid}"
+star_index_log_location = "species_data/{species}/{ref_name}/.star_index_logs"
+star_idx_service = "{species}.{ref_name}.STAR_index_loaded"
+
+bt2_index = "species_data/{species}/{ref_name}/bt2_index"
+bt2_index_param = bt2_index + "/{ref_name}"
+bt2_index_file = bt2_index_param + ".1.bt2"
+bt2_index_log = bt2_index_param + ".log"
+
+species_reference_sequence = "species_data/{species}/{ref_name}/sequence.fa"
+species_reference_annotation = "species_data/{species}/{ref_name}/annotation.gtf"
+
+species_reference_annotation_compiled = (
+    "species_data/{species}/{ref_name}/compiled_annotation"
+)
+species_reference_annotation_compiled_target = (
+    "species_data/{species}/{ref_name}/compiled_annotation/non_overlapping.csv"
+)
 
 ##############
 # Demux vars #
@@ -66,7 +116,7 @@ split_reads_sam_names = [
     "minus_AMB",
 ]
 split_reads_sam_pattern = split_reads_root + "{file_name}.sam"
-split_reads_bam_pattern = split_reads_root + "{file_name}.bam"
+split_reads_bam_pattern = split_reads_root + "{file_name}.cram"
 
 split_reads_sam_files = [split_reads_root + x + ".sam" for x in split_reads_sam_names]
 
@@ -78,6 +128,8 @@ split_reads_read_type = split_reads_root + "read_type_num.txt"
 #######################
 
 qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.html"
+qc_sheet_notebook = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.ipynb"
+qc_sheet_notebook_text = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.ipynb.txt"
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = "{polyA_adapter_trimmed}.txt.gz"
 barcode_readcounts = complete_data_root + "/out_readcounts" + barcode_readcounts_suffix
@@ -104,16 +156,19 @@ parsed_spatial_barcodes_summary = (
     + "/puck_barcode_files/spatial_barcodes_summary_{puck_barcode_file_id}.csv"
 )
 parsed_spatial_barcodes_pc = (
-    complete_data_root
-    + "/puck_barcode_files/spatial_barcodes_puck_collection.csv"
+    complete_data_root + "/puck_barcode_files/spatial_barcodes_puck_collection.csv"
 )
 stats_prealigned_spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/stats_prealigned_spatial_barcodes_{puck_barcode_file_id}.csv"
 )
 puck_barcode_files_summary = complete_data_root + "/puck_barcode_files_summary.csv"
-puck_count_barcode_matches_summary = complete_data_root + "/puck_count_barcode_matches.csv"
-puck_count_prealigned_barcode_matches_summary = complete_data_root + "/puck_count_prealigned_barcode_matches.csv"
+puck_count_barcode_matches_summary = (
+    complete_data_root + "/puck_count_barcode_matches.csv"
+)
+puck_count_prealigned_barcode_matches_summary = (
+    complete_data_root + "/puck_count_prealigned_barcode_matches.csv"
+)
 
 # dge creation
 dge_root = data_root + "/dge"
@@ -160,10 +215,7 @@ dge_spatial_obs = (
 
 # spatial + collection dge
 dge_spatial_collection = (
-    dge_out_prefix
-    + dge_out_suffix
-    + ".spatial_beads_puck_collection"
-    + h5ad_dge_suffix
+    dge_out_prefix + dge_out_suffix + ".spatial_beads_puck_collection" + h5ad_dge_suffix
 )
 dge_spatial_collection_obs = (
     dge_out_prefix
@@ -184,9 +236,13 @@ dge_spatial_mesh_obs = dge_spatial_mesh_prefix + h5ad_dge_obs_suffix
 dge_spatial_collection_mesh_suffix = (
     ".spatial_beads.mesh_{spot_diameter_um}_{spot_distance_um}_puck_collection"
 )
-dge_spatial_collection_mesh_prefix = dge_out_prefix + dge_out_suffix + dge_spatial_collection_mesh_suffix
+dge_spatial_collection_mesh_prefix = (
+    dge_out_prefix + dge_out_suffix + dge_spatial_collection_mesh_suffix
+)
 dge_spatial_collection_mesh = dge_spatial_collection_mesh_prefix + h5ad_dge_suffix
-dge_spatial_collection_mesh_obs = dge_spatial_collection_mesh_prefix + h5ad_dge_obs_suffix
+dge_spatial_collection_mesh_obs = (
+    dge_spatial_collection_mesh_prefix + h5ad_dge_obs_suffix
+)
 
 dge_types = [
     ".exon",
@@ -219,6 +275,7 @@ automated_report_prefix = (
     automated_analysis_root + "/{sample_id}_{puck_barcode_file_id_qc}_"
 )
 automated_report = automated_report_prefix + "automated_report.html"
+automated_report_notebook = automated_report_prefix + "automated_report.ipynb"
 automated_analysis_result_file = automated_report_prefix + "results.h5ad"
 
 automated_analysis_processed_data_files = {
@@ -254,20 +311,22 @@ parsed_ribo_depletion_log = complete_data_root + "/parsed_ribo_depletion_log.txt
 # #########################
 #  dropseq rules and vars #
 # #########################
-tagged_bam = complete_data_root + "/unaligned_bc_tagged.bam"
-tagged_bam_log = tagged_bam + ".log"
-unassigned = complete_data_root + "/unaligned_bc_unassigned.bam"
+tagged_bam = complete_data_root + "/unaligned_bc_tagged.cram"
+# unassigned = complete_data_root + "/unaligned_bc_unassigned.cram"
+# tagged_bam_log = tagged_bam + ".log"
 
 # trim smart adapter from the reads
-tagged_trimmed_bam = complete_data_root + "/unaligned_bc_tagged_trimmed.bam"
+tagged_trimmed_bam = complete_data_root + "/unaligned_bc_tagged_trimmed.cram"
+preprocessing_log = log_dir + "/preprocessing.log"
 
 # trim polyA overheang if exists
 tagged_polyA_adapter_trimmed_bam = (
-    complete_data_root + "/unaligned_bc_tagged.polyA_adapter_trimmed.bam"
+    complete_data_root + "/unaligned_bc_tagged.polyA_adapter_trimmed.cram"
 )
+preprocessing_stats = stats_dir + "/preprocessing.tsv"
 
 tagged_bam_pattern = (
-    complete_data_root + "/unaligned_bc_tagged{polyA_adapter_trimmed}.bam"
+    complete_data_root + "/unaligned_bc_tagged{polyA_adapter_trimmed}.cram"
 )
 
 # mapped reads
@@ -276,23 +335,29 @@ star_log_file = complete_data_root + "/star.Log.final.out"
 star_target_log_file = star_prefix + "Log.final.out"
 star_tmp_dir = star_prefix + "tmp"
 
-# final bam file
+# final bam (cram) file
 final_bam_suffix = "/final{polyA_adapter_trimmed}"
-final_bam = complete_data_root + final_bam_suffix + ".bam"
-bam_mm_included_pipe_suffix = "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included_{puck_barcode_file_id}.bam"
+final_bam = complete_data_root + final_bam_suffix + ".cram"
+bam_mm_included_pipe_suffix = "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included_{puck_barcode_file_id}.cram"
 final_bam_mm_included_pipe = complete_data_root + "/final" + bam_mm_included_pipe_suffix
 
 # downsampled bam
-downsampled_bam_mm_included_pipe_suffix = "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.bam"
+downsampled_bam_mm_included_pipe_suffix = (
+    "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.cram"
+)
 downsampled_bam = (
-    downsampled_data_root + "/final_downsampled{polyA_adapter_trimmed}.bam"
+    downsampled_data_root + "/final_downsampled{polyA_adapter_trimmed}.cram"
 )
 downsampled_bam_mm_included_pipe = (
-    downsampled_data_root + "/final_downsampled" + downsampled_bam_mm_included_pipe_suffix
+    downsampled_data_root
+    + "/final_downsampled"
+    + downsampled_bam_mm_included_pipe_suffix
 )
 downsample_saturation_analysis = (
-    downsampled_data_prefix + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.html"
+    downsampled_data_prefix
+    + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.html"
 )
+saturation_analysis_notebook = downsampled_data_prefix + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.ipynb"
 
 
 # bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'

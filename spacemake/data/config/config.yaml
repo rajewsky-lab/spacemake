@@ -120,70 +120,81 @@ barcode_flavors:
         cell: "r1[2:27]"
 
 adapter_flavors:
-  SMARTER:
-    cut_right:
-    - Q:
-        min_base_quality: 30
-    - polyA:
-        max_error: 0.25
-        min_overlap: 3
-    paired_end: replace_N
-  chromium:
-    cut_right:
-    - Q:
-        min_base_quality: 32
-    - polyA:
-        max_error: 0.25
-        min_overlap: 3
-    - polyG:
-        max_error: 0.1
-        min_overlap: 3
-  default:
-    cut_left:
-    - TSO_SMART:
-        max_error: 0.1
-        min_overlap: 10
-    cut_right:
-    - Q:
-        min_base_quality: 30
-    - polyA:
-        max_error: 0.25
-        min_overlap: 3
-    - polyG:
-        max_error: 0.1
-        min_overlap: 3
-    paired_end: single-end
-  dropseq:
-    cut_left:
-    - TSO_SMART:
-        max_errors: 0.1
-        min_overlap: 10
-    cut_right:
-    - Q:
-        min_base_quality: 30
-    - polyA:
-        max_errors: 0.25
-        min_overlap: 3
-    - polyG:
-        max_errors: 0.1
-        min_overlap: 3
-    paired_end: single-end
-  fc_SMART_UMI_RPE:
-    cut_left:
-    - TSO_SMART:
-        max_errors: 0.1
-        min_overlap: 10
-    cut_right:
-    - Q:
-        min_base_quality: 32
-    - polyG:
-        max_errors: 0.25
-        min_overlap: 3
-    - Q:
-        min_base_quality: 32
-    - polyA:
-        max_errors: 0.25
-        min_overlap: 3
+    default:
+        - nextseq_quality:
+            cutoff: 32
+        - polyA:
+        - adapter:
+            name: SMART
+            seq: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+            min_overlap: 10
+            max_errors: 0.1
+#        - barcode:
+#            cell: "r1[0:12]"
+#            UMI: "r1[12:20]"
+#    openst:
+#        - quality:
+#            right: 25
+#        - polyA:
+#        - adapter:
+#            name: SMART
+#            seq: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+#            min_overlap: 10
+#            max_errors: 0.1
+#        - barcode:
+#            UMI: "r2[0:9]"
+#            cell: "r1[2:27]"
+#        - clip:
+#            left: 12
+#   SMARTER:
+#     cut_right:
+#     - Q:
+#         min_base_quality: 30
+#     - polyA:
+#         max_error: 0.25
+#         min_overlap: 3
+#     paired_end: replace_N
+#   chromium:
+#     cut_right:
+#     - Q:
+#         min_base_quality: 32
+#     - polyA:
+#         max_error: 0.25
+#         min_overlap: 3
+#     - polyG:
+#         max_error: 0.1
+#         min_overlap: 3
+#   dropseq:
+#     cut_left:
+#     - TSO_SMART:
+#         max_errors: 0.1
+#         min_overlap: 10
+#     cut_right:
+#     - Q:
+#         min_base_quality: 30
+#     - polyA:
+#         max_errors: 0.25
+#         min_overlap: 3
+#     - polyG:
+#         max_errors: 0.1
+#         min_overlap: 3
+#     paired_end: single-end
+#   fc_SMART_UMI_RPE:
+#     cut_left:
+#     - TSO_SMART:
+#         max_errors: 0.1
+#         min_overlap: 10
+#     cut_right:
+#     - Q:
+#         min_base_quality: 32
+#     - polyG:
+#         max_errors: 0.25
+#         min_overlap: 3
+#     - Q:
+#         min_base_quality: 32
+#     - polyA:
+#         max_errors: 0.25
+#         min_overlap: 3
 
 adapters:
     smart: 'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTC'
