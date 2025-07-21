@@ -56,6 +56,16 @@ def check_if_sample_is_processed(project_id, sample_id):
     else:
         return len(os.listdir(sample_folder)) > 1
 
+def check_if_genome_files_are_on_disk(project_id, sample_id):
+    """
+    Checks if tha genome fasta files exist on disk. Raises an error if they don't
+    so that the snakemake logic won't continue.
+    """
+    species_sequences = get_map_strategy_sequences(project_id, sample_id)
+
+    for file in species_sequences.values():
+        if not os.path.exists(file):
+            raise RuntimeError(f"Required genome file missing: {file}")
 
 def check_if_all_files_exist(project_id, sample_id, file_type):
     """

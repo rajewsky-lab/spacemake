@@ -5,6 +5,7 @@ __license__ = "GPL"
 from spacemake.migrate import (
     check_if_sample_is_processed,
     check_if_all_files_exist,
+    check_if_genome_files_are_on_disk,
     convert_bam_to_cram,
     rename_log_files,
     remove_bam_files,
@@ -50,6 +51,8 @@ rule convert_bam_to_cram:
         project_folder = wildcards.project_folder
         project_id = project_folder.split("/")[1]
         sample_id = project_folder.split("/")[3]
+
+        check_if_genome_files_are_on_disk(project_id, sample_id)
 
         if check_if_all_files_exist(project_id, sample_id, "cram"):
             print(f"CRAM {output[0]} already exists. Skipping conversion.")
