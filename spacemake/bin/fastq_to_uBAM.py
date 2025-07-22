@@ -5,7 +5,7 @@ from time import time
 import numpy as np
 import spacemake.util as util
 import mrfifo as mf
-
+import logging
 
 class SeqData(object):
     """
@@ -75,7 +75,7 @@ class SeqData(object):
             seq = cols[9]
             qual = cols[10]
             sd = cls(qname, "NA", "##", seq, qual)
-            tags = cols[11:]
+            # tags = cols[11:]
             # sd.raw_tags = tags
             # sd.tags.update({tag.split(":")[0]: tag.split(":")[2] for tag in tags})
             # sd.header = header
@@ -386,6 +386,7 @@ def barcode(
 
 
 class PreProcessor(object):
+    logger = logging.getLogger("spacemake.fastq_to_uBAM.py.PreProcessor")
     type_dict = {
         "right": int,
         "left": int,
@@ -415,10 +416,15 @@ class PreProcessor(object):
         self.stats = defaultdict(int)
 
         # parse processing_str and assemble a pre-processing pipeline
-        if flavor_dict:
-            self.pipeline = self.pipeline_from_flavor(flavor_dict)
-        else:
-            self.pipeline = self.pipeline_from_str(processing_str)
+        try:
+            if flavor_dict:
+                self.pipeline = self.pipeline_from_flavor(flavor_dict)
+            else:
+                self.pipeline = self.pipeline_from_str(processing_str)
+
+        except (ValueError, KeyError) as E:
+            self.logger.error("Malformed pipeline configuration. Check the string passed to --processing or flavor in the config.yaml ")
+            raise E
 
     def pipeline_from_flavor(self, flavor_dict):
         pipeline = []
@@ -575,10 +581,10 @@ def process_reads(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
         ),
     )
 
-    # N = mf.util.CountDict()
+    # counts = defaultdict(int)
 
     for sdata in ingress:
-        # N.count("total")
+        # counts["total_records_input"] += 1
         sdata = pre.process(sdata)
         sam_out.write(sdata.render_SAM(flag=4))
 
@@ -586,7 +592,12 @@ def process_reads(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
 
 
 def min_length_filter(input, output, min_len=18):
+    from time import time
+    logger = logging.getLogger("spacemake.fastq_to_uBAM")
+    logger.setLevel(logging.INFO)
     N = 0
+    N_last = 0
+    T0 = time()
     for line in input:
         if not line.startswith("@"):
             seq = line.split("\t")[9]
@@ -595,6 +606,15 @@ def min_length_filter(input, output, min_len=18):
 
         output.write(line)
         N += 1
+        if N % 1000 == 0:
+            dT = time() - T0
+            if dT > 5:
+                dN = N - N_last
+                rate = 0.001 * dN / dT 
+                logger.info(f"processing at {rate:.2f}k records/second")
+                T0 = time()
+                N_last = N
+
 
     return N
     # if args.paired_end:
@@ -692,6 +712,14 @@ def main(args):
             n=args.threads_work,
         )
 
+    # # null writer for debug purposes
+    # w.workers(
+    #     func=mf.parts.null_writer_managed,
+    #     input=mf.FIFO("sam_{n}", "rt"),
+    #     n=args.threads_work,
+    #     job_name="{workflow}.null{n}",
+    # )
+
     # combine output streams
     w.collect(
         inputs=mf.FIFO("sam_{n}", "rt", n=args.threads_work),
@@ -709,6 +737,10 @@ def main(args):
         log_rate_template="written {M_out:.1f} M BAM records ({mps:.3f} M/s, overall {MPS:.3f} M/s)",
         log_name="fastq_to_uBAM.collect",
     )
+    # w.funnel(
+    #     func=mf.parts.null_writer_managed,
+    #     input=mf.FIFO("sam_combined", "rt"),
+    # )
     w.funnel(
         func=min_length_filter,
         input=mf.FIFO("sam_combined", "rt"),
@@ -729,6 +761,9 @@ def main(args):
     )
     res = w.run()
     stats = defaultdict(int)
+    # defaults
+    stats[("reads", "N", "output")] = 0
+    stats[("reads", "N", "input")] = 0
     for w, d in res.result_dict.items():
         if "worker" in w:
             for k, v in d.items():
@@ -772,12 +807,8 @@ def get_input_params(args):
             ] * len(R1)
 
     else:
-        R1 = [
-            args.read1,
-        ]
-        R2 = [
-            args.read2,
-        ]
+        R1 = args.read1
+        R2 = args.read2
         params = [
             {},
         ]
@@ -802,12 +833,14 @@ def parse_args():
         "--read1",
         default=None,
         help="source from where to get read1 (FASTQ format)",
+        nargs='*',
     )
     parser.add_argument(
         "--read2",
         default="/dev/stdin",
         help="source from where to get read2 (FASTQ format)",
         # required=True,
+        nargs='*'
     )
     parser.add_argument(
         "--paired-end",
