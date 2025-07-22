@@ -812,6 +812,8 @@ def get_input_params(args):
         params = [
             {},
         ]
+        if not R1:
+            R1 = ["None"] * len(R2)
 
     return R1, R2, params
 
