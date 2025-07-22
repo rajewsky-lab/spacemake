@@ -56,6 +56,16 @@ def check_if_sample_is_processed(project_id, sample_id):
     else:
         return len(os.listdir(sample_folder)) > 1
 
+def check_if_genome_files_are_on_disk(project_id, sample_id):
+    """
+    Checks if tha genome fasta files exist on disk. Raises an error if they don't
+    so that the snakemake logic won't continue.
+    """
+    species_sequences = get_map_strategy_sequences(project_id, sample_id)
+
+    for file in species_sequences.values():
+        if not os.path.exists(file):
+            raise RuntimeError(f"Required genome file missing: {file}")
 
 def check_if_all_files_exist(project_id, sample_id, file_type):
     """
@@ -258,6 +268,11 @@ def remove_bam_files(project_folder, output_file_path):
         if f.endswith(".cram") and os.path.isfile(os.path.join(project_folder, f))
     ]
 
+    # make sure the generated CRAMs are not empty -- otherwise raise an error and do not remove any BAMs
+    for cram_file in cram_files:
+        if os.path.getsize(cram_file) == 0:
+            raise ValueError(f"CRAM file is empty: {cram_file}. Aborting BAM file removal.")
+
     total_bam_size = sum(
         os.path.getsize(bam[0]) for bam in bam_files if os.path.exists(bam[0])
     )
@@ -296,8 +311,13 @@ def update_adapters_in_config():
         config = yaml.safe_load(f1)
         config_latest = yaml.safe_load(f2)
 
-    if config["adapter_flavors"] != config_latest["adapter_flavors"]:
-        print("Outdated config.yaml was identified. Will migrate to the latest version.")
+    outdated = (
+        "adapter_flavors" not in config or
+        config.get("adapter_flavors") != config_latest.get("adapter_flavors")
+    )
+
+    if outdated:
+        print("Outdated config.yaml was identified. Migrating to the latest version.")
         config["adapter_flavors"] = config_latest["adapter_flavors"]
         with open("config.yaml", "w") as f:
             yaml.dump(config, f)
