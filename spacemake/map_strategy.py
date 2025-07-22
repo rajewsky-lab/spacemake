@@ -50,24 +50,60 @@ final_target = "final.polyA_adapter_trimmed"
 ### Default settings  ###
 #########################
 
-default_BT2_MAP_FLAGS = (
-    " --local"
-    " -L 10 -D 30 -R 30"
-    " --ignore-quals"
-    " --score-min=L,0,1.5"  # require 75% of perfect match (2=base match)
-    " -k 10"
-)
-# original rRNA mapping code used --very-fast-local and that was that.
+# default_BT2_MAP_FLAGS = (
+#     " --local"
+#     " -L 10 -D 30 -R 30"
+#     " --ignore-quals"
+#     " --score-min=L,0,1.5"  # require 75% of perfect match (2=base match)
+#     " -k 10"
+# )
+# # original rRNA mapping code used --very-fast-local and that was that.
 
-default_STAR_MAP_FLAGS = (
-    # " --genomeLoad NoSharedMemory"
-    " --outSAMprimaryFlag AllBestScore"
-    " --outSAMattributes Standard"
-    " --outSAMunmapped Within"
-    " --outStd BAM_Unsorted"
-    " --outSAMtype BAM Unsorted"
-    " --limitOutSJcollapsed 5000000"
-)
+# default_STAR_MAP_FLAGS = (
+#     # " --genomeLoad NoSharedMemory"
+#     " --outSAMprimaryFlag AllBestScore"
+#     " --outSAMattributes Standard"
+#     " --outSAMunmapped Within"
+#     " --outStd BAM_Unsorted"
+#     " --outSAMtype BAM Unsorted"
+#     " --limitOutSJcollapsed 5000000"
+# )
+
+default_map_flags = {
+    "bowtie2": (
+        # original rRNA mapping code used --very-fast-local and that was that.
+        " --local"
+        " -L 10 -D 30 -R 30"
+        " --ignore-quals"
+        " --score-min=L,0,1.5" # require 75% of perfect match (2=base match)
+        " -k 10"
+    ),
+    "STAR": (
+        # before shared memory
+        # " --genomeLoad NoSharedMemory"
+        # with shared memory
+        " --limitBAMsortRAM 5000000000"
+        " --outSAMprimaryFlag AllBestScore"
+        " --outSAMattributes All"
+        " --outSAMunmapped Within"
+        " --outStd BAM_Unsorted"
+        " --outSAMtype BAM Unsorted"
+        " --limitOutSJcollapsed 5000000"
+    ),
+    "mm2": (
+        " -x splice "
+    )
+    # "mm2SR": (
+    #     " -ax sr "
+    # )
+}
+
+
+default_map_indices = {
+    "bowtie2": smv.bt2_index_param,
+    "STAR": smv.star_index,
+    "mm2": smv.mm2_index,
+}
 
 default_counting_flavor_with_annotation = "default"
 default_counting_flavor_no_annotation = "custom_index"
@@ -397,16 +433,15 @@ def get_mapped_BAM_output(
 
             default_STAR_INDEX = wc_fill(smv.star_index, mr)
             default_BT2_INDEX = wc_fill(smv.bt2_index_param, mr)
+            default_MM2_INDEX = wc_fill(smv.mm2_index_param, mr)
             if mr.mapper == "bowtie2":
                 mr.map_index_param = species_d[mr.ref_name].get(
                     "BT2_index", default_BT2_INDEX
                 )  # the parameter passed on to the mapper
                 mr.map_index = os.path.dirname(mr.map_index_param)  # the index_dir
-                mr.map_index_file = (
-                    mr.map_index_param + ".1.bt2"
-                )  # file present if the index is actually there
+                mr.map_index_file = wc_fill(smv.bt2_index_file, mr)  # file present if the index is actually there
                 mr.map_flags = species_d[mr.ref_name].get(
-                    "BT2_flags", default_BT2_MAP_FLAGS
+                    "BT2_flags", default_map_flags['bowtie2']
                 )
 
             elif mr.mapper == "STAR":
@@ -417,10 +452,20 @@ def get_mapped_BAM_output(
                 mr.map_index_file = mr.map_index + "/SAindex"
                 mr.star_idx_service = smv.star_idx_service.format(**mr)
                 mr.map_flags = species_d[mr.ref_name].get(
-                    "STAR_flags", default_STAR_MAP_FLAGS
+                    "STAR_flags", default_map_flags['STAR']
                 )
 
                 map_data["STAR_INDICES"][(mr.species, mr.ref_name)] = mr.map_index_param
+
+            elif mr.mapper == "mm2":
+                mr.map_index_param = species_d[mr.ref_name].get(
+                    "mm2_index", default_MM2_INDEX
+                )  # the parameter passed on to the mapper
+                mr.map_index = os.path.dirname(mr.map_index_param)  # the index_dir
+                mr.map_index_file = wc_fill(smv.mm2_index_file, mr)  # file present if the index is actually there
+                mr.map_flags = species_d[mr.ref_name].get(
+                    "MM2_flags", default_map_flags['mm2']
+                )
 
             map_data["MAP_RULES_LKUP"][mr.out_path] = mr
             map_data["INDEX_FASTA_LKUP"][mr.map_index_file] = mr

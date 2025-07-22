@@ -1092,7 +1092,7 @@ class ProjectDF:
         assert_file(R1, default_value=None, extension=".fastq.gz")
 
         # if R2 is not None:
-        assert_file(R2, default_value=None, extension=".fastq.gz")
+        assert_file(R2, default_value=None, extension=[".fastq.gz"])
 
         assert_file(reads, default_value=None, extension=[".txt", ".csv", ".tsv"])
         assert_file(longreads, default_value=None, extension="all")

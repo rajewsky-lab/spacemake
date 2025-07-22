@@ -49,27 +49,11 @@ final_target = "final.polyA_adapter_trimmed"
 # ubam_input = "unaligned_bc_tagged{polyA_adapter_trimmed}"
 # final_target = "final{polyA_adapter_trimmed}"
 
-default_BT2_MAP_FLAGS = (
-    " --local"
-    " -L 10 -D 30 -R 30"
-    " --ignore-quals"
-    " --score-min=L,0,1.5" # require 75% of perfect match (2=base match)
-)
-# original rRNA mapping code used --very-fast-local and that was that.
+#default_BT2_MAP_FLAGS = (
+#)
 
-default_STAR_MAP_FLAGS = (
-    # before shared memory
-    # " --genomeLoad NoSharedMemory"
-    # with shared memory
-    " --genomeLoad LoadAndKeep"
-    " --limitBAMsortRAM 5000000000"
-    " --outSAMprimaryFlag AllBestScore"
-    " --outSAMattributes All"
-    " --outSAMunmapped Within"
-    " --outStd BAM_Unsorted"
-    " --outSAMtype BAM Unsorted"
-    " --limitOutSJcollapsed 5000000"
-)
+#default_STAR_MAP_FLAGS = (
+#)
 
 # TODO: port remaining python code to map_strategy.py
 # to expose it to enable coverage analysis and unit-testing
@@ -162,7 +146,7 @@ def get_map_params(wc, output, mapper="STAR"):
 ##############################################################################
 
 ruleorder:
-    map_reads_bowtie2 > map_reads_STAR > symlinks
+    map_reads_bowtie2 > map_reads_mm2 > map_reads_STAR > symlinks
 
 ruleorder:    
     symlink_final_log > map_reads_STAR
@@ -218,6 +202,28 @@ rule map_reads_bowtie2:
        
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
+rule map_reads_mm2:
+    input:
+        unpack(lambda wc: get_map_inputs(wc, mapper='mm2')),
+    output:
+        bam=mm2_mapped_bam,
+        ubam=mm2_unmapped_bam
+    log: mm2_log
+    params:
+        auto = lambda wc, output: get_map_params(wc, output, mapper='mm2'),
+    threads: 32
+    shell:
+        "samtools fastq -f 4 -T '*' {input.bam} "
+        " "
+        "| minimap2 -ay {params.auto[flags]} {params.auto[index]} /dev/stdin 2> {log} "
+        " "
+        # fix the BAM header to accurately reflect the entire history of processing via PG records.
+        "| python {repo_dir}/scripts/splice_bam_header.py "
+        "  --in-ubam {input.bam}"
+        " "
+        "| tee >( {params.auto[annotation_cmd]} ) "
+        "| samtools view -f 4 --threads=4 -Ch --no-PG > {output.ubam}"
+        
 
 # TODO: unify these two functions and get rid of the params in parse_ribo_log rule below.
 def get_ribo_log(wc):
@@ -351,6 +357,19 @@ rule create_bowtie2_index:
                       --offrate 1 \
                       {params.auto[ref_path]} \
                       {params.auto[map_index_param]}
+        """
+
+rule create_minimap2_index:
+    input:
+        species_reference_sequence
+    output:
+        mm2_index_file
+    params:
+        auto = lambda wc: INDEX_FASTA_LKUP[wc_fill(mm2_index_file, wc)]
+    shell:
+        """
+        mkdir -p {params.auto[map_index]}
+        minimap2 -d {output} {input}
         """
 
 rule create_star_index:

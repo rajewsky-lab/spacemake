@@ -78,7 +78,7 @@ def get_longread_output(project_df=None, config=None, **kw):
 
     return out_files
 
-register_module_output_hook(get_longread_output, "longread.smk")
+# register_module_output_hook(get_longread_output, "longread.smk")
 
 def get_args(wc):
     args = f""" \
