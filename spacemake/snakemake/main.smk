@@ -206,7 +206,7 @@ include: 'merge_samples.smk'
 #########
 # RULES #
 #########
-ruleorder: link_raw_reads > link_demultiplexed_reads 
+# ruleorder: link_raw_reads > link_demultiplexed_reads 
 
 rule demultiplex_data:
     params:
@@ -252,18 +252,18 @@ rule link_demultiplexed_reads:
         find {params.demux_dir} -type f -wholename '*/{wildcards.sample_id}/*R{wildcards.mate}*.fastq.gz' -exec ln -sr {{}} {output} \; 
         """
 
-rule link_raw_reads:
-    input:
-        unpack(get_reads)
-    output:
-        raw_reads_pattern
-    run:
-        if len(input) == 1:
-            # either link raw reads
-            shell("ln -rs {input} {output}")
-        else:
-            # or append reads together
-            shell("cat {input} > {output}")
+# rule link_raw_reads:
+#     input:
+#         unpack(get_reads)
+#     output:
+#         raw_reads_pattern
+#     run:
+#         if len(input) == 1:
+#             # either link raw reads
+#             shell("ln -rs {input} {output}")
+#         else:
+#             # or append reads together
+#             shell("cat {input} > {output}")
             
 
 # rule zcat_pipe:
@@ -272,23 +272,46 @@ rule link_raw_reads:
 #     threads: 2
 #     shell: "unpigz --keep --processes {threads} --stdout $(readlink {input}) >> {output}"
 
+def make_input_arguments(wildcards):
+    R1 = project_df.get_metadata("R1", project_id=wildcards.project_id, sample_id=wildcards.sample_id)
+    R2 = project_df.get_metadata("R2", project_id=wildcards.project_id, sample_id=wildcards.sample_id)
+    longreads = project_df.get_metadata("longreads", project_id=wildcards.project_id, sample_id=wildcards.sample_id)
+    if type(R1) == list and R1:
+        R1 = " ".join(R1)
+
+    if type(R2) == list and R2:
+        R2 = " ".join(R2)
+
+    if R1 and R2:
+        args = f" --read1 {R1} --read2 {R2}"
+    elif R2:
+        args = f" --read2 {R2}"
+    elif longreads:
+        args = f" --read2 {longreads}"
+        if longreads.endswith(".bam"):
+            args += " --input-format=BAM "
+    
+    return args
+    
+
 rule tag_reads_bc_umi:
-    input:
-        # these implicitly depend on the raw reads via zcat_pipes
-        R1 = raw_reads_mate_1,
-        R2 = raw_reads_mate_2
+    # input:
+    #     # these implicitly depend on the raw reads via zcat_pipes
+    #     R1 = raw_reads_mate_1,
+    #     R2 = raw_reads_mate_2
     params:
+        input_args = lambda wildcards: make_input_arguments(wildcards),
         bc = lambda wildcards: get_bc_preprocess_settings(wildcards)
     output:
         ubam = tagged_polyA_adapter_trimmed_bam,
         log = preprocessing_log,
         stats = preprocessing_stats
-    threads: max(min(workflow.cores * 0.5, 16), 1)
+    threads: max(min(workflow.cores * 0.5, 32), 1)
     shell:
         "python {spacemake_dir}/bin/fastq_to_uBAM.py "
         "--sample={wildcards.sample_id} "
-        "--read1={input.R1} "
-        "--read2={input.R2} "
+        " {params.input_args} "
+        # "--read2={input.R2} "
         "--threads-work={threads} "
 	    "--out-file={output.ubam} "
         "--out-stats={output.stats} "
