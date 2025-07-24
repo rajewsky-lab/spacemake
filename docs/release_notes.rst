@@ -3,10 +3,11 @@ Release notes
 
 Version 0.9
 -----------
-0.9.0
+0.9.1
 ~~~~~
 * Uses ``cram`` instead of ``bam`` to significantly reduce disk space.
 * The ``migrate`` tool enables updating data processed with v0.8x to be compatible with v0.9.
+* Replaced ``R`` scripts with ``Python`` for all QC and automated reports.
 * Fixed bugs.
 
 Version 0.8

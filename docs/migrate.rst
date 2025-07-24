@@ -12,9 +12,9 @@ Starting with v0.9, spacemake adopts the ``cram`` format to reduce disk requirem
     In that case, ensure you have write permissions for the directory containing the sequence file.
 
 To smoothly migrate existing project structures created with earlier versions (v0.8x)
-and make them compatible with v0.9, spacemake offers the ``migrate`` tool.
+and make them compatible with v0.9+, spacemake offers the ``migrate`` tool.
 
-If you attempt to run a newer spacemake version inside a proejct directory created
+If you attempt to run a newer spacemake version inside a project directory created
 with an older one, you'll get the following warning::
 
     ###############################################################
