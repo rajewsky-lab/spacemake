@@ -18,6 +18,7 @@ dependencies:
     - pot
     - openjdk==11.0.15
     - pigz
+    - minimap2==2.28
     - pip:
         - cutadapt       
         - setproctitle
