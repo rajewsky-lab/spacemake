@@ -38,6 +38,10 @@ bt2_mapped_bam = complete_data_root + "/{ref_name}.bowtie2.cram"
 bt2_unmapped_bam = complete_data_root + "/not_{ref_name}.bowtie2.cram"
 bt2_mapped_log = log_dir + "/{ref_name}.bowtie2.log"
 
+mm2_mapped_bam = complete_data_root + "/{ref_name}.mm2.cram"
+mm2_unmapped_bam = complete_data_root + "/not_{ref_name}.mm2.cram"
+mm2_log = log_dir + "/{ref_name}.mm2.log"
+
 # special log file used for rRNA "ribo depletion" stats
 bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.cram.log"
 
@@ -62,6 +66,11 @@ bt2_index = "species_data/{species}/{ref_name}/bt2_index"
 bt2_index_param = bt2_index + "/{ref_name}"
 bt2_index_file = bt2_index_param + ".1.bt2"
 bt2_index_log = bt2_index_param + ".log"
+
+mm2_index = "species_data/{species}/{ref_name}/mm2_index"
+mm2_index_param = mm2_index + "/{ref_name}.mmi"
+mm2_index_file = mm2_index_param
+mm2_index_log = mm2_index_param + ".log"
 
 species_reference_sequence = "species_data/{species}/{ref_name}/sequence.fa"
 species_reference_annotation = "species_data/{species}/{ref_name}/annotation.gtf"

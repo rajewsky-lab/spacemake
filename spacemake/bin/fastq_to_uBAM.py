@@ -5,7 +5,7 @@ from time import time
 import numpy as np
 import spacemake.util as util
 import mrfifo as mf
-
+import logging
 
 class SeqData(object):
     """
@@ -62,9 +62,24 @@ class SeqData(object):
             yield cls(fqid.split()[0], r1, q1, r2, q2)
 
     @classmethod
-    def from_BAM(cls, bam_src):
-        "TODO: allow pre-processing of raw data that is already in BAM format"
-        pass
+    def from_SAM(cls, sam_src):
+        "allow pre-processing of raw data that is already in BAM format"
+        header = []
+        for line in sam_src:
+            if line.startswith("@"):
+                header.append(line)
+                continue
+
+            cols = line.rstrip().split("\t")
+            qname = cols[0]
+            seq = cols[9]
+            qual = cols[10]
+            sd = cls(qname, "NA", "##", seq, qual)
+            # tags = cols[11:]
+            # sd.raw_tags = tags
+            # sd.tags.update({tag.split(":")[0]: tag.split(":")[2] for tag in tags})
+            # sd.header = header
+            yield sd
 
 
 ## Preprocessing is done by sequentially acting on a SeqData object to modify
@@ -174,9 +189,11 @@ def polyA_trim(rev_comp=False):
             sdata.tags["T3"].append(str(n_trimmed))
 
     return polyA
-
-
-def adapter_trim(
+#                          AAGCAGTGGTATCAACGCAGAGTGGACGTTGTACTCTCC
+#                          AAGCAGTGGTATCAACGCAGAGTCAGACATACTGTTCCGATCT
+#                          AAGCAGTGGTATCAACGCAGAGTCAGACGTGTGCTCTTCCGATCT
+#                          AAGCAGTGGTATCAACGCAGAGTCAGACGT
+def adapter_trim(         #AAGCAGTGGTATCAACGCAGAGTCAGACGT
     name="SMART_TSO", seq="AAGCAGTGGTATCAACGCAGAGTGAATGGG", where="right", **kw
 ):
     import cutadapt.adapters
@@ -203,6 +220,120 @@ def adapter_trim(
                 sdata.q2 = sdata.q2[: match.rstart]
 
     return adap
+
+def require_handles(name="ONT_openst", k=10, handles=[
+    ('OpenST', "GCGAGAGTCGAGGGTGCTGTAGTCACAAGA"),
+    ('ONT', "AGATCGGAAGAGCGTCGTGTAG"), #AATGATACGGCGACCACCGAGATC TACACTCTTTCCCTACACGACGCTCTTCCGATCT
+    #('ONT_3p', "AGATCGGAAGAGCACACGTCTGACTCTGCGTTGATACCACTGCTT"),
+]):
+    """
+    kmer-lookup based detection of required adapter sequences. Can add tags, orient the sequence and
+    discard incomplete reads if desired.
+    """
+
+    from collections import defaultdict
+    kmer_dict = {}
+    kmer_count = defaultdict(int)
+    names = []
+    for name, seq in handles:
+        names.append(name)
+        for i in range(len(seq) - k + 1):
+            kmer_count[name] += 1
+            kmer = seq[i:i+k]
+            kmer_dict[kmer] = (name, i)
+    
+    from spacemake.util import rev_comp
+    
+    # print(">>> SET UP HANDLES")
+    # print(names)
+    # print(kmer_dict)
+    # print(kmer_count)
+    kmer_thresh = 0.6 * len(kmer_dict)
+
+    def _scan_seq(seq):
+        hits = defaultdict(int)
+        pos = defaultdict(lambda : defaultdict(int))
+        total_hits = 0
+
+        for i in range(len(seq) - k + 1):
+            kmer = seq[i:i+k]
+            name, j = kmer_dict.get(kmer, (None, 0) )
+            if name:
+                hits[name] += 1
+                total_hits += 1
+                pos[name][i-j] += 1
+
+        return total_hits, hits, pos
+    
+    def scan(sdata):
+        seq = sdata.r2
+        total_hits, hits, pos = _scan_seq(seq)
+        if total_hits < kmer_thresh:
+            _seq = rev_comp(seq)
+            _total_hits, _hits, _pos = _scan_seq(_seq)
+            if _total_hits > total_hits:
+                # Yes, we want the rev-comp!
+                sdata.r2 = _seq
+                sdata.q2 = sdata.q2[::-1]
+                sdata.tags['rc'] = ["true"]
+
+                seq = _seq
+                total_hits = _total_hits
+                hits = _hits
+                pos = _pos
+        
+        fractions = {}
+        pos_guess = {}
+        for name in names:
+            N = kmer_count[name]
+            fractions[name] = hits[name] / N
+            if pos[name]:
+                pos_hits = sorted([(f,x) for x, f in pos[name].items()], reverse=True)
+                pos_guess[name] = pos_hits[0][1]
+            
+        # for name in names:
+        #     print(f">> {name}: f={fractions[name]} x_guess={pos_guess.get(name,'na')} x={pos[name]}")
+
+        sdata.tags['kf'] = [f"{int(100*fractions[name])}" for name in names]
+        sdata.tags['kp'] = [f"{pos_guess.get(name, 'na')}" for name in names]
+        sdata.tags['kh'] = names
+        # print(f">> TAGS kh: {sdata.tags['kh']} kf: {sdata.tags['kf']} kp: {sdata.tags['kp']}")
+
+    return scan
+
+def find_BC_between(left="GCGAGAGTCGAGGGTGCTGTAGTCACAAGA", right="AGATCGGAAGAGCGTCGTGTAG", anchor_kh="OpenST", k=32, left_kw={}, right_kw={}):
+    import cutadapt.adapters
+
+    left_adap = cutadapt.adapters.NonInternalFrontAdapter(left, name="left", max_errors=0.3, **left_kw)
+    right_adap = cutadapt.adapters.BackAdapter(right, name="right", max_errors=0.3, **right_kw)
+
+    L = len(left) + len(right) + k
+    def adap(sdata):
+        seq = sdata.r2
+        if "kh" in sdata.tags:
+            kh = sdata.tags["kh"]
+            kp = sdata.tags["kp"]
+            kf = sdata.tags["kf"]
+            i = kh.index(anchor_kh)
+            if int(kf[i]) > 10: # at least 10% of kmers were seen
+                anchor = int(kp[i])
+
+                window = seq[anchor:anchor+L]
+                match_left = left_adap.match_to(window)
+                match_right = right_adap.match_to(window)
+
+                if match_left and match_right:
+                    sdata.tags["BC"] = [window[match_left.rstop:match_right.rstart]]
+                    # clip everything right of the match_left.rstart
+                    n_keep = anchor + match_left.rstart
+                    n_trimmed = len(sdata.r2) - n_keep
+                    sdata.tags["A3"].append(anchor_kh)
+                    sdata.tags["T3"].append(str(n_trimmed))
+                    sdata.r2 = sdata.r2[: n_keep]
+                    sdata.q2 = sdata.q2[: n_keep]
+
+    return adap
+
 
 
 format_func_template = """
@@ -255,6 +386,7 @@ def barcode(
 
 
 class PreProcessor(object):
+    logger = logging.getLogger("spacemake.fastq_to_uBAM.py.PreProcessor")
     type_dict = {
         "right": int,
         "left": int,
@@ -274,6 +406,8 @@ class PreProcessor(object):
         "simple_name": name_simplifier,
         "barcode": barcode,
         "clip": clip,
+        "handles": require_handles,
+        "BCsearch": find_BC_between,
     }
 
     def __init__(self, processing_str="", flavor_dict={}, **kw):  # , min_len=18):
@@ -282,10 +416,15 @@ class PreProcessor(object):
         self.stats = defaultdict(int)
 
         # parse processing_str and assemble a pre-processing pipeline
-        if flavor_dict:
-            self.pipeline = self.pipeline_from_flavor(flavor_dict)
-        else:
-            self.pipeline = self.pipeline_from_str(processing_str)
+        try:
+            if flavor_dict:
+                self.pipeline = self.pipeline_from_flavor(flavor_dict)
+            else:
+                self.pipeline = self.pipeline_from_str(processing_str)
+
+        except (ValueError, KeyError) as E:
+            self.logger.error("Malformed pipeline configuration. Check the string passed to --processing or flavor in the config.yaml ")
+            raise E
 
     def pipeline_from_flavor(self, flavor_dict):
         pipeline = []
@@ -365,14 +504,24 @@ class PreProcessor(object):
                 self.stats[(f"bases", a, "A3_total")] += int(t)
 
 
-def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
+def process_reads(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
 
     logger = util.setup_logging(args, "fastq_to_uBAM.worker", rename_process=False)
     logger.debug(
         f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args}"
     )
 
-    ingress = SeqData.from_paired_end(fq1, fq2) if fq1 else SeqData.from_single_end(fq2)
+    if args.input_format == "BAM":
+        ingress = SeqData.from_SAM(fq2)
+    else:
+        if fq2:
+            ingress = (
+                SeqData.from_paired_end(fq1, fq2)
+                if fq1
+                else SeqData.from_single_end(fq2)
+            )
+        else:
+            raise ValueError("no input data provided")
 
     # TODO:
     # decide how we want to handle multiple input files
@@ -432,10 +581,10 @@ def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
         ),
     )
 
-    # N = mf.util.CountDict()
+    # counts = defaultdict(int)
 
     for sdata in ingress:
-        # N.count("total")
+        # counts["total_records_input"] += 1
         sdata = pre.process(sdata)
         sam_out.write(sdata.render_SAM(flag=4))
 
@@ -443,7 +592,12 @@ def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
 
 
 def min_length_filter(input, output, min_len=18):
+    from time import time
+    logger = logging.getLogger("spacemake.fastq_to_uBAM")
+    logger.setLevel(logging.INFO)
     N = 0
+    N_last = 0
+    T0 = time()
     for line in input:
         if not line.startswith("@"):
             seq = line.split("\t")[9]
@@ -452,6 +606,15 @@ def min_length_filter(input, output, min_len=18):
 
         output.write(line)
         N += 1
+        if N % 1000 == 0:
+            dT = time() - T0
+            if dT > 5:
+                dN = N - N_last
+                rate = 0.001 * dN / dT 
+                logger.info(f"processing at {rate:.2f}k records/second")
+                T0 = time()
+                N_last = N
+
 
     return N
     # if args.paired_end:
@@ -496,15 +659,30 @@ def main(args):
     have_read1 = set([str(r1) != "None" for r1 in input_reads1]) == set([True])
 
     # queues for communication between processes
-    w = (
-        mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
-        # open reads2.fastq.gz
-        .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
-            input=mf.FIFO("read2", "rt"),
-            outputs=mf.FIFO("r2_{n}", "wt", n=args.threads_work),
-            chunk_size=args.chunk_size * 4,
+    if args.input_format == "BAM":
+        w = (
+            mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
+            # open reads2.fastq.gz
+            .BAM_reader(
+                input=input_reads2[0], output=mf.FIFO("read2", "wb")
+            ).distribute(
+                input=mf.FIFO("read2", "rt"),
+                outputs=mf.FIFO("r2_{n}", "wt", n=args.threads_work),
+                header_broadcast=True,
+                header_detect_func=mf.util.is_header,
+                chunk_size=args.chunk_size,
+            )
         )
-    )
+    else:
+        w = (
+            mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
+            # open reads2.fastq.gz
+            .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
+                input=mf.FIFO("read2", "rt"),
+                outputs=mf.FIFO("r2_{n}", "wt", n=args.threads_work),
+                chunk_size=args.chunk_size * 4,
+            )
+        )
 
     if have_read1:
         # open reads1.fastq.gz
@@ -516,7 +694,7 @@ def main(args):
         )
         # process in parallel workers
         w.workers(
-            func=process_fastq,
+            func=process_reads,
             fq1=mf.FIFO("r1_{n}", "rt"),
             fq2=mf.FIFO("r2_{n}", "rt"),
             sam_out=mf.FIFO("sam_{n}", "wt"),
@@ -526,13 +704,21 @@ def main(args):
     else:
         # process in parallel workers
         w.workers(
-            func=process_fastq,
+            func=process_reads,
             fq1=None,
             fq2=mf.FIFO("r2_{n}", "rt"),
             sam_out=mf.FIFO("sam_{n}", "wt"),
             args=args,
             n=args.threads_work,
         )
+
+    # # null writer for debug purposes
+    # w.workers(
+    #     func=mf.parts.null_writer_managed,
+    #     input=mf.FIFO("sam_{n}", "rt"),
+    #     n=args.threads_work,
+    #     job_name="{workflow}.null{n}",
+    # )
 
     # combine output streams
     w.collect(
@@ -551,6 +737,10 @@ def main(args):
         log_rate_template="written {M_out:.1f} M BAM records ({mps:.3f} M/s, overall {MPS:.3f} M/s)",
         log_name="fastq_to_uBAM.collect",
     )
+    # w.funnel(
+    #     func=mf.parts.null_writer_managed,
+    #     input=mf.FIFO("sam_combined", "rt"),
+    # )
     w.funnel(
         func=min_length_filter,
         input=mf.FIFO("sam_combined", "rt"),
@@ -571,6 +761,9 @@ def main(args):
     )
     res = w.run()
     stats = defaultdict(int)
+    # defaults
+    stats[("reads", "N", "output")] = 0
+    stats[("reads", "N", "input")] = 0
     for w, d in res.result_dict.items():
         if "worker" in w:
             for k, v in d.items():
@@ -614,15 +807,13 @@ def get_input_params(args):
             ] * len(R1)
 
     else:
-        R1 = [
-            args.read1,
-        ]
-        R2 = [
-            args.read2,
-        ]
+        R1 = args.read1
+        R2 = args.read2
         params = [
             {},
         ]
+        if not R1:
+            R1 = ["None"] * len(R2)
 
     return R1, R2, params
 
@@ -644,12 +835,14 @@ def parse_args():
         "--read1",
         default=None,
         help="source from where to get read1 (FASTQ format)",
+        nargs='*',
     )
     parser.add_argument(
         "--read2",
         default="/dev/stdin",
         help="source from where to get read2 (FASTQ format)",
         # required=True,
+        nargs='*'
     )
     parser.add_argument(
         "--paired-end",
@@ -663,7 +856,12 @@ def parse_args():
         type=int,
         help="phred quality base in the input (default=33)",
     )
-
+    parser.add_argument(
+        "--input-format",
+        default="FASTQ",
+        choices=["FASTQ", "BAM"],
+        help="input format (default=FASTQ)",
+    )
     ## pre-processing options
     parser.add_argument(
         "--processing",
@@ -704,6 +902,10 @@ def parse_args():
         default=4,
         type=int,
         help="How many megabytes of pipe-buffer to use. kernel settings is usually 64MB per user (default=4MB)",
+    )
+
+    parser.add_argument(
+        "--parallel", default=1, type=int, help="how many processes to spawn"
     )
     parser.add_argument(
         "--chunk-size",
