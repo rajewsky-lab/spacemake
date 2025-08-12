@@ -347,11 +347,11 @@ def get_data_parser(reads_required=False):
         required=reads_required,
     )
 
-    parser.add_argument(
-        "--longread-signature",
-        type=str,
-        help="identify the expected longread signature (see longread.yaml)",
-    )
+    # parser.add_argument(
+    #     "--longread-signature",
+    #     type=str,
+    #     help="identify the expected longread signature (see longread.yaml)",
+    # )
 
     return parser
 

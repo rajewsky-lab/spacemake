@@ -1081,11 +1081,11 @@ class ProjectDF:
                             + "sample_sheet, nor dge were provided.\n"
                             + "Some reads/data has to be provided"
                         )
-            else:
-                if not longread_signature:
-                    raise SpacemakeError(
-                        "adding longreads requires to set --longread-signature as well (e.g. dropseq, chromium, noUMI, default, visium, slideseq_bc14,...)"
-                    )
+            # else:
+            #     if not longread_signature:
+            #         raise SpacemakeError(
+            #             "adding longreads requires to set --longread-signature as well (e.g. dropseq, chromium, noUMI, default, visium, slideseq_bc14,...)"
+            #         )
 
         # assert files first
         # if R1 is not None:
