@@ -909,9 +909,9 @@ def parse_args():
     )
     parser.add_argument(
         "--chunk-size",
-        default=10,
+        default=1,
         type=int,
-        help="how many consecutive reads are assigned to the same worker (default=10)",
+        help="how many consecutive reads are assigned to the same worker (default=1)",
     )
     parser.add_argument(
         "--threads-work",
