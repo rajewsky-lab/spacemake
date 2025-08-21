@@ -35,6 +35,8 @@ map_data = {
     #   genome:STAR@digital_expression
     #
     # would force the legacy dropseq-tools behavior for annotation and counting (maybe)
+    # keep track of all used STAR indices to ensure they are properly unloaded after the run ended
+    "STAR_INDICES": {},
     "REF_FOR_FINAL": {},
     #   key: bt2_index_file or star_index_file
     #   value: dotdict with
@@ -443,6 +445,8 @@ def get_mapped_BAM_output(
                 mr.map_flags = species_d[mr.ref_name].get(
                     "STAR_flags", default_STAR_MAP_FLAGS
                 )
+
+                map_data["STAR_INDICES"][(mr.species, mr.ref_name)] = mr.map_index_param
 
             map_data["MAP_RULES_LKUP"][mr.out_path] = mr
             map_data["INDEX_FASTA_LKUP"][mr.map_index_file] = mr

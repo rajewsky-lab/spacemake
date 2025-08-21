@@ -222,7 +222,9 @@ def format_func(sdata):
 i5i7_extract_template = "i5i7 = sdata.qname.split(':N:0:')[1].replace('+', '')"
 
 
-def barcode(cell="r1[:12]", UMI="r1[12:20]", seq="r2", qual="q2", disable_safety=False):
+def barcode(
+    cell="r1[:12]", UMI="r1[12:20]", seq="r2", qual="r2_qual", disable_safety=False
+):
     def safety_check_eval(s, danger="();."):
         chars = set(list(s))
         if chars & set(list(danger)):

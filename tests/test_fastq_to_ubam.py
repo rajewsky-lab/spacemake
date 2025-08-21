@@ -97,6 +97,7 @@ def test_preprocessing():
         "CCTGCTGGGAGGGGGTGGGGGGAGGAGGAAGAGGTGGGGCTCTACTCTGATTAATTAAAAAAAAAGAGAAAAAAAAAAAAAAAAGGG",
         "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIEEIEEIE#IIIIIIIIIIIIIIEIII###",
     )
+
     res = pre.process(sdata)
     tag_d = dict(res.tags)
     assert tag_d["T3"] == ["3", "28"]
@@ -115,3 +116,48 @@ if __name__ == "__main__":
 #         "30",
 #         """--cell='"A"'""",
 #     )
+
+
+def test_issue135():
+    import spacemake.bin.fastq_to_uBAM as ubam
+    from argparse import Namespace
+    import io
+
+    f1 = io.StringIO(
+        "\n".join(
+            [
+                "@QNAME MUST NOT HAVE WHITESPACE",
+                "CCTGCTGGGAGGGG",
+                "+",
+                "IIIIIIIIIIIIII",
+                "",
+            ]
+        )
+    )
+
+    f2 = io.StringIO(
+        "\n".join(
+            [
+                "@QNAME MUST NOT HAVE WHITESPACE",
+                "CCTGCTGGGAGGGGGTGGGGGGAGGAGGAAGAGGTGGGGCTCTACTCTGATTAATTA",
+                "+",
+                "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII",
+                "",
+            ]
+        )
+    )
+
+    pre = ubam.PreProcessor("quality:left=25,right=25;barcode")
+
+    for sdata in ubam.SeqData.from_paired_end(f1, f2):
+        sdata = pre.process(sdata)
+
+        sam = sdata.render_SAM(flag=4)
+        cols = sam.split()
+        assert cols[0] == "QNAME"
+        assert cols[1] == "4"
+    # print(sam)
+
+
+if __name__ == "__main__":
+    test_issue135()
