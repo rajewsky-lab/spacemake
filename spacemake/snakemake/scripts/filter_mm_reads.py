@@ -55,6 +55,7 @@ if __name__ == "__main__":
 
     multi_mappers = []
 
+    qname = None
     for aln in bam_in.fetch(until_eof=True):
         counter += 1
         total_records += 1
@@ -74,18 +75,13 @@ if __name__ == "__main__":
             start_time = datetime.datetime.now()
             counter = 0
 
-        mapped_number = aln.get_tag("NH")
-
-        if mapped_number == 1:
-            bam_out.write(aln)
-        else:
-            if len(multi_mappers) < (mapped_number - 1):
-                # still some multimappers missing. we need to add the alignments
-                # until the last one to the list
-                multi_mappers.append(aln)
-            else:
-                # add the last alignment
-                multi_mappers.append(aln)
+        if aln.query_name != qname:
+            # new read
+            if len(multi_mappers) == 1:
+                # fast path
+                bam_out.write(aln)
+                multi_mappers = []
+            elif len(multi_mappers) > 1:
                 # decide which, if any, to keep
                 aln_to_keep = select_alignment(multi_mappers)
 
@@ -98,5 +94,26 @@ if __name__ == "__main__":
                 # reset multimapper list
                 multi_mappers = []
 
+        qname = aln.query_name
+        multi_mappers.append(aln)
+
+    # final iteration:
+    if len(multi_mappers) == 1:
+        # fast path
+        bam_out.write(aln)
+        multi_mappers = []
+
+    elif len(multi_mappers) > 1:
+        # decide which, if any, to keep
+        aln_to_keep = select_alignment(multi_mappers)
+
+        if aln_to_keep is not None:
+            # set aln secondary flag to 0, so that it is flagged as primary
+            # secondary flag is at 0x100, so 8th bit (starting from 0)
+            aln_to_keep.flag = aln_to_keep.flag & ~(1 << 8)
+            bam_out.write(aln_to_keep)
+
     formatted_time = finish_time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f'Finished processing {counter:,} records in {total_elapsed_seconds:,.0f} seconds. Current time: {formatted_time}')
+    print(
+        f"Finished processing {counter:,} records in {total_elapsed_seconds:,.0f} seconds. Current time: {formatted_time}"
+    )
