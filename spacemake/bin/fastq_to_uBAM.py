@@ -7,6 +7,7 @@ import spacemake.util as util
 import mrfifo as mf
 import logging
 
+
 class SeqData(object):
     """
     Minimal Sequencing Read Data container. Holds the following attributes
@@ -35,6 +36,7 @@ class SeqData(object):
 
     def render_tags(self, extra_tags=[]):
         # print(self.tags)
+
         bam_tags = [(n, f"{','.join(records)}") for n, records in self.tags.items()]
         tag_str = "\t".join([f"{tag}:Z:{val}" for tag, val in bam_tags] + extra_tags)
         return tag_str
@@ -189,11 +191,13 @@ def polyA_trim(rev_comp=False):
             sdata.tags["T3"].append(str(n_trimmed))
 
     return polyA
+
+
 #                          AAGCAGTGGTATCAACGCAGAGTGGACGTTGTACTCTCC
 #                          AAGCAGTGGTATCAACGCAGAGTCAGACATACTGTTCCGATCT
 #                          AAGCAGTGGTATCAACGCAGAGTCAGACGTGTGCTCTTCCGATCT
 #                          AAGCAGTGGTATCAACGCAGAGTCAGACGT
-def adapter_trim(         #AAGCAGTGGTATCAACGCAGAGTCAGACGT
+def adapter_trim(  # AAGCAGTGGTATCAACGCAGAGTCAGACGT
     name="SMART_TSO", seq="AAGCAGTGGTATCAACGCAGAGTGAATGGG", where="right", **kw
 ):
     import cutadapt.adapters
@@ -221,17 +225,26 @@ def adapter_trim(         #AAGCAGTGGTATCAACGCAGAGTCAGACGT
 
     return adap
 
-def require_handles(name="ONT_openst", k=10, handles=[
-    ('OpenST', "GCGAGAGTCGAGGGTGCTGTAGTCACAAGA"),
-    ('ONT', "AGATCGGAAGAGCGTCGTGTAG"), #AATGATACGGCGACCACCGAGATC TACACTCTTTCCCTACACGACGCTCTTCCGATCT
-    #('ONT_3p', "AGATCGGAAGAGCACACGTCTGACTCTGCGTTGATACCACTGCTT"),
-]):
+
+def require_handles(
+    name="ONT_openst",
+    k=10,
+    handles=[
+        ("OpenST", "GCGAGAGTCGAGGGTGCTGTAGTCACAAGA"),
+        (
+            "ONT",
+            "AGATCGGAAGAGCGTCGTGTAG",
+        ),  # AATGATACGGCGACCACCGAGATC TACACTCTTTCCCTACACGACGCTCTTCCGATCT
+        # ('ONT_3p', "AGATCGGAAGAGCACACGTCTGACTCTGCGTTGATACCACTGCTT"),
+    ],
+):
     """
     kmer-lookup based detection of required adapter sequences. Can add tags, orient the sequence and
     discard incomplete reads if desired.
     """
 
     from collections import defaultdict
+
     kmer_dict = {}
     kmer_count = defaultdict(int)
     names = []
@@ -239,11 +252,11 @@ def require_handles(name="ONT_openst", k=10, handles=[
         names.append(name)
         for i in range(len(seq) - k + 1):
             kmer_count[name] += 1
-            kmer = seq[i:i+k]
+            kmer = seq[i : i + k]
             kmer_dict[kmer] = (name, i)
-    
+
     from spacemake.util import rev_comp
-    
+
     # print(">>> SET UP HANDLES")
     # print(names)
     # print(kmer_dict)
@@ -252,19 +265,19 @@ def require_handles(name="ONT_openst", k=10, handles=[
 
     def _scan_seq(seq):
         hits = defaultdict(int)
-        pos = defaultdict(lambda : defaultdict(int))
+        pos = defaultdict(lambda: defaultdict(int))
         total_hits = 0
 
         for i in range(len(seq) - k + 1):
-            kmer = seq[i:i+k]
-            name, j = kmer_dict.get(kmer, (None, 0) )
+            kmer = seq[i : i + k]
+            name, j = kmer_dict.get(kmer, (None, 0))
             if name:
                 hits[name] += 1
                 total_hits += 1
-                pos[name][i-j] += 1
+                pos[name][i - j] += 1
 
         return total_hits, hits, pos
-    
+
     def scan(sdata):
         seq = sdata.r2
         total_hits, hits, pos = _scan_seq(seq)
@@ -275,65 +288,83 @@ def require_handles(name="ONT_openst", k=10, handles=[
                 # Yes, we want the rev-comp!
                 sdata.r2 = _seq
                 sdata.q2 = sdata.q2[::-1]
-                sdata.tags['rc'] = ["true"]
+                sdata.tags["rc"] = ["true"]
 
                 seq = _seq
                 total_hits = _total_hits
                 hits = _hits
                 pos = _pos
-        
+
         fractions = {}
         pos_guess = {}
         for name in names:
             N = kmer_count[name]
             fractions[name] = hits[name] / N
             if pos[name]:
-                pos_hits = sorted([(f,x) for x, f in pos[name].items()], reverse=True)
+                pos_hits = sorted([(f, x) for x, f in pos[name].items()], reverse=True)
                 pos_guess[name] = pos_hits[0][1]
-            
+
         # for name in names:
         #     print(f">> {name}: f={fractions[name]} x_guess={pos_guess.get(name,'na')} x={pos[name]}")
 
-        sdata.tags['kf'] = [f"{int(100*fractions[name])}" for name in names]
-        sdata.tags['kp'] = [f"{pos_guess.get(name, 'na')}" for name in names]
-        sdata.tags['kh'] = names
+        sdata.tags["kf"] = [f"{int(100*fractions[name])}" for name in names]
+        sdata.tags["kp"] = [f"{pos_guess.get(name, 'na')}" for name in names]
+        sdata.tags["kh"] = names
         # print(f">> TAGS kh: {sdata.tags['kh']} kf: {sdata.tags['kf']} kp: {sdata.tags['kp']}")
 
     return scan
 
-def find_BC_between(left="GCGAGAGTCGAGGGTGCTGTAGTCACAAGA", right="AGATCGGAAGAGCGTCGTGTAG", anchor_kh="OpenST", k=32, left_kw={}, right_kw={}):
-    import cutadapt.adapters
 
-    left_adap = cutadapt.adapters.NonInternalFrontAdapter(left, name="left", max_errors=0.3, **left_kw)
-    right_adap = cutadapt.adapters.BackAdapter(right, name="right", max_errors=0.3, **right_kw)
+def find_BC_between(
+    left="GCGAGAGTCGAGGGTGCTGTAGTCACAAGA",
+    right="AGATCGGAAGAGCGTCGTGTAG",
+    anchor_handle="OpenST",
+    k=32,
+    left_kw={},
+    right_kw={},
+    rev_comp=True,
+):
+    import cutadapt.adapters
+    from spacemake.util import rev_comp
+
+    left_adap = cutadapt.adapters.NonInternalFrontAdapter(
+        left, name="left", max_errors=0.3, **left_kw
+    )
+    right_adap = cutadapt.adapters.BackAdapter(
+        right, name="right", max_errors=0.3, **right_kw
+    )
 
     L = len(left) + len(right) + k
+
     def adap(sdata):
         seq = sdata.r2
         if "kh" in sdata.tags:
             kh = sdata.tags["kh"]
             kp = sdata.tags["kp"]
             kf = sdata.tags["kf"]
-            i = kh.index(anchor_kh)
-            if int(kf[i]) > 10: # at least 10% of kmers were seen
+            i = kh.index(anchor_handle)
+            if int(kf[i]) > 10:  # at least 10% of kmers were seen
                 anchor = int(kp[i])
 
-                window = seq[anchor:anchor+L]
+                window = seq[anchor : anchor + L]
                 match_left = left_adap.match_to(window)
                 match_right = right_adap.match_to(window)
 
                 if match_left and match_right:
-                    sdata.tags["BC"] = [window[match_left.rstop:match_right.rstart]]
+                    raw_barcode = window[match_left.rstop : match_right.rstart]
+                    if rev_comp:
+                        raw_barcode = rev_comp(raw_barcode)
+
+                    sdata.tags["CR"] = [raw_barcode]
                     # clip everything right of the match_left.rstart
                     n_keep = anchor + match_left.rstart
                     n_trimmed = len(sdata.r2) - n_keep
-                    sdata.tags["A3"].append(anchor_kh)
+                    sdata.tags["A3"].append(anchor_handle)
                     sdata.tags["T3"].append(str(n_trimmed))
-                    sdata.r2 = sdata.r2[: n_keep]
-                    sdata.q2 = sdata.q2[: n_keep]
+                    sdata.r2 = sdata.r2[:n_keep]
+                    sdata.q2 = sdata.q2[:n_keep]
 
     return adap
-
 
 
 format_func_template = """
@@ -343,6 +374,8 @@ def format_func(sdata):
     q1 = sdata.q1
     r2 = sdata.r2
     r2_qual = sdata.q2
+
+    lr_CR = sdata.tags.get('CR', ["NA"])[0]
 
     sdata.tags['CB'] = [{cell}, ]
     sdata.tags['MI'] = [{UMI}, ]
@@ -423,7 +456,9 @@ class PreProcessor(object):
                 self.pipeline = self.pipeline_from_str(processing_str)
 
         except (ValueError, KeyError) as E:
-            self.logger.error("Malformed pipeline configuration. Check the string passed to --processing or flavor in the config.yaml ")
+            self.logger.error(
+                "Malformed pipeline configuration. Check the string passed to --processing or flavor in the config.yaml "
+            )
             raise E
 
     def pipeline_from_flavor(self, flavor_dict):
@@ -593,6 +628,7 @@ def process_reads(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
 
 def min_length_filter(input, output, min_len=18):
     from time import time
+
     logger = logging.getLogger("spacemake.fastq_to_uBAM")
     logger.setLevel(logging.INFO)
     N = 0
@@ -603,18 +639,17 @@ def min_length_filter(input, output, min_len=18):
             seq = line.split("\t")[9]
             if len(seq) < min_len:
                 continue
+            N += 1
 
         output.write(line)
-        N += 1
         if N % 1000 == 0:
             dT = time() - T0
             if dT > 5:
                 dN = N - N_last
-                rate = 0.001 * dN / dT 
+                rate = 0.001 * dN / dT
                 logger.info(f"processing at {rate:.2f}k records/second")
                 T0 = time()
                 N_last = N
-
 
     return N
     # if args.paired_end:
@@ -767,6 +802,7 @@ def main(args):
     for w, d in res.result_dict.items():
         if "worker" in w:
             for k, v in d.items():
+                # print(w, k, v)
                 stats[k] += v
         elif "funnel0" in w:
             stats[("reads", "N", "output")] = d
@@ -835,14 +871,14 @@ def parse_args():
         "--read1",
         default=None,
         help="source from where to get read1 (FASTQ format)",
-        nargs='*',
+        nargs="*",
     )
     parser.add_argument(
         "--read2",
         default="/dev/stdin",
         help="source from where to get read2 (FASTQ format)",
         # required=True,
-        nargs='*'
+        nargs="*",
     )
     parser.add_argument(
         "--paired-end",
