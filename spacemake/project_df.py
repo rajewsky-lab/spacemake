@@ -529,10 +529,9 @@ class ProjectDF:
             or (data.sample_sheet and data.basecalls_dir)
             or data.dge
             or data.reads
+            or data.longreads
         ):
             return True
-        elif data.longreads:
-            return False
         else:
             raise SpacemakeError(
                 f"Sample with id (project_id, sample_id)="
