@@ -83,13 +83,29 @@ run_modes:
         - 100
         - 250
         - 500
-    
+    openst_testing:
+        clean_dge: false
+        count_intronic_reads: true
+        count_mm_reads: true
+        detect_tissue: false
+        mesh_data: true
+        mesh_spot_diameter_um: 7
+        mesh_spot_distance_um: 7
+        mesh_type: hexagon
+        n_beads: 100000
+        polyA_adapter_trimming: true
+        spatial_barcode_min_matches: 0
+        umi_cutoff:
+        - 0
 
 barcode_flavors:
     default:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
         #bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+    openst_ont:
+        UMI: r2[-8:]
+        cell: lr_CR[2:27]
     dropseq:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
@@ -129,6 +145,24 @@ adapter_flavors:
             seq: AAGCAGTGGTATCAACGCAGAGTGAATGGG
             min_overlap: 10
             max_errors: 0.1
+    openst_ont:
+        - handles:
+            k: 10
+            name: openst_ont
+            handles: [['OpenST', "GCGAGAGTCGAGGGTGCTGTAGTCACAAGA"], ['ONT', "AGATCGGAAGAGCGTCGTGTAG"]]
+        - BCsearch: 
+            left: "GCGAGAGTCGAGGGTGCTGTAGTCACAAGA"
+            right: "AGATCGGAAGAGCGTCGTGTAG"
+            anchor_handle: OpenST
+            k: 32
+        - adapter:
+            name: ONT_5p
+            seq: AAGCAGTGGTATCAACGCAGAGTCAGACGTGTGCTCTTCCGATCT
+            where: left
+            max_errors: 0.3
+            min_overlap: 10
+        - polyA: null
+
 #        - barcode:
 #            cell: "r1[0:12]"
 #            UMI: "r1[12:20]"
