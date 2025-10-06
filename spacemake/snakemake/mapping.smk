@@ -215,7 +215,7 @@ rule map_reads_mm2:
     shell:
         "samtools fastq -f 4 -T '*' {input.bam} "
         " "
-        "| minimap2 -ay {params.auto[flags]} {params.auto[index]} /dev/stdin 2> {log} "
+        "| minimap2 -t {threads} -ay {params.auto[flags]} {params.auto[index]} /dev/stdin 2> {log} "
         " "
         # fix the BAM header to accurately reflect the entire history of processing via PG records.
         "| python {repo_dir}/scripts/splice_bam_header.py "
