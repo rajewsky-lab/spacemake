@@ -306,7 +306,9 @@ rule tag_reads_bc_umi:
         ubam = tagged_polyA_adapter_trimmed_bam,
         log = preprocessing_log,
         stats = preprocessing_stats
-    threads: max(min(workflow.cores * 0.5, 32), 1)
+    threads: 48 #max(min(workflow.cores * 0.5, 32), 1)
+    resources:
+        pipe_buffer_mb=6
     shell:
         "python {spacemake_dir}/bin/fastq_to_uBAM.py "
         "--sample={wildcards.sample_id} "
@@ -320,6 +322,7 @@ rule tag_reads_bc_umi:
         "--adapter-flavor={params.bc.adapter_flavor} "
         #"--bam-tags='{params.bc.bam_tags}' "
         "--out-fmt=CRAM "
+        "--pipe-buffer={resources.pipe_buffer_mb} "
         "--out-fmt-option='version=3.1' " # not supported by DropSeqTools 2.5.1
         "--log-file='{output.log}' "
 

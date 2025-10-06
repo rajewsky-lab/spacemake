@@ -1,3 +1,5 @@
+set-resources:
+    pipe_buffer_mb: 12
 puck_data:
     barcode_file: 'predictions_ml.csv'
     root: 'puck_data'
