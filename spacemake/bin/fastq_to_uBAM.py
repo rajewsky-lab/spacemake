@@ -418,6 +418,20 @@ def barcode(
     return func
 
 
+def discard_filter(min_len=18):
+    def check_discard(sdata):
+        seq = sdata.r2
+        if len(seq) < min_len:
+            sdata.tags["DQ"] = ["short_discard"]
+
+        CB = sdata.tags.get("CB", [""])[0]
+        if len(CB) == 0:
+            # print("discarding read without CB")
+            sdata.tags["DQ"] = ["no_CB_discard"]
+
+    return check_discard
+
+
 class PreProcessor(object):
     logger = logging.getLogger("spacemake.fastq_to_uBAM.py.PreProcessor")
     type_dict = {
@@ -460,6 +474,9 @@ class PreProcessor(object):
                 "Malformed pipeline configuration. Check the string passed to --processing or flavor in the config.yaml "
             )
             raise E
+
+        # always ensure that we filter out too-short or unusable reads
+        self.pipeline.append(discard_filter(min_len=self.kw.get("min_len", 18)))
 
     def pipeline_from_flavor(self, flavor_dict):
         pipeline = []
@@ -538,6 +555,10 @@ class PreProcessor(object):
                 self.stats[(f"bases", a, t)] += 1
                 self.stats[(f"bases", a, "A3_total")] += int(t)
 
+        if "DQ" in tags:
+            for reason in tags["DQ"]:
+                self.stats[("reads", "N", reason)] += 1
+
 
 def process_reads(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
 
@@ -614,6 +635,7 @@ def process_reads(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
             seq=args.seq,
             qual=args.qual,
         ),
+        min_len=args.min_len,
     )
 
     # counts = defaultdict(int)
@@ -626,7 +648,7 @@ def process_reads(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
     return pre.stats
 
 
-def min_length_filter(input, output, min_len=18):
+def discard_tag_filter(input, output):
     from time import time
 
     logger = logging.getLogger("spacemake.fastq_to_uBAM")
@@ -636,9 +658,9 @@ def min_length_filter(input, output, min_len=18):
     T0 = time()
     for line in input:
         if not line.startswith("@"):
-            seq = line.split("\t")[9]
-            if len(seq) < min_len:
+            if "\tDQ:Z:" in line:
                 continue
+
             N += 1
 
         output.write(line)
@@ -647,11 +669,12 @@ def min_length_filter(input, output, min_len=18):
             if dT > 5:
                 dN = N - N_last
                 rate = 0.001 * dN / dT
-                logger.info(f"processing at {rate:.2f}k records/second")
+                logger.info(f"processing at {rate:.2f}k records/second ({N:,} total)")
                 T0 = time()
                 N_last = N
 
     return N
+
     # if args.paired_end:
     #             # if args.paired_end[0] == 'r':
     #             #     # rev_comp R1 and reverse qual1
@@ -777,10 +800,9 @@ def main(args):
     #     input=mf.FIFO("sam_combined", "rt"),
     # )
     w.funnel(
-        func=min_length_filter,
+        func=discard_tag_filter,
         input=mf.FIFO("sam_combined", "rt"),
         output=mf.FIFO("sam_filtered", "wt"),
-        min_len=args.min_len,
     )
     # compress to BAM
     fmt_opt = " ".join([f"--output-fmt-option {o}" for o in args.out_fmt_option])
