@@ -261,7 +261,7 @@ def require_handles(
     # print(names)
     # print(kmer_dict)
     # print(kmer_count)
-    kmer_thresh = 0.6 * len(kmer_dict)
+    kmer_thresh = 0.75 * len(kmer_dict)
 
     def _scan_seq(seq):
         hits = defaultdict(int)
@@ -327,37 +327,72 @@ def find_BC_between(
     import cutadapt.adapters
     from spacemake.util import rev_comp
 
+    # left_adap = cutadapt.adapters.NonInternalFrontAdapter(
+    #     left, name="left", max_errors=0.3, **left_kw
+    # )
+    # right_adap = cutadapt.adapters.BackAdapter(
+    #     right, name="right", max_errors=0.3, **right_kw
+    # )
     left_adap = cutadapt.adapters.NonInternalFrontAdapter(
-        left, name="left", max_errors=0.3, **left_kw
+        left, name="left", max_errors=0.3, min_overlap=4, **left_kw
     )
     right_adap = cutadapt.adapters.BackAdapter(
-        right, name="right", max_errors=0.3, **right_kw
+        right, name="right", max_errors=0.3, min_overlap=4, **right_kw
     )
 
     L = len(left) + len(right) + k
 
     def adap(sdata):
         seq = sdata.r2
-        if "kh" in sdata.tags:
+        if len(seq) < L:
+            sdata.tags["MQ"] = ["too_short"]
+        elif "kh" in sdata.tags:
             kh = sdata.tags["kh"]
             kp = sdata.tags["kp"]
             kf = sdata.tags["kf"]
             i = kh.index(anchor_handle)
-            if int(kf[i]) > 10:  # at least 10% of kmers were seen
-                anchor = int(kp[i])
+            if int(kf[i]) > 5:  # at least 5% of kmers were seen
+                anchor = max(
+                    int(kp[i]), 0
+                )  # occasionally, kmer hits indicate a truncated handle with start pos < 0
 
                 window = seq[anchor : anchor + L]
                 match_left = left_adap.match_to(window)
                 match_right = right_adap.match_to(window)
 
+                raw_barcode = None
                 if match_left and match_right:
                     raw_barcode = window[match_left.rstop : match_right.rstart]
+                    sdata.tags["MQ"] = ["LR"]
+                    n_keep = anchor + match_left.rstart
+                elif match_left:
+                    raw_barcode = window[match_left.rstop : match_left.rstop + k]
+                    sdata.tags["MQ"] = ["L-"]
+                    n_keep = anchor + match_left.rstart
+                elif match_right:
+                    raw_barcode = window[match_right.rstart - k : match_right.rstart]
+                    sdata.tags["MQ"] = ["-R"]
+                    n_keep = anchor + match_right.rstart - k - len(left)
+                else:
+                    sdata.tags["MQ"] = ["--"]
+                    # print(f"{sdata.qname} {sdata.tags['kf']} {sdata.tags['kp']}")
+                    # print(window)
+                    # print(match_left)
+                    # print(match_right)
+
+                if raw_barcode:
                     if rev_comp:
                         raw_barcode = rev_comp(raw_barcode)
 
+                    BC_len = len(raw_barcode)
+                    if BC_len < k:
+                        sdata.tags["MQ"].append("short_BC")
+                    if BC_len > k:
+                        sdata.tags["MQ"].append("long_BC")
+
                     sdata.tags["CR"] = [raw_barcode]
+                    sdata.tags["bl"] = [str(BC_len)]
                     # clip everything right of the match_left.rstart
-                    n_keep = anchor + match_left.rstart
                     n_trimmed = len(sdata.r2) - n_keep
                     sdata.tags["A3"].append(anchor_handle)
                     sdata.tags["T3"].append(str(n_trimmed))
@@ -558,6 +593,13 @@ class PreProcessor(object):
         if "DQ" in tags:
             for reason in tags["DQ"]:
                 self.stats[("reads", "N", reason)] += 1
+
+        if "MQ" in tags:
+            for value in tags["MQ"]:
+                self.stats[("reads", "MQ", value)] += 1
+
+        if "bl" in tags:
+            self.stats[("bases", "BC_len", tags["bl"][0])] += 1
 
 
 def process_reads(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
@@ -1039,7 +1081,7 @@ def cmdline():
     logger.info(
         f"processed {N/1e6:.3f} M reads in {dt:.1f} seconds ({rate:.1f} k reads/sec)"
     )
-    logger.info(f"kept {N_kept/1e6:.3f} M reads in output ({100 * N_kept/N:.2f} %)")
+    logger.info(f"kept {N_kept:,} reads in output ({100 * N_kept/N:.2f} %)")
     return df
 
 
