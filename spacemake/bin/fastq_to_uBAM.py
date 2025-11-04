@@ -374,20 +374,37 @@ def find_BC_between(
                 window = seq[anchor : anchor + L]
                 match_left = left_adap.match_to(window)
                 match_right = right_adap.match_to(window)
-                # print(window)
+                # print(match_left)
+                # print(match_right)
 
+                # print(window)
                 left_score = 0
                 right_score = 0
 
                 if match_left and match_right:
                     # print("match left + right")
-                    # print(f"{match_left.rstart}")
-                    if match_left.errors <= match_right.errors:
+                    # simple heuristic to find out which adapter matched correctly at the side facing the barcode
+                    left_score = (
+                        10 * (match_left.match_sequence()[-4:] == left[-4:])
+                        - match_left.errors
+                    )
+                    right_score = (
+                        10 * (match_right.match_sequence()[:4] == right[:4])
+                        - match_right.errors
+                    )
+
+                    if left_score > right_score:
                         raw_barcode = window[match_left.rstop : match_left.rstop + k]
                     else:
                         raw_barcode = window[
                             match_right.rstart - k : match_right.rstart
                         ]
+
+                    # print(f"left_score={left_score} right_score={right_score}")
+                    # lpad = " " * match_left.rstart
+                    # print(
+                    #     f"{lpad}{match_left.match_sequence()}{' '*(k)}{match_right.match_sequence()}"
+                    # )
 
                     # This can be wonky. If match_right is off in the beginning then we'll end up with != 32 bases and after rev-comp this will
                     # screw the barcode
@@ -412,9 +429,9 @@ def find_BC_between(
                     raw_barcode = None
                     match_code = "--"
 
-                # print(f"CR={raw_barcode} CB={rev_comp(raw_barcode)[2:27]}")
                 sdata.tags["MQ"] = [match_code]
                 sdata.tags["MS"] = [str(left_score), str(right_score)]
+                # print(f"CR={raw_barcode} CB={rev_comp(raw_barcode)[2:27]}")
                 # print(f"{sdata.qname} {sdata.tags['kf']} {sdata.tags['kp']}")
                 # print(window)
                 # print(match_left)
