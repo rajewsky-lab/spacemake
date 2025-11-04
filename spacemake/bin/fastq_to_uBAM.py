@@ -281,19 +281,19 @@ def require_handles(
     def scan(sdata):
         seq = sdata.r2
         total_hits, hits, pos = _scan_seq(seq)
-        if total_hits < kmer_thresh:
-            _seq = rev_comp(seq)
-            _total_hits, _hits, _pos = _scan_seq(_seq)
-            if _total_hits > total_hits:
-                # Yes, we want the rev-comp!
-                sdata.r2 = _seq
-                sdata.q2 = sdata.q2[::-1]
-                sdata.tags["rc"] = ["true"]
+        # if total_hits < kmer_thresh:
+        _seq = rev_comp(seq)
+        _total_hits, _hits, _pos = _scan_seq(_seq)
+        if _total_hits > total_hits:
+            # Yes, we want the rev-comp!
+            sdata.r2 = _seq
+            sdata.q2 = sdata.q2[::-1]
+            sdata.tags["rc"] = ["true"]
 
-                seq = _seq
-                total_hits = _total_hits
-                hits = _hits
-                pos = _pos
+            seq = _seq
+            total_hits = _total_hits
+            hits = _hits
+            pos = _pos
 
         fractions = {}
         pos_guess = {}
@@ -313,6 +313,16 @@ def require_handles(
         # print(f">> TAGS kh: {sdata.tags['kh']} kf: {sdata.tags['kf']} kp: {sdata.tags['kp']}")
 
     return scan
+
+
+"""
+right                                                         AGATCGGAAGAGCGTCGTGTAG
+GCGAGAGTCGAGGGTGCTGTAGTCACAAGACAAGTTAGCTAGTCCCGCCAGACCTCGATCCGAGAAATAGGAAGAGCATAGTGT
+                                                                AgATcGGAAGAGCgTcGTGTAG
+                                                                AAATAGGAAGAGCATAGTGT
+                                                              AGAAATAGGAAGAGCATAGTGT
+                                                              AGA--TcGGAAGAGCGTCGTGTAG
+"""
 
 
 def find_BC_between(
@@ -351,6 +361,11 @@ def find_BC_between(
             kp = sdata.tags["kp"]
             kf = sdata.tags["kf"]
             i = kh.index(anchor_handle)
+
+            # print(sdata.qname)
+            # print(f"rc={sdata.tags['rc']} kh={kh} kp={kp} kf={kf}")
+            # print(sdata.r2)
+
             if int(kf[i]) > 5:  # at least 5% of kmers were seen
                 anchor = max(
                     int(kp[i]), 0
@@ -359,26 +374,51 @@ def find_BC_between(
                 window = seq[anchor : anchor + L]
                 match_left = left_adap.match_to(window)
                 match_right = right_adap.match_to(window)
+                # print(window)
 
-                raw_barcode = None
+                left_score = 0
+                right_score = 0
+
                 if match_left and match_right:
-                    raw_barcode = window[match_left.rstop : match_right.rstart]
-                    sdata.tags["MQ"] = ["LR"]
+                    # print("match left + right")
+                    # print(f"{match_left.rstart}")
+                    if match_left.errors <= match_right.errors:
+                        raw_barcode = window[match_left.rstop : match_left.rstop + k]
+                    else:
+                        raw_barcode = window[
+                            match_right.rstart - k : match_right.rstart
+                        ]
+
+                    # This can be wonky. If match_right is off in the beginning then we'll end up with != 32 bases and after rev-comp this will
+                    # screw the barcode
+                    # raw_barcode = window[match_left.rstop : match_right.rstart]
                     n_keep = anchor + match_left.rstart
+                    match_code = "LR"
+                    left_score = match_left.score
+                    right_score = match_right.score
                 elif match_left:
+                    # print("match left")
                     raw_barcode = window[match_left.rstop : match_left.rstop + k]
-                    sdata.tags["MQ"] = ["L-"]
                     n_keep = anchor + match_left.rstart
+                    match_code = "L-"
+                    left_score = match_left.score
                 elif match_right:
+                    # print("match right")
                     raw_barcode = window[match_right.rstart - k : match_right.rstart]
-                    sdata.tags["MQ"] = ["-R"]
                     n_keep = anchor + match_right.rstart - k - len(left)
+                    match_code = "-R"
+                    right_score = match_right.score
                 else:
-                    sdata.tags["MQ"] = ["--"]
-                    # print(f"{sdata.qname} {sdata.tags['kf']} {sdata.tags['kp']}")
-                    # print(window)
-                    # print(match_left)
-                    # print(match_right)
+                    raw_barcode = None
+                    match_code = "--"
+
+                # print(f"CR={raw_barcode} CB={rev_comp(raw_barcode)[2:27]}")
+                sdata.tags["MQ"] = [match_code]
+                sdata.tags["MS"] = [str(left_score), str(right_score)]
+                # print(f"{sdata.qname} {sdata.tags['kf']} {sdata.tags['kp']}")
+                # print(window)
+                # print(match_left)
+                # print(match_right)
 
                 if raw_barcode:
                     if rev_comp:
