@@ -23,6 +23,10 @@ base_map[ord('c')] = 1
 base_map[ord('g')] = 2
 base_map[ord('t')] = 3
 
+cdef uint64_t[16] dimers
+for i in range(16):
+    dimers[i] = i
+
 cpdef uint32_t seq_to_uint32(bytes seq):
     """
     Encode up to 16 bases (A,C,G,T) into a 32-bit unsigned integer.
@@ -305,10 +309,210 @@ def query_idx64(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarray[np_uint3
         if ofs != 0:
             idx_s = <uint32_t>(bc & mask) # lower 30 bits
             nn = SL_view[ofs]
-            ofs += 1
             for j in range(nn):
-                if SL_view[ofs + j] == idx_s:
+                if SL_view[ofs + j + 1] == idx_s:
                     hits_view[i] = 1
                     break
+
+    return hits
+
+
+
+cdef make_shifts(uint64_t idx, uint64_t* shifts, int l=25):
+    # cdef uint64_t[40] shifts
+    cdef uint64_t j
+    cdef int i = 0, ld_shift = 2*(l - 2), lm_shift = 2*(l-1)
+
+    # add two-base right-shifted sequences with all possible dimers in front
+    for j in range(16):
+        shifts[i] = (dimers[j] << ld_shift) | (idx >> 4)
+        i += 1
+
+    # add single base right-shifted sequences
+    for j in range(4):
+        shifts[i] = (j << lm_shift) | (idx >> 2)
+        i += 1
+
+    # add single base left-shifted sequences
+    for j in range(4):
+        shifts[i] = (idx << 2) | j
+        i += 1
+
+    # now add left-shifted sequences with all possible dimers at the end
+    for j in range(16):
+        shifts[i] = (idx << 4) | dimers[j]
+        i += 1
+
+    # return np.array(shifts)
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.overflowcheck(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.exceptval(check=False)
+#@cython.nogil
+def query_idx64_shifts(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarray[np_uint32_t, ndim=1] PI, ndarray[np_uint32_t, ndim=1] SL, int l_prefix, int l_suffix):
+    """
+    For each barcode in bc_list, check whether it is in the index defined by PI and SL.
+    Mark hits in the hits array (1 = hit, 0 = no hit).
+    bc_list: list of bytes objects (barcodes)
+    hits: 1D numpy array of uint8_t, preallocated, length = len(bc_list)
+    PI: 1D numpy array of uint32_t, prefix index
+    SL: 1D numpy array of uint32_t, suffix list
+    l_prefix: length of prefix in bases
+    """
+    cdef Py_ssize_t n = len(bc_list)
+    cdef Py_ssize_t i, n_shifts, k
+    cdef uint32_t idx_p, idx_s, ofs, nn
+    cdef uint64_t bc, bc_shift, j
+    # create typed memoryviews for fast C-level access
+    # PI and SL can be read-only (e.g. memory-mapped files), so use const views
+    cdef const uint32_t[:] PI_view = PI
+    cdef const uint32_t[:] SL_view = SL
+    cdef uint8_t[:] hits_view = hits
+    cdef uint64_t rshift = 2 * l_suffix
+    cdef int l = l_prefix + l_suffix
+    cdef uint64_t mask_l = (1 << (2 * l)) - 1
+    cdef uint64_t mask = (1 << (2 * l_suffix)) - 1
+    cdef uint64_t[42] shifts
+    cdef int ld_shift = 2*(l - 2), lm_shift = 2*(l-1)
+
+    for i in range(n):
+        bc = bc_list[i]
+        # print(f"{i} bc={bc} {uint64_to_seq(bc, l)}")
+
+        n_shifts = 0
+        # add two-base right-shifted sequences with all possible dimers in front
+        for j in range(16):
+            shifts[n_shifts] = (dimers[j] << ld_shift) | (bc >> 4)
+            n_shifts += 1
+
+        # add single base right-shifted sequences
+        for j in range(4):
+            shifts[n_shifts] = (j << lm_shift) | (bc >> 2)
+            n_shifts += 1
+
+        # add single base left-shifted sequences
+        for j in range(4):
+            shifts[n_shifts] = ((bc << 2) & mask_l) | j
+            n_shifts += 1
+
+        # now add left-shifted sequences with all possible dimers at the end
+        for j in range(16):
+            shifts[n_shifts] = ((bc << 4) & mask_l) | dimers[j]
+            n_shifts += 1
+
+        # print(f"made {n_shifts}")
+        # make_shifts(bc, &shifts, l_prefix)
+        # fast-path for bytes: read raw buffer and compute indices without Python indexing
+        
+        n_hits = 0
+        for k in range(n_shifts):
+            bc_shift = shifts[k]
+            # print(f"bc_shift {k}={bc_shift} {uint64_to_seq(bc_shift, l)}")
+            idx_p = <uint32_t>(bc_shift >> rshift)
+            # print(f"idx_p={idx_p} -> seq={uint64_to_seq(idx_p, l_prefix)}")
+
+            ofs = PI_view[idx_p] # Could this have side-effects if we modify ofs?
+            # print(f"{i}: query {k}/{n_shifts} -> ofs={ofs}")
+            # print("ofs=", ofs)
+            if ofs != 0:
+                idx_s = <uint32_t>(bc_shift & mask) # lower 30 bits
+                nn = SL_view[ofs]
+                # print("nn=", nn)
+                for j in range(nn):
+                    if SL_view[ofs + j + 1] == idx_s:
+                        n_hits += 1
+                        break
+
+        hits_view[i] = n_hits
+        # print(f"{i} -> n_hits={n_hits}")
+
+    return hits
+
+
+cdef make_variants_off_by_one(uint32_t idx_s, uint32_t* variants, int l=15):
+    """
+    Generate all single-base off-by-one variants of a suffix index.
+    Return as an array of 75 uint32_t values.
+    """
+    
+    cdef int pos, j, shift
+    cdef uint32_t mut_code, idx_v
+
+    cdef int i = 0
+    for pos in range(l):  # up to 15 bases in suffix
+        shift = 2 * pos
+        idx_v = idx_s
+        for j in range(3):
+            mut_code = ((idx_v >> shift) + 1) & 0b11
+            idx_v = idx_s & ~(0b11 << shift) | (mut_code << shift)
+            variants[i] = idx_v
+            i += 1
+
+        
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.overflowcheck(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.exceptval(check=False)
+#@cython.nogil
+def query_idx64_off_by_one(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarray[np_uint32_t, ndim=1] PI, ndarray[np_uint32_t, ndim=1] SL, int l_prefix, int l_suffix):
+    """
+    For each barcode in bc_list, check whether it is in the index defined by PI and SL.
+    Mark hits in the hits array (1 = hit, 0 = no hit).
+    bc_list: list of bytes objects (barcodes)
+    hits: 1D numpy array of uint8_t, preallocated, length = len(bc_list)
+    PI: 1D numpy array of uint32_t, prefix index
+    SL: 1D numpy array of uint32_t, suffix list
+    l_prefix: length of prefix in bases
+    """
+    cdef Py_ssize_t n = len(bc_list)
+    cdef Py_ssize_t i, j, k
+    cdef uint32_t idx_p, idx_s, idx_sv, ofs, nn
+    cdef uint64_t bc
+    # create typed memoryviews for fast C-level access
+    # PI and SL can be read-only (e.g. memory-mapped files), so use const views
+    cdef const uint32_t[:] PI_view = PI
+    cdef const uint32_t[:] SL_view = SL
+    cdef uint8_t[:] hits_view = hits
+    cdef uint8_t rshift = 2 * l_suffix
+    cdef uint64_t mask = (1 << (2 * l_suffix)) - 1
+    cdef uint32_t[45] idx_s_variants # 15 * 3 = 45 variants for single-base off-by-one
+    cdef uint32_t[30] idx_p_variants
+
+    for i in range(n):
+        bc = bc_list[i]
+        # fast-path for bytes: read raw buffer and compute indices without Python indexing
+        idx_p = <uint32_t>(bc >> rshift)
+
+        ofs = PI_view[idx_p]
+        n_hits = 0
+        if ofs != 0:
+            idx_s = <uint32_t>(bc & mask) # lower 30 bits
+            make_variants_off_by_one(idx_s, idx_s_variants, l_suffix)
+            nn = SL_view[ofs]
+            ofs += 1
+            for j in range(nn):
+                for k in range(45):
+                    idx_sv = idx_s_variants[k]
+                    if SL_view[ofs + j] == idx_sv:
+                        n_hits += 1
+
+        make_variants_off_by_one(idx_p, idx_p_variants, l_prefix)
+        for idx_p in idx_p_variants:
+            ofs = PI_view[idx_p]
+            if ofs != 0:
+                nn = SL_view[ofs]
+                ofs += 1
+                for j in range(nn):
+                    if SL_view[ofs + j] == idx_s:
+                        n_hits += 1
+                        break
+
+        hits_view[i] = n_hits   
 
     return hits

@@ -128,6 +128,25 @@ class BCIndex:
 
         return bci
 
+    def sanity_check(self):
+        from collections import defaultdict
+
+        logger = logging.getLogger("BCIndex.sanity_check")
+        n_total = 0
+        n_lists = 0
+        nn_max = 0
+        for idx_p in range(self.L_idx_p):
+            l_ofs = self.PI[idx_p]
+            if l_ofs > 0:
+                n_lists += 1
+                n = self.SL[l_ofs]  # number of suffixes to expect
+                n_total += n
+                nn_max = max(nn_max, n)
+
+        logger.info(
+            f"sanity check: {n_lists} prefix lists with total of {n_total} suffixes. max list size = {nn_max}"
+        )
+
     def dump(self):
         for idx_p in np.arange(self.L_idx_p):
             l_ofs = self.PI[idx_p]
@@ -217,7 +236,16 @@ def reader(fname, n_max=None):
 def testing():
 
     # # prefrix
-    # bc = "ACGTACGTAC"
+    # bc = "ACGTACGTACGTACGTACGTACGTA"
+    # idx = seqidx.seq_to_uint64(bytes(bc, "ascii"))
+    # # shifts = np.array(50, dtype=np.uint64)
+    # shifts = seqidx.make_shifts(idx, l=25)
+    # print(f"original bc {bc} -> {idx}")
+    # for s in shifts:
+    #     sbc = seqidx.uint64_to_seq(s, 25)
+    #     print(f"shifted versions {sbc} -> {s}")
+
+    # 1 / 0
     # idx = _to_index(bc)
     # id2 = seqidx.seq_to_uint32(bc)
     # print(f"{bc} -> {idx} == {id2}")
@@ -229,6 +257,8 @@ def testing():
     # test_data = sorted(set(reader("../longreads/fc_1_2_1414.txt.gz")))
 
     n_max = 100000000
+    # n_max = 1000000
+    # n_max = 100
     # fname = "/data/local/rajewsky/home/zkliesm/ont_openst/reference/all_BCs/lib298_whitelist_allBCs.csv"
     fname = "bc_to_match.txt"
     logging.debug("loading test data as uint64")
@@ -272,6 +302,7 @@ def testing():
     bci = BCIndex.load_mmap(
         path=".", l_prefix=10, l_suffix=15
     )  # just the last suffix we processed
+    # bci.sanity_check()
     # logging.debug("testing completeness and correctness of stored barcode universe")
     # for seq, ref in zip(bci.dump(), test_data):
     #     if seq != ref:
@@ -280,8 +311,44 @@ def testing():
     logging.debug("testing query with reference")
     hits = bci.query_idx64(test_data)
 
+    # bci.sanity_check()
     print(f"{hits.sum()} hits (match-rate = {hits.sum()/len(test_data):.4f})")
+
+    n_total_hits = hits.sum()
     # assert hits.all()
+
+    non_matched = np.array(test_data)[~hits]
+    if len(non_matched) > 0:
+        logging.debug("testing shifted versions of non-matched barcodes")
+        ob1_hits = np.zeros(len(non_matched), dtype=np.uint8)
+        seqidx.query_idx64_shifts(
+            list(non_matched), ob1_hits, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
+        )
+        n_uniq = (ob1_hits == 1).sum()
+        n_matches = (ob1_hits > 0).sum()
+        print(
+            f"shift: {n_uniq}/{n_matches} hits (uniq match-rate = {n_uniq/len(test_data):.4f})"
+        )
+        # bci.sanity_check()
+        n_total_hits += n_uniq
+
+        # lets create all off-by-one neighbors and see if they match
+        logging.debug("testing off-by-one neighbors of non-matched barcodes")
+        ob1_hits = np.zeros(len(non_matched), dtype=np.uint8)
+        seqidx.query_idx64_off_by_one(
+            list(non_matched), ob1_hits, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
+        )
+        n_uniq = (ob1_hits == 1).sum()
+        n_matches = (ob1_hits > 0).sum()
+        print(
+            f"hamming1: {n_uniq}/{n_matches} hits (uniq match-rate = {n_uniq/len(test_data):.4f})"
+        )
+        # bci.sanity_check()
+        n_total_hits += n_uniq
+
+    print(
+        f"total matched barcodes: {n_total_hits}/{len(test_data)} ({n_total_hits/len(test_data):.4f})"
+    )
 
 
 if __name__ == "__main__":
