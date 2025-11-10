@@ -393,7 +393,7 @@ def find_BC_between(
                         - match_right.errors
                     )
 
-                    if left_score > right_score:
+                    if left_score >= right_score:
                         raw_barcode = window[match_left.rstop : match_left.rstop + k]
                     else:
                         raw_barcode = window[
