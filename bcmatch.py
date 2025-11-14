@@ -60,7 +60,7 @@ class BCIndex:
         return bci
 
     @classmethod
-    def build_from_barcodes(cls, src, l_prefix=10, **kw):
+    def build_from_barcodes(cls, src, l_prefix=10, l_suffix=15):
         # prefix index -> list index
         logger = logging.getLogger("BCIndex.build_from_barcodes")
         logger.debug("building temp set list")
@@ -69,15 +69,21 @@ class BCIndex:
 
         logger.debug("Ingesting sequences")
         n_seqs = 0
+        rshift = 2 * l_suffix
+        mask = np.uint64((1 << (2 * l_suffix)) - 1)
         T0 = time()
-        for seq in src:
-            n_seqs += 1
-            prefix = seq[:l_prefix]
-            suffix = seq[l_prefix:]
 
-            idx_p = _to_index(prefix)
-            # print(f"{prefix} -> {idx_p} L={2**(l_prefix*2)}")
-            idx_s = _to_index(suffix)
+        for idx in src:
+            n_seqs += 1
+            # prefix = seq[:l_prefix]
+            # suffix = seq[l_prefix:]
+
+            # idx_p = _to_index(prefix)
+            # # print(f"{prefix} -> {idx_p} L={2**(l_prefix*2)}")
+            # idx_s = _to_index(suffix)
+
+            idx_p = idx >> rshift
+            idx_s = idx & mask
 
             sets[idx_p].add(idx_s)
 
@@ -121,7 +127,7 @@ class BCIndex:
         logger.debug(f"needed {ofs *4} bytes for packed suffix lists")
 
         bci = cls(
-            l_prefix=l_prefix, l_suffix=len(suffix)
+            l_prefix=l_prefix, l_suffix=l_suffix
         )  # just the last suffix we processed
         bci.PI = PI
         bci.SL = SL
@@ -233,8 +239,54 @@ def reader(fname, n_max=None):
     logging.debug(f"read {n} barcodes in {dT:.1f} seconds ({rate:.2f} k/sec)")
 
 
+def make_insertions(idx, l=25):
+    """
+    Generate all single-base insertions/clipped to l again.
+    Write into an array of l*4 uint32_t values.
+    """
+
+    full_mask = (1 << 2 * l) - 1
+
+    i = 0
+    idx_l = (idx << 2) & full_mask  # on base left-shifted and clipped
+    idx_r = idx
+
+    print(f"{seqidx.uint64_to_seq(idx, l)} one base insertions")
+    print(f"{seqidx.uint64_to_seq(idx_l, l)} left-shifted index")
+    for pos in range(l):
+        # insertion at base pos
+        mask_r = (1 << pos * 2) - 1
+        mask_l = full_mask ^ ((mask_r << 2) | 11)
+        idx0 = (idx_l & mask_l) | (idx_r & mask_r)
+
+        for k in range(4):
+            idx_var = idx0 | (k << pos * 2)
+            i += 1
+
+            print(f"{seqidx.uint64_to_seq(idx_var, l)} pos={pos} k={k} i={i}")
+
+
 def testing():
 
+    # freak = "AAAAAACAATATTAATGTGAGCTCG".encode("ascii")
+    # f64 = seqidx.seq_to_uint64(freak)
+
+    # # make_insertions(f64)
+
+    # bci = BCIndex.load_mmap(path=".", l_prefix=10, l_suffix=15)
+    # # print(bci.query([freak]))
+
+    # # print(bci.query_idx64([f64]))
+
+    # freak = "AAAAAAACAATATTAATTGAGCTCG".encode("ascii")
+    # f64 = seqidx.seq_to_uint64(freak)
+
+    # ob1_hits = np.zeros(1, dtype=np.uint8)
+    # seqidx.query_idx64_indel(
+    #     [f64], ob1_hits, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
+    # )
+    # print(ob1_hits)
+    # 1 / 0
     # # prefrix
     # bc = "ACGTACGTACGTACGTACGTACGTA"
     # idx = seqidx.seq_to_uint64(bytes(bc, "ascii"))
@@ -259,7 +311,7 @@ def testing():
     n_max = 100000000
     # n_max = 1000000
     # n_max = 100
-    # fname = "/data/local/rajewsky/home/zkliesm/ont_openst/reference/all_BCs/lib298_whitelist_allBCs.csv"
+    # fname = "/data/rajewsky/home/zkliesm/ont_openst/reference/all_BCs/lib298_whitelist_allBCs.csv"
     fname = "bc_to_match.txt"
     logging.debug("loading test data as uint64")
     idx_data = seqidx.load_and_unique_sorted_barcodes(
@@ -279,25 +331,14 @@ def testing():
 
     test_data = idx_data
 
-    # for i in range(10):
-    #     idx = test_data[i]
-    #     bc = seqidx.uint64_to_seq(idx, 25)
-
-    #     prefix = bc[:10]
-    #     suffix = bc[10:]
-
-    #     _pre = seqidx.uint64_to_seq(idx >> (2 * 15), 10)
-    #     _suf = seqidx.uint64_to_seq(idx & ((1 << (2 * 15)) - 1), 15)
-
-    #     logging.debug(
-    #         f"test data sample {i}: {idx} {bc} prefix={prefix} suffix={suffix} ->_pre={_pre} _suf={_suf}"
-    #     )
+    # logging.debug("building BC index from test data")
+    # T0 = time()
+    # bci = BCIndex.build_from_barcodes(idx_data, l_prefix=10)
+    # bci.sanity_check()
     # dT = time() - T0
     # rate = len(test_data) / dT / 1000
-    # print(f"looked up {len(test_data)} in {dT:.1f} seconds ({rate:.2f} k/sec)")
-    # assert hits.all()
+    # print(f"built BC index in {dT:.1f} seconds ({rate:.2f} k/sec)")
 
-    # 1 / 0
     logging.debug("loading stored index from mmap")
     bci = BCIndex.load_mmap(
         path=".", l_prefix=10, l_suffix=15
@@ -309,41 +350,71 @@ def testing():
     #         print(f"mismatch between {seq} and {ref}")
 
     logging.debug("testing query with reference")
+    T0 = time()
     hits = bci.query_idx64(test_data)
-
-    # bci.sanity_check()
-    print(f"{hits.sum()} hits (match-rate = {hits.sum()/len(test_data):.4f})")
-
     n_total_hits = hits.sum()
+    print(f"{hits.sum()} hits (match-rate = {n_total_hits/len(test_data):.4f})")
+    dT = time() - T0
+    rate = len(test_data) / dT / 1000
+    print(f"looked up {len(test_data)} in {dT:.1f} seconds ({rate:.2f} k/sec)")
+
+    # for idx in non_matched:
+    #     seq = seqidx.uint64_to_seq(idx, bci.l_prefix + bci.l_suffix)
+    #     print(f"non-matched barcode: {seq}")
+
     # assert hits.all()
 
-    non_matched = np.array(test_data)[~hits]
+    # non_matched = np.array(test_data)[~hits]
+    test_data = np.array(test_data)
+    non_matched = test_data[~hits]
     if len(non_matched) > 0:
-        logging.debug("testing shifted versions of non-matched barcodes")
+        # logging.debug("testing shifted versions of non-matched barcodes")
+        # ob1_hits = np.zeros(len(non_matched), dtype=np.uint8)
+        # seqidx.query_idx64_shifts(
+        #     list(non_matched), ob1_hits, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
+        # )
+        # n_uniq = (ob1_hits == 1).sum()
+        # n_matches = (ob1_hits > 0).sum()
+        # print(
+        #     f"shift: {n_uniq}/{n_matches} hits (uniq match-rate = {n_uniq/len(test_data):.4f})"
+        # )
+        # # bci.sanity_check()
+        # n_total_hits += n_uniq
+        # non_matched = non_matched[~ob1_hits] # still non-matched
+
+        # lets create all off-by-one neighbors and see if they match
+        logging.debug(
+            f"testing indel neighbors of {len(non_matched)} non-matched barcodes"
+        )
+        T0 = time()
         ob1_hits = np.zeros(len(non_matched), dtype=np.uint8)
-        seqidx.query_idx64_shifts(
+        seqidx.query_idx64_indel(
             list(non_matched), ob1_hits, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
         )
+        dT = time() - T0
+        rate = len(non_matched) / dT / 1000
         n_uniq = (ob1_hits == 1).sum()
         n_matches = (ob1_hits > 0).sum()
         print(
-            f"shift: {n_uniq}/{n_matches} hits (uniq match-rate = {n_uniq/len(test_data):.4f})"
+            f"indel: {n_uniq}/{len(non_matched)} hits (uniq match-rate = {n_uniq/len(non_matched):.4f}) in {dT:.1f} seconds ({rate:.2f} k/sec)"
         )
-        # bci.sanity_check()
         n_total_hits += n_uniq
 
-        # lets create all off-by-one neighbors and see if they match
-        logging.debug("testing off-by-one neighbors of non-matched barcodes")
+        logging.debug(
+            f"testing off-by-one neighbors of {len(non_matched)} non-matched barcodes"
+        )
+        T0 = time()
         ob1_hits = np.zeros(len(non_matched), dtype=np.uint8)
         seqidx.query_idx64_off_by_one(
             list(non_matched), ob1_hits, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
         )
+        dT = time() - T0
+        rate = len(non_matched) / dT / 1000
         n_uniq = (ob1_hits == 1).sum()
         n_matches = (ob1_hits > 0).sum()
         print(
-            f"hamming1: {n_uniq}/{n_matches} hits (uniq match-rate = {n_uniq/len(test_data):.4f})"
+            f"hamming1: {n_uniq}/{len(non_matched)} hits (uniq match-rate = {n_uniq/len(non_matched):.4f}) in {dT:.1f} seconds ({rate:.2f} k/sec)"
         )
-        # bci.sanity_check()
         n_total_hits += n_uniq
 
     print(

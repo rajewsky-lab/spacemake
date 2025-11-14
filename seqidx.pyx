@@ -2,7 +2,10 @@
 ## cython: language_level=3
 import cython
 cimport cython
-from libc.stdint cimport uint32_t, uint64_t
+import numpy as np
+# from libc.stdint cimport uint8_t
+from libc.stdint cimport uint64_t, uint32_t, uint8_t
+from numpy cimport ndarray, uint32_t as np_uint32_t, uint8_t as np_uint8_t
 from cython cimport Py_ssize_t
 from cpython.bytes cimport PyBytes_AsStringAndSize
 
@@ -151,6 +154,9 @@ def load_and_unique_sorted_barcodes(fname, int k=25, int n_max=0, bint unique=Fa
         if n_read <= 0:
             break
         
+        if n_read < k:
+            # skip too short barcodes
+            continue
     #     if line.startswith("cell_bc"):
     #         continue
 
@@ -160,7 +166,6 @@ def load_and_unique_sorted_barcodes(fname, int k=25, int n_max=0, bint unique=Fa
         n += 1
         if n_max and n > n_max:
             break
-
 
         idx64 = seq_to_uint64_from_buf_nogil(<const unsigned char*>line, 0, k)
 
@@ -214,9 +219,59 @@ cdef uint32_t seq_to_uint32_slice(bytes seq, Py_ssize_t start, Py_ssize_t length
     return result
 
 
-import numpy as np
-from libc.stdint cimport uint8_t
-from numpy cimport ndarray, uint32_t as np_uint32_t, uint8_t as np_uint8_t
+@cython.cfunc
+@cython.inline
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.overflowcheck(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.exceptval(check=False)
+cdef uint8_t find_in_list(uint32_t idx_s, uint32_t* slist, uint32_t n):
+    """
+    Find idx_s in the sorted suffix list slist of length n.
+    Return 1 if found, 0 otherwise.
+    """
+    cdef uint32_t i, m
+    cdef uint32_t ofs, idx_l, idx_r, idx_cur, idx_m
+
+    if n == 0:
+        return 0
+    
+    if n == 1:
+        return slist[0] == idx_s
+
+    idx_l = slist[0]
+    idx_r = slist[n - 1]
+
+    if idx_l == idx_s:
+        return 1
+    if idx_r == idx_s:
+        return 1
+    
+    if idx_l > idx_s:
+        # first entry is already larger than target
+        return 0
+    
+    if idx_r < idx_s:
+        # last entry is still smaller than target
+        return 0
+
+    if (n > 2):
+        m = n // 2
+        idx_m = slist[m]
+        if idx_m == idx_s:
+            return 1
+
+        if (idx_m > idx_s):
+            # look in left half
+            return find_in_list(idx_s, &slist[1], m - 1)
+        elif (idx_m < idx_s):
+            # look in right half
+            return find_in_list(idx_s, &slist[m + 1], n - m - 2)
+
+    return 0
+
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
@@ -254,16 +309,25 @@ def query(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarray[np_uint32_t, n
         # fast-path for bytes: read raw buffer and compute indices without Python indexing
         PyBytes_AsStringAndSize(bc, &cbuf, &blen)
         idx_p = seq_to_uint32_from_buf_nogil(<const unsigned char *>cbuf, 0, l_prefix)
+        # print(f"idx_p={idx_p} for bc={bc}")
 
         ofs = PI_view[idx_p]
+        # print("ofs=", ofs)
         if ofs != 0:
             idx_s = seq_to_uint32_from_buf_nogil(<const unsigned char *>cbuf, l_prefix, blen - l_prefix)
             nn = SL_view[ofs]
-            ofs += 1
-            for j in range(nn):
-                if SL_view[ofs + j] == idx_s:
-                    hits_view[i] = 1
-                    break
+            # print(f"idx_s={idx_s} nn={nn}")
+            if find_in_list(idx_s, &SL_view[ofs+1], nn):
+                hits_view[i] = 1
+
+            # for j in range(nn):
+            #     idx_cur = SL_view[ofs + j]
+            #     if idx_cur == idx_s:
+            #         hits_view[i] = 1
+            #         break
+            #     elif idx_cur > idx_s:
+            #         # indices are sorted, can break early
+            #         break
 
     return hits
 
@@ -304,15 +368,22 @@ def query_idx64(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarray[np_uint3
         bc = bc_list[i]
         # fast-path for bytes: read raw buffer and compute indices without Python indexing
         idx_p = <uint32_t>(bc >> rshift)
+        # print(f"idx_p={idx_p} for bc={bc}")
 
         ofs = PI_view[idx_p]
+        # print("ofs=", ofs)
+
         if ofs != 0:
             idx_s = <uint32_t>(bc & mask) # lower 30 bits
             nn = SL_view[ofs]
-            for j in range(nn):
-                if SL_view[ofs + j + 1] == idx_s:
-                    hits_view[i] = 1
-                    break
+            # print(f"idx_s={idx_s} nn={nn}")
+            if find_in_list(idx_s, &SL_view[ofs+1], nn):
+                hits_view[i] = 1
+
+            # for j in range(nn):
+            #     if SL_view[ofs + j + 1] == idx_s:
+            #         hits_view[i] = 1
+            #         break
 
     return hits
 
@@ -431,7 +502,14 @@ def query_idx64_shifts(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarray[n
 
     return hits
 
-
+@cython.cfunc
+@cython.inline
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.overflowcheck(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.exceptval(check=False)
 cdef make_variants_off_by_one(uint32_t idx_s, uint32_t* variants, int l=15):
     """
     Generate all single-base off-by-one variants of a suffix index.
@@ -451,7 +529,53 @@ cdef make_variants_off_by_one(uint32_t idx_s, uint32_t* variants, int l=15):
             variants[i] = idx_v
             i += 1
 
+@cython.cfunc
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.overflowcheck(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.exceptval(check=False)
+@cython.inline
+cdef make_insertions(uint64_t idx, uint64_t* variants, uint64_t l=25):
+    """
+    Generate all single-base insertions/clipped to l again.
+    Write into an array of l*4 uint32_t values.
+    """
+    
+    cdef uint64_t idx_l, idx0, idx_var, k, mask_l, mask_r, pos
+    cdef uint64_t full_mask = 1
+    full_mask = full_mask << 2*l
+    full_mask -= 1
+
+    # print(f"{uint64_to_seq(idx, l)} one base insertions")
+    # print(f"l={l} 1 << 2*l = {1 << (2*l):b}")
+    # print(f"full_mask {full_mask:b}")
+
+    cdef int i = 0
+    idx_l = (idx << 2) & full_mask # on base left-shifted and clipped
+    idx_r = idx
+
+    mask_l = full_mask ^ 3
+    mask_r = 0
+    # print(f"{uint64_to_seq(idx_l, l)} left-shifted index")
+    for pos in range(l):
+        # insertion at base pos
+        idx0 = (idx_l & mask_l) | (idx & mask_r)
         
+        # print(f"{mask_l:050b} mask_l")
+        # print(f"{mask_r:050b} mask_r")
+        # print(f"{uint64_to_seq(idx0, l)} IDX0 pos={pos} i={i}")
+
+        for k in range(4):
+            idx_var = idx0 | (k << pos*2)
+            variants[i] = idx_var
+            i += 1
+        
+            # print(f"{uint64_to_seq(idx_var, l)} k={k} i={i}")
+
+        mask_l = (mask_l << 2) & full_mask
+        mask_r = (mask_r << 2) | 3
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
@@ -471,7 +595,7 @@ def query_idx64_off_by_one(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarr
     l_prefix: length of prefix in bases
     """
     cdef Py_ssize_t n = len(bc_list)
-    cdef Py_ssize_t i, j, k
+    cdef Py_ssize_t i, j, k, n_p_variants = l_prefix * 3, n_s_variants = l_suffix * 3
     cdef uint32_t idx_p, idx_s, idx_sv, ofs, nn
     cdef uint64_t bc
     # create typed memoryviews for fast C-level access
@@ -481,38 +605,94 @@ def query_idx64_off_by_one(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarr
     cdef uint8_t[:] hits_view = hits
     cdef uint8_t rshift = 2 * l_suffix
     cdef uint64_t mask = (1 << (2 * l_suffix)) - 1
-    cdef uint32_t[45] idx_s_variants # 15 * 3 = 45 variants for single-base off-by-one
-    cdef uint32_t[30] idx_p_variants
+    cdef uint32_t[16*3] idx_s_variants # 15 * 3 = 45 variants for single-base off-by-one
+    cdef uint32_t[16*3] idx_p_variants
 
     for i in range(n):
         bc = bc_list[i]
+
         # fast-path for bytes: read raw buffer and compute indices without Python indexing
         idx_p = <uint32_t>(bc >> rshift)
 
         ofs = PI_view[idx_p]
         n_hits = 0
         if ofs != 0:
-            idx_s = <uint32_t>(bc & mask) # lower 30 bits
+            idx_s = <uint32_t>(bc & mask) # lower 2 x l_suffix bits
             make_variants_off_by_one(idx_s, idx_s_variants, l_suffix)
             nn = SL_view[ofs]
             ofs += 1
-            for j in range(nn):
-                for k in range(45):
-                    idx_sv = idx_s_variants[k]
-                    if SL_view[ofs + j] == idx_sv:
-                        n_hits += 1
-
+            for idx_sv in idx_s_variants[:n_s_variants]:
+                if find_in_list(idx_sv, &SL_view[ofs+1], nn):
+                    n_hits += 1
+        
+        # now also check prefix variants
         make_variants_off_by_one(idx_p, idx_p_variants, l_prefix)
-        for idx_p in idx_p_variants:
+        for idx_p in idx_p_variants[:n_p_variants]:
             ofs = PI_view[idx_p]
             if ofs != 0:
                 nn = SL_view[ofs]
-                ofs += 1
-                for j in range(nn):
-                    if SL_view[ofs + j] == idx_s:
-                        n_hits += 1
-                        break
+                if find_in_list(idx_s, &SL_view[ofs+1], nn):
+                    n_hits += 1
 
         hits_view[i] = n_hits   
+
+    return hits
+
+
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.overflowcheck(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.exceptval(check=False)
+# @cython.nogil
+def query_idx64_indel(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarray[np_uint32_t, ndim=1] PI, ndarray[np_uint32_t, ndim=1] SL, int l_prefix, int l_suffix):
+    """
+    For each barcode in bc_list, check whether it is in the index defined by PI and SL.
+    Mark hits in the hits array (1 = hit, 0 = no hit).
+    bc_list: list of bytes objects (barcodes)
+    hits: 1D numpy array of uint8_t, preallocated, length = len(bc_list)
+    PI: 1D numpy array of uint32_t, prefix index
+    SL: 1D numpy array of uint32_t, suffix list
+    l_prefix: length of prefix in bases
+    """
+    cdef Py_ssize_t n = len(bc_list)
+    cdef Py_ssize_t i
+    cdef uint32_t j, idx_p, idx_s, ofs, nn
+    cdef uint64_t bc, bc_var, l = l_prefix + l_suffix
+    # create typed memoryviews for fast C-level access
+    # PI and SL can be read-only (e.g. memory-mapped files), so use const views
+    cdef const uint32_t[:] PI_view = PI
+    cdef const uint32_t[:] SL_view = SL
+    cdef uint8_t[:] hits_view = hits
+    cdef uint8_t rshift = 2 * l_suffix
+    cdef uint64_t mask = (1 << (2 * l_suffix)) - 1, n_indels = 4*l # for now just the insertions
+
+    cdef uint64_t[32*4] idx_indels
+
+    for i in range(n):
+        bc = bc_list[i]
+        make_insertions(bc, idx_indels, l)
+
+        for bc_var in idx_indels[:n_indels]:
+            # fast-path for bytes: read raw buffer and compute indices without Python indexing
+            idx_p = <uint32_t>(bc_var >> rshift)
+            # print(f"idx_p={idx_p} for bc={bc_var}")
+
+            ofs = PI_view[idx_p]
+            # print("ofs=", ofs)
+
+            if ofs != 0:
+                idx_s = <uint32_t>(bc_var & mask) # lower 30 bits
+                nn = SL_view[ofs]
+                # print(f"idx_s={idx_s} nn={nn}")
+                if find_in_list(idx_s, &SL_view[ofs+1], nn):
+                    hits_view[i] += 1
+
+                # for j in range(nn):
+                #     if SL_view[ofs + j + 1] == idx_s:
+                #         hits_view[i] = 1
+                #         break
 
     return hits
