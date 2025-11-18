@@ -4,8 +4,8 @@ import cython
 cimport cython
 import numpy as np
 # from libc.stdint cimport uint8_t
-from libc.stdint cimport uint64_t, uint32_t, uint8_t
-from numpy cimport ndarray, uint32_t as np_uint32_t, uint8_t as np_uint8_t
+from libc.stdint cimport uint64_t, uint32_t, uint8_t, int16_t
+from numpy cimport ndarray, uint64_t as np_uint64_t, uint32_t as np_uint32_t, uint8_t as np_uint8_t, int16_t as np_int16_t
 from cython cimport Py_ssize_t
 from cpython.bytes cimport PyBytes_AsStringAndSize
 
@@ -510,7 +510,7 @@ def query_idx64_shifts(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarray[n
 @cython.initializedcheck(False)
 @cython.nonecheck(False)
 @cython.exceptval(check=False)
-cdef make_variants_off_by_one(uint32_t idx_s, uint32_t* variants, int l=15):
+cdef int make_variants_off_by_one(uint32_t idx_s, uint32_t* variants, uint32_t start=0, uint32_t end=15):
     """
     Generate all single-base off-by-one variants of a suffix index.
     Return as an array of 75 uint32_t values.
@@ -520,7 +520,7 @@ cdef make_variants_off_by_one(uint32_t idx_s, uint32_t* variants, int l=15):
     cdef uint32_t mut_code, idx_v
 
     cdef int i = 0
-    for pos in range(l):  # up to 15 bases in suffix
+    for pos in range(start, end):  # up to 15 bases in suffix
         shift = 2 * pos
         idx_v = idx_s
         for j in range(3):
@@ -528,54 +528,9 @@ cdef make_variants_off_by_one(uint32_t idx_s, uint32_t* variants, int l=15):
             idx_v = idx_s & ~(0b11 << shift) | (mut_code << shift)
             variants[i] = idx_v
             i += 1
-
-@cython.cfunc
-@cython.wraparound(False)
-@cython.boundscheck(False)
-@cython.overflowcheck(False)
-@cython.initializedcheck(False)
-@cython.nonecheck(False)
-@cython.exceptval(check=False)
-@cython.inline
-cdef make_insertions(uint64_t idx, uint64_t* variants, uint64_t l=25):
-    """
-    Generate all single-base insertions/clipped to l again.
-    Write into an array of l*4 uint32_t values.
-    """
     
-    cdef uint64_t idx_l, idx0, idx_var, k, mask_l, mask_r, pos
-    cdef uint64_t full_mask = 1
-    full_mask = full_mask << 2*l
-    full_mask -= 1
+    return i
 
-    # print(f"{uint64_to_seq(idx, l)} one base insertions")
-    # print(f"l={l} 1 << 2*l = {1 << (2*l):b}")
-    # print(f"full_mask {full_mask:b}")
-
-    cdef int i = 0
-    idx_l = (idx << 2) & full_mask # on base left-shifted and clipped
-    idx_r = idx
-
-    mask_l = full_mask ^ 3
-    mask_r = 0
-    # print(f"{uint64_to_seq(idx_l, l)} left-shifted index")
-    for pos in range(l):
-        # insertion at base pos
-        idx0 = (idx_l & mask_l) | (idx & mask_r)
-        
-        # print(f"{mask_l:050b} mask_l")
-        # print(f"{mask_r:050b} mask_r")
-        # print(f"{uint64_to_seq(idx0, l)} IDX0 pos={pos} i={i}")
-
-        for k in range(4):
-            idx_var = idx0 | (k << pos*2)
-            variants[i] = idx_var
-            i += 1
-        
-            # print(f"{uint64_to_seq(idx_var, l)} k={k} i={i}")
-
-        mask_l = (mask_l << 2) & full_mask
-        mask_r = (mask_r << 2) | 3
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
@@ -639,6 +594,149 @@ def query_idx64_off_by_one(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarr
     return hits
 
 
+@cython.cfunc
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.overflowcheck(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.exceptval(check=False)
+@cython.inline
+cdef int make_insertions(uint64_t idx, uint64_t* variants, uint64_t l=25):
+    """
+    Generate all single-base insertions/clipped to l again.
+    Write into an array of l*4 uint32_t values.
+    """
+    
+    cdef uint64_t idx_l, idx0, idx_var, k, mask_l, mask_r, pos
+    cdef uint64_t full_mask = 1
+    cdef uint64_t ext_mask = 1
+    full_mask = full_mask << 2*l
+    ext_mask = full_mask << 2
+    full_mask -= 1
+    ext_mask -= 1 # keep one extra base for insertions
+
+    # print(f"{uint64_to_seq(idx, l)} one base insertions")
+    # print(f"l={l} 1 << 2*l = {1 << (2*l):b}")
+    # print(f"full_mask {full_mask:b}")
+
+    cdef int i = 0
+    idx_l = idx << 2  # one base left-shifted
+
+    mask_l = ext_mask ^ 3 #<< (start * 2)) & ext_mask  # initial left mask
+    mask_r = 0 #1 << (start * 2) - 1  # initial right mask
+    # print(f"{uint64_to_seq(idx_l, l)} left-shifted index")
+    for pos in range(l):
+        # insertion at base pos
+        idx0 = (idx_l & mask_l) | (idx & mask_r)
+        
+        # print(f"{mask_l:050b} mask_l")
+        # print(f"{mask_r:050b} mask_r")
+        # print(f"{uint64_to_seq(idx0, l)} IDX0 pos={pos} i={i}")
+
+        for k in range(4):
+            idx_var = idx0 | (k << pos*2)
+            if pos < l - 1:
+                variants[i] = idx_var & full_mask
+                i += 1
+            if pos > 0:
+                variants[i] = idx_var >> 2
+                i += 1        
+            # print(f"{uint64_to_seq(idx_var, l)} k={k} i={i}")
+
+        mask_l = (mask_l << 2) & ext_mask
+        mask_r = (mask_r << 2) | 3
+
+    #    print("made insertions:", i) # 8 * (l-1) = 192 for l=25
+    return i
+
+
+
+
+@cython.cfunc
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.overflowcheck(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.exceptval(check=False)
+@cython.inline
+cdef int make_deletions(uint64_t idx, uint64_t* variants, uint64_t l=25):
+    """
+    Generate all single-base deletions, padded on either side to l again.
+    Write into an array of l*4 uint32_t values.
+    """
+    
+    cdef uint64_t idx_l, idx0, idx_var, k, mask_l, mask_r, pos
+    cdef uint64_t full_mask = 1
+    full_mask = full_mask << 2*l
+    full_mask -= 1
+
+    # print(f"{uint64_to_seq(idx, l)} one base insertions")
+    # print(f"l={l} 1 << 2*l = {1 << (2*l):b}")
+    # print(f"full_mask {full_mask:b}")
+
+    cdef int i = 0
+    idx_l = (idx >> 2) # last base deleted, shifted right
+    idx_r = idx
+
+    mask_l = full_mask
+    mask_r = 0
+    # print(f"{uint64_to_seq(idx_l, l)} left side")
+    for pos in range(l):
+        # delete base pos
+        idx0 = (idx_l & mask_l) | (idx & mask_r)
+        
+        # print(f"{mask_l:050b} mask_l")
+        # print(f"{mask_r:050b} mask_r")
+        # print(f"{uint64_to_seq(idx0, l-1)} deleted@pos={pos} sequence i={i}")
+
+        for k in range(4):
+            idx_var = ((idx0 << 2) | k) & full_mask # insert random base on the right
+            # print(f"{uint64_to_seq(idx_var, l)} k={k} i={i} random right")
+            variants[i] = idx_var
+            i += 1
+
+            idx_var = idx0 | (k << (2*(l-1))) # insert random base on the left
+            # print(f"{uint64_to_seq(idx_var, l)} k={k} i={i} random left")
+            variants[i] = idx_var
+            i += 1
+
+
+        mask_l = (mask_l << 2) & full_mask
+        mask_r = (mask_r << 2) | 3
+    
+    return i
+
+@cython.cfunc
+@cython.inline
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.overflowcheck(False)
+@cython.initializedcheck(False)
+@cython.nonecheck(False)
+@cython.exceptval(check=False)
+cdef int make_substitutions(uint64_t idx_s, uint64_t* variants, uint64_t start=0, uint64_t end=15):
+    """
+    Generate all single-base substitutions variants of a two-bit coded sequence index.
+    """
+    
+    cdef uint64_t pos, j, shift
+    cdef uint64_t mut_code, idx_v
+
+    cdef int i = 0
+    for pos in range(start, end):  # up to 15 bases in suffix
+        shift = 2 * pos
+        idx_v = idx_s
+        for j in range(3):
+            mut_code = ((idx_v >> shift) + 1) & 0b11
+            idx_v = idx_s & ~(0b11 << shift) | (mut_code << shift)
+            variants[i] = idx_v
+            i += 1
+    
+    return i
+
+
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
@@ -647,7 +745,7 @@ def query_idx64_off_by_one(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarr
 @cython.nonecheck(False)
 @cython.exceptval(check=False)
 # @cython.nogil
-def query_idx64_indel(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarray[np_uint32_t, ndim=1] PI, ndarray[np_uint32_t, ndim=1] SL, int l_prefix, int l_suffix):
+def query_idx64_variants(list bc_list, ndarray[np_uint64_t, ndim=1] hits, ndarray[np_int16_t, ndim=1] hit_variants, ndarray[np_uint32_t, ndim=1] PI, ndarray[np_uint32_t, ndim=1] SL, int l_prefix, int l_suffix):
     """
     For each barcode in bc_list, check whether it is in the index defined by PI and SL.
     Mark hits in the hits array (1 = hit, 0 = no hit).
@@ -659,40 +757,57 @@ def query_idx64_indel(list bc_list, ndarray[np_uint8_t, ndim=1] hits, ndarray[np
     """
     cdef Py_ssize_t n = len(bc_list)
     cdef Py_ssize_t i
-    cdef uint32_t j, idx_p, idx_s, ofs, nn
-    cdef uint64_t bc, bc_var, l = l_prefix + l_suffix
+    cdef int h
+    cdef uint32_t j=0, idx_p, idx_s, ofs, nn
+    cdef uint64_t bc, l = l_prefix + l_suffix, n_variants, n_tested, n_total_queries=0, n_trigger_subs_del = 8 * (l - 1)  - 1
     # create typed memoryviews for fast C-level access
     # PI and SL can be read-only (e.g. memory-mapped files), so use const views
     cdef const uint32_t[:] PI_view = PI
     cdef const uint32_t[:] SL_view = SL
-    cdef uint8_t[:] hits_view = hits
+    cdef int16_t[:] hit_variants_view = hit_variants
+    cdef uint64_t[:] hits_view = hits
     cdef uint8_t rshift = 2 * l_suffix
-    cdef uint64_t mask = (1 << (2 * l_suffix)) - 1, n_indels = 4*l # for now just the insertions
-
-    cdef uint64_t[32*4] idx_indels
+    cdef uint64_t mask = (1 << (2 * l_suffix)) - 1
+    cdef uint64_t[1000] idx_variants
 
     for i in range(n):
+        n_tested = 0
         bc = bc_list[i]
-        make_insertions(bc, idx_indels, l)
+        idx_variants[0] = bc # exact match
+        n_variants = 1
 
-        for bc_var in idx_indels[:n_indels]:
+        while n_tested < n_variants:
+            # print(f"n_tested={n_tested} n_variants={n_variants}")
+            bc = idx_variants[n_tested]
             # fast-path for bytes: read raw buffer and compute indices without Python indexing
-            idx_p = <uint32_t>(bc_var >> rshift)
+            idx_p = <uint32_t>(bc >> rshift) # prefix
             # print(f"idx_p={idx_p} for bc={bc_var}")
 
             ofs = PI_view[idx_p]
             # print("ofs=", ofs)
 
             if ofs != 0:
-                idx_s = <uint32_t>(bc_var & mask) # lower 30 bits
+                idx_s = <uint32_t>(bc & mask) # suffix
                 nn = SL_view[ofs]
                 # print(f"idx_s={idx_s} nn={nn}")
-                if find_in_list(idx_s, &SL_view[ofs+1], nn):
-                    hits_view[i] += 1
+                h = find_in_list(idx_s, &SL_view[ofs+1], nn)
+                if h:
+                    hit_variants_view[i] = n_tested + 1 # the variant number that had the hit (which edit)
+                    hits_view[i] = bc # the variant that had the hit, i.e. the corrected barcode
+                    break # stop at first hit
 
-                # for j in range(nn):
-                #     if SL_view[ofs + j + 1] == idx_s:
-                #         hits_view[i] = 1
-                #         break
+            if n_tested == 0:
+                # we did not get a hit for the original sequence,
+                # generate insertion variants for the original sequence
+                n_variants += make_insertions(bc, &idx_variants[n_variants], l)
 
-    return hits
+            # if n_tested == n_trigger_subs_del:
+                # we have tried all insertion variants, now generate substitution and deletion variants
+                n_variants += make_substitutions(bc, &idx_variants[n_variants], 0, l)
+                n_variants += make_deletions(bc, &idx_variants[n_variants], l)
+            
+            n_tested += 1
+
+        n_total_queries += n_tested
+
+    return n_total_queries

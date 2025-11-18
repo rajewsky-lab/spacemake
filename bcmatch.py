@@ -245,25 +245,146 @@ def make_insertions(idx, l=25):
     Write into an array of l*4 uint32_t values.
     """
 
-    full_mask = (1 << 2 * l) - 1
+    full_mask = (1 << 2 * l)
+    ext_mask = full_mask << 2
+    full_mask -= 1
+    ext_mask -= 1 # keep one extra base for insertions
 
     i = 0
-    idx_l = (idx << 2) & full_mask  # on base left-shifted and clipped
-    idx_r = idx
+    idx_l = idx << 2  # on base left-shifted
 
     print(f"{seqidx.uint64_to_seq(idx, l)} one base insertions")
     print(f"{seqidx.uint64_to_seq(idx_l, l)} left-shifted index")
+
+
+    # print(f"{uint64_to_seq(idx, l)} one base insertions")
+    # print(f"l={l} 1 << 2*l = {1 << (2*l):b}")
+    # print(f"full_mask {full_mask:b}")
+
+    i = 0
+    idx_l = idx << 2  # one base left-shifted
+
+    mask_l = ext_mask ^ 3 #<< (start * 2)) & ext_mask  # initial left mask
+    mask_r = 0 #1 << (start * 2) - 1  # initial right mask
+    # print(f"{uint64_to_seq(idx_l, l)} left-shifted index")
     for pos in range(l):
         # insertion at base pos
-        mask_r = (1 << pos * 2) - 1
-        mask_l = full_mask ^ ((mask_r << 2) | 11)
-        idx0 = (idx_l & mask_l) | (idx_r & mask_r)
+        idx0 = (idx_l & mask_l) | (idx & mask_r)
+        
+        # print(f"{mask_l:050b} mask_l")
+        # print(f"{mask_r:050b} mask_r")
+        # print(f"{uint64_to_seq(idx0, l)} IDX0 pos={pos} i={i}")
 
         for k in range(4):
-            idx_var = idx0 | (k << pos * 2)
+            idx_var = idx0 | (k << pos*2)
+            if pos < l - 1:
+                print(f"{seqidx.uint64_to_seq(idx_var & full_mask, l)} pos={pos} k={k} i={i}")
+                # variants[i] = idx_var & full_mask
+                i += 1
+            if pos > 0:
+                print(f"{seqidx.uint64_to_seq(idx_var >> 2, l)} pos={pos} k={k} i={i}")
+                # variants[i] = idx_var >> 2
+                i += 1        
+            # print(f"{uint64_to_seq(idx_var, l)} k={k} i={i}")
+
+        mask_l = (mask_l << 2) & ext_mask
+        mask_r = (mask_r << 2) | 3
+
+    return i
+
+    # for pos in range(l):
+    #     # insertion at base pos
+    #     mask_r = (1 << pos * 2) - 1
+    #     mask_l = full_mask ^ ((mask_r << 2) | 11)
+    #     idx0 = (idx_l & mask_l) | (idx_r & mask_r)
+
+    #     for k in range(4):
+    #         idx_var = idx0 | (k << pos * 2)
+    #         i += 1
+
+    #         print(f"{seqidx.uint64_to_seq(idx_var, l)} pos={pos} k={k} i={i}")
+
+
+
+def make_deletions(idx, l=25):
+    """
+    Generate all single-base deletions, padded on either side to l again.
+    Write into an array of l*4 uint32_t values.
+    """
+
+    variants = np.zeros(l * 8, dtype=np.uint64)
+    full_mask = np.uint64(1)
+    full_mask = full_mask << 2 * l
+    full_mask -= 1
+
+    print(f"{seqidx.uint64_to_seq(idx, l)} one base deletions")
+    print(f"l={l} 1 << 2*l = {1 << (2*l):b}")
+    print(f"full_mask {full_mask:b}")
+
+    i = 0
+    idx_l = idx >> 2  # last base deleted, shifted right
+
+    mask_l = full_mask
+    mask_r = 0
+    print(f"{seqidx.uint64_to_seq(idx_l, l)} left-shifted index")
+    for pos in range(l):
+        # delete base pos
+        idx0 = (idx_l & mask_l) | (idx & mask_r)
+
+        # print(f"{mask_l:050b} mask_l")
+        # print(f"{mask_r:050b} mask_r")
+        print(f"{seqidx.uint64_to_seq(idx0, l-1)} IDX0 pos={pos} i={i}")
+
+        for k in range(4):
+            idx_var = (idx0 << 2) | k  # insert random base on the right
+            variants[i] = idx_var
+            i += 1
+            print(f"{seqidx.uint64_to_seq(idx_var, l)} k={k} i={i} random right")
+
+            idx_var = idx0 | (k << (2 * (l - 1)))  # insert random base on the left
+            variants[i] = idx_var
+            i += 1
+            print(f"{seqidx.uint64_to_seq(idx_var, l)} k={k} i={i} random left")
+
+        mask_l = (mask_l << 2) & full_mask
+        mask_r = (mask_r << 2) | 3
+
+    return i
+
+
+def make_edit_dict(l=25):
+    d = {
+        0:'X', # no match
+        1:'=', # exact match
+    }
+    
+    i = 2
+    
+    # insertions first
+    for pos in range(l):
+        for b in "ACGT":
+            if pos < l-1:
+                d[i] = f"I{l-pos}{b}1"
+                i += 1
+            if pos > 0:
+                d[i] = f"I{l-pos}{b}0"
+                i += 1
+
+    # substitutions
+    for pos in range(l):
+        for k in range(1, 4):
+            d[i] = f"S{l-pos}+{k}"
             i += 1
 
-            print(f"{seqidx.uint64_to_seq(idx_var, l)} pos={pos} k={k} i={i}")
+    # deletions
+    for pos in range(l):
+        for b in "ACGT":
+            d[i] = f"_{l-pos}..{b}"
+            i += 1
+            d[i] = f"_{b}..{l-pos}"
+            i += 1
+    
+    return d
 
 
 def testing():
@@ -271,7 +392,10 @@ def testing():
     # freak = "AAAAAACAATATTAATGTGAGCTCG".encode("ascii")
     # f64 = seqidx.seq_to_uint64(freak)
 
-    # # make_insertions(f64)
+    # n = make_insertions(f64)
+    # print(f"generated {n} insertions")
+    # #make_deletions(f64)
+    # 1 / 0
 
     # bci = BCIndex.load_mmap(path=".", l_prefix=10, l_suffix=15)
     # # print(bci.query([freak]))
@@ -309,7 +433,8 @@ def testing():
     # test_data = sorted(set(reader("../longreads/fc_1_2_1414.txt.gz")))
 
     n_max = 100000000
-    # n_max = 1000000
+    n_max = 1000000
+    # n_max = 100000
     # n_max = 100
     # fname = "/data/rajewsky/home/zkliesm/ont_openst/reference/all_BCs/lib298_whitelist_allBCs.csv"
     fname = "bc_to_match.txt"
@@ -343,31 +468,80 @@ def testing():
     bci = BCIndex.load_mmap(
         path=".", l_prefix=10, l_suffix=15
     )  # just the last suffix we processed
+
+
+    logging.debug(
+        f"testing d=1 neighbors of barcodes"
+    )
+    T0 = time()
+    hit_variants = np.zeros(len(test_data), dtype=np.int16)
+    hits = np.zeros(len(test_data), dtype=np.uint64)
+    n_total_queries = seqidx.query_idx64_variants(
+        list(test_data), hits, hit_variants, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
+    )
+    dT = time() - T0
+    rate = len(test_data) / dT / 1000
+    n_total_hits = (hit_variants > 0).sum()
+    print(
+        f"variants: {n_total_hits}/{len(test_data)} hits (match-rate = {n_total_hits/len(test_data):.4f}) in {dT:.1f} seconds ({rate:.2f} k/sec)"
+    )
+    print(
+        f"total queries processed: {n_total_queries} ({n_total_queries/len(test_data):.2f} per barcode) rate: {n_total_queries / dT / 1000:.2f} k/sec)"
+    )
+
+    d = make_edit_dict(l=bci.l_prefix + bci.l_suffix)
+
+    n_edits = np.bincount(hit_variants)
+
+    for i, n in sorted(list(enumerate(n_edits)), key=lambda x: -x[1]):
+        print(f"edit {i}: {d.get(i,'?')} -> {n} hits")
+
+    for query, match, var_i in zip(test_data, hits, hit_variants):
+        query_seq = seqidx.uint64_to_seq(query, bci.l_prefix + bci.l_suffix)
+        match_seq = seqidx.uint64_to_seq(match, bci.l_prefix + bci.l_suffix)
+        edit = d.get(var_i, "?")
+        print(f"query {query_seq} matched {match_seq} via edit {edit}")
+
+    # seqidx.query_idx64_indel(
+    #     list(non_matched), ob1_hits, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
+    # )
+    # dT = time() - T0
+    # rate = len(non_matched) / dT / 1000
+    # n_uniq = (ob1_hits == 1).sum()
+    # n_matches = (ob1_hits > 0).sum()
+    # print(
+    #     f"indel: {n_uniq}/{len(non_matched)} hits (uniq match-rate = {n_uniq/len(non_matched):.4f}) in {dT:.1f} seconds ({rate:.2f} k/sec)"
+    # )
+    # n_total_hits += n_uniq
+
+
+
+
     # bci.sanity_check()
     # logging.debug("testing completeness and correctness of stored barcode universe")
     # for seq, ref in zip(bci.dump(), test_data):
     #     if seq != ref:
     #         print(f"mismatch between {seq} and {ref}")
 
-    logging.debug("testing query with reference")
-    T0 = time()
-    hits = bci.query_idx64(test_data)
-    n_total_hits = hits.sum()
-    print(f"{hits.sum()} hits (match-rate = {n_total_hits/len(test_data):.4f})")
-    dT = time() - T0
-    rate = len(test_data) / dT / 1000
-    print(f"looked up {len(test_data)} in {dT:.1f} seconds ({rate:.2f} k/sec)")
+    # logging.debug("testing query with reference")
+    # T0 = time()
+    # hits = bci.query_idx64(test_data)
+    # n_total_hits = hits.sum()
+    # print(f"{hits.sum()} hits (match-rate = {n_total_hits/len(test_data):.4f})")
+    # dT = time() - T0
+    # rate = len(test_data) / dT / 1000
+    # print(f"looked up {len(test_data)} in {dT:.1f} seconds ({rate:.2f} k/sec)")
 
-    # for idx in non_matched:
-    #     seq = seqidx.uint64_to_seq(idx, bci.l_prefix + bci.l_suffix)
-    #     print(f"non-matched barcode: {seq}")
+    # # for idx in non_matched:
+    # #     seq = seqidx.uint64_to_seq(idx, bci.l_prefix + bci.l_suffix)
+    # #     print(f"non-matched barcode: {seq}")
 
-    # assert hits.all()
+    # # assert hits.all()
 
-    # non_matched = np.array(test_data)[~hits]
-    test_data = np.array(test_data)
-    non_matched = test_data[~hits]
-    if len(non_matched) > 0:
+    # # non_matched = np.array(test_data)[~hits]
+    # test_data = np.array(test_data)
+    # non_matched = test_data[~hits]
+    # if len(non_matched) > 0:
         # logging.debug("testing shifted versions of non-matched barcodes")
         # ob1_hits = np.zeros(len(non_matched), dtype=np.uint8)
         # seqidx.query_idx64_shifts(
@@ -383,39 +557,39 @@ def testing():
         # non_matched = non_matched[~ob1_hits] # still non-matched
 
         # lets create all off-by-one neighbors and see if they match
-        logging.debug(
-            f"testing indel neighbors of {len(non_matched)} non-matched barcodes"
-        )
-        T0 = time()
-        ob1_hits = np.zeros(len(non_matched), dtype=np.uint8)
-        seqidx.query_idx64_indel(
-            list(non_matched), ob1_hits, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
-        )
-        dT = time() - T0
-        rate = len(non_matched) / dT / 1000
-        n_uniq = (ob1_hits == 1).sum()
-        n_matches = (ob1_hits > 0).sum()
-        print(
-            f"indel: {n_uniq}/{len(non_matched)} hits (uniq match-rate = {n_uniq/len(non_matched):.4f}) in {dT:.1f} seconds ({rate:.2f} k/sec)"
-        )
-        n_total_hits += n_uniq
+        # logging.debug(
+        #     f"testing indel neighbors of {len(non_matched)} non-matched barcodes"
+        # )
+        # T0 = time()
+        # ob1_hits = np.zeros(len(non_matched), dtype=np.uint8)
+        # seqidx.query_idx64_indel(
+        #     list(non_matched), ob1_hits, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
+        # )
+        # dT = time() - T0
+        # rate = len(non_matched) / dT / 1000
+        # n_uniq = (ob1_hits == 1).sum()
+        # n_matches = (ob1_hits > 0).sum()
+        # print(
+        #     f"indel: {n_uniq}/{len(non_matched)} hits (uniq match-rate = {n_uniq/len(non_matched):.4f}) in {dT:.1f} seconds ({rate:.2f} k/sec)"
+        # )
+        # n_total_hits += n_uniq
 
-        logging.debug(
-            f"testing off-by-one neighbors of {len(non_matched)} non-matched barcodes"
-        )
-        T0 = time()
-        ob1_hits = np.zeros(len(non_matched), dtype=np.uint8)
-        seqidx.query_idx64_off_by_one(
-            list(non_matched), ob1_hits, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
-        )
-        dT = time() - T0
-        rate = len(non_matched) / dT / 1000
-        n_uniq = (ob1_hits == 1).sum()
-        n_matches = (ob1_hits > 0).sum()
-        print(
-            f"hamming1: {n_uniq}/{len(non_matched)} hits (uniq match-rate = {n_uniq/len(non_matched):.4f}) in {dT:.1f} seconds ({rate:.2f} k/sec)"
-        )
-        n_total_hits += n_uniq
+        # logging.debug(
+        #     f"testing off-by-one neighbors of {len(non_matched)} non-matched barcodes"
+        # )
+        # T0 = time()
+        # ob1_hits = np.zeros(len(non_matched), dtype=np.uint8)
+        # seqidx.query_idx64_off_by_one(
+        #     list(non_matched), ob1_hits, bci.PI, bci.SL, bci.l_prefix, bci.l_suffix
+        # )
+        # dT = time() - T0
+        # rate = len(non_matched) / dT / 1000
+        # n_uniq = (ob1_hits == 1).sum()
+        # n_matches = (ob1_hits > 0).sum()
+        # print(
+        #     f"hamming1: {n_uniq}/{len(non_matched)} hits (uniq match-rate = {n_uniq/len(non_matched):.4f}) in {dT:.1f} seconds ({rate:.2f} k/sec)"
+        # )
+        # n_total_hits += n_uniq
 
     print(
         f"total matched barcodes: {n_total_hits}/{len(test_data)} ({n_total_hits/len(test_data):.4f})"
