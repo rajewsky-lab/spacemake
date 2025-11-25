@@ -92,6 +92,7 @@ def get_module_outputs():
 # INCLUDE OTHER MODULES #
 #########################
 include: 'downsample.smk'
+include: 'barcode.smk'
 include: 'mapping.smk'
 include: 'dropseq.smk'
 include: 'longread.smk'
