@@ -687,9 +687,12 @@ rule render_qc_sheet:
             --output-dir $(dirname {output.html}) \
             --output $(basename {output.html}) \
             --no-input
-        
+
         # Inject navigation
         bash {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
+        
+        # Ensure we don't break permissions
+        chmod --reference={input} {output.html}
         """
 
 rule run_automated_analysis:
@@ -747,6 +750,9 @@ rule render_automated_analysis:
             --no-input
 
         bash {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
+
+        # Ensure we don't break permissions
+        chmod --reference={input} {output.html}
         """
 
 rule run_novosparc_denovo:
