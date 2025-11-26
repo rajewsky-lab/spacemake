@@ -12,34 +12,36 @@ rule cb_correct:
         # wedge between final_bam and dropseq.smk:filter_mm_reads
         ubam=var.ubam,
         #bam=final_bam_mm_included_pipe # this is the pipe() output of dropseq.smk:filter_mm_reads rule
-        bci=capture_area_bci
+        bci=var.capture_area_bci
     output:
         match=var.ubam_corrected,
         # nomatch=var.ubam_nomatch
-    threads: 16
+        stats=var.ubam_correction_stats
+    threads: 32
     shell:
         "python -m scbamtools.bin.cb_correct sam "
         "  --input {input.ubam} "
         "  --index {input.bci} "
         "  --bam-out {output.match} "
-#        "  --bam-out-mode bu"
+        "  --stats-out {output.stats}"
         "  --threads {threads} "
         "  --nomatch-out discard " #{output.nomatch}"
 
 
+
 def get_puck_barcode_files(wc):
-    df = pd.read_csv(wc_fill(puck_barcode_files_summary, wc))
+    df = pd.read_csv(wc_fill(var.puck_barcode_files_summary, wc))
     print(">>> getting flowcell capture area barcodes")
     print(df)
     return " ".join(df['puck_barcode_file'].tolist())
 
 rule cb_index:
     input:
-        puck_barcode_files_summary
+        var.puck_barcode_files_summary
     params:
         puck_barcode_files=get_puck_barcode_files
     output:
-        bci=capture_area_bci
+        bci=var.capture_area_bci
     threads: 4
     shell:
         "cat {params.puck_barcode_files} | "
