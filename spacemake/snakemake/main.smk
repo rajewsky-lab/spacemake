@@ -480,8 +480,8 @@ rule create_dge:
         I= /dev/stdin \
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
-        CELL_BC_FILE={input.top_barcodes} \
         CELL_BARCODE_TAG={params.cell_barcode_tag} \
+        CELL_BC_FILE={input.top_barcodes} \
         MOLECULAR_BARCODE_TAG={params.umi_tag} \
         TMP_DIR={global_tmp} \
         {params.dge_extra_params}

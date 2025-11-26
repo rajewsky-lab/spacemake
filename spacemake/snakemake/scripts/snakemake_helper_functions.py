@@ -641,7 +641,8 @@ def get_ribo_depletion_log(wildcards):
 
 def get_top_barcodes(wildcards):
     if wildcards.n_beads == "spatial":
-        return {"top_barcodes": spatial_barcodes}  # experimental
+        return {"top_barcodes": spatial_barcodes_corrected}  # experimental
+        # return {"top_barcodes": spatial_barcodes}  # experimental
     if wildcards.dge_cleaned == "":
         return {"top_barcodes": top_barcodes}
     else:
@@ -992,11 +993,21 @@ def get_puck_file(wildcards):
         sample_id=wildcards.sample_id,
         puck_barcode_file_id=wildcards.puck_barcode_file_id,
     )
-
     if puck_barcode_file is None:
         return []
     else:
         return {"barcode_file": puck_barcode_file}
+
+
+def maybe_get_puck_file(wildcards):
+    if wildcards.puck_barcode_file_id == "no_spatial_data":
+        top = get_top_barcodes(wildcards)
+        bcf = {"barcode_file": top["top_barcodes"]}
+        return bcf
+    else:
+        # print("getting puck_file")
+        bcf = get_puck_file(wildcards)
+        return bcf
 
 
 def get_all_puck_files(wildcards):

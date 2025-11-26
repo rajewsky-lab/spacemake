@@ -154,6 +154,16 @@ spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/spatialBarcodes_{puck_barcode_file_id}.txt"
 )
+# added in bc-correct. Created after correction, needed only for DigitalExpression
+# can go in drop-dropseq
+spatial_barcodes_corrected = (
+    complete_data_root
+    + "/puck_barcode_files/spatialBarcodes_corrected{polyA_adapter_trimmed}.{puck_barcode_file_id}.txt"
+)
+corrected_sample_bci = (
+    complete_data_root + "/puck_barcode_files/corrected{polyA_adapter_trimmed}.bci"
+)
+
 parsed_spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/spatial_barcodes_{puck_barcode_file_id}.csv"
@@ -345,7 +355,7 @@ star_tmp_dir = star_prefix + "tmp"
 # final bam (cram) file
 final_bam_suffix = "/final{polyA_adapter_trimmed}"
 final_bam = complete_data_root + final_bam_suffix + ".cram"
-bam_mm_included_pipe_suffix = "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included_{puck_barcode_file_id}.cram"
+bam_mm_included_pipe_suffix = ".{n_beads}{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included_{puck_barcode_file_id}.cram"
 final_bam_mm_included_pipe = complete_data_root + "/final" + bam_mm_included_pipe_suffix
 
 # final_bam_corrected = complete_data_root + "/corrected{polyA_adapter_trimmed}.cram"
