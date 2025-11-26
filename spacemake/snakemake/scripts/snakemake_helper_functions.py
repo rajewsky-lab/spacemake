@@ -892,9 +892,11 @@ def get_all_barcode_readcounts(wildcards, prealigned=False):
         "polyA_adapter_trimmed": polyA_adapter_trimmed_wildcard,
     }
 
+    # This code seems questionable. What does is_merged have to do w prealigned vs post-aligned?
     if prealigned or is_merged:
         return {"bc_readcounts": expand(barcode_readcounts, **extra_args)}
     else:
+        # why return prealigned if 'prealigned == False' ??
         return {"bc_readcounts": expand(barcode_readcounts_prealigned, **extra_args)}
 
 
