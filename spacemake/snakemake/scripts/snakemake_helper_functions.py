@@ -213,6 +213,10 @@ def get_all_dges(wildcards):
                         )["dge"],
                     )
 
+    print(f"get_all_dges():")
+    for dge in dges:
+        print(f" -> '{dge}'")
+
     return dges
 
 
@@ -264,6 +268,9 @@ def get_all_dges_collection(wildcards):
                             downsampling_percentage="",
                         )["dge"]
                     )
+    print(f"get_all_dges_collection():")
+    for dge in dges:
+        print(f" -> '{dge}'")
 
     return dges
 
@@ -1003,11 +1010,14 @@ def maybe_get_puck_file(wildcards):
     if wildcards.puck_barcode_file_id == "no_spatial_data":
         top = get_top_barcodes(wildcards)
         bcf = {"barcode_file": top["top_barcodes"]}
-        return bcf
+    elif wildcards.n_beads != "spatial":
+        top = get_top_barcodes(wildcards)
+        bcf = {"barcode_file": top["top_barcodes"]}
     else:
         # print("getting puck_file")
         bcf = get_puck_file(wildcards)
-        return bcf
+
+    return bcf
 
 
 def get_all_puck_files(wildcards):
