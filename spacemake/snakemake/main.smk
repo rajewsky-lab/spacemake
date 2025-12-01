@@ -494,6 +494,11 @@ rule create_h5ad_dge:
         puck_barcode_files_summary
     # output here will either be n_beads=number, n_beads=spatial
     output: dge_out_h5ad, dge_out_h5ad_obs
+    # shell:
+    #     "python {spacemake_dir}/bin/dge_to_h5ad.py "
+    #     " --dge {input.dge} "
+    #     " --dge-summary {input.dge_summary} "
+    #     " {params.barcode_args} "
     run:
         if wildcards.is_external == '.external':
             adata = load_external_dge(input['dge'])
