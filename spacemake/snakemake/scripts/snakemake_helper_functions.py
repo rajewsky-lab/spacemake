@@ -9,9 +9,15 @@ def get_output_files(
     run_on_external=True,
     puck_barcode_file_matching_type="none",
     check_puck_collection=False,
+    mode="pucks",
     qc=False,
     **kwargs,
 ):
+    """
+    if mode == 'pucks': return individual tiles or pucks
+    if mode == 'collections': return only collections
+    if mode == 'auto': return collections if we have any, else pucks/tiles
+    """
     out_files = []
     df = project_df.df
 
@@ -57,7 +63,37 @@ def get_output_files(
                 project_id=project_id, sample_id=sample_id
             )
 
-        if check_puck_collection:
+        # these are somewhat recursive
+        if mode == "auto":
+            collections = get_output_files(
+                pattern,
+                projects,
+                samples,
+                filter_merged,
+                run_on_external,
+                puck_barcode_file_matching_type,
+                check_puck_collection=True,
+                mode="collections",
+                qc=qc,
+                **kwargs,
+            )
+            if collections:
+                return collections
+            else:
+                return get_output_files(
+                    pattern,
+                    projects,
+                    samples,
+                    filter_merged,
+                    run_on_external,
+                    puck_barcode_file_matching_type,
+                    check_puck_collection=False,
+                    mode="pucks",
+                    qc=qc,
+                    **kwargs,
+                )
+
+        if check_puck_collection or (mode == "collections"):
             puck_vars = project_df.get_puck_variables(
                 project_id=project_id, sample_id=sample_id
             )
@@ -78,7 +114,7 @@ def get_output_files(
 
             puck_barcode_file_ids = "puck_collection"
 
-        else:
+        else:  # (mode == 'pucks') or (check_puck_collection == False)
             # add the non spatial barcode by default
             non_spatial_pbf_id = project_df.project_df_default_values[
                 "puck_barcode_file_id"
