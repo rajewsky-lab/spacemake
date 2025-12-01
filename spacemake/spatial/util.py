@@ -315,8 +315,8 @@ def aggregate_adata_by_indices(
     # rename index
     aggregated_adata.obs.index.name = "cell_bc"
 
-    def summarise_adata_obs_column(adata, column, summary_fun=sum):
-        vals_to_join = adata.obs[column].to_numpy()[idx_to_aggregate]
+    def summarise_adata_obs_column(adata, column, summary_fun=sum, dtype=np.float32):
+        vals_to_join = adata.obs[column].to_numpy(dtype=dtype)[idx_to_aggregate]
         vals_joined = np.array(
             [
                 summary_fun(vals_to_join[ix_array[n].astype(int)])
@@ -325,7 +325,7 @@ def aggregate_adata_by_indices(
         )
         return vals_joined
 
-    print(adata)
+    # print(adata)
 
     # summarise and attach n_reads, calculate metrics (incl. pcr)
     calculate_adata_metrics(
