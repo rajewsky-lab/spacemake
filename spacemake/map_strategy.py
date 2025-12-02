@@ -37,7 +37,7 @@ map_data = {
 #### snakemake string templates #####
 #####################################
 
-ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
+ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed.corrected"
 # this must be local and not have .bam appended!
 # basically, if ubam_input were used as {target} in linked_bam it should eval to
 # "unaligned_bc_tagged.polyA_adapter_trimmed.bam"
@@ -365,6 +365,7 @@ def get_mapped_BAM_output(
     """
     out_files = []
 
+    # print(f">>> ENTER ")
     for index, row in project_df.df.iterrows():
         # rules so far are "local" to each sample. Here we create full paths, merging with
         # project_id/sample_id from the project_df
@@ -507,4 +508,5 @@ def get_mapped_BAM_output(
     #     print(f"    output={k} <- source={v}")
 
     # print("out_files", out_files)
+    # print(f">>> EXIT ")
     return out_files

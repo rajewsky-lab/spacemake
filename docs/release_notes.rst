@@ -3,6 +3,10 @@ Release notes
 
 Version 0.9
 -----------
+0.9.1b
+~~~~~
+* Fixes permissions of `html` files (QC report and automated analysis)
+
 0.9.1
 ~~~~~
 * Uses ``cram`` instead of ``bam`` to significantly reduce disk space.

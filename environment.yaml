@@ -20,7 +20,8 @@ dependencies:
     - pigz
     - minimap2==2.28
     - pip:
-        - cutadapt       
+        - cutadapt
+        - git+https://github.com/marvin-jens/scbamtools.git@cb_correct       
         - setproctitle
         - isal
         - pytest

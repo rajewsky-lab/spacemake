@@ -92,6 +92,7 @@ def get_module_outputs():
 # INCLUDE OTHER MODULES #
 #########################
 include: 'downsample.smk'
+include: 'barcode.smk'
 include: 'mapping.smk'
 include: 'dropseq.smk'
 include: 'longread.smk'
@@ -141,20 +142,22 @@ rule run_analysis:
                     filter_merged=True) 
                 if config['with_fastqc'] else []
         ),
+        # get_output_files(automated_report,
+        #     data_root_type = 'complete_data', downsampling_percentage='',
+        #     puck_barcode_file_matching_type='spatial_matching'),
         get_output_files(automated_report,
             data_root_type = 'complete_data', downsampling_percentage='',
-            puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(automated_report,
-            data_root_type = 'complete_data', downsampling_percentage='',
-            check_puck_collection=True,
+            # check_puck_collection=True,
+            mode='auto',
             puck_barcode_file_matching_type='spatial_matching'),
         # get_output_files(qc_sheet,
         #     data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
         #     puck_barcode_file_matching_type='spatial_matching'),
-        # get_output_files(qc_sheet,
-        #     data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
-        #     check_puck_collection=True,
-        #     puck_barcode_file_matching_type='spatial_matching'),
+        get_output_files(qc_sheet,
+            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
+            # check_puck_collection=True,
+            mode='auto',
+            puck_barcode_file_matching_type='spatial_matching'),
         # finally, everything registered via register_module_output_hook()
         get_module_outputs(),
         
@@ -457,10 +460,15 @@ rule create_spatial_barcode_file:
         " --chunksize 10000000"
 
 rule create_spatial_barcode_whitelist:
-    input: parsed_spatial_barcodes
-    output: temp(spatial_barcodes)
+    # modified to just always read in the entire barcode universe per tile (to also capture corrected BCs)
+    # input: parsed_spatial_barcodes
+    input:
+        unpack(get_puck_file)
+    output:
+        temp(spatial_barcodes)
     run:
-        bc = pd.read_csv(input[0])
+        # bc = pd.read_csv(input[0])
+        bc = pd.read_csv(input.barcode_file, sep='\t')
         bc = bc[['cell_bc']]
         # bc = bc.append({'cell_bc': 'NNNNNNNNNNNN'}, ignore_index=True)
 
@@ -499,8 +507,8 @@ rule create_dge:
         I= /dev/stdin \
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
-        CELL_BC_FILE={input.top_barcodes} \
         CELL_BARCODE_TAG={params.cell_barcode_tag} \
+        CELL_BC_FILE={input.top_barcodes} \
         MOLECULAR_BARCODE_TAG={params.umi_tag} \
         TMP_DIR={global_tmp} \
         {params.dge_extra_params}
@@ -513,6 +521,11 @@ rule create_h5ad_dge:
         puck_barcode_files_summary
     # output here will either be n_beads=number, n_beads=spatial
     output: dge_out_h5ad, dge_out_h5ad_obs
+    # shell:
+    #     "python {spacemake_dir}/bin/dge_to_h5ad.py "
+    #     " --dge {input.dge} "
+    #     " --dge-summary {input.dge_summary} "
+    #     " {params.barcode_args} "
     run:
         if wildcards.is_external == '.external':
             adata = load_external_dge(input['dge'])
@@ -706,9 +719,12 @@ rule render_qc_sheet:
             --output-dir $(dirname {output.html}) \
             --output $(basename {output.html}) \
             --no-input
-        
+
         # Inject navigation
         bash {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
+        
+        # Ensure we don't break permissions
+        chmod --reference={input} {output.html}
         """
 
 rule run_automated_analysis:
@@ -766,6 +782,9 @@ rule render_automated_analysis:
             --no-input
 
         bash {spacemake_dir}/report/scripts/inject_navigation.sh {output.html} {spacemake_dir}
+
+        # Ensure we don't break permissions
+        chmod --reference={input} {output.html}
         """
 
 rule run_novosparc_denovo:

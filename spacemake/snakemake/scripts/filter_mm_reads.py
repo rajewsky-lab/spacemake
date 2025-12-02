@@ -1,4 +1,4 @@
-import pysam
+import logging
 import datetime
 import argparse
 import numpy as np
@@ -6,20 +6,26 @@ import numpy as np
 counted_regions = ["UTR", "CODING"]
 
 
+def get_tag_on_split(row, tag="XF:Z:", default="INTERGENIC"):
+    for col in row[11:]:
+        if col.startswith(tag):
+            return col.split(tag)[1]
+
+    return default
+
+
 def select_alignment(alignments):
-    read_names = [aln.query_name for aln in alignments]
+    pieces = [aln.split("\t") for aln in alignments]
+    read_names = [p[0] for p in pieces]
     if read_names.count(read_names[0]) != len(read_names):
-        print(read_names)
+        # print(read_names)
         raise Exception(f"input alignments do not come from the same read")
 
-    def is_exonic(aln):
-        if not aln.has_tag("XF"):
-            return False
+    def is_exonic(row):
+        xf = get_tag_on_split(row)
+        return xf in counted_regions
 
-        return aln.get_tag("XF") in counted_regions
-
-    alignments_are_exonic = np.array([is_exonic(aln) for aln in alignments])
-
+    alignments_are_exonic = np.array([is_exonic(row) for row in pieces])
     exonic_ix = np.where(alignments_are_exonic == True)[0]
 
     num_exonic = exonic_ix.shape[0]
@@ -32,88 +38,156 @@ def select_alignment(alignments):
         return None
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Filter out ambiguous multi-mapper reads"
-    )
+def load_barcodes(fname):
+    logger = logging.getLogger("spacemake.scripts.filter_mm_reads.load_barcodes")
+    if fname.endswith(".gz"):
+        import isal.igzip
 
-    parser.add_argument("--in-bam", help="input bam")
-    parser.add_argument("--out-bam", help="output bam")
+        _open = isal.igzip.open
+    else:
+        _open = open
 
-    args = parser.parse_args()
-    print(args)
+    bcs = set()
+    for line in _open(fname, "rt"):
+        if line.startswith("cell"):
+            continue
 
-    bam_in = pysam.AlignmentFile(args.in_bam, "rc")
+        bcs.add(line.split("\t")[0])
 
-    bam_out = pysam.AlignmentFile(args.out_bam, "wc", header=bam_in.header)
-    counter = 0
-    total_records = 0
-    start_time = datetime.datetime.now()
-    finish_time = start_time
-    total_start_time = datetime.datetime.now()
-    time_interval = 30
+    logger.info(f"loaded {len(bcs)} barcodes from {fname}")
+    return bcs
 
+
+def filter_mm(input, _out, bcs=set(), **kw):
+    logger = logging.getLogger("spacemake.scripts.filter_mm_reads")
+    from collections import defaultdict
+
+    counter = defaultdict(int)
+
+    import re
+
+    CB_pattern = re.compile(f"CB:Z:(\S+)")
+
+    from time import time
+
+    T0 = time()
+
+    output = open(_out, "wt")
     multi_mappers = []
-
     qname = None
-    for aln in bam_in.fetch(until_eof=True):
-        counter += 1
-        total_records += 1
+    for aln in open(input, "rt"):
+        # header line. Just pass through
+        if aln.startswith("@"):
+            output.write(aln)
 
-        finish_time = datetime.datetime.now()
-        delta_seconds = (finish_time - start_time).seconds
-        total_elapsed_seconds = (finish_time - total_start_time).total_seconds()
-
-        if delta_seconds >= time_interval:
-            formatted_time = finish_time.strftime("%Y-%m-%d %H:%M:%S")
-            records_per_second = counter / delta_seconds
-
-            print(
-                f"Processed {total_records:,} records in {total_elapsed_seconds:,.0f} seconds. Average processing rate: {records_per_second:,.0f} records/second. Current time: {formatted_time}"
+        # counting and rate info
+        counter["N_alignments"] += 1
+        if counter["N_alignments"] % 10000000 == 0:
+            dT = time() - T0
+            rate = counter["N_alignments"] / 1000.0 / dT
+            logger.info(
+                f"processed {counter['N_alignments']} alignments in {dT:.1f} seconds ({rate:.1f}k/sec)"
             )
 
-            start_time = datetime.datetime.now()
-            counter = 0
+        # restrict output to only desired barcode subset
+        if bcs:
+            m_CB = re.search(CB_pattern, aln)
+            if not m_CB:
+                # This should never happen at this stage
+                counter["N_no_CB"] += 1
+                continue
 
-        if aln.query_name != qname:
+            CB = m_CB.groups(0)[0]
+            if CB not in bcs:
+                counter["N_CB_not_selected"] += 1
+                continue
+            else:
+                counter["N_CB_selected"] += 1
+
+        query_name = aln.split("\t", maxsplit=1)[0]
+        if query_name != qname:
             # new read
             if len(multi_mappers) == 1:
                 # fast path
-                bam_out.write(aln)
-                multi_mappers = []
-            elif len(multi_mappers) > 1:
+                counter["N_unique"] += 1
+                output.write(aln)
+            else:
+                counter["N_multi"] += 1
                 # decide which, if any, to keep
                 aln_to_keep = select_alignment(multi_mappers)
-
                 if aln_to_keep is not None:
+                    counter["N_salvaged"] += 1
                     # set aln secondary flag to 0, so that it is flagged as primary
                     # secondary flag is at 0x100, so 8th bit (starting from 0)
-                    aln_to_keep.flag = aln_to_keep.flag & ~(1 << 8)
-                    bam_out.write(aln_to_keep)
+                    cols = aln_to_keep.split("\t")
+                    flag = int(cols[1])
+                    flag = flag & ~(1 << 8)
+                    cols[1] = str(flag)
+                    output.write("\t".join(cols))
+                else:
+                    counter["N_not_salvaged"] += 1
 
-                # reset multimapper list
-                multi_mappers = []
+            # reset multimapper list
+            multi_mappers = []
 
-        qname = aln.query_name
+        # add the last alignment
         multi_mappers.append(aln)
 
     # final iteration:
     if len(multi_mappers) == 1:
-        # fast path
-        bam_out.write(aln)
-        multi_mappers = []
+        counter["N_unique"] += 1
+        output.write(aln)
 
     elif len(multi_mappers) > 1:
+        counter["N_multi"] += 1
         # decide which, if any, to keep
         aln_to_keep = select_alignment(multi_mappers)
-
         if aln_to_keep is not None:
+            counter["N_salvaged"] += 1
             # set aln secondary flag to 0, so that it is flagged as primary
             # secondary flag is at 0x100, so 8th bit (starting from 0)
-            aln_to_keep.flag = aln_to_keep.flag & ~(1 << 8)
-            bam_out.write(aln_to_keep)
+            cols = aln_to_keep.split("\t")
+            flag = int(cols[1])
+            flag = flag & ~(1 << 8)
+            cols[1] = str(flag)
+            output.write("\t".join(cols))
+        else:
+            counter["N_not_salvaged"] += 1
+
+    output.flush()
+    return counter
+
+
+if __name__ == "__main__":
+    import spacemake.util as util
+
+    parser = util.make_minimal_parser(
+        description="Filter out ambiguous multi-mapper reads"
+    )
+
+    parser.add_argument("--in-sam", help="input sam", default="/dev/stdin")
+    parser.add_argument(
+        "--barcode-list",
+        help="[optional] only pass reads with CB:Z:<barcode> from this (compressed) table's first column",
+    )
+    parser.add_argument("--out-sam", help="output sam", default="/dev/stdout")
+    # parser.add_argument("--sample", help="sample_id", default="NA")
+
+    args = parser.parse_args()
+    logger = util.setup_logging(args, name="spacemake.scripts.filter_mm_reads")
+    logger.info("starting up")
+    if args.barcode_list:
+        bcs = load_barcodes(args.barcode_list)
+    else:
+        bcs = set()
+
+    start_time = datetime.datetime.now()
+    counter = filter_mm(args.in_sam, args.out_sam, bcs=bcs)
+    finish_time = datetime.datetime.now()
 
     formatted_time = finish_time.strftime("%Y-%m-%d %H:%M:%S")
-    print(
-        f"Finished processing {counter:,} records in {total_elapsed_seconds:,.0f} seconds. Current time: {formatted_time}"
+    total_elapsed_seconds = (finish_time - start_time).total_seconds()
+
+    logger.info(
+        f"Finished processing {counter['N_alignments']:,} records in {total_elapsed_seconds:,.0f} seconds. Current time: {formatted_time}"
     )
