@@ -147,6 +147,7 @@ rule run_analysis:
         get_output_files(automated_report,
             data_root_type = 'complete_data', downsampling_percentage='',
             check_puck_collection=True,
+            # mode='auto',
             puck_barcode_file_matching_type='spatial_matching'),
         get_output_files(qc_sheet,
             data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
@@ -154,6 +155,7 @@ rule run_analysis:
         get_output_files(qc_sheet,
             data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
             check_puck_collection=True,
+            # mode='auto',
             puck_barcode_file_matching_type='spatial_matching'),
         # finally, everything registered via register_module_output_hook()
         get_module_outputs(),
