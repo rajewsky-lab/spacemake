@@ -207,7 +207,8 @@ rule map_reads_mm2:
         unpack(lambda wc: get_map_inputs(wc, mapper='mm2')),
     output:
         bam=mm2_mapped_bam,
-        ubam=mm2_unmapped_bam
+        ubam=mm2_unmapped_bam,
+        star_log=star_target_log_file,
     log: mm2_log
     params:
         auto = lambda wc, output: get_map_params(wc, output, mapper='mm2'),
@@ -222,8 +223,9 @@ rule map_reads_mm2:
         "  --in-ubam {input.bam}"
         " "
         "| tee >( {params.auto[annotation_cmd]} ) "
-        "| samtools view -f 4 --threads=4 -Ch --no-PG > {output.ubam}"
-        
+        "| samtools view -f 4 --threads=4 -Ch --no-PG > {output.ubam} "
+        " && touch {output.star_log}" # TODO find out who depends on this and make them read mm2 stats too
+
 
 # TODO: unify these two functions and get rid of the params in parse_ribo_log rule below.
 def get_ribo_log(wc):
