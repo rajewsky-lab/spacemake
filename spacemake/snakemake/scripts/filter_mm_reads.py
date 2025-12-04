@@ -111,7 +111,8 @@ def filter_mm(input, _out, bcs=set(), **kw):
                 # fast path
                 counter["N_unique"] += 1
                 output.write(aln)
-            else:
+
+            elif len(multi_mappers) > 1:
                 counter["N_multi"] += 1
                 # decide which, if any, to keep
                 aln_to_keep = select_alignment(multi_mappers)
@@ -129,6 +130,7 @@ def filter_mm(input, _out, bcs=set(), **kw):
 
             # reset multimapper list
             multi_mappers = []
+            qname = query_name
 
         # add the last alignment
         multi_mappers.append(aln)
