@@ -27,24 +27,34 @@ rule cb_correct:
         "  --threads {threads} "
         "  --nomatch-out discard " #{output.nomatch}"
 
-def get_puck_barcode_files(wc):
+def get_correction_reference(wc, input):
+    # print("get_puck_barcode_files")
+    # print(project_df.get_puck_barcode_ids_and_files(
+    #         wc.project_id, wc.sample_id
+    #     )
+    # )
     df = pd.read_csv(wc_fill(var.puck_barcode_files_summary, wc))
-    print(">>> getting flowcell capture area barcodes")
-    print(df)
-    return " ".join(df['puck_barcode_file'].tolist())
+    # print(">>> getting flowcell capture area barcodes")
+    # print(df)
+    if len(df) == 0:
+        # fallback: top 100k barcodes
+        return f"zcat {input.bc_counts} | grep -v '#' | head -n 100000 | cut -f 2 | "
+    else:
+        files = " ".join(df['puck_barcode_file'].tolist())
+        return f"cat {files} | python -m isal.igzip -dc | "
 
 rule cb_index_relevant_tiles:
     input:
-        var.puck_barcode_files_summary
+        puck_summary=var.puck_barcode_files_summary,
+        bc_counts=barcode_readcounts_prealigned
+        # top=top_barcodes
     params:
-        puck_barcode_files=get_puck_barcode_files
+        cb_ref=get_correction_reference
     output:
         bci=var.capture_area_bci
     threads: 4
     shell:
-        "cat {params.puck_barcode_files} | "
-        " python -m isal.igzip -dc | "
-        " python -m scbamtools.bin.cb_correct index "
+        " {params.cb_ref} python -m scbamtools.bin.cb_correct index "
         "  --index {output.bci} "
 
 rule cb_index_corrected_sample:
