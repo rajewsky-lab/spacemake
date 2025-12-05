@@ -17,7 +17,6 @@ import scanpy as sc
 from spacemake.preprocess.dge import dge_to_sparse_adata, attach_barcode_file,\
     parse_barcode_file, load_external_dge, attach_puck
 from spacemake.spatial.util import create_meshed_adata
-import spacemake.spatial.puck_collection as puck_collection
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
 from spacemake.errors import SpacemakeError
@@ -617,6 +616,7 @@ rule puck_collection_stitching_meshed:
             project_id=wildcards.project_id, sample_id=wildcards.sample_id
         ),
     run:
+        import spacemake.spatial.puck_collection as puck_collection
         _pc = puck_collection.merge_pucks_to_collection(
             # takes all input except the puck_barcode_files
             input[:-1],
