@@ -361,7 +361,7 @@ final_bam_mm_included_pipe = complete_data_root + "/final" + bam_mm_included_pip
 # final_bam_corrected = complete_data_root + "/corrected{polyA_adapter_trimmed}.cram"
 # final_bam_cb_nomatch = complete_data_root + "/nomatch{polyA_adapter_trimmed}.cram"
 
-ubam = tagged_polyA_adapter_trimmed_bam
+ubam = tagged_polyA_adapter_trimmed_bam  # complete_data_root + "/unaligned_bc_tagged.{polyA_adapter_trimmed}.cram"
 ubam_corrected = ubam.replace(".cram", ".corrected.cram")
 ubam_nomatch = ubam.replace(".cram", ".nomatch.cram")
 ubam_correction_stats = complete_data_root + "/stats/cb_correct.tsv"
