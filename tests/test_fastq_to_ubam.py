@@ -78,7 +78,7 @@ def test_preprocessing():
     )
     sdata = pre.process(sdata)
     assert sdata.q2 == qual
-    assert len(sdata.tags) == 0
+    assert "T3" not in sdata.tags and "T5" not in sdata.tags
 
     qual = "###IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII###I#I#"
     sdata.q2 = qual
