@@ -5,18 +5,60 @@ __author__ = ['Marvin Jens']
 __licence__ = 'GPL'
 __email__ = ['marvin.jens@mdc-berlin.de']
 
-import spacemake.snakemake.variables as var
+import spacemake.snakemake.variables as smv
+
+def get_puck_barcode_files(wc, input):
+
+    df = pd.read_csv(input.tile_match_summary)
+    print(">>> getting flowcell capture area barcodes")
+    select = df["pass_threshold"] == 1
+    print(df.loc[select])
+
+    pbc =  project_df.get_puck_barcode_ids_and_files(
+            project_id=wc.project_id, sample_id=wc.sample_id
+        )
+    print(f"pdf.get_puck_barcode_ids_and_files() -> {pbc}")
+    res = " ".join(df.loc[select, 'puck_barcode_file'].tolist())
+    if not res:
+        res = "no_spatial_data"
+
+    return res
+
+rule cb_index_relevant_tiles:
+    input:
+        tile_match_summary=smv.puck_count_prealigned_barcode_matches_summary
+    params:
+        puck_barcode_files=get_puck_barcode_files
+    output:
+        bci=smv.capture_area_bci
+    threads: 4
+    run:
+        if params.puck_barcode_files == "no_spatial_data":
+            # we have no whitelist. So no real BCI is needed
+            shell(
+                "touch {output.bci}"
+            )
+        else:
+            # the real McCoy.
+            shell(
+                "cat {params.puck_barcode_files} | "
+                " python -m isal.igzip -dc | "
+                " python -m scbamtools.bin.cb_correct index "
+                "  --index {output.bci} "
+            )
 
 rule cb_correct:
     input:
         # wedge between final_bam and dropseq.smk:filter_mm_reads
-        ubam=var.ubam,
+        ubam=smv.ubam,
         #bam=final_bam_mm_included_pipe # this is the pipe() output of dropseq.smk:filter_mm_reads rule
-        bci=var.capture_area_bci
+        bci=smv.capture_area_bci
     output:
-        match=var.ubam_corrected,
-        # nomatch=var.ubam_nomatch
-        stats=var.ubam_correction_stats
+        match=smv.ubam_corrected,
+        # nomatch=smv.ubam_nomatch
+        stats=smv.ubam_correction_stats
+    params:
+        rel_ubam=lambda wildcards, input: os.path.basename(input.ubam)
     threads: 32
     shell:
         "python -m scbamtools.bin.cb_correct sam "
@@ -59,7 +101,7 @@ rule cb_index_relevant_tiles:
 
 rule cb_index_corrected_sample:
     input: barcode_readcounts
-    output: var.corrected_sample_bci
+    output: smv.corrected_sample_bci
     shell:
         "zcat {input} | grep -v '#' | cut -f 2 | "
         " python -m scbamtools.bin.cb_correct index "
@@ -72,7 +114,7 @@ ruleorder: make_whitelist_for_dge > create_spatial_barcode_whitelist
 rule make_whitelist_for_dge:
     input:
         unpack(get_puck_file),
-        bci=var.corrected_sample_bci
+        bci=smv.corrected_sample_bci
     output:
         spatial_barcodes_corrected
     shell:
