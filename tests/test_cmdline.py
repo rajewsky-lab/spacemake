@@ -296,7 +296,7 @@ def test_fill_project_df(with_species):
             f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
-                f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt"
+                f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt.gz"
                 " --puck slide_seq --run-mode slide_seq"
             ),
         ),
@@ -308,7 +308,7 @@ def test_fill_project_df(with_species):
             f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
-                f" --puck-barcode-file {spacemake_dir}/test_data/tile_2.txt"
+                f" --puck-barcode-file {spacemake_dir}/test_data/tile_2.txt.gz"
                 " --puck slide_seq --run-mode slide_seq"
             ),
         ),
@@ -320,7 +320,7 @@ def test_fill_project_df(with_species):
             f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
-                f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt {spacemake_dir}/test_data/tile_2.txt"
+                f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt.gz {spacemake_dir}/test_data/tile_2.txt.gz"
                 " --puck slide_seq --run-mode slide_seq"
             ),
         ),
