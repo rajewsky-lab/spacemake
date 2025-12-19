@@ -7,26 +7,47 @@ __email__ = ['marvin.jens@mdc-berlin.de']
 
 import spacemake.snakemake.variables as smv
 
-def get_puck_barcode_files(wc, input):
-
-    df = pd.read_csv(input.tile_match_summary)
-    print(">>> getting flowcell capture area barcodes")
-    select = df["pass_threshold"] == 1
-    print(df.loc[select])
-
+def maybe_get_puck_count_prealigned_barcode_matches_summary(wc):
     pbc =  project_df.get_puck_barcode_ids_and_files(
             project_id=wc.project_id, sample_id=wc.sample_id
         )
-    print(f"pdf.get_puck_barcode_ids_and_files() -> {pbc}")
-    res = " ".join(df.loc[select, 'puck_barcode_file'].tolist())
-    if not res:
-        res = "no_spatial_data"
+    print(f"maybe_get_puck_count_prealigned_barcode_matches_summary(): pbc={pbc}")
+    if len(pbc[0]) > 0:
+        return smv.puck_count_prealigned_barcode_matches_summary
+    else:
+        # we have a no_spatial_data sample
+        return 'no_spatial_data'
+
+def get_puck_barcode_files(wc, input):
+    fname = input.tile_match_summary
+    res = "no_spatial_data"
+
+    if os.path.exists(fname) and fname != "no_spatial_data":
+        print(f"trying to read {fname}")
+        df = pd.read_csv(fname)
+        print(">>> getting flowcell capture area barcodes")
+        select = df["pass_threshold"] == 1
+        print(df.loc[select])
+        puck_barcode_files = df.loc[select, 'puck_barcode_file'].tolist()
+        if puck_barcode_files:
+            res = " ".join(puck_barcode_files)
+    else:
+        print(f"get_puck_barcode_files(): file {fname} does not exist-> no_spatial_data")
 
     return res
 
+
+rule place_no_spatial_data_indicator:
+    output:
+        no_spatial_data="no_spatial_data"
+    run:
+        shell(
+            "touch {output.no_spatial_data}"
+        )
+
 rule cb_index_relevant_tiles:
     input:
-        tile_match_summary=smv.puck_count_prealigned_barcode_matches_summary
+        tile_match_summary=maybe_get_puck_count_prealigned_barcode_matches_summary
     params:
         puck_barcode_files=get_puck_barcode_files
     output:
@@ -49,9 +70,7 @@ rule cb_index_relevant_tiles:
 
 rule cb_correct:
     input:
-        # wedge between final_bam and dropseq.smk:filter_mm_reads
         ubam=smv.ubam,
-        #bam=final_bam_mm_included_pipe # this is the pipe() output of dropseq.smk:filter_mm_reads rule
         bci=smv.capture_area_bci
     output:
         match=smv.ubam_corrected,
@@ -60,44 +79,24 @@ rule cb_correct:
     params:
         rel_ubam=lambda wildcards, input: os.path.basename(input.ubam)
     threads: 32
-    shell:
-        "python -m scbamtools.bin.cb_correct sam "
-        "  --input {input.ubam} "
-        "  --index {input.bci} "
-        "  --bam-out {output.match} "
-        "  --stats-out {output.stats}"
-        "  --threads {threads} "
-        "  --nomatch-out discard " #{output.nomatch}"
-
-def get_correction_reference(wc, input):
-    # print("get_puck_barcode_files")
-    # print(project_df.get_puck_barcode_ids_and_files(
-    #         wc.project_id, wc.sample_id
-    #     )
-    # )
-    df = pd.read_csv(wc_fill(var.puck_barcode_files_summary, wc))
-    # print(">>> getting flowcell capture area barcodes")
-    # print(df)
-    if len(df) == 0:
-        # fallback: top 100k barcodes
-        return f"zcat {input.bc_counts} | grep -v '#' | head -n 100000 | cut -f 2 | "
-    else:
-        files = " ".join(df['puck_barcode_file'].tolist())
-        return f"cat {files} | python -m isal.igzip -dc | "
-
-# rule cb_index_relevant_tiles:
-#     input:
-#         puck_summary=var.puck_barcode_files_summary,
-#         bc_counts=barcode_readcounts_prealigned
-#         # top=top_barcodes
-#     params:
-#         cb_ref=get_correction_reference
-#     output:
-#         bci=var.capture_area_bci
-#     threads: 4
-#     shell:
-#         " {params.cb_ref} python -m scbamtools.bin.cb_correct index "
-#         "  --index {output.bci} "
+    run:
+        if os.path.getsize(input.bci) == 0:
+            print(f"about to link {params.rel_ubam} to {output.match} because bci is empty")
+            # no spatial data -> just link input to output
+            shell(
+                "ln -s {params.rel_ubam} {output.match} ; "
+                "touch {output.stats} "
+            )
+        else:
+            shell(
+                "python -m scbamtools.bin.cb_correct sam "
+                "  --input {input.ubam} "
+                "  --index {input.bci} "
+                "  --bam-out {output.match} "
+                "  --stats-out {output.stats}"
+                "  --threads {threads} "
+                "  --nomatch-out discard " #{output.nomatch}"
+            )
 
 rule cb_index_corrected_sample:
     input: barcode_readcounts
