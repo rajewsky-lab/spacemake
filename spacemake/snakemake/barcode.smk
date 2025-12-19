@@ -85,19 +85,19 @@ def get_correction_reference(wc, input):
         files = " ".join(df['puck_barcode_file'].tolist())
         return f"cat {files} | python -m isal.igzip -dc | "
 
-rule cb_index_relevant_tiles:
-    input:
-        puck_summary=var.puck_barcode_files_summary,
-        bc_counts=barcode_readcounts_prealigned
-        # top=top_barcodes
-    params:
-        cb_ref=get_correction_reference
-    output:
-        bci=var.capture_area_bci
-    threads: 4
-    shell:
-        " {params.cb_ref} python -m scbamtools.bin.cb_correct index "
-        "  --index {output.bci} "
+# rule cb_index_relevant_tiles:
+#     input:
+#         puck_summary=var.puck_barcode_files_summary,
+#         bc_counts=barcode_readcounts_prealigned
+#         # top=top_barcodes
+#     params:
+#         cb_ref=get_correction_reference
+#     output:
+#         bci=var.capture_area_bci
+#     threads: 4
+#     shell:
+#         " {params.cb_ref} python -m scbamtools.bin.cb_correct index "
+#         "  --index {output.bci} "
 
 rule cb_index_corrected_sample:
     input: barcode_readcounts
