@@ -13,11 +13,10 @@ def get_puck_barcode_files(wc, input):
     print(">>> getting flowcell capture area barcodes")
     select = df["pass_threshold"] == 1
     print(df.loc[select])
-
-    pbc =  project_df.get_puck_barcode_ids_and_files(
-            project_id=wc.project_id, sample_id=wc.sample_id
-        )
-    print(f"pdf.get_puck_barcode_ids_and_files() -> {pbc}")
+    # pbc =  project_df.get_puck_barcode_ids_and_files(
+    #         project_id=wc.project_id, sample_id=wc.sample_id
+    #     )
+    # print(f"pdf.get_puck_barcode_ids_and_files() -> {pbc}")
     res = " ".join(df.loc[select, 'puck_barcode_file'].tolist())
     if not res:
         res = "no_spatial_data"
