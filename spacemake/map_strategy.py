@@ -466,9 +466,6 @@ def get_mapped_BAM_output(
                 mr.map_index = os.path.dirname(mr.map_index_param)  # the index_dir
                 mr.map_index_file = wc_fill(smv.mm2_index_file, mr)  # file present if the index is actually there
                 
-                mr.map_flags = species_d[mr.ref_name].get(
-                    "MM2_flags", default_map_flags['mm2']
-                )
                 if mr.mapper == "mm2_sr":
                     mr.map_flags = species_d[mr.ref_name].get(
                         "MM2_sr_flags", default_map_flags['mm2_sr']
@@ -500,15 +497,33 @@ def get_mapped_BAM_output(
                 final_log_name = smv.star_log_file.format(
                     project_id=index[0], sample_id=index[1]
                 )
-                final_log = smv.star_target_log_file.format(
-                    ref_name=lr.ref_name, project_id=index[0], sample_id=index[1]
-                )
-                # print("STAR_FINAL_LOG_SYMLINKS preparation", final_target, final_log_name, "->", final_log)
-                map_data["STAR_FINAL_LOG_SYMLINKS"][final_log_name] = final_log
-                map_data["REF_FOR_FINAL"][lr.link_path] = mr.ref_path
+
+                # lr.src_path is the BAM that is being designated as "final"
+                mr_final = map_data["MAP_RULES_LKUP"].get(lr.src_path)
+                if mr_final is None:
+                    raise SpacemakeError(
+                        f"Final BAM source '{lr.src_path}' not found in MAP_RULES_LKUP. "
+                        f"map_strategy='{map_strategy}'"
+                    )
+
+                if mr_final.mapper == "STAR": #STAR final log
+                    final_log_src = smv.star_target_log_file.format(
+                        project_id=index[0], sample_id=index[1], ref_name=mr_final.ref_name
+                    )
+                elif mr_final.mapper in ("mm2", "mm2_sr"): #mm2 final log
+                    final_log_src = wc_fill(smv.mm2_target_log_file, mr_final)
+                
+                else:
+                    raise SpacemakeError(
+                        f"Final mapper '{mr_final.mapper}' not supported for final log linking "
+                    )
+
+                map_data["STAR_FINAL_LOG_SYMLINKS"][final_log_name] = final_log_src
+
+                # IMPORTANT: use the final rule's ref_path (not the last mr from the loop)
+                map_data["REF_FOR_FINAL"][lr.link_path] = mr_final.ref_path
 
                 out_files.append(lr.link_path)
-
     # for k, v in sorted(map_data["MAP_RULES_LKUP"].items()):
     #     print(f"map_rules for '{k}'")
     #     print(v)

@@ -201,7 +201,6 @@ rule map_reads_bowtie2:
        
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
-
 rule map_reads_mm2:
     wildcard_constraints:
         mapper="mm2|mm2_sr"
@@ -210,9 +209,9 @@ rule map_reads_mm2:
     output:
         bam=mapped_bam,
         ubam=unmapped_bam,
-        marker=mm2_target_log_file,
+        log=mm2_target_log_file,
     log:
-        mm2_log
+        mm2_log,
     params:
         auto=lambda wc, output: get_map_params(wc, output, mapper=wc.mapper),
     threads: 32
@@ -226,7 +225,7 @@ rule map_reads_mm2:
         " "
         "| tee >( {params.auto[annotation_cmd]} ) "
         "| samtools view -f 4 --threads=4 -Ch --no-PG > {output.ubam} "
-        " && touch {output.marker}"
+        " && touch {output.log}"
 
 # TODO: unify these two functions and get rid of the params in parse_ribo_log rule below.
 def get_ribo_log(wc):
