@@ -354,6 +354,11 @@ To list the currently available ``run-mode``-s, type::
    
    spacemake config list_run-modes
 
+.. warning::
+
+    The command line interface for adding, updating, and deleting run\_modes will be deprecated in future versions of spacemake.
+    Please consider editing the ``config.yaml`` file directly to manage run-modes.
+
 Add a new run\_mode
 ^^^^^^^^^^^^^^^^^^^
 
@@ -438,6 +443,12 @@ Upon initiation, these files will automatically placed there by spacemake
 To list the currently available ``puck``-s, type::
    
    spacemake config list_pucks
+
+
+.. warning::
+
+    The command line interface for adding, updating, and deleting pucks will be deprecated in future versions of spacemake.
+    Please consider editing the ``config.yaml`` file directly to manage pucks.
 
 
 Add a new puck
