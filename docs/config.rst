@@ -34,6 +34,104 @@ To list the currently available ``species``, type::
    
    spacemake config list-species
 
+Configure adapter-flavors and pre-processing
+--------------------------------------------
+
+.. _configure-adapter-flavor:
+
+Spacemake allows to pre-process raw reads based on adapter-flavors. An adapter-flavor describes how adapters and
+polyA stretches should be trimmed from the cDNA read (usually read2). The complete set of operations that can be performed are:
+- trim polyA stretches
+- trim adapters
+- clip low-quality bases
+- clip fixed number of bases from either end of read2
+
+Access to these operations is provided through the ``adapter-flavors`` section of ``config.yaml`` only. Here is an example of an adapter-flavor:
+
+.. code-block:: yaml
+
+   adapter_flavors:
+      example:
+         - nextseq_quality:
+               cutoff: 32
+         - polyA:
+         - adapter:
+               name: SMART
+               seq: AAGCAGTGGTATCAACGCAGAGTGAATGGG
+               where: left
+               min_overlap: 10
+               max_errors: 0.1
+
+
+Below follows a list of each operation and the supported parameters and default values. 
+
+quality
+^^^^^^^
+
+Trim low-quality bases from 3' end and/or 5' end of read. Functionality is provided by `cutadapt <https://cutadapt.readthedocs.io/en/stable/guide.html#quality-trimming>`_.
+Two parameters are supported: ``left`` and ``right``, which define the quality threshold below which bases will be trimmed from the 5' and 3' end of read2, respectively. 
+Default is ``left: 0`` and ``right: 25``.
+
+nextseq_quality
+^^^^^^^^^^^^^^^
+
+Trim low-quality bases from 3' end of read. Functionality is provided by `cutadapt <https://cutadapt.readthedocs.io/en/stable/guide.html#quality-trimming>`_.
+The sole parameter is ``cutoff``, which defines the quality threshold below which bases will be trimmed. Analogous to quality with ``right=cutoff``, except that terminal `G` nucleotides
+are always treated as below cutoff quality. Default is ``cutoff: 30``.
+
+clip
+^^^^
+
+Clip bases from either end of read2. Two parameters are supported: ``left`` and ``right``, which define how many bases should be clipped from the 5' and 3' end of read2, 
+respectively. Default is ``left: 0`` and ``right: 0``.
+
+polyA
+^^^^^
+
+Trim polyA stretches from 3' end of read. Functionality is provided by `cutadapt <https://cutadapt.readthedocs.io/en/stable/guide.html#quality-trimming>`_.
+The only supported parameter is ``revcomp``, which if set to ``True`` will trim polyT stretches instead of polyA. Default is ``revcomp: False``.
+
+adapter
+^^^^^^^
+
+Trim adapters from either end of read. Functionality is provided by `cutadapt <https://cutadapt.readthedocs.io/en/stable/guide.html#search-parameters>`_.
+Paraneters are:
+
+  - ``name``: name of the adapter. Only for logging purposes.
+  - ``seq``: sequence of the adapter to be trimmed.
+  - ``min_overlap``: minimum overlap between read and adapter for a successful trimming. Default is ``3``.
+  - ``max_errors``: maximum error rate allowed for a successful trimming. Default is ``0.1``.
+  - ``where``: where to search for the adapter. Possible values are ``'left'``, and ``'right'``. Default is ``'right'`` (3 prime end of cDNA).
+
+.. note::
+   Internally, spacemake uses the cutadapt python module to perform all trimming operations. If ``where == 'left'`` we use ``cutadapt.adapters.NonInternalFrontAdapter``,
+   for ``where == 'right'`` we use ``cutadapt.adapters.BackAdapter``.
+
+   For more information about the parameters and their meaning, please refer to the `cutadapt source code <https://github.com/marcelm/cutadapt/blob/main/src/cutadapt/adapters.py>`_.
+
+Each adapter-flavor in the ``config.yaml`` is a list of operations to be performed in the given order. If needed, you can chain multiple operations of the same type (for 
+example to remove multiple adapters).
+
+
+CRAM/BAM tags with pre-processing info
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Note that `spacemake` keeps a record of pre-processing steps
+for each read in the CRAM/BAM file tags, so it is always possible to track which operations were performed:
+- A3: comma-separated list of adapters detected and trimmed from the 3'end. May also contain "polyA" if polyA trimming was performed and/or "Q" if quality trimming was performed.
+- A5: comma-separated list of adapters detected and trimmed from the 5'end.
+- T3: comma-separated list of number of bases trimmed from the 3'end (synced with A3).
+- T5: comma-separated list of number of bases trimmed from the 5'end (synced with A5).
+
+Here is an example:
+
+.. code-block:: text
+
+   read_name 163 chr1 1000 60 50M = 1050 100 ACGT... * NM:i:0 A3:Z:Q,polyA A5:Z:SMART T3:Z:5,10 T5:22
+
+The tags indicate that from the 3' end of the read, first 5 bases were trimmed due to quality (Q), then 10 bases of a polyA stretch.
+From the 5' end, 22 bases of SMART adapter were trimmed.
+
 Configure barcode-flavors
 --------------------------
 
@@ -43,10 +141,18 @@ This sample-variable describes how the cell-barcode and the UMI should be extrac
 The ``default`` value for barcode\_flavor will be dropseq: ``cell = r1[0:12]`` (cell-barcode comes from first 12nt of Read1) and
 ``UMI = r1[12:20]`` (UMI comes from the 13-20 nt of Read1). 
 
-**If a sample has no barcode\_flavor provided, the default run\_mode will be used**
+**If a sample has no barcode\_flavor provided, the default barcode\_flavor will be used**
 
 Provided barcode-flavors
 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+
+   Future versions of spacemake will merge barcode-flavors into adapter-flavors (which arguably become pre-processing flavors at that point)
+   by defining ``barcode`` as a pre-processing step with ``cell`` and ``UMI`` as parameters.
+   In the current implementation, barcode-flavors are kept separate for backwards compatibility. The new implementation will give additional
+   flexibity, for example to remove additional adapters/primers, or clip the read further, after barcode extraction. Currently, if ``barcode``
+   is not in the list of pre-processing steps, it is taken to be implied as the last step and its parameters are loaded from the barcode-flavor.
 
 Spacemake provides the following barcode-flavors out of the box:
 
@@ -78,7 +184,12 @@ To list the currently available ``barcode-flavor``-s, type::
    
    spacemake config list_barcode-flavors
 
-Add a new barcode-flavor
+.. warning::
+
+    The command line interface for adding, updating, and deleting barcode-flavors will be deprecated in future versions of spacemake.
+    Please consider editing the ``config.yaml`` file directly to manage barcode-flavors.
+
+Add a new barcode\_flavor
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block::

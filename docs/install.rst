@@ -2,12 +2,12 @@ Installation
 ============
 
 
-Using Apptainer (recommended)
+Using apptainer (recommended)
 =============================
-The easiest way to run spacemake is to use `Apptainer <https://apptainer.org/>`_ (formerly known as Singularity). Apptainer allows to run containerized applications without requiring root access.
+The easiest way to run spacemake is to use `apptainer <https://apptainer.org/>`_ (formerly known as Singularity). apptainer allows to run containerized applications without requiring root access.
 This is especially useful when working on HPC clusters where users do not have root access.
 
-If you have not installed Apptainer yet, follow the installation instructions on the `Apptainer website <https://apptainer.org/docs/admin/latest/installation.html>`_.
+If you have not installed apptainer yet, follow the installation instructions on the `apptainer website <https://apptainer.org/docs/admin/latest/installation.html>`_.
 For a non-provileged installation, you can simply:
 
 .. code-block:: console
@@ -17,31 +17,39 @@ For a non-provileged installation, you can simply:
 
 where `install-dir` is the directory you want to install it into. Once installed, you can run it with `install-dir/bin/apptainer`. For the rest of this guide, we will assume that `apptainer` is in your PATH.
 
-To run spacemake using Apptainer, first download the latest spacemake container from the Rajewsky lab: `smmain.sif <https://bimsbstatic.mdc-berlin.de/rajewsky/containers/spacemake/smmain.sif>`_:
+To run spacemake using apptainer, first download the latest spacemake apptainer image from the Rajewsky lab: `smmain.sif <https://bimsbstatic.mdc-berlin.de/rajewsky/containers/spacemake/smmain.sif>`_:
 
 .. code-block:: console
 
     wget https://bimsbstatic.mdc-berlin.de/rajewsky/containers/spacemake/smmain.sif
 
-You can then run spacemake using Apptainer like this:
+You can then run spacemake using apptainer like this:
 
 .. code-block:: console
 
     apptainer run -B /tmp --writable-tmpfs smmain.sif --help
 
 
-For your convenience, you can create an alias for spacemake like this (we recommend adding this line to your ``.bashrc`` or ``.zshrc`` file):
+For your convenience, you can create an alias for spacemake like this (we recommend to also add this line to your ``.bashrc`` or ``.zshrc`` file to make it more permanent):
 
 .. code-block:: console
 
     alias spacemake="apptainer run -B /tmp --writable-tmpfs /path/to/smmain.sif"
 
-This will allow you to run spacemake commands directly using the ``spacemake`` command.
+This will allow you to run spacemake commands directly using simply ``spacemake``.
 
 .. note:: 
    
-    The Apptainer version of spacemake comes pre-packaged with `Dropseq-tools`, so you do not need to download it separately.
+    The apptainer version of spacemake comes pre-packaged with `Dropseq-tools`, so you do not need to download it separately.
     When starting a new project, simply omit the ``--dropseq-tools`` argument, and spacemake will automatically use the Dropseq-tools version included in the container.
+
+
+.. note::
+
+    Apptainer may not by default expose the file systems you want to work with inside the container.
+    You can use the ``-B`` option to bind mount directories from your host system into the container.
+    In the above example, we bind mount ``/tmp`` as an example (and to speed things up). You can bind mount any other directory you want 
+    to work with by adding additional ``-B /path/on/host`` options to the apptainer command.
 
 Installing via conda and pip
 ============================
