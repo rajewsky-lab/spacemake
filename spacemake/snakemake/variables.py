@@ -40,8 +40,8 @@ bt2_mapped_log = log_dir + "/{ref_name}.bowtie2.log"
 
 mm2_mapped_bam = complete_data_root + "/{ref_name}.mm2.cram"
 mm2_unmapped_bam = complete_data_root + "/not_{ref_name}.mm2.cram"
-mm2_log = log_dir + "/{ref_name}.{mapper}.log"
-mm2_target_log_file = complete_data_root + "/mm2.{ref_name}.{mapper}.Log.final.out"
+mm2_log = log_dir + "/{ref_name}.mm2.log"
+mm2_target_log_file = complete_data_root + "/mm2.{ref_name}.Log.final.out"
 # special log file used for rRNA "ribo depletion" stats
 bt2_rRNA_log = complete_data_root + "/rRNA.bowtie2.cram.log"
 

@@ -202,18 +202,16 @@ rule map_reads_bowtie2:
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
 rule map_reads_mm2:
-    wildcard_constraints:
-        mapper="mm2|mm2_sr"
     input:
-        unpack(lambda wc: get_map_inputs(wc, mapper=wc.mapper)),
+        unpack(lambda wc: get_map_inputs(wc, mapper='mm2')),
     output:
-        bam=mapped_bam,
-        ubam=unmapped_bam,
+        bam=mm2_mapped_bam,
+        ubam=mm2_unmapped_bam,
         log=mm2_target_log_file,
     log:
         mm2_log,
     params:
-        auto=lambda wc, output: get_map_params(wc, output, mapper=wc.mapper),
+        auto=lambda wc, output: get_map_params(wc, output, mapper='mm2'),
     threads: 32
     shell:
         "samtools fastq -f 4 -T '*' {input.bam} "

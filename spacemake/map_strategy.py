@@ -92,10 +92,7 @@ default_map_flags = {
     ),
     "mm2": (
         " -x splice "
-    ),
-    "mm2_sr": (
-         " -x splice:sr "
-     )
+    )
 }
 
 
@@ -103,7 +100,6 @@ default_map_indices = {
     "bowtie2": smv.bt2_index_param,
     "STAR": smv.star_index,
     "mm2": smv.mm2_index,
-    "mm2_sr": smv.mm2_index,
 }
 
 default_counting_flavor_with_annotation = "default"
@@ -459,21 +455,15 @@ def get_mapped_BAM_output(
 
                 map_data["STAR_INDICES"][(mr.species, mr.ref_name)] = mr.map_index_param
 
-            elif mr.mapper in ("mm2", "mm2_sr"):
+            elif mr.mapper == "mm2":
                 mr.map_index_param = species_d[mr.ref_name].get(
                     "mm2_index", default_MM2_INDEX
                 )  # the parameter passed on to the mapper
                 mr.map_index = os.path.dirname(mr.map_index_param)  # the index_dir
                 mr.map_index_file = wc_fill(smv.mm2_index_file, mr)  # file present if the index is actually there
-                
-                if mr.mapper == "mm2_sr":
-                    mr.map_flags = species_d[mr.ref_name].get(
-                        "MM2_sr_flags", default_map_flags['mm2_sr']
-                    )
-                else:
-                    mr.map_flags = species_d[mr.ref_name].get(
-                        "MM2_flags", default_map_flags['mm2']
-                    )
+                mr.map_flags = species_d[mr.ref_name].get(
+                    "MM2_flags", default_map_flags['mm2']
+                )
 
             map_data["MAP_RULES_LKUP"][mr.out_path] = mr
             map_data["INDEX_FASTA_LKUP"][mr.map_index_file] = mr
@@ -504,7 +494,7 @@ def get_mapped_BAM_output(
                     final_log = smv.star_target_log_file.format(
                         ref_name=mr_final.ref_name,project_id=index[0], sample_id=index[1]
                     )
-                elif mr_final.mapper in ("mm2", "mm2_sr"): #mm2 final log
+                elif mr_final.mapper == "mm2": #mm2 final log
                     final_log = wc_fill(smv.mm2_target_log_file, mr_final)
                 
                 else:
