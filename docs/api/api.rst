@@ -6,7 +6,7 @@ Spacemake class
 
 Accessing spacemake objects from python
 
-.. autoclass:: spacemake.Spacemake
+.. autoclass:: spacemake.smk.Spacemake
     :members:
 
 H&E integration module
