@@ -205,6 +205,7 @@ rule map_reads_bowtie2:
 rule map_reads_mm2:
     input:
         unpack(lambda wc: get_map_inputs(wc, mapper='mm2')),
+        junc_bed=lambda wc: f"species_data/{wc.species}/{wc.ref_name}/annotation.bed"
     output:
         bam=mm2_mapped_bam,
         ubam=mm2_unmapped_bam,
@@ -216,7 +217,7 @@ rule map_reads_mm2:
     shell:
         "samtools fastq -f 4 -T '*' {input.bam} "
         " "
-        "| minimap2 -t {threads} -ay {params.auto[flags]} {params.auto[index]} /dev/stdin 2> {log} "
+        "| minimap2 -t {threads} -ay {params.auto[flags]} --junc-bed {input.junc_bed} {params.auto[index]} /dev/stdin 2> {log} "
         " "
         # fix the BAM header to accurately reflect the entire history of processing via PG records.
         "| python {repo_dir}/scripts/splice_bam_header.py "
@@ -378,7 +379,7 @@ rule create_junc_bed:
     input:
         species_reference_annotation
     output:
-        species_reference_junc_bed
+        "species_data/{species}/{ref_name}/annotation.bed"
     shell:
         """
         paftools.js gff2bed {input} > {output}
