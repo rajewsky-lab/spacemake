@@ -114,6 +114,9 @@ def get_map_inputs(wc, mapper="STAR"):
     #     d['index_loaded'] = load_index_if_needed(expand(star_index_loaded, species=mr.species, ref_name=mr.ref_name))
     if hasattr(mr, "ann_final"):
         d['annotation'] = mr.ann_final
+        # For minimap2, also add junction BED file when annotation exists
+        if mapper == "mm2" and mr.ann_final:
+            d['junc_bed'] = f"species_data/{mr.species}/{mr.ref_name}/annotation.bed"
 
     return d
 
@@ -133,11 +136,18 @@ def get_map_params(wc, output, mapper="STAR"):
                 f"samtools view --no-PG --threads=4 -T {ref} -C /dev/stdin -o {mr.out_path}"
             )
 
+    # For minimap2, add junc-bed flag when annotation exists
+    junc_bed_flag = ""
+    if mapper == "mm2" and hasattr(mr, "ann_final") and mr.ann_final:
+        junc_bed_path = f"species_data/{mr.species}/{mr.ref_name}/annotation.bed"
+        junc_bed_flag = f"--junc-bed {junc_bed_path}"
+
     return {
         'annotation_cmd' : annotation_cmd,
         'annotation' : mr.ann_final,
         'index' : mr.map_index_param,
         'flags' : mr.map_flags,
+        'junc_bed_flag' : junc_bed_flag,
     }
 
 ##############################################################################
@@ -204,7 +214,6 @@ rule map_reads_bowtie2:
 rule map_reads_mm2:
     input:
         unpack(lambda wc: get_map_inputs(wc, mapper='mm2')),
-        junc_bed=lambda wc: f"species_data/{wc.species}/{wc.ref_name}/annotation.bed"
     output:
         bam=mm2_mapped_bam,
         ubam=mm2_unmapped_bam,
@@ -217,7 +226,7 @@ rule map_reads_mm2:
     shell:
         "samtools fastq -f 4 -T '*' {input.bam} "
         " "
-        "| minimap2 -t {threads} -ay {params.auto[flags]} --junc-bed {input.junc_bed} {params.auto[index]} /dev/stdin 2> {log} "
+        "| minimap2 -t {threads} -ay {params.auto[flags]} {params.auto[junc_bed_flag]} {params.auto[index]} /dev/stdin 2> {log} "
         " "
         "| python {repo_dir}/scripts/splice_bam_header.py "
         "  --in-ubam {input.bam}"
