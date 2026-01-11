@@ -374,6 +374,16 @@ rule create_minimap2_index:
         minimap2 -d {output} {input}
         """
 
+rule create_junc_bed:
+    input:
+        species_reference_annotation
+    output:
+        species_reference_junc_bed
+    shell:
+        """
+        paftools.js gff2bed {input} > {output}
+        """
+
 rule create_star_index:
     input:
         sequence=species_reference_sequence,
