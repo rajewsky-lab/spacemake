@@ -115,9 +115,10 @@ def get_map_inputs(wc, mapper="STAR"):
     #     d['index_loaded'] = load_index_if_needed(expand(star_index_loaded, species=mr.species, ref_name=mr.ref_name))
     if hasattr(mr, "ann_final"):
         d['annotation'] = mr.ann_final
-        # For minimap2, also add junction BED file when annotation exists
-        if mapper == "mm2" and mr.ann_final:
-            d['junc_bed'] = f"species_data/{mr.species}/{mr.ref_name}/annotation.bed"
+
+    # For minimap2, also add junction BED file when annotation exists
+    if mapper == "mm2" and hasattr(mr, "ann_path") and mr.ann_path:
+        d['junc_bed'] = species_reference_junc_bed.format(species=mr.species, ref_name=mr.ref_name)
 
     return d
 
@@ -139,8 +140,8 @@ def get_map_params(wc, output, mapper="STAR"):
 
     # For minimap2, add junc-bed flag when annotation exists
     junc_bed_flag = ""
-    if mapper == "mm2" and hasattr(mr, "ann_final") and mr.ann_final:
-        junc_bed_path = f"species_data/{mr.species}/{mr.ref_name}/annotation.bed"
+    if mapper == "mm2" and hasattr(mr, "ann_path") and mr.ann_path:
+        junc_bed_path = species_reference_junc_bed.format(species=mr.species, ref_name=mr.ref_name)
         junc_bed_flag = f"--junc-bed {junc_bed_path}"
 
     return {
