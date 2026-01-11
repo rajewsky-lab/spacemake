@@ -389,7 +389,7 @@ rule create_junc_bed:
     input:
         species_reference_annotation
     output:
-        "species_data/{species}/{ref_name}/annotation.bed"
+        species_reference_junc_bed
     shell:
         """
         paftools.js gff2bed {input} > {output}
