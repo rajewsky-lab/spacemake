@@ -77,6 +77,7 @@ mm2_index_log = mm2_index_param + ".log"
 
 species_reference_sequence = "species_data/{species}/{ref_name}/sequence.fa"
 species_reference_annotation = "species_data/{species}/{ref_name}/annotation.gtf"
+species_reference_junc_bed = "species_data/{species}/{ref_name}/annotation.bed"
 
 species_reference_annotation_compiled = (
     "species_data/{species}/{ref_name}/compiled_annotation"
