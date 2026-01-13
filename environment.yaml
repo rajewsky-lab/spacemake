@@ -20,7 +20,7 @@ dependencies:
     - pigz
     - pip:
         - cutadapt
-        - git+https://github.com/marvin-jens/scbamtools.git@cb_correct       
+        - scbamtools>=0.8.5       
         - setproctitle
         - isal
         - pytest
