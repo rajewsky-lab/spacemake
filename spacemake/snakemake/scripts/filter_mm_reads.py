@@ -29,7 +29,7 @@ def select_alignment(alignments):
     exonic_ix = np.where(alignments_are_exonic == True)[0]
 
     num_exonic = exonic_ix.shape[0]
-
+    # print(alignments_are_exonic, exonic_ix, num_exonic)
     if num_exonic == 1:
         # if only one exonic reads from the group
         # return the exonic indices
@@ -79,6 +79,7 @@ def filter_mm(input, _out, bcs=set(), **kw):
         # header line. Just pass through
         if aln.startswith("@"):
             output.write(aln)
+            continue
 
         # counting and rate info
         counter["N_alignments"] += 1
