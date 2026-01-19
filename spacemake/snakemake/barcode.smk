@@ -89,7 +89,9 @@ rule cb_correct:
             )
         else:
             shell(
-                "python -m scbamtools.bin.cb_correct sam "
+                "python -m scbamtools.bin.cb_correct "
+                "  --sample {wildcards.sample_id} "
+                "  sam "
                 "  --input {input.ubam} "
                 "  --index {input.bci} "
                 "  --bam-out {output.match} "
