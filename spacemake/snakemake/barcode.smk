@@ -74,7 +74,7 @@ rule cb_correct:
         bci=smv.capture_area_bci
     output:
         match=smv.ubam_corrected,
-        # nomatch=smv.ubam_nomatch
+        nomatch=smv.ubam_nomatch,
         stats=smv.ubam_correction_stats
     params:
         rel_ubam=lambda wildcards, input: os.path.basename(input.ubam)
@@ -95,7 +95,7 @@ rule cb_correct:
                 "  --bam-out {output.match} "
                 "  --stats-out {output.stats}"
                 "  --threads {threads} "
-                "  --nomatch-out discard " #{output.nomatch}"
+                "  --nomatch-out {output.nomatch} " #{output.nomatch}"
             )
 
 rule cb_index_corrected_sample:
