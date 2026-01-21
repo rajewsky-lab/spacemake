@@ -85,7 +85,7 @@ rule cb_correct:
             # no spatial data -> just link input to output
             shell(
                 "ln -s {params.rel_ubam} {output.match} ; "
-                "touch {output.stats} "
+                "touch {output.stats} ; touch {output.nomatch} "
             )
         else:
             shell(
