@@ -249,9 +249,9 @@ def get_all_dges(wildcards):
                         )["dge"],
                     )
 
-    print(f"get_all_dges():")
-    for dge in dges:
-        print(f" -> '{dge}'")
+    # print(f"get_all_dges():")
+    # for dge in dges:
+    #     print(f" -> '{dge}'")
 
     return dges
 
