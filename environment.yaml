@@ -19,7 +19,8 @@ dependencies:
     - openjdk==11.0.15
     - pigz
     - pip:
-        - cutadapt       
+        - cutadapt
+        - scbamtools>=0.8.8       
         - setproctitle
         - isal
         - pytest

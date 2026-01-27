@@ -296,7 +296,7 @@ def test_fill_project_df(with_species):
             f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
-                f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt"
+                f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt.gz"
                 " --puck slide_seq --run-mode slide_seq"
             ),
         ),
@@ -308,7 +308,7 @@ def test_fill_project_df(with_species):
             f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
-                f" --puck-barcode-file {spacemake_dir}/test_data/tile_2.txt"
+                f" --puck-barcode-file {spacemake_dir}/test_data/tile_2.txt.gz"
                 " --puck slide_seq --run-mode slide_seq"
             ),
         ),
@@ -320,7 +320,7 @@ def test_fill_project_df(with_species):
             f"{spacemake_dir}/test_data/simple.reads2.fastq.gz",
             (
                 "--map-strategy=rRNA:bowtie2->miRNA:bowtie2->genome:STAR:final"
-                f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt {spacemake_dir}/test_data/tile_2.txt"
+                f" --puck-barcode-file {spacemake_dir}/test_data/tile_1.txt.gz {spacemake_dir}/test_data/tile_2.txt.gz"
                 " --puck slide_seq --run-mode slide_seq"
             ),
         ),
@@ -399,10 +399,10 @@ def test_tiles_nomatch(with_species, dry=False):
         "--run-mode=openst",
         "--barcode-flavor=openst",
         "--puck-barcode-file",
-        f"{spacemake_dir}/test_data/tile_1.txt",
-        f"{spacemake_dir}/test_data/tile_2.txt",
-        f"{spacemake_dir}/test_data/tile_3.txt",
-        f"{spacemake_dir}/test_data/tile_4.txt",
+        f"{spacemake_dir}/test_data/tile_1.txt.gz",
+        f"{spacemake_dir}/test_data/tile_2.txt.gz",
+        f"{spacemake_dir}/test_data/tile_3.txt.gz",
+        f"{spacemake_dir}/test_data/tile_4.txt.gz",
         "--map-strategy=rRNA:bowtie2->genome:STAR:final",
         "--species=test_hsa",
     )
@@ -438,12 +438,12 @@ def test_puck_collection(with_species, dry=False):
         "--run-mode=openst",
         "--barcode-flavor=openst",
         "--puck-barcode-file",
-        f"{spacemake_dir}/test_data/tile_1.txt",
-        f"{spacemake_dir}/test_data/tile_2.txt",
-        f"{spacemake_dir}/test_data/tile_3.txt",
-        f"{spacemake_dir}/test_data/tile_4.txt",
-        f"{spacemake_dir}/test_data/tile_5.txt",
-        f"{spacemake_dir}/test_data/tile_6.txt",
+        f"{spacemake_dir}/test_data/tile_1.txt.gz",
+        f"{spacemake_dir}/test_data/tile_2.txt.gz",
+        f"{spacemake_dir}/test_data/tile_3.txt.gz",
+        f"{spacemake_dir}/test_data/tile_4.txt.gz",
+        f"{spacemake_dir}/test_data/tile_5.txt.gz",
+        f"{spacemake_dir}/test_data/tile_6.txt.gz",
         "--map-strategy=rRNA:bowtie2->genome:STAR:final",
         "--species=test_hsa",
     )
@@ -476,7 +476,7 @@ def test_puck_single_tile(with_species, dry=False):
         "--run-mode=openst",
         "--barcode-flavor=openst",
         "--puck-barcode-file",
-        f"{spacemake_dir}/test_data/tile_5.txt",
+        f"{spacemake_dir}/test_data/tile_5.txt.gz",
         "--map-strategy=rRNA:bowtie2->genome:STAR:final",
         "--species=test_hsa",
     )

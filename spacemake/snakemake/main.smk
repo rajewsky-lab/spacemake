@@ -17,7 +17,6 @@ import scanpy as sc
 from spacemake.preprocess.dge import dge_to_sparse_adata, attach_barcode_file,\
     parse_barcode_file, load_external_dge, attach_puck
 from spacemake.spatial.util import create_meshed_adata
-import spacemake.spatial.puck_collection as puck_collection
 from spacemake.project_df import ProjectDF
 from spacemake.config import ConfigFile
 from spacemake.errors import SpacemakeError
@@ -92,6 +91,7 @@ def get_module_outputs():
 # INCLUDE OTHER MODULES #
 #########################
 include: 'downsample.smk'
+include: 'barcode.smk'
 include: 'mapping.smk'
 include: 'dropseq.smk'
 include: 'longread.smk'
@@ -141,21 +141,21 @@ rule run_analysis:
                     filter_merged=True) 
                 if config['with_fastqc'] else []
         ),
+        # get_output_files(automated_report,
+        #     data_root_type = 'complete_data', downsampling_percentage='',
+        #     puck_barcode_file_matching_type='spatial_matching'),
         get_output_files(automated_report,
             data_root_type = 'complete_data', downsampling_percentage='',
+            # check_puck_collection=True,
+            mode='auto',
             puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(automated_report,
-            data_root_type = 'complete_data', downsampling_percentage='',
-            check_puck_collection=True,
-            # mode='auto',
-            puck_barcode_file_matching_type='spatial_matching'),
+        # get_output_files(qc_sheet,
+        #     data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
+        #     puck_barcode_file_matching_type='spatial_matching'),
         get_output_files(qc_sheet,
             data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
-            puck_barcode_file_matching_type='spatial_matching'),
-        get_output_files(qc_sheet,
-            data_root_type = 'complete_data', downsampling_percentage='', run_on_external=False,
-            check_puck_collection=True,
-            # mode='auto',
+            # check_puck_collection=True,
+            mode='auto',
             puck_barcode_file_matching_type='spatial_matching'),
         # finally, everything registered via register_module_output_hook()
         get_module_outputs(),
@@ -434,10 +434,15 @@ rule create_spatial_barcode_file:
         " --chunksize 10000000"
 
 rule create_spatial_barcode_whitelist:
-    input: parsed_spatial_barcodes
-    output: temp(spatial_barcodes)
+    # modified to just always read in the entire barcode universe per tile (to also capture corrected BCs)
+    # input: parsed_spatial_barcodes
+    input:
+        unpack(get_puck_file)
+    output:
+        temp(spatial_barcodes)
     run:
-        bc = pd.read_csv(input[0])
+        # bc = pd.read_csv(input[0])
+        bc = pd.read_csv(input.barcode_file, sep='\t')
         bc = bc[['cell_bc']]
         # bc = bc.append({'cell_bc': 'NNNNNNNNNNNN'}, ignore_index=True)
 
@@ -476,8 +481,8 @@ rule create_dge:
         I= /dev/stdin \
         O= {output.dge} \
         SUMMARY= {output.dge_summary} \
-        CELL_BC_FILE={input.top_barcodes} \
         CELL_BARCODE_TAG={params.cell_barcode_tag} \
+        CELL_BC_FILE={input.top_barcodes} \
         MOLECULAR_BARCODE_TAG={params.umi_tag} \
         TMP_DIR={global_tmp} \
         {params.dge_extra_params}
@@ -490,6 +495,11 @@ rule create_h5ad_dge:
         puck_barcode_files_summary
     # output here will either be n_beads=number, n_beads=spatial
     output: dge_out_h5ad, dge_out_h5ad_obs
+    # shell:
+    #     "python {spacemake_dir}/bin/dge_to_h5ad.py "
+    #     " --dge {input.dge} "
+    #     " --dge-summary {input.dge_summary} "
+    #     " {params.barcode_args} "
     run:
         if wildcards.is_external == '.external':
             adata = load_external_dge(input['dge'])
@@ -606,6 +616,7 @@ rule puck_collection_stitching_meshed:
             project_id=wildcards.project_id, sample_id=wildcards.sample_id
         ),
     run:
+        import spacemake.spatial.puck_collection as puck_collection
         _pc = puck_collection.merge_pucks_to_collection(
             # takes all input except the puck_barcode_files
             input[:-1],

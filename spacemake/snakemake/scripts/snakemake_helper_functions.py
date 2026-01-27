@@ -249,6 +249,10 @@ def get_all_dges(wildcards):
                         )["dge"],
                     )
 
+    # print(f"get_all_dges():")
+    # for dge in dges:
+    #     print(f" -> '{dge}'")
+
     return dges
 
 
@@ -300,6 +304,9 @@ def get_all_dges_collection(wildcards):
                             downsampling_percentage="",
                         )["dge"]
                     )
+    # print(f"get_all_dges_collection():")
+    # for dge in dges:
+    #     print(f" -> '{dge}'")
 
     return dges
 
@@ -677,7 +684,8 @@ def get_ribo_depletion_log(wildcards):
 
 def get_top_barcodes(wildcards):
     if wildcards.n_beads == "spatial":
-        return {"top_barcodes": spatial_barcodes}  # experimental
+        return {"top_barcodes": spatial_barcodes_corrected}  # experimental
+        # return {"top_barcodes": spatial_barcodes}  # experimental
     if wildcards.dge_cleaned == "":
         return {"top_barcodes": top_barcodes}
     else:
@@ -928,9 +936,11 @@ def get_all_barcode_readcounts(wildcards, prealigned=False):
         "polyA_adapter_trimmed": polyA_adapter_trimmed_wildcard,
     }
 
+    # This code seems questionable. What does is_merged have to do w prealigned vs post-aligned?
     if prealigned or is_merged:
         return {"bc_readcounts": expand(barcode_readcounts, **extra_args)}
     else:
+        # why return prealigned if 'prealigned == False' ??
         return {"bc_readcounts": expand(barcode_readcounts_prealigned, **extra_args)}
 
 
@@ -1026,11 +1036,24 @@ def get_puck_file(wildcards):
         sample_id=wildcards.sample_id,
         puck_barcode_file_id=wildcards.puck_barcode_file_id,
     )
-
     if puck_barcode_file is None:
         return []
     else:
         return {"barcode_file": puck_barcode_file}
+
+
+def maybe_get_puck_file(wildcards):
+    if wildcards.puck_barcode_file_id == "no_spatial_data":
+        top = get_top_barcodes(wildcards)
+        bcf = {"barcode_file": top["top_barcodes"]}
+    elif wildcards.n_beads != "spatial":
+        top = get_top_barcodes(wildcards)
+        bcf = {"barcode_file": top["top_barcodes"]}
+    else:
+        # print("getting puck_file")
+        bcf = get_puck_file(wildcards)
+
+    return bcf
 
 
 def get_all_puck_files(wildcards):
