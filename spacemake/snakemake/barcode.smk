@@ -151,7 +151,7 @@ rule cb_correct:
         bci=smv.capture_area_bci
     output:
         match=smv.ubam_corrected,
-        # nomatch=smv.ubam_nomatch
+        nomatch=smv.ubam_nomatch,
         stats=smv.ubam_correction_stats
     params:
         rel_ubam=lambda wildcards, input: os.path.basename(input.ubam)
@@ -165,19 +165,20 @@ rule cb_correct:
             print(f"about to link {params.rel_ubam} to {output.match} because we do not have reference barcodes")
             # no spatial data -> just link input to output
             shell(
-                "python -m scbamtools.bin.cb_correct sam "
+                "ln -s {params.rel_ubam} {output.match} ; "
+                "touch {output.stats} ; touch {output.nomatch} "
+            )
+        else:
+            shell(
+                "python -m scbamtools.bin.cb_correct "
+                "  --sample {wildcards.sample_id} "
+                "  sam "
                 "  --input {input.ubam} "
                 "  --index {input.bci} "
                 "  --bam-out {output.match} "
                 "  --stats-out {output.stats}"
                 "  --threads {threads} "
-                "  --nomatch-out discard " #{output.nomatch}"
-            )
-        else:
-            shell(
-                "echo ln -s {params.rel_ubam} {output.match}; \n"
-                "ln -s {params.rel_ubam} {output.match}; "
-                "touch {output.stats}"
+                "  --nomatch-out {output.nomatch} " #{output.nomatch}"
             )
 
 

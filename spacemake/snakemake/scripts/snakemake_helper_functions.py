@@ -249,9 +249,9 @@ def get_all_dges(wildcards):
                         )["dge"],
                     )
 
-    print(f"get_all_dges():")
-    for dge in dges:
-        print(f" -> '{dge}'")
+    # print(f"get_all_dges():")
+    # for dge in dges:
+    #     print(f" -> '{dge}'")
 
     return dges
 
@@ -304,9 +304,9 @@ def get_all_dges_collection(wildcards):
                             downsampling_percentage="",
                         )["dge"]
                     )
-    print(f"get_all_dges_collection():")
-    for dge in dges:
-        print(f" -> '{dge}'")
+    # print(f"get_all_dges_collection():")
+    # for dge in dges:
+    #     print(f" -> '{dge}'")
 
     return dges
 
