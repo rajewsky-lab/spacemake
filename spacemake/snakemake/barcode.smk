@@ -100,6 +100,44 @@ rule cb_correct:
                 "  --nomatch-out {output.nomatch} " #{output.nomatch}"
             )
 
+rule sample_ubam:
+    input:
+        ubam=smv.ubam
+    
+    output:
+        ubam_sample=smv.ubam_sample
+    shell:
+        # take only the first 1M records (including header for now)
+        "samtools view -h {input.ubam} | head -n 1000000 | samtools view -hC - > {output.ubam_sample}"
+
+
+rule cb_correct_sample:
+    input:
+        ubam=smv.ubam_sample, 
+        bci=smv.capture_area_bci
+    output:
+        stats=smv.ubam_correction_sample_stats 
+    threads: 32
+    run:
+        if os.path.getsize(input.bci) == 0:
+            # no spatial data 
+            shell(
+                "touch {output.stats}"
+            )
+        else:
+            shell(
+                "python -m scbamtools.bin.cb_correct "
+                "  --sample {wildcards.sample_id} "
+                "  sam "
+                "  --input {input.ubam} "
+                "  --index {input.bci} "
+                "  --bam-out /dev/null "
+                "  --stats-out {output.stats}"
+                "  --threads {threads} "
+                "  --nomatch-out discard " #{output.nomatch}"
+            )
+
+
 rule cb_index_corrected_sample:
     input: barcode_readcounts
     output: smv.corrected_sample_bci
