@@ -790,6 +790,13 @@ def setup_run_parser(parent_parser_subparsers):
     )
     downsampling_parser.set_defaults(downsample=True, func=spacemake_run)
 
+    ecg_parser = parser_run_subparsers.add_parser(
+        "estimate-correction-gains",
+        help="perform barcode correction on the first 1M reads to estimate the correction gains for a list of projects/samples",
+        parents=[get_project_sample_parser(allow_multiple=True), get_run_parser()],
+    )
+    ecg_parser.set_defaults(func=spacemake_estimate_correction_gains)
+
     # parser_novosparc = novosparc_spacemake_parser(parser_run_subparsers)
     # parser_novosparc.set_defaults(novosparc_reconstruct=True,
     #    func=lambda args: spacemake_run(pdf, args))
@@ -1020,9 +1027,8 @@ def collect_smk_options(args):
     return smk_options
 
 
-@message_aggregation(logger_name)
-def spacemake_run(args):
-    """spacemake_run.
+def prepare_run(args):
+    """prepare_run.
 
     :param args:
     """
@@ -1076,8 +1082,8 @@ def spacemake_run(args):
         return
 
     pdf = get_global_ProjectDF()
-    samples = []
-    projects = []
+    samples = args.get("sample_id_list", [])
+    projects = args.get("project_id_list", [])
     targets = ["run_analysis"]
     with_fastqc = args.get("with_fastqc", False)
 
@@ -1086,8 +1092,6 @@ def spacemake_run(args):
 
     if downsample:
         targets = ["downsample"]
-        samples = args.get("sample_id_list", [])
-        projects = args.get("project_id_list", [])
 
     if novosparc_reconstruct:
         targets = ["novosparc"]
@@ -1106,6 +1110,74 @@ def spacemake_run(args):
         "log_debug": args["debug"],
     }
 
+    return config_variables, targets, pdf
+
+
+@message_aggregation(logger_name)
+def spacemake_estimate_correction_gains(args):
+    """spacemake_estimate_correction_gains.
+
+    :param args:
+    """
+    from spacemake.errors import SpacemakeError
+    import snakemake
+
+    config_variables, targets, pdf = prepare_run(args)
+    # join config_variables and novosparc_variables
+    # to flatten the diunpack(get_final_bam)e
+    snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
+
+    smk_options = collect_smk_options(args)
+
+    # analysis_finished = snakemake.snakemake(
+    #     snakefile,
+    #     targets=["estimate_correction_gains"],
+    #     config=config_variables,
+    #     **smk_options,
+    # )
+    # if analysis_finished is False:
+    #     raise SpacemakeError("an error occurred while snakemake() ran")
+
+    # collect the estimated correction gains from the generated files
+    from spacemake.snakemake.variables import ubam_correction_sample_stats
+
+    import pandas as pd
+    import numpy as np
+    # from scbamtools.pl import edit_stats
+    from scbamtools.tk import summarize_edit_stats
+    ecg = []
+    for sample in pdf:
+        # print(sample, sample.Index)
+        fname = ubam_correction_sample_stats.format(project_id=sample.Index[0], sample_id=sample.Index[1])
+        # print("checking", fname)
+        if os.path.isfile(fname):
+            df = pd.read_csv(fname, sep='\t')
+            op, (S_freq, I_freq, D_freq) = summarize_edit_stats(df)
+
+            # print(df)
+            # op, (S_freq, I_freq, D_freq) = summarize_edit_stats(df)
+            f = df.groupby("op")["n"].agg("sum")
+            F = f / f.sum()
+            all_edits = ["S", "I", "_"]
+            found_edits = [e for e in all_edits if e in F.index] # intersection while preserving order
+            F.loc["combined"] = F.loc[found_edits].sum()
+            boost = 100 * F / F.loc["="]
+            logger.info(f"estimated correction gains for {sample.Index}: {boost.loc['combined']:.2f} %")
+            ecg.append(np.round(boost.loc["combined"], 2))
+
+    pd.DataFrame({'estimated_correction_gain': ecg}, index=pdf.df.index).to_csv(
+        "estimated_correction_gains.csv")
+
+@message_aggregation(logger_name)
+def spacemake_run(args):
+    """spacemake_run.
+
+    :param args:
+    """
+    from spacemake.errors import SpacemakeError
+    import snakemake
+
+    config_variables, targets, pdf = prepare_run(args)
     # join config_variables and novosparc_variables
     # to flatten the diunpack(get_final_bam)e
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
