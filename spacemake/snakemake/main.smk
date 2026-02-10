@@ -125,17 +125,6 @@ wildcard_constraints:
     puck_barcode_file_id = r'(?!puck_collection)[^.]+',
     puck_barcode_file_id_qc = r'[^.]+'
 
-##################################
-# Estimate correction gains rule #
-##################################
-
-rule estimate_correction_gains:
-    input:
-        get_output_files(ubam_correction_sample_stats,
-            data_root_type = 'complete_data',
-            downsampling_percentage = '',
-            run_on_external=False)
-
 
 #############
 # Main rule #

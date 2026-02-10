@@ -1129,44 +1129,21 @@ def spacemake_estimate_correction_gains(args):
 
     smk_options = collect_smk_options(args)
 
-    # analysis_finished = snakemake.snakemake(
-    #     snakefile,
-    #     targets=["estimate_correction_gains"],
-    #     config=config_variables,
-    #     **smk_options,
-    # )
-    # if analysis_finished is False:
-    #     raise SpacemakeError("an error occurred while snakemake() ran")
+    # print(smk_options)
+    # print(config_variables)
+    analysis_finished = snakemake.snakemake(
+        snakefile,
+        targets=["estimate_correction_gains"],
+        config=config_variables,
+        **smk_options,
+    )
+    if analysis_finished is False:
+        raise SpacemakeError("an error occurred while snakemake() ran")
+    else:
+        logger.info(
+            "estimation of correction gains finished successfully. Check 'estimated_correction_gains.csv' for results."
+        )
 
-    # collect the estimated correction gains from the generated files
-    from spacemake.snakemake.variables import ubam_correction_sample_stats
-
-    import pandas as pd
-    import numpy as np
-    # from scbamtools.pl import edit_stats
-    from scbamtools.tk import summarize_edit_stats
-    ecg = []
-    for sample in pdf:
-        # print(sample, sample.Index)
-        fname = ubam_correction_sample_stats.format(project_id=sample.Index[0], sample_id=sample.Index[1])
-        # print("checking", fname)
-        if os.path.isfile(fname):
-            df = pd.read_csv(fname, sep='\t')
-            op, (S_freq, I_freq, D_freq) = summarize_edit_stats(df)
-
-            # print(df)
-            # op, (S_freq, I_freq, D_freq) = summarize_edit_stats(df)
-            f = df.groupby("op")["n"].agg("sum")
-            F = f / f.sum()
-            all_edits = ["S", "I", "_"]
-            found_edits = [e for e in all_edits if e in F.index] # intersection while preserving order
-            F.loc["combined"] = F.loc[found_edits].sum()
-            boost = 100 * F / F.loc["="]
-            logger.info(f"estimated correction gains for {sample.Index}: {boost.loc['combined']:.2f} %")
-            ecg.append(np.round(boost.loc["combined"], 2))
-
-    pd.DataFrame({'estimated_correction_gain': ecg}, index=pdf.df.index).to_csv(
-        "estimated_correction_gains.csv")
 
 @message_aggregation(logger_name)
 def spacemake_run(args):
