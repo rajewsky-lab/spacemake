@@ -100,33 +100,6 @@ rule cb_correct:
                 "  --nomatch-out {output.nomatch} " #{output.nomatch}"
             )
 
-rule cb_correct_sample:
-    input:
-        ubam=smv.ubam, 
-        bci=smv.capture_area_bci
-    output:
-        stats=smv.ubam_correction_sample_stats 
-    threads: 32
-    run:
-        if os.path.getsize(input.bci) == 0:
-            # no spatial data 
-            shell(
-                "touch {output.stats}"
-            )
-        else:
-            shell(
-                "samtools view -h {input.ubam} | head -n 1000000 | samtools view -hC - | "
-                "python -m scbamtools.bin.cb_correct "
-                "  --sample {wildcards.sample_id} "
-                "  sam "
-                "  --input /dev/stdin "
-                "  --index {input.bci} "
-                "  --bam-out /dev/null "
-                "  --stats-out {output.stats}"
-                "  --threads {threads} "
-                "  --nomatch-out discard " #{output.nomatch}"
-            )
-
 
 rule cb_index_corrected_sample:
     input: barcode_readcounts
@@ -159,12 +132,46 @@ rule make_whitelist_for_dge:
 # Estimate correction gains rule #
 ##################################
 
+rule cb_correct_sample:
+    input:
+        ubam=smv.ubam, 
+        bci=smv.capture_area_bci
+    output:
+        stats=smv.ubam_correction_sample_stats 
+    params:
+        sample_size=int(config.get('ecg_sample_size', 10) * 1e6)
+    threads: 32
+    run:
+        if os.path.getsize(input.bci) == 0:
+            # no spatial data 
+            shell(
+                "touch {output.stats}"
+            )
+        else:
+            shell(
+                "samtools view -h {input.ubam} | head -n {params.sample_size} | samtools view -hC - | "
+                "python -m scbamtools.bin.cb_correct "
+                "  --sample {wildcards.sample_id} "
+                "  sam "
+                "  --input /dev/stdin "
+                "  --index {input.bci} "
+                "  --bam-out /dev/null "
+                "  --stats-out {output.stats}"
+                "  --threads {threads} "
+                "  --nomatch-out discard " #{output.nomatch}"
+            )
+
+
 rule estimate_correction_gains:
     input:
         get_output_files(ubam_correction_sample_stats,
             data_root_type = 'complete_data',
             downsampling_percentage = '',
-            run_on_external=False)
+            run_on_external=False,
+            projects=config.get("projects", []),
+            samples=config.get("samples", []),
+            filter_merged=True
+        )
     output:
         ecg="estimated_correction_gains.csv"
     run:
@@ -188,6 +195,7 @@ rule estimate_correction_gains:
         for fname in input:
             data['project_id'].append(fname.split("/")[p_ix])
             data['sample_id'].append(fname.split("/")[s_ix])
+            
             
             df = pd.read_csv(fname, sep='\t')
             op, (S_freq, I_freq, D_freq) = summarize_edit_stats(df)

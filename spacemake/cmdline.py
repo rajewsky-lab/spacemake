@@ -795,6 +795,9 @@ def setup_run_parser(parent_parser_subparsers):
         help="perform barcode correction on the first 1M reads to estimate the correction gains for a list of projects/samples",
         parents=[get_project_sample_parser(allow_multiple=True), get_run_parser()],
     )
+    ecg_parser.add_argument(
+        "--sample-size", type=float, default=10, help="number of million reads to use for estimating the correction gains"
+    )
     ecg_parser.set_defaults(func=spacemake_estimate_correction_gains)
 
     # parser_novosparc = novosparc_spacemake_parser(parser_run_subparsers)
@@ -1126,7 +1129,7 @@ def spacemake_estimate_correction_gains(args):
     # join config_variables and novosparc_variables
     # to flatten the diunpack(get_final_bam)e
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
-
+    config_variables['ecg_sample_size']= args.get("sample_size", 10)
     smk_options = collect_smk_options(args)
 
     # print(smk_options)
