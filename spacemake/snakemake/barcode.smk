@@ -64,7 +64,9 @@ rule cb_index_relevant_tiles:
             shell(
                 "cat {params.puck_barcode_files} | "
                 " python -m isal.igzip -dc | "
-                " python -m scbamtools.bin.cb_correct index "
+                " python -m scbamtools.bin.cb_correct "
+                "  --sample {wildcards.sample_id} "
+                "  index "
                 "  --index {output.bci} "
             )
 
