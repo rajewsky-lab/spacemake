@@ -114,7 +114,7 @@ def clip(left=0, right=0):
     return c
 
 
-def nextseq_trim(cutoff=30):
+def nextseq_trim(cutoff=25):
     from cutadapt.qualtrim import nextseq_trim_index
     from dnaio import SequenceRecord
 

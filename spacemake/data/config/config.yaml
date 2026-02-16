@@ -135,7 +135,7 @@ barcode_flavors:
 adapter_flavors:
     default:
         - nextseq_quality:
-            cutoff: 32
+            cutoff: 25
         - polyA:
         - adapter:
             name: SMART
