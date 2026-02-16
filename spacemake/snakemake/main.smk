@@ -148,6 +148,7 @@ rule run_analysis:
         get_output_files(automated_report,
             data_root_type = 'complete_data', downsampling_percentage='',
             # check_puck_collection=True,
+            require_meshed=True,
             mode='auto',
             puck_barcode_file_matching_type='spatial_matching'),
         # get_output_files(qc_sheet,
