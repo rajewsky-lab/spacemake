@@ -151,7 +151,7 @@ rule cb_correct_sample:
             )
         else:
             shell(
-                "samtools view -@2 -h {input.ubam} | head -n {params.sample_size} | samtools view -hub -@2 - | "
+                "samtools view -@6 -h {input.ubam} | head -n {params.sample_size} | "
                 "python -m scbamtools.bin.cb_correct "
                 "  --sample {wildcards.sample_id} "
                 "  sam "
