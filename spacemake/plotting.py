@@ -768,6 +768,16 @@ def _scales_for_spatial_plot(adata):
     }
 
 
+def auto_threshold(x, log=True):
+    from skimage.filters import threshold_otsu
+
+    if log:
+        x = np.log10(x + 1)
+        return 10 ** threshold_otsu(x) - 1
+    else:
+        return threshold_otsu(x)
+
+
 @ensure_anndata
 def spatial(
     adata,
@@ -776,16 +786,21 @@ def spatial(
     cmap="magma",
     figsize=(5, 5),
     return_fig=True,
+    clip_outliers=True,
+    remove_background=False,
+    # auto_log=True,
     **kwargs,
 ):
     if spot_size <= 0:
         raise ValueError("spot_size must be > 0")
 
-    if (
-        (color not in adata.obs)
-        and (color not in adata.var)
-        and (color not in adata.var_names)
-    ):
+    if color in adata.obs:
+        data = adata.obs[color].values
+    elif color in adata.var:
+        data = adata.var[color].values
+    elif color in adata.var_names:
+        data = np.array(adata[:, color].X).ravel()
+    else:
         logger.warning(f"No '{color}' found in adata")
         return None
 
@@ -794,6 +809,16 @@ def spatial(
         return fig, axes
 
     scales = _scales_for_spatial_plot(adata)
+
+    if remove_background:
+        if color in adata.obs:
+            thresh = auto_threshold(data)
+            adata = adata[adata.obs[color] > thresh]
+        else:
+            logger.warning("automatic background removal only supported on .obs keyes")
+
+    if clip_outliers and "vmax" not in kwargs:
+        kwargs["vmax"] = np.percentile(data, 95)
 
     sc.pl.spatial(
         adata,
