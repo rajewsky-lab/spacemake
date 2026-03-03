@@ -125,6 +125,7 @@ wildcard_constraints:
     puck_barcode_file_id = r'(?!puck_collection)[^.]+',
     puck_barcode_file_id_qc = r'[^.]+'
 
+
 #############
 # Main rule #
 #############
@@ -147,6 +148,7 @@ rule run_analysis:
         get_output_files(automated_report,
             data_root_type = 'complete_data', downsampling_percentage='',
             # check_puck_collection=True,
+            require_meshed=True,
             mode='auto',
             puck_barcode_file_matching_type='spatial_matching'),
         # get_output_files(qc_sheet,
@@ -850,7 +852,11 @@ rule count_barcode_matches:
             # we use > so whenever default: 0 we exclude empty pucks
             above_threshold_mask = out_df.matching_ratio > params['run_mode_variables']['spatial_barcode_min_matches']
             out_df['pass_threshold'] = 0
-            out_df['px_by_um'] = (out_df['x_pos_max_px'] - out_df['x_pos_min_px'])  / params['puck_variables']['width_um']
+            
+            # only use this if we have no specification in the config.yaml puck section
+            px_by_um_est = (out_df['x_pos_max_px'] - out_df['x_pos_min_px'])  / params['puck_variables']['width_um']
+            out_df['px_by_um'] = params['puck_variables'].get("px_by_um", px_by_um_est)
+            
             out_df['pass_threshold'][above_threshold_mask] = 1
 
         out_df[['puck_barcode_file_id', 'puck_barcode_file', 'parsed_barcode_file', 'n_barcodes', 'n_matching', 'matching_ratio', 'pass_threshold']].to_csv(output[0], index=False)

@@ -445,6 +445,7 @@ class Puck(ConfigMainVariable):
         "barcodes": str,
         "spot_diameter_um": float,
         "width_um": int,
+        "px_by_um": float,
         "coordinate_system": str,
     }
 

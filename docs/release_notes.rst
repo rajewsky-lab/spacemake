@@ -6,7 +6,8 @@ Version 0.9
 
 0.9.3
 ~~~~~
-* Adds spatial barcode correction with edit distance 1, boosting counts by ~5-15% for many samples.
+* Adds spatial barcode correction with edit distance 1, boosting counts by ~5-15% for many samples. **see the documentation for details and caveats**.
+
 
 0.9.2
 ~~~~~
