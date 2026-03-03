@@ -53,7 +53,7 @@ Access to these operations is provided through the ``adapter-flavors`` section o
    adapter_flavors:
       example:
          - nextseq_quality:
-               cutoff: 32
+               cutoff: 25
          - polyA:
          - adapter:
                name: SMART
@@ -77,7 +77,14 @@ nextseq_quality
 
 Trim low-quality bases from 3' end of read. Functionality is provided by `cutadapt <https://cutadapt.readthedocs.io/en/stable/guide.html#quality-trimming>`_.
 The sole parameter is ``cutoff``, which defines the quality threshold below which bases will be trimmed. Analogous to quality with ``right=cutoff``, except that terminal `G` nucleotides
-are always treated as below cutoff quality. Default is ``cutoff: 30``.
+are always treated as below cutoff quality. Default is ``cutoff: 25``.
+
+.. note::
+
+    Before version ``0.9.1`` there was no quality trimming of bases at all, which led to issues on some runs. Between versions ``0.9.1`` and ``0.9.5``, the default was set 
+    to ``nextseq_quality`` with ``cutoff: 32``, which is a common default for quality trimming, but relatively strict. In version ``0.9.5`` the default was changed to ``cutoff: 25``, 
+    which is in our experience a good compromise, because low quality bases may still be soft-clipped in the mapping stage. However, if you experience a drop in UMI counts between pre ``0.9.1`` and 
+    current versions, you can try lowering the quality cutoff further (or even set it to 0) and rerun your samples, to restore pre ``0.9.1`` behavior.
 
 clip
 ^^^^
@@ -143,6 +150,24 @@ The ``default`` value for barcode\_flavor will be dropseq: ``cell = r1[0:12]`` (
 
 **If a sample has no barcode\_flavor provided, the default barcode\_flavor will be used**
 
+Barcode correction
+^^^^^^^^^^^^^^^^^^
+
+As of version ``0.9.3``, spacemake performs spatial barcode correction with edit distance 1, which boosts counts by ~5-15% for many samples.
+For performance reasons, this employs some heuristics:
+- all ``N`` bases are replaced with ``A``, in the reference (flowcell) catalog, as well as in the samples.
+- a capture-area catalog of reference barcodes is built for each samples, based on exact match counts alone.
+- exact matches to the capture-area catalog are searched first and preferred. Unmatched barcodes go on to a second stage of potential error correction.
+- spacemake looks all edit distance 1 variants of an unmatched sample barcode in the capture-area catalog in a defined order. 
+  The first match is reported and no further matches are considered. 
+  The order is as follows: (1) substitutions, (2) insertions, (3) deletions. This means that if a barcode has no exact matches, but **multiple** edit 1 matches, the 
+  correction will be deterministic, but is not guaranteed to be correct. In practice, however, the fraction of barcodes with multiple edit 1 matches is extremely low 
+  and dwarfed by other sources of experimental and technical noise.
+
+.. note::
+   Barcode correction requires to configure ``--puck-barcode-files`` for your sample. Otherwise it will not be treated as a spatial sample and no capture-area catalog 
+   can be built.
+   
 Provided barcode-flavors
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
