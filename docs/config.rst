@@ -167,7 +167,13 @@ For performance reasons, this employs some heuristics:
 .. note::
    Barcode correction requires to configure ``--puck-barcode-files`` for your sample. Otherwise it will not be treated as a spatial sample and no capture-area catalog 
    can be built.
-   
+
+.. note::
+   If you have already run your samples with a previous version of spacemake and want to apply the new barcode correction, you can run
+   ``spacemake run estimate-correction-gains`` to get an estimate of the increase in UMI counts to expect for each sample. In our experience,
+   this is close to the actual increase, unless your ratio of reads to UMIs is already high, indicating saturation of the library, in which case the gains may be lower.
+   If you want to give it a try, just update spacemake and run again. The correction should be applied automatically.
+
 Provided barcode-flavors
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
