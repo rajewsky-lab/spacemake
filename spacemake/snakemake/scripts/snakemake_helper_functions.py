@@ -10,6 +10,7 @@ def get_output_files(
     puck_barcode_file_matching_type="none",
     check_puck_collection=False,
     mode="pucks",
+    require_meshed=False,
     qc=False,
     **kwargs,
 ):
@@ -125,6 +126,7 @@ def get_output_files(
 
         for run_mode in row["run_mode"]:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
+
             if "polyA_adapter_trimmed" in kwargs:
                 polyA_adapter_trimmed = kwargs["polyA_adapter_trimmed"]
             else:
@@ -132,6 +134,10 @@ def get_output_files(
                     polyA_adapter_trimmed = ".polyA_adapter_trimmed"
                 else:
                     polyA_adapter_trimmed = ""
+
+            is_meshed = run_mode_variables.get("mesh_data", False)
+            if require_meshed and not is_meshed:
+                continue
 
             out_files = out_files + expand(
                 pattern,
@@ -249,9 +255,9 @@ def get_all_dges(wildcards):
                         )["dge"],
                     )
 
-    print(f"get_all_dges():")
-    for dge in dges:
-        print(f" -> '{dge}'")
+    # print(f"get_all_dges():")
+    # for dge in dges:
+    #     print(f" -> '{dge}'")
 
     return dges
 
@@ -304,9 +310,9 @@ def get_all_dges_collection(wildcards):
                             downsampling_percentage="",
                         )["dge"]
                     )
-    print(f"get_all_dges_collection():")
-    for dge in dges:
-        print(f" -> '{dge}'")
+    # print(f"get_all_dges_collection():")
+    # for dge in dges:
+    #     print(f" -> '{dge}'")
 
     return dges
 

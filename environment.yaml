@@ -21,7 +21,7 @@ dependencies:
     - minimap2==2.28
     - pip:
         - cutadapt
-        - git+https://github.com/marvin-jens/scbamtools.git@cb_correct       
+        - scbamtools>=0.8.8       
         - setproctitle
         - isal
         - pytest
