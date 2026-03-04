@@ -105,14 +105,6 @@ rule cb_correct:
                 "  --threads {threads} "
                 "  --nomatch-out {output.nomatch} " #{output.nomatch}"
             )
-        else:
-            shell(
-                "echo ln -s {params.rel_ubam} {output.match}; \n"
-                "ln -s {params.rel_ubam} {output.match}; "
-                "touch {output.stats}"
-            )
-
-
 
 rule cb_index_corrected_sample:
     input: barcode_readcounts
