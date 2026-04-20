@@ -1,0 +1,27 @@
+# test data for spacemake.annotation used in tests/test_annotation.py
+chr1	test	transcript	1	10000	.	+	.	gene_name "A"; transcript_type "protein_coding"; transcript_id "A.1";
+chr1	test	exon	1	150	.	+	.	gene_name "A"; transcript_type "protein_coding"; transcript_id "A.1";
+chr1	test	exon	9000	10000	.	+	.	gene_name "A"; transcript_type "protein_coding"; transcript_id "A.1";
+chr1	test	CDS	75	150	.	+	.	gene_name "A"; transcript_type "protein_coding"; transcript_id "A.1";
+chr1	test	CDS	9000	9050	.	+	.	gene_name "A"; transcript_type "protein_coding"; transcript_id "A.1";
+chr2	test	transcript	1	10000	.	+	.	gene_name "B"; transcript_type "protein_coding"; transcript_id "B.1";
+chr2	test	exon	1	150	.	+	.	gene_name "B"; transcript_type "protein_coding"; transcript_id "B.1";
+chr2	test	exon	9000	10000	.	+	.	gene_name "B"; transcript_type "protein_coding"; transcript_id "B.1";
+chr2	test	transcript	1	10000	.	+	.	gene_name "B"; transcript_type "protein_coding"; transcript_id "B.2";
+chr2	test	exon	1	150	.	+	.	gene_name "B"; transcript_type "protein_coding"; transcript_id "B.2";
+chr2	test	exon	500	600	.	+	.	gene_name "B"; transcript_type "protein_coding"; transcript_id "B.2";
+chr2	test	exon	9000	10000	.	+	.	gene_name "B"; transcript_type "protein_coding"; transcript_id "B.2";
+chr2	test	CDS	75	150	.	+	.	gene_name "B"; transcript_type "protein_coding"; transcript_id "B.2";
+chr2	test	CDS	500	600	.	+	.	gene_name "B"; transcript_type "protein_coding"; transcript_id "B.2";
+chr2	test	CDS	9000	9050	.	+	.	gene_name "B"; transcript_type "protein_coding"; transcript_id "B.2";
+chr3	test	transcript	1	10000	.	+	.	gene_name "C"; transcript_type "protein_coding"; transcript_id "C.1";
+chr3	test	exon	1	150	.	+	.	gene_name "C"; transcript_type "protein_coding"; transcript_id "C.1";
+chr3	test	exon	9000	10000	.	+	.	gene_name "C"; transcript_type "protein_coding"; transcript_id "C.1";
+chr3	test	CDS	75	150	.	+	.	gene_name "C"; transcript_type "protein_coding"; transcript_id "C.2";
+chr3	test	CDS	9000	9050	.	+	.	gene_name "C"; transcript_type "protein_coding"; transcript_id "C.2";
+chr3	test	transcript	1000	2100	.	-	.	transcript_type "lincRNA"; transcript_id "D";
+chr3	test	exon	1000	2100	.	-	.	transcript_type "lincRNA"; transcript_id "D";
+chrX	test	ignore_me	1	2	.	+	.	gene_name "ignore_me";
+
+
+

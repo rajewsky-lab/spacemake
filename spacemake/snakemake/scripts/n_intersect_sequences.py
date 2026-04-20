@@ -169,7 +169,6 @@ def find_matches(_target, df=None):
     elif isinstance(_target, set):
         f_in = None
         target = _target
-        f_out = args.output[0]
     else:
         raise ValueError(
             "_target must be either integer (will use as index for 'args.target' or set of unique reads"
@@ -178,9 +177,12 @@ def find_matches(_target, df=None):
     start = time.time()
     _intersection = target.intersection(query_seqs)
     n_matches = len(_intersection)
-    print(f"queried {len(target):,} barcodes and found {n_matches:,} matches in {round(time.time() - start, 2):,} seconds")
+    print(
+        f"queried {len(target):,} barcodes and found {n_matches:,} matches in {round(time.time() - start, 2):,} seconds"
+    )
 
     if args.output != "":
+        f_out = args.output[0]
         df_matched = df[df[args.target_column].isin(list(_intersection))]
         df_matched = df_matched[["cell_bc", "x_pos", "y_pos"]]
         df_matched.to_csv(
@@ -257,6 +259,12 @@ def cmdline():
         logger.info(f"hashed unique query reads")
 
         if len(args.target) == 1:
+            df = pd.read_csv(args.target[0], sep=args.target_separator).rename(
+                columns={"xcoord": "x_pos", "ycoord": "y_pos"}
+            )
+            reads = df[args.target_column]
+            target = set(reads)
+
             _, n_barcodes, n_matches = find_matches(target, df)
             results = [(args.target[0], n_barcodes, n_matches)]
         elif len(args.target) > 1:

@@ -20,7 +20,9 @@ analysis, and analysis of long reads as separate modules.
     config
     projects/index
     run
+    migrate
     tutorials/index
     troubleshooting
     api/index
+    release_notes
 

@@ -2,7 +2,7 @@ import errno
 import os
 import logging
 
-#from contextlib import ContextDecorator, contextmanager
+# from contextlib import ContextDecorator, contextmanager
 from spacemake.errors import SpacemakeError, FileWrongExtensionError
 from spacemake.contrib import __version__, __license__, __author__, __email__
 
@@ -10,13 +10,15 @@ LINE_SEPARATOR = "-" * 50 + "\n"
 
 bool_in_str = ["True", "true", "False", "false"]
 
-def generate_kmers(k, nts='ACGT'):
+
+def generate_kmers(k, nts="ACGT"):
     if k == 0:
-        yield ''
+        yield ""
     elif k > 0:
         for x in nts:
-            for mer in generate_kmers(k-1, nts=nts):
+            for mer in generate_kmers(k - 1, nts=nts):
                 yield x + mer
+
 
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
@@ -49,6 +51,7 @@ def wc_fill(x, wc):
         polyA_adapter_trimmed=getattr(wc, "polyA_adapter_trimmed", ""),
         data_root_type=getattr(wc, "data_root_type", "complete_data"),
     )
+
 
 def quiet_bam_open(*argc, **kw):
     """_summary_
@@ -111,6 +114,7 @@ def ensure_path(path):
     if dirname:
         os.makedirs(dirname, exist_ok=True)
     return path
+
 
 def timed_loop(
     src,
@@ -189,7 +193,13 @@ def read_fq(fname, skim=0):
         src = FASTQ_src(fname)  # assume its a stream or file-like object already
 
     n = 0
-    for record in timed_loop(src, logger, T=15, template="processed {i} reads in {dT:.1f}sec. ({rate:.3f} k rec/sec)", skim=skim):
+    for record in timed_loop(
+        src,
+        logger,
+        T=15,
+        template="processed {i} reads in {dT:.1f}sec. ({rate:.3f} k rec/sec)",
+        skim=skim,
+    ):
         yield record
         n += 1
 
@@ -396,6 +406,7 @@ def fasta_chunks(lines, strip=True, fuse=True):
 #     except SpacemakeError as e:
 #         print(e)
 
+
 def message_aggregation(log_listen="spacemake", print_logger=False, print_success=True):
     from functools import wraps
 
@@ -428,9 +439,10 @@ def message_aggregation(log_listen="spacemake", print_logger=False, print_succes
                     print(f"{LINE_SEPARATOR}SUCCESS!")
                 return res
 
-        return wrapper        
+        return wrapper
 
     return the_decorator
+
 
 def str_to_list(value):
     # if list in string representation, return the list
@@ -476,20 +488,27 @@ def setup_logging(
     args,
     name="spacemake.main",
     log_file="",
-    FORMAT="%(asctime)-20s\t{sample:30s}\t%(name)-50s\t%(levelname)s\t%(message)s",
+    FORMAT="%(asctime)-20s\t%(levelname)s\t{sample:20s}\t%(name)-30s\t%(message)s",
+    rename_process=True,
+    **kwargs,
 ):
-    sample = getattr(args, "sample", "na")
-    import setproctitle
-    if name != "spacemake.main":
-        setproctitle.setproctitle(f"{name} {sample}")
+    sample = getattr(args, "sample", kwargs.get("sample", "na"))
+    if rename_process:
+        import setproctitle
+
+        if name != "spacemake.main":
+            setproctitle.setproctitle(f"{name} {sample}")
 
     FORMAT = FORMAT.format(sample=sample)
-
     log_level = getattr(args, "log_level", "INFO")
     lvl = getattr(logging, log_level)
-    logging.basicConfig(level=lvl, format=FORMAT)
-    root = logging.getLogger("spacemake")
+    # logging.basicConfig(level=lvl, format=FORMAT)
+    # ^^ above does not mix well with Snakemake code
+    root = logging.getLogger(name)
     root.setLevel(lvl)
+    lh = logging.StreamHandler()
+    lh.setFormatter(logging.Formatter(FORMAT))
+    root.addHandler(lh)
 
     log_file = getattr(args, "log_file", log_file)
     if log_file:
@@ -514,10 +533,13 @@ def setup_logging(
 
     return logger
 
+
 def setup_smk_logging(name="spacemake.smk", **kw):
     import argparse
+
     args = argparse.Namespace(**kw)
     return setup_logging(args, name=name)
+
 
 default_log_level = "INFO"
 
@@ -528,8 +550,8 @@ def make_minimal_parser(prog="", usage="", **kw):
     parser = argparse.ArgumentParser(prog=prog, usage=usage, **kw)
     parser.add_argument(
         "--log-file",
-        default=f"{prog}.log",
-        help=f"place log entries in this file (default={prog}.log)",
+        default=f"",
+        help=f"place log entries in this file (default=None)",
     )
     parser.add_argument(
         "--log-level",
@@ -578,3 +600,54 @@ def load_config_with_fallbacks(args, try_yaml="config.yaml"):
     import argparse
 
     return argparse.Namespace(**args_kw)
+
+
+def sync_timestamps(original_file, new_file):
+    """
+    Sync only the mtime of new_file to match original_file.
+    For symlinks, mtime of the link itself is set (not the target).
+    """
+    import time
+
+    try:
+        source_stat = os.lstat(original_file)
+        mtime = source_stat.st_mtime
+
+        if os.path.islink(new_file):
+            os.utime(new_file, (mtime, mtime), follow_symlinks=False)
+        else:
+            os.utime(new_file, (mtime, mtime), follow_symlinks=True)
+
+    except Exception as e:
+        print(f"[sync] Failed to sync timestamps for {new_file}: {e}")
+
+
+def sync_symlink_mtime(source_symlink, target_symlink):
+    """
+    Set the mtime of a symlink to match another symlink using `touch -h`.
+    Prints detailed debug info.
+    """
+    import subprocess
+    import time
+
+    try:
+        # Format the timestamp in touch-compatible form: YYYYMMDDhhmm.ss
+        mtime = os.lstat(source_symlink).st_mtime
+        timestamp = time.strftime("%Y%m%d%H%M.%S", time.localtime(mtime))
+
+        # Run touch
+        result = subprocess.run(
+            ["touch", "-h", "-t", timestamp, target_symlink],
+            capture_output=True,
+            text=True,
+            check=False  # don't raise exception yet
+        )
+
+        if result.returncode != 0:
+            print("[sync_symlink_mtime] touch failed.")
+        else:
+            print("[sync_symlink_mtime] touch succeeded.")
+
+    except Exception as e:
+        print(f"[sync_symlink_mtime] Exception occurred: {e}")
+

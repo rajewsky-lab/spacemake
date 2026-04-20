@@ -309,7 +309,7 @@ def merge_pucks_to_collection(
     :type no_transform: bool, optional
     :param merge_output: How to merge pucks, can be "same", "unique", "first", or "only", defaults to "same".
     :type merge_output: str, optional
-    :param join_output: How to join pucks, can be "inner" or "outer", defaults to "inner".
+    :param join_output: How to join pucks, can be "inner" or "outer", defaults to "outer".
     :type join_output: str, optional
     :returns: Merged puck collection as an AnnData object.
     :rtype: anndata.AnnData
@@ -326,18 +326,36 @@ def merge_pucks_to_collection(
             create_puck_collection(
                 puck,
                 puck_transform,
-                ~no_reset_index,
-                ~no_transform,
+                not no_reset_index,
+                not no_transform,
             )
         ]
 
-    puck_collection = anndata.concat(
-        puck_collection_list, merge=merge_output, join=join_output
-    )
+    if puck_collection_list:
+        puck_collection = anndata.concat(
+            puck_collection_list, merge=merge_output, join=join_output
+        )
+        puck_collection.uns = {
+            np.unique(puck.obs[puck_id_key])[0]: puck.uns
+            for puck in puck_collection_list
+        }
 
-    puck_collection.uns = {np.unique(puck.obs[puck_id_key])[0]: puck.uns for puck in puck_collection_list}
+        # we select the first puck from the collection, we assume the variables will be very similar across
+        _current_puck = puck_collection_list[0]
+
+        if "mesh_variables" in _current_puck.uns:
+            puck_collection.uns["mesh_variables"] = _current_puck.uns["mesh_variables"]
+
+        if "puck_variables" in _current_puck.uns:
+            puck_collection.uns["puck_variables"] = _current_puck.uns["puck_variables"]
+    else:
+        # return empty anndata object
+        puck_collection = anndata.AnnData()
+        puck_collection.obsm["spatial"] = np.empty((0, 2))
+        puck_collection.obs["total_counts"] = []
 
     return puck_collection
+
 
 @message_aggregation(logger_name)
 def cmdline():

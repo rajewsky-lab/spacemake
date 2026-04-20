@@ -2,6 +2,7 @@ import os
 
 # import yaml
 import argparse
+from spacemake.contrib import __version__
 import re
 import logging
 
@@ -458,6 +459,7 @@ class Puck(ConfigMainVariable):
         "barcodes": str,
         "spot_diameter_um": float,
         "width_um": int,
+        "px_by_um": float,
         "coordinate_system": str,
     }
 
@@ -507,6 +509,7 @@ class ConfigFile:
 
     def __init__(self):
         self.variables = {
+            "spacemake_version": __version__,
             "root_dir": ".",
             "temp_dir": "/tmp",
             "species": {},
@@ -562,8 +565,21 @@ class ConfigFile:
                 if "default" not in cf.variables[var_with_default]:
                     cf.variables[var_with_default]["default"] = default_val
                 else:
+                    user_val = cf.variables[var_with_default]["default"]
                     # update default run mode with missing values
-                    default_val.update(cf.variables[var_with_default]["default"])
+                    if type(default_val) is dict:
+                        default_val.update(user_val)
+                    elif type(default_val) is list:
+                        if type(user_val) is list:
+                            default_val = user_val
+                        else:
+                            cf.logger.warning(
+                                f"Trying to set list type entry {var_with_default}['default'] "
+                                f"with a dict-type entry in user-defined '{file_path}'. "
+                                "it looks like you may have a legacy config.yaml. Reverting to default values. "
+                                "Please run 'spacemake migrate config' to get rid of this warning."
+                            )
+                    # print(default_val)
                     cf.variables[var_with_default]["default"] = default_val
 
         cf.expand_strings()
@@ -1154,64 +1170,64 @@ def get_run_mode_parser(required=True):
     return parser
 
 
-# def get_species_parser(required=True):
-#     "a parser that allows to add a reference sequence and annotation, belonging to some species"
-#     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
-#     parser.add_argument(
-#         "--reference",
-#         help="name of the reference (default=genome)",
-#         type=str,
-#         default="genome",
-#     )
-#     parser.add_argument("--name", help="name of the species", type=str, required=True)
-#     parser.add_argument(
-#         "--sequence",
-#         help="path to the sequence (.fa) file for the species/reference to be added (e.g. the genome)",
-#         type=str,
-#         required=required,
-#     )
-#     parser.add_argument(
-#         "--genome",
-#         help="[DEPRECATED] path to the genome (.fa) file for the species to be added. --genome=<arg> is a synonym for --reference=genome --sequence=<arg>",
-#         type=str,
-#         required=False,
-#     )
+def get_species_parser(required=True):
+    "a parser that allows to add a reference sequence and annotation, belonging to some species"
+    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
+    parser.add_argument(
+        "--reference",
+        help="name of the reference (default=genome)",
+        type=str,
+        default="genome",
+    )
+    parser.add_argument("--name", help="name of the species", type=str, required=True)
+    parser.add_argument(
+        "--sequence",
+        help="path to the sequence (.fa) file for the species/reference to be added (e.g. the genome)",
+        type=str,
+        required=required,
+    )
+    parser.add_argument(
+        "--genome",
+        help="[DEPRECATED] path to the genome (.fa) file for the species to be added. --genome=<arg> is a synonym for --reference=genome --sequence=<arg>",
+        type=str,
+        required=False,
+    )
 
-#     parser.add_argument(
-#         "--annotation",
-#         help="path to the genome annotation (.gtf) file for the species to be added",
-#         type=str,
-#         default="",
-#         required=False,
-#     )
-#     parser.add_argument(
-#         "--STAR_index_dir",
-#         help="path to STAR index directory",
-#         type=str,
-#         required=False,
-#     )
-#     parser.add_argument(
-#         "--BT2_index",
-#         help="path to BOWTIE2 index",
-#         type=str,
-#         required=False,
-#     )
-#     parser.add_argument(
-#         "--BT2_flags",
-#         help="bt2 mapping arguments for this reference (default=mapping.smk:default_BT2_MAP_FLAGS) ",
-#         type=str,
-#         default="",
-#         required=False,
-#     )
-#     parser.add_argument(
-#         "--STAR_flags",
-#         help="STAR mapping arguments for this reference (default=mapping.smk:default_STAR_MAP_FLAGS)",
-#         type=str,
-#         default="",
-#         required=False,
-#     )
+    parser.add_argument(
+        "--annotation",
+        help="path to the genome annotation (.gtf) file for the species to be added",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--STAR_index_dir",
+        help="path to STAR index directory",
+        type=str,
+        required=False,
+    )
+    parser.add_argument(
+        "--BT2_index",
+        help="path to BOWTIE2 index",
+        type=str,
+        required=False,
+    )
+    parser.add_argument(
+        "--BT2_flags",
+        help="bt2 mapping arguments for this reference (default=mapping.smk:default_BT2_MAP_FLAGS) ",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--STAR_flags",
+        help="STAR mapping arguments for this reference (default=mapping.smk:default_STAR_MAP_FLAGS)",
+        type=str,
+        default="",
+        required=False,
+    )
 
-#     return parser
+    return parser
 
 
 def get_barcode_flavor_parser(required=True):

@@ -1,0 +1,131 @@
+{%- extends 'lab/index.html.j2' -%}
+
+{% block html_head %}
+{{ super() }}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+/* Sidebar styles */
+.sidebar {
+    height: 100%;
+    width: 250px;
+    position: fixed;
+    z-index: 1;
+    top: 0;
+    left: 0;
+    background-color: #f8f9fa;
+    overflow-x: hidden;
+    padding-top: 60px;
+    border-right: 1px solid #dee2e6;
+}
+
+.sidebar a {
+    padding: 8px 8px 8px 32px;
+    text-decoration: none;
+    font-size: 14px;
+    color: #495057;
+    display: block;
+    transition: 0.3s;
+}
+
+.sidebar a:hover {
+    color: #007bff;
+    background-color: #e9ecef;
+}
+
+/* Main content styles */
+.main-content {
+    margin-left: 250px;
+    padding: 20px;
+}
+
+/* Tab styles */
+.nav-tabs {
+    border-bottom: 1px solid #dee2e6;
+    margin-bottom: 20px;
+}
+
+.nav-tabs .nav-link {
+    margin-bottom: -1px;
+    border: 1px solid transparent;
+    border-top-left-radius: 0.25rem;
+    border-top-right-radius: 0.25rem;
+}
+
+.nav-tabs .nav-link.active {
+    color: #495057;
+    background-color: #fff;
+    border-color: #dee2e6 #dee2e6 #fff;
+}
+
+/* Tables */
+.table-container {
+    margin: 20px 0;
+    overflow-x: auto;
+}
+
+.metrics-table {
+    width: 100%;
+    margin-bottom: 1rem;
+    background-color: transparent;
+    border-collapse: collapse;
+}
+
+.metrics-table th,
+.metrics-table td {
+    padding: 0.75rem;
+    vertical-align: top;
+    border-top: 1px solid #dee2e6;
+}
+
+.metrics-table thead th {
+    vertical-align: bottom;
+    border-bottom: 2px solid #dee2e6;
+    background-color: #f8f9fa;
+}
+
+/* Plot containers */
+.plot-container {
+    margin: 20px 0;
+    text-align: center;
+}
+
+.plot-container img {
+    max-width: 100%;
+    height: auto;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Build sidebar navigation
+    const sidebar = document.createElement('div');
+    sidebar.className = 'sidebar';
+    const headers = document.querySelectorAll('h1, h2, h3');
+    
+    headers.forEach(header => {
+        if (!header.id) {
+            header.id = header.textContent.toLowerCase().replace(/\s+/g, '-');
+        }
+        const link = document.createElement('a');
+        link.href = '#' + header.id;
+        link.textContent = header.textContent;
+        link.style.paddingLeft = (header.tagName[1] * 16) + 'px';
+        sidebar.appendChild(link);
+    });
+    
+    document.body.insertBefore(sidebar, document.body.firstChild);
+    
+    // Wrap notebook content
+    const mainContent = document.createElement('div');
+    mainContent.className = 'main-content';
+    const notebookContent = document.querySelector('#notebook-container');
+    notebookContent.parentNode.insertBefore(mainContent, notebookContent);
+    mainContent.appendChild(notebookContent);
+});
+</script>
+{% endblock html_head %}
+
+{% block body_header %}
+<body class="notebook-body">
+{% endblock body_header %}

@@ -1,0 +1,7 @@
+puck_id,x_offset,y_offset,z_offset
+tile_1,0,100,0
+tile_2,100,0,0
+tile_3,100,100,0
+tile_4,0,0,0
+tile_5,1000,1000,0
+tile_6,1100,1000,0

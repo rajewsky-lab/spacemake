@@ -9,9 +9,16 @@ def get_output_files(
     run_on_external=True,
     puck_barcode_file_matching_type="none",
     check_puck_collection=False,
+    mode="pucks",
+    require_meshed=False,
     qc=False,
     **kwargs,
 ):
+    """
+    if mode == 'pucks': return individual tiles or pucks
+    if mode == 'collections': return only collections
+    if mode == 'auto': return collections if we have any, else pucks/tiles
+    """
     out_files = []
     df = project_df.df
 
@@ -57,7 +64,37 @@ def get_output_files(
                 project_id=project_id, sample_id=sample_id
             )
 
-        if check_puck_collection:
+        # these are somewhat recursive
+        if mode == "auto":
+            collections = get_output_files(
+                pattern,
+                projects,
+                samples,
+                filter_merged,
+                run_on_external,
+                puck_barcode_file_matching_type,
+                check_puck_collection=True,
+                mode="collections",
+                qc=qc,
+                **kwargs,
+            )
+            if collections:
+                return collections
+            else:
+                return get_output_files(
+                    pattern,
+                    projects,
+                    samples,
+                    filter_merged,
+                    run_on_external,
+                    puck_barcode_file_matching_type,
+                    check_puck_collection=False,
+                    mode="pucks",
+                    qc=qc,
+                    **kwargs,
+                )
+
+        if check_puck_collection or (mode == "collections"):
             puck_vars = project_df.get_puck_variables(
                 project_id=project_id, sample_id=sample_id
             )
@@ -67,13 +104,18 @@ def get_output_files(
             ):
                 continue
 
+            if (len(puck_barcode_file_ids) > 0) and (
+                puck_barcode_file_ids[0] == "no_spatial_data"
+            ):
+                continue
+
             coordinate_system = puck_vars["coordinate_system"]
             if coordinate_system == "":
                 continue
 
             puck_barcode_file_ids = "puck_collection"
 
-        else:
+        else:  # (mode == 'pucks') or (check_puck_collection == False)
             # add the non spatial barcode by default
             non_spatial_pbf_id = project_df.project_df_default_values[
                 "puck_barcode_file_id"
@@ -84,6 +126,7 @@ def get_output_files(
 
         for run_mode in row["run_mode"]:
             run_mode_variables = project_df.config.get_run_mode(run_mode).variables
+
             if "polyA_adapter_trimmed" in kwargs:
                 polyA_adapter_trimmed = kwargs["polyA_adapter_trimmed"]
             else:
@@ -91,6 +134,10 @@ def get_output_files(
                     polyA_adapter_trimmed = ".polyA_adapter_trimmed"
                 else:
                     polyA_adapter_trimmed = ""
+
+            is_meshed = run_mode_variables.get("mesh_data", False)
+            if require_meshed and not is_meshed:
+                continue
 
             out_files = out_files + expand(
                 pattern,
@@ -208,6 +255,10 @@ def get_all_dges(wildcards):
                         )["dge"],
                     )
 
+    # print(f"get_all_dges():")
+    # for dge in dges:
+    #     print(f" -> '{dge}'")
+
     return dges
 
 
@@ -259,6 +310,9 @@ def get_all_dges_collection(wildcards):
                             downsampling_percentage="",
                         )["dge"]
                     )
+    # print(f"get_all_dges_collection():")
+    # for dge in dges:
+    #     print(f" -> '{dge}'")
 
     return dges
 
@@ -371,6 +425,11 @@ def get_bc_preprocess_settings(wildcards):
 
     settings = bc_flavor_data.preprocess_settings[flavor]
 
+    adapter_flavor = project_df.get_metadata(
+        "adapter_flavor", project_id=wildcards.project_id, sample_id=wildcards.sample_id
+    )
+
+    settings["adapter_flavor"] = adapter_flavor
     return settings
 
 
@@ -389,17 +448,51 @@ def get_star_input_bam(wildcards):
         return {"reads": tagged_bam}
 
 
-def get_final_bam(wildcards):
-    is_merged = project_df.get_metadata(
+def is_merged(wildcards):
+    return project_df.get_metadata(
         "is_merged", project_id=wildcards.project_id, sample_id=wildcards.sample_id
     )
 
-    if is_merged:
+
+def get_final_bam(wildcards):
+    if is_merged(wildcards):
         res = [final_merged_bam]
     else:
         res = [final_bam]
 
     return res
+
+
+def get_final_bam_reference(wildcards):
+    from spacemake.map_strategy import map_data
+
+    if is_merged(wildcards):
+        merged_from = project_df.get_metadata(
+            "merged_from",
+            project_id=wildcards.project_id,
+            sample_id=wildcards.sample_id,
+        )
+        # collect the main reference to which the constituent
+        # samples were aligned/annotated and make sure it is
+        # the same.
+        refs = set()
+        wc = dotdict(wildcards)
+        for project_id, sample_id in merged_from:
+            wc.project_id = project_id
+            wc.sample_id = sample_id
+            fb = wc_fill(final_bam, wc)
+            ref = map_data["REF_FOR_FINAL"][fb]
+            # print(f">>> merged_from: {wc.sample_id} {fb} {ref}")
+            refs.add(ref)
+
+        assert len(refs) == 1
+        ref = refs.pop()
+    else:
+        fb = wc_fill(final_bam, wildcards)
+        ref = map_data["REF_FOR_FINAL"][fb]
+        # print(f">>> {fb} {ref}")
+
+    return ref
 
 
 def get_dge_input_bam(wildcards):
@@ -597,7 +690,8 @@ def get_ribo_depletion_log(wildcards):
 
 def get_top_barcodes(wildcards):
     if wildcards.n_beads == "spatial":
-        return {"top_barcodes": spatial_barcodes}  # experimental
+        return {"top_barcodes": spatial_barcodes_corrected}  # experimental
+        # return {"top_barcodes": spatial_barcodes}  # experimental
     if wildcards.dge_cleaned == "":
         return {"top_barcodes": top_barcodes}
     else:
@@ -848,9 +942,11 @@ def get_all_barcode_readcounts(wildcards, prealigned=False):
         "polyA_adapter_trimmed": polyA_adapter_trimmed_wildcard,
     }
 
+    # This code seems questionable. What does is_merged have to do w prealigned vs post-aligned?
     if prealigned or is_merged:
         return {"bc_readcounts": expand(barcode_readcounts, **extra_args)}
     else:
+        # why return prealigned if 'prealigned == False' ??
         return {"bc_readcounts": expand(barcode_readcounts_prealigned, **extra_args)}
 
 
@@ -916,6 +1012,7 @@ def get_qc_sheet_input_files(wildcards):
             )
 
         to_return[f"{run_mode}.dge_summary"] = run_mode_dge["dge_summary"]
+        to_return[f"{run_mode}.dge"] = run_mode_dge["dge"]
 
     return to_return
 
@@ -945,11 +1042,24 @@ def get_puck_file(wildcards):
         sample_id=wildcards.sample_id,
         puck_barcode_file_id=wildcards.puck_barcode_file_id,
     )
-
     if puck_barcode_file is None:
         return []
     else:
         return {"barcode_file": puck_barcode_file}
+
+
+def maybe_get_puck_file(wildcards):
+    if wildcards.puck_barcode_file_id == "no_spatial_data":
+        top = get_top_barcodes(wildcards)
+        bcf = {"barcode_file": top["top_barcodes"]}
+    elif wildcards.n_beads != "spatial":
+        top = get_top_barcodes(wildcards)
+        bcf = {"barcode_file": top["top_barcodes"]}
+    else:
+        # print("getting puck_file")
+        bcf = get_puck_file(wildcards)
+
+    return bcf
 
 
 def get_all_puck_files(wildcards):

@@ -315,8 +315,8 @@ def aggregate_adata_by_indices(
     # rename index
     aggregated_adata.obs.index.name = "cell_bc"
 
-    def summarise_adata_obs_column(adata, column, summary_fun=sum):
-        vals_to_join = adata.obs[column].to_numpy()[idx_to_aggregate]
+    def summarise_adata_obs_column(adata, column, summary_fun=sum, dtype=np.float32):
+        vals_to_join = adata.obs[column].to_numpy(dtype=dtype)[idx_to_aggregate]
         vals_joined = np.array(
             [
                 summary_fun(vals_to_join[ix_array[n].astype(int)])
@@ -325,7 +325,7 @@ def aggregate_adata_by_indices(
         )
         return vals_joined
 
-    print(adata)
+    # print(adata)
 
     # summarise and attach n_reads, calculate metrics (incl. pcr)
     calculate_adata_metrics(
@@ -335,12 +335,12 @@ def aggregate_adata_by_indices(
     )
 
     aggregated_adata.obs["n_joined"] = [len(x) for x in ix_array]
-    print(f"ix_array={ix_array} shape={ix_array.shape} dtype={ix_array.dtype}")
-    print(f"idx_to_aggregate={idx_to_aggregate}")
+    # print(f"ix_array={ix_array} shape={ix_array.shape} dtype={ix_array.dtype}")
+    # print(f"idx_to_aggregate={idx_to_aggregate}")
     joined_dict = {i: idx_to_aggregate[x.astype(int)] for i, x in enumerate(ix_array)}
 
     indices_joined_spatial_units = dok_matrix(
-        (len(joined_dict), len(adata.obs_names)), dtype=np.int8
+        (len(joined_dict), len(adata.obs_names)), dtype=np.uint16
     )
 
     for obs_name_aggregate, obs_name_to_aggregate in joined_dict.items():
@@ -350,17 +350,27 @@ def aggregate_adata_by_indices(
     aggregated_adata.uns["spatial_units_obs_names"] = np.array(adata.obs_names)
     aggregated_adata.uns["indices_joined_spatial_units"] = indices_joined_spatial_units
 
+    # carry the variables for the original puck variables
+    if "puck_variables" in adata.uns:
+        aggregated_adata.uns["puck_variables"] = adata.uns["puck_variables"]
+
     from statistics import mean
 
-    for column in [
-        "exact_entropy",
-        "theoretical_entropy",
-        "exact_compression",
-        "theoretical_compression",
+    for column, dtype in [
+        ("exact_entropy", np.float16),
+        ("theoretical_entropy", np.float16),
+        ("exact_compression", np.uint16),
+        ("theoretical_compression", np.uint16),
+        ("n_counts", np.uint32),
     ]:
-        aggregated_adata.obs[column] = summarise_adata_obs_column(adata, column, mean)
+        # print(
+        #     f"aggregate_adata_by_indices() column={column} {adata.obs[column].dtype} -> {dtype}"
+        # )
 
-    aggregated_adata.obs['n_counts'] = summarise_adata_obs_column(adata, "n_counts")
+        aggregated_adata.obs[column] = summarise_adata_obs_column(
+            adata, column, mean, dtype=dtype
+        )
+
     return aggregated_adata
 
 
@@ -526,12 +536,24 @@ def create_meshed_adata(
 
     joined_coordinates = mesh_px[np.unique(new_ilocs)]
 
-    adata.obs['n_counts'] = adata.obs['total_counts'] #np.array(adata.X.sum(axis=1))[:, 0]
+    adata.obs["n_counts"] = adata.obs[
+        "total_counts"
+    ]  # np.array(adata.X.sum(axis=1))[:, 0]
     meshed_adata = aggregate_adata_by_indices(
         adata,
         idx_to_aggregate=original_ilocs,
         idx_aggregated=new_ilocs,
         coordinates_aggregated=joined_coordinates,
     )
+
+    # set the meshing variables
+    meshed_adata.uns["mesh_variables"] = {
+        "px_by_um": px_by_um,
+        "spot_diameter_um": spot_diameter_um,
+        "spot_distance_um": spot_distance_um,
+        "bead_diameter_um": bead_diameter_um,
+        "mesh_type": mesh_type,
+        "start_at_minimum": start_at_minimum,
+    }
 
     return meshed_adata
