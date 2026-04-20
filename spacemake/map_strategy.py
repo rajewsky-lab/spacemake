@@ -60,13 +60,9 @@ default_BT2_MAP_FLAGS = (
 # original rRNA mapping code used --very-fast-local and that was that.
 
 default_STAR_MAP_FLAGS = (
-    # before shared memory
-    # " --genomeLoad NoSharedMemory"
-    # with shared memory
-    " --genomeLoad LoadAndKeep"
     " --limitBAMsortRAM 5000000000"
     " --outSAMprimaryFlag AllBestScore"
-    " --outSAMattributes All"
+    " --outSAMattributes Standard"
     " --outSAMunmapped Within"
     " --outStd BAM_Unsorted"
     " --outSAMtype BAM Unsorted"
@@ -328,13 +324,18 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
 
 
 def get_index_creation_settings(pdf, species, reference):
+    import spacemake.snakemake.variables as smv
+
     print(f"species={species} reference={reference}")
     d = pdf.config.get_variable("species", name=species)[reference]
     print(f"d={d}")
     settings = {
-        "bt2_index_param": bt2_index_param.format(species=species, ref_name=reference),
-        "bt2_index": bt2_index.format(species=species, ref_name=reference),
+        "bt2_index_param": smv.bt2_index_param.format(
+            species=species, ref_name=reference
+        ),
+        "bt2_index": smv.bt2_index.format(species=species, ref_name=reference),
         "fasta": d["sequence"],
+        # optional index creation parameters, with defaults if not provided in the config
         "bowtie2_flags": d.get("BT2_index_flags", default_BT2_INDEX_FLAGS),
         "STAR_flags": d.get("STAR_index_flags", default_STAR_INDEX_FLAGS),
     }
