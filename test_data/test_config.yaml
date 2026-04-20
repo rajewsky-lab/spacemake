@@ -1,4 +1,4 @@
-spacemake_version: 0.9.1b
+spacemake_version: 0.9.5
 root_dir: '.'
 temp_dir: '/tmp'
 external_bin: 
@@ -264,4 +264,34 @@ species:
         rRNA:
             annotation: ''
             sequence: "{spacemake_dir}/test_data/rRNA_hsa.fa.gz"
+
+default_mapper_settings:
+    STAR:
+        index_flags: |+
+            --runThreadN 4
+            --genomeSAindexNbases 12
+
+        map_flags: |+
+            --limitBAMsortRAM 5000000000
+            --outSAMprimaryFlag AllBestScore
+            --outSAMattributes Standard
+            --outSAMunmapped Within
+            --outStd BAM_Unsorted
+            --outSAMtype BAM Unsorted
+            --limitOutSJcollapsed 5000000
+
+    bowtie2:
+        index_flags: |+
+            --ftabchars 12
+            --offrate 1
+            --threads 4
+
+        map_flags: |+
+            --local
+            -L 10 -D 30 -R 30
+            -k 10
+            --ignore-quals
+            --score-min=L,0,1.5  # require 75% of perfect match (2=base match)
+
+
 

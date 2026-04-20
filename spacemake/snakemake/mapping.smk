@@ -208,7 +208,7 @@ rule map_reads_bowtie2:
         "| samtools view --no-PG --threads=2 -Sbu " 
         " "
         # 3) align reads with bowtie2, *preserving the original BAM tags*
-        "| bowtie2 -p {threads} --reorder --mm "
+        "| bowtie2 --reorder --mm " # -p {threads} moved to config.yaml as default flag
         "  -x {params.auto[index]} -b /dev/stdin --preserve-tags "
         "  {params.auto[flags]} 2> {log} "
         " "
@@ -273,7 +273,7 @@ rule map_reads_STAR:
         # this needs to be removed for memory sharing
         # " --sjdbGTFfile {params.auto[annotation]}"
         " --outFileNamePrefix {params.star_prefix}"
-        " --runThreadN {threads}"
+        # " --runThreadN {threads}"
         " "
         "| python {repo_dir}/scripts/splice_bam_header.py"
         " --in-ubam {input.bam}"
@@ -346,12 +346,13 @@ rule create_bowtie2_index:
         species_reference_sequence
     output:
         bt2_index_file
+    threads: max(workflow.cores * 0.25, 8)
     params:
         settings = lambda wc: get_index_creation_settings(pdf=project_df, species=wc.species, reference=wc.ref_name)
     shell:
         """
         mkdir -p {params.settings[bt2_index]}
-        bowtie2-build {params.settings[bowtie2_flags]} {input} {params.settings[bt2_index_param]}
+        bowtie2-build --threads {threads} {params.settings[bowtie2_flags]} {input} {params.settings[bt2_index_param]}
         """
 
 rule create_star_index:
@@ -368,8 +369,8 @@ rule create_star_index:
         """
         mkdir -p {output.index_dir} 
         STAR --runMode genomeGenerate \
-             {params.settings[STAR_flags]} \
              --runThreadN {threads} \
+             {params.settings[STAR_flags]} \
              --genomeDir {output.index_dir} \
              --genomeFastaFiles {input.sequence} \
              --sjdbGTFfile {input.annotation}

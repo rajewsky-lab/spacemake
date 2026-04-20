@@ -222,3 +222,32 @@ adapters:
     polyG: GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
     nextflex_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACTGACCAATCTCGTATGCCGTCTTCTGCTTGAA
     truseq_RA3: TGGAATTCTCGGGTGCCAAGGAACTCCAGTCACCCGTCCA
+
+default_mapper_settings:
+    STAR:
+        index_flags: --genomeSAindexNbases 12
+
+        map_flags: >-
+            --limitBAMsortRAM 5000000000
+            --outSAMprimaryFlag AllBestScore
+            --outSAMattributes Standard
+            --outSAMunmapped Within
+            --outStd BAM_Unsorted
+            --outSAMtype BAM Unsorted
+            --limitOutSJcollapsed 5000000
+
+    bowtie2:
+        index_flags: >-
+            --ftabchars 12
+            --offrate 1
+        
+        # --score-min=L,0,1.5 -> require 75% of perfect match (2=base match)
+        map_flags: >-
+            --local
+            -L 10 -D 30 -R 30
+            -k 10
+            --ignore-quals
+            --score-min=L,0,1.5
+
+
+
