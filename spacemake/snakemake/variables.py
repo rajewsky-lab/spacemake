@@ -77,6 +77,7 @@ mm2_index_log = mm2_index_param + ".log"
 
 species_reference_sequence = "species_data/{species}/{ref_name}/sequence.fa"
 species_reference_annotation = "species_data/{species}/{ref_name}/annotation.gtf"
+species_reference_junc_bed = "species_data/{species}/{ref_name}/annotation.bed"
 
 species_reference_annotation_compiled = (
     "species_data/{species}/{ref_name}/compiled_annotation"
@@ -372,8 +373,11 @@ final_bam_mm_included_pipe = complete_data_root + "/final" + bam_mm_included_pip
 
 ubam = tagged_polyA_adapter_trimmed_bam  # complete_data_root + "/unaligned_bc_tagged.{polyA_adapter_trimmed}.cram"
 ubam_corrected = ubam.replace(".cram", ".corrected.cram")
+
 ubam_nomatch = ubam.replace(".cram", ".nomatch.cram")
 ubam_correction_stats = complete_data_root + "/stats/cb_correct.tsv"
+ubam_correction_sample_stats = complete_data_root + "/stats/cb_correct_sample.tsv"
+
 # downsampled bam
 downsampled_bam_mm_included_pipe_suffix = (
     "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included.cram"

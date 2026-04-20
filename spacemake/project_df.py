@@ -264,6 +264,10 @@ class ProjectDF:
 
             # print(self.df[["puck_barcode_file_id", "puck_barcode_file", "puck"]])
 
+    def __iter__(self):
+        for row in self.df.itertuples():
+            yield row
+
     def _check_unique_samples(self):
         for index, _ in self.df.iterrows():
             if len(self.df[self.df.index.isin([index])]) > 1:

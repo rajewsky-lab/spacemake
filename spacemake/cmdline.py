@@ -790,6 +790,16 @@ def setup_run_parser(parent_parser_subparsers):
     )
     downsampling_parser.set_defaults(downsample=True, func=spacemake_run)
 
+    ecg_parser = parser_run_subparsers.add_parser(
+        "estimate-correction-gains",
+        help="perform barcode correction on the first 1M reads to estimate the correction gains for a list of projects/samples",
+        parents=[get_project_sample_parser(allow_multiple=True), get_run_parser()],
+    )
+    ecg_parser.add_argument(
+        "--sample-size", type=float, default=10, help="number of million reads to use for estimating the correction gains"
+    )
+    ecg_parser.set_defaults(func=spacemake_estimate_correction_gains)
+
     # parser_novosparc = novosparc_spacemake_parser(parser_run_subparsers)
     # parser_novosparc.set_defaults(novosparc_reconstruct=True,
     #    func=lambda args: spacemake_run(pdf, args))
@@ -1020,9 +1030,8 @@ def collect_smk_options(args):
     return smk_options
 
 
-@message_aggregation(logger_name)
-def spacemake_run(args):
-    """spacemake_run.
+def prepare_run(args):
+    """prepare_run.
 
     :param args:
     """
@@ -1076,8 +1085,8 @@ def spacemake_run(args):
         return
 
     pdf = get_global_ProjectDF()
-    samples = []
-    projects = []
+    samples = args.get("sample_id_list", [])
+    projects = args.get("project_id_list", [])
     targets = ["run_analysis"]
     with_fastqc = args.get("with_fastqc", False)
 
@@ -1086,8 +1095,6 @@ def spacemake_run(args):
 
     if downsample:
         targets = ["downsample"]
-        samples = args.get("sample_id_list", [])
-        projects = args.get("project_id_list", [])
 
     if novosparc_reconstruct:
         targets = ["novosparc"]
@@ -1106,6 +1113,51 @@ def spacemake_run(args):
         "log_debug": args["debug"],
     }
 
+    return config_variables, targets, pdf
+
+
+@message_aggregation(logger_name)
+def spacemake_estimate_correction_gains(args):
+    """spacemake_estimate_correction_gains.
+
+    :param args:
+    """
+    from spacemake.errors import SpacemakeError
+    import snakemake
+
+    config_variables, targets, pdf = prepare_run(args)
+    # join config_variables and novosparc_variables
+    # to flatten the diunpack(get_final_bam)e
+    snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")
+    config_variables['ecg_sample_size']= args.get("sample_size", 10)
+    smk_options = collect_smk_options(args)
+
+    # print(smk_options)
+    # print(config_variables)
+    analysis_finished = snakemake.snakemake(
+        snakefile,
+        targets=["estimate_correction_gains"],
+        config=config_variables,
+        **smk_options,
+    )
+    if analysis_finished is False:
+        raise SpacemakeError("an error occurred while snakemake() ran")
+    else:
+        logger.info(
+            "estimation of correction gains finished successfully. Check 'estimated_correction_gains.csv' for results."
+        )
+
+
+@message_aggregation(logger_name)
+def spacemake_run(args):
+    """spacemake_run.
+
+    :param args:
+    """
+    from spacemake.errors import SpacemakeError
+    import snakemake
+
+    config_variables, targets, pdf = prepare_run(args)
     # join config_variables and novosparc_variables
     # to flatten the diunpack(get_final_bam)e
     snakefile = os.path.join(os.path.dirname(__file__), "snakemake/main.smk")

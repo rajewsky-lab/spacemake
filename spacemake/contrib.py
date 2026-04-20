@@ -1,6 +1,7 @@
 import importlib.metadata
 
-__version__ = "0.9.4"
+__version__ = "0.9.6"
+
 __author__ = [
     "Nikos Karaiskos",
     "Tamas Ryszard Sztanka-Toth",
@@ -52,6 +53,10 @@ roadmap = [
     (
         "0.9",
         "CRAM on-disk format together with other tweaks -> disk footprint down to 1/3 of 0.8. Replace pre-processing with cutadapt code",
+    ),
+    (
+        "0.9.3",
+        "barcode error correction. ~5%-15% more reads assigned to spatial barcodes.",
     ),
     (
         "1.x",

@@ -211,6 +211,47 @@ def test_issue_88(initialized_root):
     print("here's what we inserted", inserted)
     assert "name" not in inserted
 
+def test_puck_collection_nomesh_issue_157(with_species, dry=False):
+    """
+    test openst puck collection without meshing, which failed due to a missing import in
+    0.9.3 (issue #157 reported by helen-5808 on github)
+    """
+    # derived from test_puck_collection
+    sm(
+        "config",
+        "add-puck",
+        "--name=openst_min",
+        f"--coordinate_system={spacemake_dir}/test_data/test_coordinate_system.csv",
+        "--width_um=1200",
+        "--spot_diameter_um=0.6",
+    )
+    sm(
+        "projects",
+        "add-sample",
+        "--project-id=fc_test",
+        "--sample-id=fc_test_collection",
+        f"--R1={spacemake_dir}/test_data/simple.reads1.fastq.gz",
+        f"--R2={spacemake_dir}/test_data/simple.reads2.fastq.gz",
+        "--puck=openst_min",
+        "--run-mode=openst_nomesh",  # nomesh is important here
+        "--barcode-flavor=openst",
+        "--puck-barcode-file",
+        f"{spacemake_dir}/test_data/tile_1.txt.gz",
+        f"{spacemake_dir}/test_data/tile_2.txt.gz",
+        f"{spacemake_dir}/test_data/tile_3.txt.gz",
+        f"{spacemake_dir}/test_data/tile_4.txt.gz",
+        f"{spacemake_dir}/test_data/tile_5.txt.gz",
+        f"{spacemake_dir}/test_data/tile_6.txt.gz",
+        "--map-strategy=rRNA:bowtie2->genome:STAR:final",
+        "--species=test_hsa",
+    )
+    if dry:
+        sm("run", "-np", "--cores=8")
+    else:
+        sm("run", "-p", "--cores=8")
+        # assert os.path.exists(
+        #     "projects/fc_test/processed_data/fc_test_collection/illumina/complete_data/dge/dge.all.polyA_adapter_trimmed.mm_included.spatial_beads.mesh_7_hexagon_puck_collection.h5ad"
+        # )
 
 def test_sample(configured_root):
     os.chdir(configured_root.as_posix())

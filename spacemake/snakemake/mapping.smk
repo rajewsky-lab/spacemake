@@ -116,6 +116,10 @@ def get_map_inputs(wc, mapper="STAR"):
     if hasattr(mr, "ann_final"):
         d['annotation'] = mr.ann_final
 
+    # For minimap2, also add junction BED file when annotation exists
+    if mapper == "mm2" and hasattr(mr, "ann_path") and mr.ann_path:
+        d['junc_bed'] = species_reference_junc_bed.format(species=mr.species, ref_name=mr.ref_name)
+
     return d
 
 def get_map_params(wc, output, mapper="STAR"):
@@ -134,11 +138,18 @@ def get_map_params(wc, output, mapper="STAR"):
                 f"samtools view --no-PG --threads=4 -T {ref} -C /dev/stdin -o {mr.out_path}"
             )
 
+    # For minimap2, add junc-bed flag when annotation exists
+    junc_bed_flag = ""
+    if mapper == "mm2" and hasattr(mr, "ann_path") and mr.ann_path:
+        junc_bed_path = species_reference_junc_bed.format(species=mr.species, ref_name=mr.ref_name)
+        junc_bed_flag = f"--junc-bed {junc_bed_path}"
+
     return {
         'annotation_cmd' : annotation_cmd,
         'annotation' : mr.ann_final,
         'index' : mr.map_index_param,
         'flags' : mr.map_flags,
+        'junc_bed_flag' : junc_bed_flag,
     }
 
 ##############################################################################
@@ -216,7 +227,7 @@ rule map_reads_mm2:
     shell:
         "samtools fastq -f 4 -T '*' {input.bam} "
         " "
-        "| minimap2 -t {threads} -ay {params.auto[flags]} {params.auto[index]} /dev/stdin 2> {log} "
+        "| minimap2 -t {threads} -ay {params.auto[flags]} {params.auto[junc_bed_flag]} {params.auto[index]} /dev/stdin 2> {log} "
         " "
         # fix the BAM header to accurately reflect the entire history of processing via PG records.
         "| python {repo_dir}/scripts/splice_bam_header.py "
@@ -372,6 +383,16 @@ rule create_minimap2_index:
         """
         mkdir -p {params.auto[map_index]}
         minimap2 -d {output} {input}
+        """
+
+rule create_junc_bed:
+    input:
+        species_reference_annotation
+    output:
+        species_reference_junc_bed
+    shell:
+        """
+        paftools.js gff2bed {input} > {output}
         """
 
 rule create_star_index:
