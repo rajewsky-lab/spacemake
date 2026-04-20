@@ -93,9 +93,6 @@ default_map_flags = {
     "mm2": (
         " -x splice "
     )
-    # "mm2SR": (
-    #     " -ax sr "
-    # )
 }
 
 
@@ -490,15 +487,26 @@ def get_mapped_BAM_output(
                 final_log_name = smv.star_log_file.format(
                     project_id=index[0], sample_id=index[1]
                 )
-                final_log = smv.star_target_log_file.format(
-                    ref_name=lr.ref_name, project_id=index[0], sample_id=index[1]
-                )
-                # print("STAR_FINAL_LOG_SYMLINKS preparation", final_target, final_log_name, "->", final_log)
+                
+                mr_final = map_data["MAP_RULES_LKUP"].get(lr.src_path)
+
+                if mr_final.mapper == "STAR": #STAR final log
+                    final_log = smv.star_target_log_file.format(
+                        ref_name=mr_final.ref_name,project_id=index[0], sample_id=index[1]
+                    )
+                elif mr_final.mapper == "mm2": #mm2 final log
+                    final_log = wc_fill(smv.mm2_target_log_file, mr_final)
+                
+                else:
+                    raise SpacemakeError(
+                        f"Final mapper '{mr_final.mapper}' not supported for final log linking "
+                    )
+
                 map_data["STAR_FINAL_LOG_SYMLINKS"][final_log_name] = final_log
-                map_data["REF_FOR_FINAL"][lr.link_path] = mr.ref_path
+
+                map_data["REF_FOR_FINAL"][lr.link_path] = mr_final.ref_path
 
                 out_files.append(lr.link_path)
-
     # for k, v in sorted(map_data["MAP_RULES_LKUP"].items()):
     #     print(f"map_rules for '{k}'")
     #     print(v)

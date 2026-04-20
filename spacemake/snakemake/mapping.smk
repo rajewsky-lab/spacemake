@@ -10,7 +10,6 @@ references, each with its own sequence/FASTA file and optional annotation) and a
 The module takes over after pre-processing is done and hands over a "final.bam" or equivalent
 to all downstream steps (DGE generation, qc_sheets, ...).
 """
-
 # This is where all the python functions and string constants
 # live
 from spacemake.map_strategy import *
@@ -219,24 +218,23 @@ rule map_reads_mm2:
     output:
         bam=mm2_mapped_bam,
         ubam=mm2_unmapped_bam,
-        star_log=star_target_log_file,
-    log: mm2_log
+        log=mm2_target_log_file,
+    log:
+        mm2_log,
     params:
-        auto = lambda wc, output: get_map_params(wc, output, mapper='mm2'),
+        auto=lambda wc, output: get_map_params(wc, output, mapper='mm2'),
     threads: 32
     shell:
         "samtools fastq -f 4 -T '*' {input.bam} "
         " "
         "| minimap2 -t {threads} -ay {params.auto[flags]} {params.auto[junc_bed_flag]} {params.auto[index]} /dev/stdin 2> {log} "
         " "
-        # fix the BAM header to accurately reflect the entire history of processing via PG records.
         "| python {repo_dir}/scripts/splice_bam_header.py "
         "  --in-ubam {input.bam}"
         " "
         "| tee >( {params.auto[annotation_cmd]} ) "
         "| samtools view -f 4 --threads=4 -Ch --no-PG > {output.ubam} "
-        " && touch {output.star_log}" # TODO find out who depends on this and make them read mm2 stats too
-
+        " && touch {output.log}"
 
 # TODO: unify these two functions and get rid of the params in parse_ribo_log rule below.
 def get_ribo_log(wc):
