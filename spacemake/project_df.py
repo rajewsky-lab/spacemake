@@ -533,10 +533,9 @@ class ProjectDF:
             or (data.sample_sheet and data.basecalls_dir)
             or data.dge
             or data.reads
+            or data.longreads
         ):
             return True
-        elif data.longreads:
-            return False
         else:
             raise SpacemakeError(
                 f"Sample with id (project_id, sample_id)="
@@ -1085,18 +1084,18 @@ class ProjectDF:
                             + "sample_sheet, nor dge were provided.\n"
                             + "Some reads/data has to be provided"
                         )
-            else:
-                if not longread_signature:
-                    raise SpacemakeError(
-                        "adding longreads requires to set --longread-signature as well (e.g. dropseq, chromium, noUMI, default, visium, slideseq_bc14,...)"
-                    )
+            # else:
+            #     if not longread_signature:
+            #         raise SpacemakeError(
+            #             "adding longreads requires to set --longread-signature as well (e.g. dropseq, chromium, noUMI, default, visium, slideseq_bc14,...)"
+            #         )
 
         # assert files first
         # if R1 is not None:
         assert_file(R1, default_value=None, extension=".fastq.gz")
 
         # if R2 is not None:
-        assert_file(R2, default_value=None, extension=".fastq.gz")
+        assert_file(R2, default_value=None, extension=[".fastq.gz"])
 
         assert_file(reads, default_value=None, extension=[".txt", ".csv", ".tsv"])
         assert_file(longreads, default_value=None, extension="all")

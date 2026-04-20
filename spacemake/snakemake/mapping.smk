@@ -10,7 +10,6 @@ references, each with its own sequence/FASTA file and optional annotation) and a
 The module takes over after pre-processing is done and hands over a "final.bam" or equivalent
 to all downstream steps (DGE generation, qc_sheets, ...).
 """
-
 # This is where all the python functions and string constants
 # live
 from spacemake.map_strategy import *
@@ -49,27 +48,11 @@ final_target = "final.polyA_adapter_trimmed"
 # ubam_input = "unaligned_bc_tagged{polyA_adapter_trimmed}"
 # final_target = "final{polyA_adapter_trimmed}"
 
-default_BT2_MAP_FLAGS = (
-    " --local"
-    " -L 10 -D 30 -R 30"
-    " --ignore-quals"
-    " --score-min=L,0,1.5" # require 75% of perfect match (2=base match)
-)
-# original rRNA mapping code used --very-fast-local and that was that.
+#default_BT2_MAP_FLAGS = (
+#)
 
-default_STAR_MAP_FLAGS = (
-    # before shared memory
-    # " --genomeLoad NoSharedMemory"
-    # with shared memory
-    " --genomeLoad LoadAndKeep"
-    " --limitBAMsortRAM 5000000000"
-    " --outSAMprimaryFlag AllBestScore"
-    " --outSAMattributes All"
-    " --outSAMunmapped Within"
-    " --outStd BAM_Unsorted"
-    " --outSAMtype BAM Unsorted"
-    " --limitOutSJcollapsed 5000000"
-)
+#default_STAR_MAP_FLAGS = (
+#)
 
 # TODO: port remaining python code to map_strategy.py
 # to expose it to enable coverage analysis and unit-testing
@@ -132,6 +115,10 @@ def get_map_inputs(wc, mapper="STAR"):
     if hasattr(mr, "ann_final"):
         d['annotation'] = mr.ann_final
 
+    # For minimap2, also add junction BED file when annotation exists
+    if mapper == "mm2" and hasattr(mr, "ann_path") and mr.ann_path:
+        d['junc_bed'] = species_reference_junc_bed.format(species=mr.species, ref_name=mr.ref_name)
+
     return d
 
 def get_map_params(wc, output, mapper="STAR"):
@@ -150,11 +137,18 @@ def get_map_params(wc, output, mapper="STAR"):
                 f"samtools view --no-PG --threads=4 -T {ref} -C /dev/stdin -o {mr.out_path}"
             )
 
+    # For minimap2, add junc-bed flag when annotation exists
+    junc_bed_flag = ""
+    if mapper == "mm2" and hasattr(mr, "ann_path") and mr.ann_path:
+        junc_bed_path = species_reference_junc_bed.format(species=mr.species, ref_name=mr.ref_name)
+        junc_bed_flag = f"--junc-bed {junc_bed_path}"
+
     return {
         'annotation_cmd' : annotation_cmd,
         'annotation' : mr.ann_final,
         'index' : mr.map_index_param,
         'flags' : mr.map_flags,
+        'junc_bed_flag' : junc_bed_flag,
     }
 
 ##############################################################################
@@ -162,10 +156,7 @@ def get_map_params(wc, output, mapper="STAR"):
 ##############################################################################
 
 ruleorder:
-    map_reads_bowtie2 > map_reads_STAR > cb_correct > symlinks
-
-# wildcard_constraints:
-#     link_name=".*!corrected$"
+    map_reads_bowtie2 > map_reads_mm2 > map_reads_STAR > cb_correct > symlinks
 
 ruleorder:    
     symlink_final_log > map_reads_STAR
@@ -221,6 +212,29 @@ rule map_reads_bowtie2:
        
         # "sambamba sort -t {threads} -m 8G --tmpdir=/tmp/tmp.{wildcards.name} -l 6 -o {output} /dev/stdin "
 
+rule map_reads_mm2:
+    input:
+        unpack(lambda wc: get_map_inputs(wc, mapper='mm2')),
+    output:
+        bam=mm2_mapped_bam,
+        ubam=mm2_unmapped_bam,
+        log=mm2_target_log_file,
+    log:
+        mm2_log,
+    params:
+        auto=lambda wc, output: get_map_params(wc, output, mapper='mm2'),
+    threads: 32
+    shell:
+        "samtools fastq -f 4 -T '*' {input.bam} "
+        " "
+        "| minimap2 -t {threads} -ay {params.auto[flags]} {params.auto[junc_bed_flag]} {params.auto[index]} /dev/stdin 2> {log} "
+        " "
+        "| python {repo_dir}/scripts/splice_bam_header.py "
+        "  --in-ubam {input.bam}"
+        " "
+        "| tee >( {params.auto[annotation_cmd]} ) "
+        "| samtools view -f 4 --threads=4 -Ch --no-PG > {output.ubam} "
+        " && touch {output.log}"
 
 # TODO: unify these two functions and get rid of the params in parse_ribo_log rule below.
 def get_ribo_log(wc):
@@ -354,6 +368,29 @@ rule create_bowtie2_index:
                       --offrate 1 \
                       {params.auto[ref_path]} \
                       {params.auto[map_index_param]}
+        """
+
+rule create_minimap2_index:
+    input:
+        species_reference_sequence
+    output:
+        mm2_index_file
+    params:
+        auto = lambda wc: INDEX_FASTA_LKUP[wc_fill(mm2_index_file, wc)]
+    shell:
+        """
+        mkdir -p {params.auto[map_index]}
+        minimap2 -d {output} {input}
+        """
+
+rule create_junc_bed:
+    input:
+        species_reference_annotation
+    output:
+        species_reference_junc_bed
+    shell:
+        """
+        paftools.js gff2bed {input} > {output}
         """
 
 rule create_star_index:

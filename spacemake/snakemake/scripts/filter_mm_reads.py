@@ -64,17 +64,17 @@ def filter_mm(input, _out, bcs=set(), **kw):
 
     counter = defaultdict(int)
 
-    multi_mappers = []
-
     import re
 
-    pattern = re.compile(f"NH:i:(\S+)")
     CB_pattern = re.compile(f"CB:Z:(\S+)")
 
-    output = open(_out, "wt")
     from time import time
 
     T0 = time()
+
+    output = open(_out, "wt")
+    multi_mappers = []
+    qname = None
     for aln in open(input, "rt"):
         # header line. Just pass through
         if aln.startswith("@"):
@@ -105,29 +105,18 @@ def filter_mm(input, _out, bcs=set(), **kw):
             else:
                 counter["N_CB_selected"] += 1
 
-        # we only end up here if we have a cell barcode from the list
-        m = re.search(pattern, aln)
-        mapped_number = int(m.groups(0)[0])
-        # else:
-        #     # print(aln)
-        #     break
+        query_name = aln.split("\t", maxsplit=1)[0]
+        if query_name != qname:
+            # new read
+            if len(multi_mappers) == 1:
+                # fast path
+                counter["N_unique"] += 1
+                output.write(aln)
 
-        # see if we have unique or multimapper
-        if mapped_number == 1:
-            counter["N_unique"] += 1
-            output.write(aln)
-        else:
-            if len(multi_mappers) < (mapped_number - 1):
-                # still some multimappers missing. we need to add the alignments
-                # until the last one to the list
-                multi_mappers.append(aln)
-            else:
-                # add the last alignment
-                multi_mappers.append(aln)
+            elif len(multi_mappers) > 1:
                 counter["N_multi"] += 1
                 # decide which, if any, to keep
                 aln_to_keep = select_alignment(multi_mappers)
-
                 if aln_to_keep is not None:
                     counter["N_salvaged"] += 1
                     # set aln secondary flag to 0, so that it is flagged as primary
@@ -139,8 +128,34 @@ def filter_mm(input, _out, bcs=set(), **kw):
                     output.write("\t".join(cols))
                 else:
                     counter["N_not_salvaged"] += 1
-                # reset multimapper list
-                multi_mappers = []
+
+            # reset multimapper list
+            multi_mappers = []
+            qname = query_name
+
+        # add the last alignment
+        multi_mappers.append(aln)
+
+    # final iteration:
+    if len(multi_mappers) == 1:
+        counter["N_unique"] += 1
+        output.write(aln)
+
+    elif len(multi_mappers) > 1:
+        counter["N_multi"] += 1
+        # decide which, if any, to keep
+        aln_to_keep = select_alignment(multi_mappers)
+        if aln_to_keep is not None:
+            counter["N_salvaged"] += 1
+            # set aln secondary flag to 0, so that it is flagged as primary
+            # secondary flag is at 0x100, so 8th bit (starting from 0)
+            cols = aln_to_keep.split("\t")
+            flag = int(cols[1])
+            flag = flag & ~(1 << 8)
+            cols[1] = str(flag)
+            output.write("\t".join(cols))
+        else:
+            counter["N_not_salvaged"] += 1
 
     output.flush()
     return counter

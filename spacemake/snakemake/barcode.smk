@@ -82,8 +82,12 @@ rule cb_correct:
         rel_ubam=lambda wildcards, input: os.path.basename(input.ubam)
     threads: 32
     run:
-        if os.path.getsize(input.bci) == 0:
-            print(f"about to link {params.rel_ubam} to {output.match} because bci is empty")
+        pbc = project_df.get_puck_barcode_ids_and_files(
+            project_id=wildcards.project_id, sample_id=wildcards.sample_id
+        )
+        print(pbc)
+        if (len(pbc[0]) and pbc[0] != "no_spatial_data") and (os.path.getsize(input.bci) > 0):
+            print(f"about to link {params.rel_ubam} to {output.match} because we do not have reference barcodes")
             # no spatial data -> just link input to output
             shell(
                 "ln -s {params.rel_ubam} {output.match} ; "
@@ -101,7 +105,6 @@ rule cb_correct:
                 "  --threads {threads} "
                 "  --nomatch-out {output.nomatch} " #{output.nomatch}"
             )
-
 
 rule cb_index_corrected_sample:
     input: barcode_readcounts

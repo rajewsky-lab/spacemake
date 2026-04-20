@@ -1,3 +1,5 @@
+set-resources:
+    pipe_buffer_mb: 12
 puck_data:
     barcode_file: 'predictions_ml.csv'
     root: 'puck_data'
@@ -98,12 +100,14 @@ run_modes:
         - 250
         - 500
     
-
 barcode_flavors:
     default:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
         #bam_tags: "CR:{cell},CB:{cell},MI:{UMI},RG:{assigned}"
+    openst_ont:
+        UMI: r2[-8:]
+        cell: lr_CR[2:27]
     dropseq:
         cell: "r1[0:12]"
         UMI: "r1[12:20]"
@@ -143,6 +147,24 @@ adapter_flavors:
             seq: AAGCAGTGGTATCAACGCAGAGTGAATGGG
             min_overlap: 10
             max_errors: 0.1
+    openst_ont:
+        - handles:
+            k: 10
+            name: openst_ont
+            handles: [['OpenST', "GCGAGAGTCGAGGGTGCTGTAGTCACAAGA"], ['ONT', "AGATCGGAAGAGCGTCGTGTAG"]]
+        - BCsearch: 
+            left: "GCGAGAGTCGAGGGTGCTGTAGTCACAAGA"
+            right: "AGATCGGAAGAGCGTCGTGTAG"
+            anchor_handle: OpenST
+            k: 32
+        - adapter:
+            name: ONT_5p
+            seq: AAGCAGTGGTATCAACGCAGAGTCAGACGTGTGCTCTTCCGATCT
+            where: left
+            max_errors: 0.3
+            min_overlap: 10
+        - polyA: null
+
 #        - barcode:
 #            cell: "r1[0:12]"
 #            UMI: "r1[12:20]"

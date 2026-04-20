@@ -5,6 +5,7 @@ from time import time
 import numpy as np
 import spacemake.util as util
 import mrfifo as mf
+import logging
 
 
 class SeqData(object):
@@ -35,6 +36,7 @@ class SeqData(object):
 
     def render_tags(self, extra_tags=[]):
         # print(self.tags)
+
         bam_tags = [(n, f"{','.join(records)}") for n, records in self.tags.items()]
         tag_str = "\t".join([f"{tag}:Z:{val}" for tag, val in bam_tags] + extra_tags)
         return tag_str
@@ -62,9 +64,24 @@ class SeqData(object):
             yield cls(fqid.split()[0], r1, q1, r2, q2)
 
     @classmethod
-    def from_BAM(cls, bam_src):
-        "TODO: allow pre-processing of raw data that is already in BAM format"
-        pass
+    def from_SAM(cls, sam_src):
+        "allow pre-processing of raw data that is already in BAM format"
+        header = []
+        for line in sam_src:
+            if line.startswith("@"):
+                header.append(line)
+                continue
+
+            cols = line.rstrip().split("\t")
+            qname = cols[0]
+            seq = cols[9]
+            qual = cols[10]
+            sd = cls(qname, "NA", "##", seq, qual)
+            # tags = cols[11:]
+            # sd.raw_tags = tags
+            # sd.tags.update({tag.split(":")[0]: tag.split(":")[2] for tag in tags})
+            # sd.header = header
+            yield sd
 
 
 ## Preprocessing is done by sequentially acting on a SeqData object to modify
@@ -176,7 +193,11 @@ def polyA_trim(rev_comp=False):
     return polyA
 
 
-def adapter_trim(
+#                          AAGCAGTGGTATCAACGCAGAGTGGACGTTGTACTCTCC
+#                          AAGCAGTGGTATCAACGCAGAGTCAGACATACTGTTCCGATCT
+#                          AAGCAGTGGTATCAACGCAGAGTCAGACGTGTGCTCTTCCGATCT
+#                          AAGCAGTGGTATCAACGCAGAGTCAGACGT
+def adapter_trim(  # AAGCAGTGGTATCAACGCAGAGTCAGACGT
     name="SMART_TSO", seq="AAGCAGTGGTATCAACGCAGAGTGAATGGG", where="right", **kw
 ):
     import cutadapt.adapters
@@ -205,6 +226,239 @@ def adapter_trim(
     return adap
 
 
+def require_handles(
+    name="ONT_openst",
+    k=10,
+    handles=[
+        ("OpenST", "GCGAGAGTCGAGGGTGCTGTAGTCACAAGA"),
+        (
+            "ONT",
+            "AGATCGGAAGAGCGTCGTGTAG",
+        ),  # AATGATACGGCGACCACCGAGATC TACACTCTTTCCCTACACGACGCTCTTCCGATCT
+        # ('ONT_3p', "AGATCGGAAGAGCACACGTCTGACTCTGCGTTGATACCACTGCTT"),
+    ],
+):
+    """
+    kmer-lookup based detection of required adapter sequences. Can add tags, orient the sequence and
+    discard incomplete reads if desired.
+    """
+
+    from collections import defaultdict
+
+    kmer_dict = {}
+    kmer_count = defaultdict(int)
+    names = []
+    for name, seq in handles:
+        names.append(name)
+        for i in range(len(seq) - k + 1):
+            kmer_count[name] += 1
+            kmer = seq[i : i + k]
+            kmer_dict[kmer] = (name, i)
+
+    from spacemake.util import rev_comp
+
+    # print(">>> SET UP HANDLES")
+    # print(names)
+    # print(kmer_dict)
+    # print(kmer_count)
+    kmer_thresh = 0.75 * len(kmer_dict)
+
+    def _scan_seq(seq):
+        hits = defaultdict(int)
+        pos = defaultdict(lambda: defaultdict(int))
+        total_hits = 0
+
+        for i in range(len(seq) - k + 1):
+            kmer = seq[i : i + k]
+            name, j = kmer_dict.get(kmer, (None, 0))
+            if name:
+                hits[name] += 1
+                total_hits += 1
+                pos[name][i - j] += 1
+
+        return total_hits, hits, pos
+
+    def scan(sdata):
+        seq = sdata.r2
+        total_hits, hits, pos = _scan_seq(seq)
+        # if total_hits < kmer_thresh:
+        _seq = rev_comp(seq)
+        _total_hits, _hits, _pos = _scan_seq(_seq)
+        if _total_hits > total_hits:
+            # Yes, we want the rev-comp!
+            sdata.r2 = _seq
+            sdata.q2 = sdata.q2[::-1]
+            sdata.tags["rc"] = ["true"]
+
+            seq = _seq
+            total_hits = _total_hits
+            hits = _hits
+            pos = _pos
+
+        fractions = {}
+        pos_guess = {}
+        for name in names:
+            N = kmer_count[name]
+            fractions[name] = hits[name] / N
+            if pos[name]:
+                pos_hits = sorted([(f, x) for x, f in pos[name].items()], reverse=True)
+                pos_guess[name] = pos_hits[0][1]
+
+        # for name in names:
+        #     print(f">> {name}: f={fractions[name]} x_guess={pos_guess.get(name,'na')} x={pos[name]}")
+
+        sdata.tags["kf"] = [f"{int(100*fractions[name])}" for name in names]
+        sdata.tags["kp"] = [f"{pos_guess.get(name, 'na')}" for name in names]
+        sdata.tags["kh"] = names
+        # print(f">> TAGS kh: {sdata.tags['kh']} kf: {sdata.tags['kf']} kp: {sdata.tags['kp']}")
+
+    return scan
+
+
+"""
+right                                                         AGATCGGAAGAGCGTCGTGTAG
+GCGAGAGTCGAGGGTGCTGTAGTCACAAGACAAGTTAGCTAGTCCCGCCAGACCTCGATCCGAGAAATAGGAAGAGCATAGTGT
+                                                                AgATcGGAAGAGCgTcGTGTAG
+                                                                AAATAGGAAGAGCATAGTGT
+                                                              AGAAATAGGAAGAGCATAGTGT
+                                                              AGA--TcGGAAGAGCGTCGTGTAG
+"""
+
+
+def find_BC_between(
+    left="GCGAGAGTCGAGGGTGCTGTAGTCACAAGA",
+    right="AGATCGGAAGAGCGTCGTGTAG",
+    anchor_handle="OpenST",
+    k=32,
+    left_kw={},
+    right_kw={},
+    rev_comp=True,
+):
+    import cutadapt.adapters
+    from spacemake.util import rev_comp
+
+    # left_adap = cutadapt.adapters.NonInternalFrontAdapter(
+    #     left, name="left", max_errors=0.3, **left_kw
+    # )
+    # right_adap = cutadapt.adapters.BackAdapter(
+    #     right, name="right", max_errors=0.3, **right_kw
+    # )
+    left_adap = cutadapt.adapters.NonInternalFrontAdapter(
+        left, name="left", max_errors=0.3, min_overlap=4, **left_kw
+    )
+    right_adap = cutadapt.adapters.BackAdapter(
+        right, name="right", max_errors=0.3, min_overlap=4, **right_kw
+    )
+
+    L = len(left) + len(right) + k
+
+    def adap(sdata):
+        seq = sdata.r2
+        if len(seq) < L:
+            sdata.tags["MQ"] = ["too_short"]
+        elif "kh" in sdata.tags:
+            kh = sdata.tags["kh"]
+            kp = sdata.tags["kp"]
+            kf = sdata.tags["kf"]
+            i = kh.index(anchor_handle)
+
+            # print(sdata.qname)
+            # print(f"rc={sdata.tags['rc']} kh={kh} kp={kp} kf={kf}")
+            # print(sdata.r2)
+
+            if int(kf[i]) > 5:  # at least 5% of kmers were seen
+                anchor = max(
+                    int(kp[i]), 0
+                )  # occasionally, kmer hits indicate a truncated handle with start pos < 0
+
+                window = seq[anchor : anchor + L]
+                match_left = left_adap.match_to(window)
+                match_right = right_adap.match_to(window)
+                # print(match_left)
+                # print(match_right)
+
+                # print(window)
+                left_score = 0
+                right_score = 0
+
+                if match_left and match_right:
+                    # print("match left + right")
+                    # simple heuristic to find out which adapter matched correctly at the side facing the barcode
+                    left_score = (
+                        10 * (match_left.match_sequence()[-4:] == left[-4:])
+                        - match_left.errors
+                    )
+                    right_score = (
+                        10 * (match_right.match_sequence()[:4] == right[:4])
+                        - match_right.errors
+                    )
+
+                    if left_score >= right_score:
+                        raw_barcode = window[match_left.rstop : match_left.rstop + k]
+                    else:
+                        raw_barcode = window[
+                            match_right.rstart - k : match_right.rstart
+                        ]
+
+                    # print(f"left_score={left_score} right_score={right_score}")
+                    # lpad = " " * match_left.rstart
+                    # print(
+                    #     f"{lpad}{match_left.match_sequence()}{' '*(k)}{match_right.match_sequence()}"
+                    # )
+
+                    # This can be wonky. If match_right is off in the beginning then we'll end up with != 32 bases and after rev-comp this will
+                    # screw the barcode
+                    # raw_barcode = window[match_left.rstop : match_right.rstart]
+                    n_keep = anchor + match_left.rstart
+                    match_code = "LR"
+                    left_score = match_left.score
+                    right_score = match_right.score
+                elif match_left:
+                    # print("match left")
+                    raw_barcode = window[match_left.rstop : match_left.rstop + k]
+                    n_keep = anchor + match_left.rstart
+                    match_code = "L-"
+                    left_score = match_left.score
+                elif match_right:
+                    # print("match right")
+                    raw_barcode = window[match_right.rstart - k : match_right.rstart]
+                    n_keep = anchor + match_right.rstart - k - len(left)
+                    match_code = "-R"
+                    right_score = match_right.score
+                else:
+                    raw_barcode = None
+                    match_code = "--"
+
+                sdata.tags["MQ"] = [match_code]
+                sdata.tags["MS"] = [str(left_score), str(right_score)]
+                # print(f"CR={raw_barcode} CB={rev_comp(raw_barcode)[2:27]}")
+                # print(f"{sdata.qname} {sdata.tags['kf']} {sdata.tags['kp']}")
+                # print(window)
+                # print(match_left)
+                # print(match_right)
+
+                if raw_barcode:
+                    if rev_comp:
+                        raw_barcode = rev_comp(raw_barcode)
+
+                    BC_len = len(raw_barcode)
+                    if BC_len < k:
+                        sdata.tags["MQ"].append("short_BC")
+                    if BC_len > k:
+                        sdata.tags["MQ"].append("long_BC")
+
+                    sdata.tags["CR"] = [raw_barcode]
+                    sdata.tags["bl"] = [str(BC_len)]
+                    # clip everything right of the match_left.rstart
+                    n_trimmed = len(sdata.r2) - n_keep
+                    sdata.tags["A3"].append(anchor_handle)
+                    sdata.tags["T3"].append(str(n_trimmed))
+                    sdata.r2 = sdata.r2[:n_keep]
+                    sdata.q2 = sdata.q2[:n_keep]
+
+    return adap
+
+
 format_func_template = """
 def format_func(sdata):
     {i5i7}
@@ -212,6 +466,8 @@ def format_func(sdata):
     q1 = sdata.q1
     r2 = sdata.r2
     r2_qual = sdata.q2
+
+    lr_CR = sdata.tags.get('CR', ["NA"])[0]
 
     sdata.tags['CB'] = [{cell}, ]
     sdata.tags['MI'] = [{UMI}, ]
@@ -254,7 +510,22 @@ def barcode(
     return func
 
 
+def discard_filter(min_len=18):
+    def check_discard(sdata):
+        seq = sdata.r2
+        if len(seq) < min_len:
+            sdata.tags["DQ"] = ["short_discard"]
+
+        CB = sdata.tags.get("CB", [""])[0]
+        if len(CB) == 0:
+            # print("discarding read without CB")
+            sdata.tags["DQ"] = ["no_CB_discard"]
+
+    return check_discard
+
+
 class PreProcessor(object):
+    logger = logging.getLogger("spacemake.fastq_to_uBAM.py.PreProcessor")
     type_dict = {
         "right": int,
         "left": int,
@@ -274,6 +545,8 @@ class PreProcessor(object):
         "simple_name": name_simplifier,
         "barcode": barcode,
         "clip": clip,
+        "handles": require_handles,
+        "BCsearch": find_BC_between,
     }
 
     def __init__(self, processing_str="", flavor_dict={}, **kw):  # , min_len=18):
@@ -282,10 +555,20 @@ class PreProcessor(object):
         self.stats = defaultdict(int)
 
         # parse processing_str and assemble a pre-processing pipeline
-        if flavor_dict:
-            self.pipeline = self.pipeline_from_flavor(flavor_dict)
-        else:
-            self.pipeline = self.pipeline_from_str(processing_str)
+        try:
+            if flavor_dict:
+                self.pipeline = self.pipeline_from_flavor(flavor_dict)
+            else:
+                self.pipeline = self.pipeline_from_str(processing_str)
+
+        except (ValueError, KeyError) as E:
+            self.logger.error(
+                "Malformed pipeline configuration. Check the string passed to --processing or flavor in the config.yaml "
+            )
+            raise E
+
+        # always ensure that we filter out too-short or unusable reads
+        self.pipeline.append(discard_filter(min_len=self.kw.get("min_len", 18)))
 
     def pipeline_from_flavor(self, flavor_dict):
         pipeline = []
@@ -364,15 +647,36 @@ class PreProcessor(object):
                 self.stats[(f"bases", a, t)] += 1
                 self.stats[(f"bases", a, "A3_total")] += int(t)
 
+        if "DQ" in tags:
+            for reason in tags["DQ"]:
+                self.stats[("reads", "N", reason)] += 1
 
-def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
+        if "MQ" in tags:
+            for value in tags["MQ"]:
+                self.stats[("reads", "MQ", value)] += 1
+
+        if "bl" in tags:
+            self.stats[("bases", "BC_len", tags["bl"][0])] += 1
+
+
+def process_reads(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
 
     logger = util.setup_logging(args, "fastq_to_uBAM.worker", rename_process=False)
     logger.debug(
         f"starting up with fq1={fq1}, fq2={fq2} sam_out={sam_out} and args={args}"
     )
 
-    ingress = SeqData.from_paired_end(fq1, fq2) if fq1 else SeqData.from_single_end(fq2)
+    if args.input_format == "BAM":
+        ingress = SeqData.from_SAM(fq2)
+    else:
+        if fq2:
+            ingress = (
+                SeqData.from_paired_end(fq1, fq2)
+                if fq1
+                else SeqData.from_single_end(fq2)
+            )
+        else:
+            raise ValueError("no input data provided")
 
     # TODO:
     # decide how we want to handle multiple input files
@@ -430,30 +734,46 @@ def process_fastq(fq1, fq2, sam_out, args, _extra_args={}, **kwargs):
             seq=args.seq,
             qual=args.qual,
         ),
+        min_len=args.min_len,
     )
 
-    # N = mf.util.CountDict()
+    # counts = defaultdict(int)
 
     for sdata in ingress:
-        # N.count("total")
+        # counts["total_records_input"] += 1
         sdata = pre.process(sdata)
         sam_out.write(sdata.render_SAM(flag=4))
 
     return pre.stats
 
 
-def min_length_filter(input, output, min_len=18):
+def discard_tag_filter(input, output):
+    from time import time
+
+    logger = logging.getLogger("spacemake.fastq_to_uBAM")
+    logger.setLevel(logging.INFO)
     N = 0
+    N_last = 0
+    T0 = time()
     for line in input:
         if not line.startswith("@"):
-            seq = line.split("\t")[9]
-            if len(seq) < min_len:
+            if "\tDQ:Z:" in line:
                 continue
 
+            N += 1
+
         output.write(line)
-        N += 1
+        if N % 1000 == 0:
+            dT = time() - T0
+            if dT > 5:
+                dN = N - N_last
+                rate = 0.001 * dN / dT
+                logger.info(f"processing at {rate:.2f}k records/second ({N:,} total)")
+                T0 = time()
+                N_last = N
 
     return N
+
     # if args.paired_end:
     #             # if args.paired_end[0] == 'r':
     #             #     # rev_comp R1 and reverse qual1
@@ -496,15 +816,30 @@ def main(args):
     have_read1 = set([str(r1) != "None" for r1 in input_reads1]) == set([True])
 
     # queues for communication between processes
-    w = (
-        mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
-        # open reads2.fastq.gz
-        .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
-            input=mf.FIFO("read2", "rt"),
-            outputs=mf.FIFO("r2_{n}", "wt", n=args.threads_work),
-            chunk_size=args.chunk_size * 4,
+    if args.input_format == "BAM":
+        w = (
+            mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
+            # open reads2.fastq.gz
+            .BAM_reader(
+                input=input_reads2[0], output=mf.FIFO("read2", "wb")
+            ).distribute(
+                input=mf.FIFO("read2", "rt"),
+                outputs=mf.FIFO("r2_{n}", "wt", n=args.threads_work),
+                header_broadcast=True,
+                header_detect_func=mf.util.is_header,
+                chunk_size=args.chunk_size,
+            )
         )
-    )
+    else:
+        w = (
+            mf.Workflow("fastq_to_uBAM", total_pipe_buffer_MB=args.pipe_buffer)
+            # open reads2.fastq.gz
+            .gz_reader(inputs=input_reads2, output=mf.FIFO("read2", "wb")).distribute(
+                input=mf.FIFO("read2", "rt"),
+                outputs=mf.FIFO("r2_{n}", "wt", n=args.threads_work),
+                chunk_size=args.chunk_size * 4,
+            )
+        )
 
     if have_read1:
         # open reads1.fastq.gz
@@ -516,7 +851,7 @@ def main(args):
         )
         # process in parallel workers
         w.workers(
-            func=process_fastq,
+            func=process_reads,
             fq1=mf.FIFO("r1_{n}", "rt"),
             fq2=mf.FIFO("r2_{n}", "rt"),
             sam_out=mf.FIFO("sam_{n}", "wt"),
@@ -526,13 +861,21 @@ def main(args):
     else:
         # process in parallel workers
         w.workers(
-            func=process_fastq,
+            func=process_reads,
             fq1=None,
             fq2=mf.FIFO("r2_{n}", "rt"),
             sam_out=mf.FIFO("sam_{n}", "wt"),
             args=args,
             n=args.threads_work,
         )
+
+    # # null writer for debug purposes
+    # w.workers(
+    #     func=mf.parts.null_writer_managed,
+    #     input=mf.FIFO("sam_{n}", "rt"),
+    #     n=args.threads_work,
+    #     job_name="{workflow}.null{n}",
+    # )
 
     # combine output streams
     w.collect(
@@ -551,11 +894,14 @@ def main(args):
         log_rate_template="written {M_out:.1f} M BAM records ({mps:.3f} M/s, overall {MPS:.3f} M/s)",
         log_name="fastq_to_uBAM.collect",
     )
+    # w.funnel(
+    #     func=mf.parts.null_writer_managed,
+    #     input=mf.FIFO("sam_combined", "rt"),
+    # )
     w.funnel(
-        func=min_length_filter,
+        func=discard_tag_filter,
         input=mf.FIFO("sam_combined", "rt"),
         output=mf.FIFO("sam_filtered", "wt"),
-        min_len=args.min_len,
     )
     # compress to BAM
     fmt_opt = " ".join([f"--output-fmt-option {o}" for o in args.out_fmt_option])
@@ -571,9 +917,13 @@ def main(args):
     )
     res = w.run()
     stats = defaultdict(int)
+    # defaults
+    stats[("reads", "N", "output")] = 0
+    stats[("reads", "N", "input")] = 0
     for w, d in res.result_dict.items():
         if "worker" in w:
             for k, v in d.items():
+                # print(w, k, v)
                 stats[k] += v
         elif "funnel0" in w:
             stats[("reads", "N", "output")] = d
@@ -614,15 +964,13 @@ def get_input_params(args):
             ] * len(R1)
 
     else:
-        R1 = [
-            args.read1,
-        ]
-        R2 = [
-            args.read2,
-        ]
+        R1 = args.read1
+        R2 = args.read2
         params = [
             {},
         ]
+        if not R1:
+            R1 = ["None"] * len(R2)
 
     return R1, R2, params
 
@@ -644,12 +992,14 @@ def parse_args():
         "--read1",
         default=None,
         help="source from where to get read1 (FASTQ format)",
+        nargs="*",
     )
     parser.add_argument(
         "--read2",
         default="/dev/stdin",
         help="source from where to get read2 (FASTQ format)",
         # required=True,
+        nargs="*",
     )
     parser.add_argument(
         "--paired-end",
@@ -663,7 +1013,12 @@ def parse_args():
         type=int,
         help="phred quality base in the input (default=33)",
     )
-
+    parser.add_argument(
+        "--input-format",
+        default="FASTQ",
+        choices=["FASTQ", "BAM"],
+        help="input format (default=FASTQ)",
+    )
     ## pre-processing options
     parser.add_argument(
         "--processing",
@@ -705,11 +1060,15 @@ def parse_args():
         type=int,
         help="How many megabytes of pipe-buffer to use. kernel settings is usually 64MB per user (default=4MB)",
     )
+
+    parser.add_argument(
+        "--parallel", default=1, type=int, help="how many processes to spawn"
+    )
     parser.add_argument(
         "--chunk-size",
-        default=10,
+        default=1,
         type=int,
-        help="how many consecutive reads are assigned to the same worker (default=10)",
+        help="how many consecutive reads are assigned to the same worker (default=1)",
     )
     parser.add_argument(
         "--threads-work",
@@ -779,7 +1138,7 @@ def cmdline():
     logger.info(
         f"processed {N/1e6:.3f} M reads in {dt:.1f} seconds ({rate:.1f} k reads/sec)"
     )
-    logger.info(f"kept {N_kept/1e6:.3f} M reads in output ({100 * N_kept/N:.2f} %)")
+    logger.info(f"kept {N_kept:,} reads in output ({100 * N_kept/N:.2f} %)")
     return df
 
 

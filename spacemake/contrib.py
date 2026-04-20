@@ -1,6 +1,7 @@
 import importlib.metadata
 
-__version__ = "0.9.5"
+__version__ = "0.9.6"
+
 __author__ = [
     "Nikos Karaiskos",
     "Tamas Ryszard Sztanka-Toth",
