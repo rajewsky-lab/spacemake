@@ -583,6 +583,15 @@ class ConfigFile:
                     cf.variables[var_with_default]["default"] = default_val
 
         cf.expand_strings()
+        from spacemake.util import dotdict
+
+        # make config.paths.complete_data.root a viable option
+        cf.paths = dotdict(cf.variables["paths"])
+        for k, v in cf.paths.items():
+            if type(v) is dict:
+                # replace dict with dotdict for easier access
+                cf.paths[k] = dotdict(v)
+
         return cf
 
     def expand_strings(self, **kw):
