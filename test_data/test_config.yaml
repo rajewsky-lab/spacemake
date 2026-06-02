@@ -1,4 +1,4 @@
-spacemake_version: 0.9.1b
+spacemake_version: 0.9.5
 root_dir: '.'
 temp_dir: '/tmp'
 external_bin: 
@@ -264,4 +264,73 @@ species:
         rRNA:
             annotation: ''
             sequence: "{spacemake_dir}/test_data/rRNA_hsa.fa.gz"
+
+default_mapper_settings:
+    STAR:
+        index_flags: --genomeSAindexNbases 12
+
+        map_flags: >-
+            --limitBAMsortRAM 5000000000
+            --outSAMprimaryFlag AllBestScore
+            --outSAMattributes Standard
+            --outSAMunmapped Within
+            --outStd BAM_Unsorted
+            --outSAMtype BAM Unsorted
+            --limitOutSJcollapsed 5000000
+
+    bowtie2:
+        index_flags: >-
+            --ftabchars 12
+            --offrate 1
+        
+        # --score-min=L,0,1.5 -> require 75% of perfect match (2=base match)
+        map_flags: >-
+            --local
+            -L 10 -D 30 -R 30
+            -k 10
+            --ignore-quals
+            --score-min=L,0,1.5
+
+
+
+paths:
+    base:
+        project_dir : "projects/{project_id}"
+        config_path : "config.yaml"
+        project_df : "project_df.csv"
+        raw_data_root: "projects/{project_id}/raw_data"
+        raw_data_illumina: "projects/{project_id}/raw_data/illumina"
+        raw_data_illumina_reads: "projects/{project_id}/raw_data/illumina/reads/raw"
+        raw_data_illumina_reads_reversed: "projects/{project_id}/raw_data/illumina/reads/bc_umi_tagged"
+        processed_data_root: "projects/{project_id}/processed_data/{sample_id}"
+        processed_data_illumina: "projects/{project_id}/processed_data/{sample_id}/illumina"
+        illumina_root: "projects/{project_id}/processed_data/{sample_id}/illumina"
+    downsampled_data:
+#        prefix: "projects/{project_id}/processed_data/{sample_id}/illumina/downsampled_data"
+        root: "projects/{project_id}/processed_data/{sample_id}/illumina/downsampled_data/{downsampling_percentage}"
+    complete_data:
+        root: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data"
+        log_dir: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/logs"
+        stats: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/stats"
+        plots: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/plots"
+    data_root: "projects/{project_id}/processed_data/{sample_id}/illumina/{data_root_type}{downsampling_percentage}"
+    bam:
+        linked: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/{link_name}.cram"
+        mapped: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/{ref_name}.{mapper}.cram"
+        unmapped: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/not_{ref_name}.{mapper}.cram"
+        star_mapped: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/{ref_name}.STAR.cram"
+        star_unmapped: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/not_{ref_name}.STAR.cram"
+        bt2_mapped: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/{ref_name}.bowtie2.cram"
+        bt2_unmapped: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/not_{ref_name}.bowtie2.cram"
+        bt2_mapped_log: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/{ref_name}.bowtie2.log"
+        # special log file used for rRNA "ribo depletion" stats
+        bt2_rRNA_log: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/rRNA.bowtie2.cram.log"
+        # special flag to indicate that intermediate non_...cram files have been removed
+        unmapped_removed_flag: "projects/{project_id}/processed_data/{sample_id}/illumina/complete_data/.unmapped_removed"
+
+
+
+
+
+
 

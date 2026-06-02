@@ -46,28 +46,32 @@ ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed.corrected"
 final_target = "final.polyA_adapter_trimmed"
 
 
-#########################
-### Default settings  ###
-#########################
+#####################################################################
+### Default settings moved to config.yaml:default_mapper_settings ###
+#####################################################################
 
-default_BT2_MAP_FLAGS = (
-    " --local"
-    " -L 10 -D 30 -R 30"
-    " --ignore-quals"
-    " --score-min=L,0,1.5"  # require 75% of perfect match (2=base match)
-    " -k 10"
-)
+# default_BT2_MAP_FLAGS = (
+#     " --local"
+#     " -L 10 -D 30 -R 30"
+#     " --ignore-quals"
+#     " --score-min=L,0,1.5"  # require 75% of perfect match (2=base match)
+#     " -k 10"
+# )
 # original rRNA mapping code used --very-fast-local and that was that.
 
-default_STAR_MAP_FLAGS = (
-    # " --genomeLoad NoSharedMemory"
-    " --outSAMprimaryFlag AllBestScore"
-    " --outSAMattributes Standard"
-    " --outSAMunmapped Within"
-    " --outStd BAM_Unsorted"
-    " --outSAMtype BAM Unsorted"
-    " --limitOutSJcollapsed 5000000"
-)
+# default_STAR_MAP_FLAGS = (
+#     " --limitBAMsortRAM 5000000000"
+#     " --outSAMprimaryFlag AllBestScore"
+#     " --outSAMattributes Standard"
+#     " --outSAMunmapped Within"
+#     " --outStd BAM_Unsorted"
+#     " --outSAMtype BAM Unsorted"
+#     " --limitOutSJcollapsed 5000000"
+# )
+
+# mapping index creation fine-tuning
+# default_BT2_INDEX_FLAGS = "--ftabchars 12 --offrate 1"
+# default_STAR_INDEX_FLAGS = ""
 
 default_counting_flavor_with_annotation = "default"
 default_counting_flavor_no_annotation = "custom_index"
@@ -319,6 +323,30 @@ def mapstr_to_targets(mapstr, left="uBAM", final="final"):
     return map_rules, link_rules
 
 
+def get_index_creation_settings(pdf, species, reference):
+    import spacemake.snakemake.variables as smv
+
+    print(f"species={species} reference={reference}")
+    d = pdf.config.get_variable("species", name=species)[reference]
+    print(f"d={d}")
+    bt2_defaults = pdf.config.get_variable("default_mapper_settings", name="bowtie2")
+    STAR_defaults = pdf.config.get_variable("default_mapper_settings", name="STAR")
+    settings = {
+        "bt2_index_param": smv.bt2_index_param.format(
+            species=species, ref_name=reference
+        ),
+        "bt2_index": smv.bt2_index.format(species=species, ref_name=reference),
+        "fasta": d["sequence"],
+        # optional index creation parameters, with defaults if not provided in the config
+        "bowtie2_flags": d.get("BT2_index_flags", bt2_defaults["index_flags"]),
+        "STAR_flags": d.get("STAR_index_flags", STAR_defaults["index_flags"]),
+    }
+    from pprint import pprint
+
+    pprint(settings)
+    return settings
+
+
 def get_mapped_BAM_output(
     project_df=None, config=None, default_strategy="genome:STAR:final"
 ):
@@ -328,6 +356,12 @@ def get_mapped_BAM_output(
     to parse the map_strategy into rules and dependencies.
     """
     out_files = []
+    bt2_defaults = project_df.config.get_variable(
+        "default_mapper_settings", name="bowtie2"
+    )
+    STAR_defaults = project_df.config.get_variable(
+        "default_mapper_settings", name="STAR"
+    )
 
     # print(f">>> ENTER ")
     for index, row in project_df.df.iterrows():
@@ -407,7 +441,7 @@ def get_mapped_BAM_output(
                     mr.map_index_param + ".1.bt2"
                 )  # file present if the index is actually there
                 mr.map_flags = species_d[mr.ref_name].get(
-                    "BT2_flags", default_BT2_MAP_FLAGS
+                    "BT2_flags", bt2_defaults["map_flags"]
                 )
 
             elif mr.mapper == "STAR":
@@ -418,7 +452,7 @@ def get_mapped_BAM_output(
                 mr.map_index_file = mr.map_index + "/SAindex"
                 mr.star_idx_service = smv.star_idx_service.format(**mr)
                 mr.map_flags = species_d[mr.ref_name].get(
-                    "STAR_flags", default_STAR_MAP_FLAGS
+                    "STAR_flags", STAR_defaults["map_flags"]
                 )
 
                 map_data["STAR_INDICES"][(mr.species, mr.ref_name)] = mr.map_index_param

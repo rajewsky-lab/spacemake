@@ -33,6 +33,8 @@ INDEX_FASTA_LKUP = map_data['INDEX_FASTA_LKUP']
 # needed for later stages of SPACEMAKE which require one "star.Log.final.out" file.
 STAR_FINAL_LOG_SYMLINKS = map_data['STAR_FINAL_LOG_SYMLINKS']
 
+cfg = project_df.config
+
 register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
 #####################################
 #### snakemake string templates #####
@@ -49,27 +51,27 @@ final_target = "final.polyA_adapter_trimmed"
 # ubam_input = "unaligned_bc_tagged{polyA_adapter_trimmed}"
 # final_target = "final{polyA_adapter_trimmed}"
 
-default_BT2_MAP_FLAGS = (
-    " --local"
-    " -L 10 -D 30 -R 30"
-    " --ignore-quals"
-    " --score-min=L,0,1.5" # require 75% of perfect match (2=base match)
-)
-# original rRNA mapping code used --very-fast-local and that was that.
+# default_BT2_MAP_FLAGS = (
+#     " --local"
+#     " -L 10 -D 30 -R 30"
+#     " --ignore-quals"
+#     " --score-min=L,0,1.5" # require 75% of perfect match (2=base match)
+# )
+# # original rRNA mapping code used --very-fast-local and that was that.
 
-default_STAR_MAP_FLAGS = (
-    # before shared memory
-    # " --genomeLoad NoSharedMemory"
-    # with shared memory
-    " --genomeLoad LoadAndKeep"
-    " --limitBAMsortRAM 5000000000"
-    " --outSAMprimaryFlag AllBestScore"
-    " --outSAMattributes All"
-    " --outSAMunmapped Within"
-    " --outStd BAM_Unsorted"
-    " --outSAMtype BAM Unsorted"
-    " --limitOutSJcollapsed 5000000"
-)
+# default_STAR_MAP_FLAGS = (
+#     # before shared memory
+#     # " --genomeLoad NoSharedMemory"
+#     # with shared memory
+#     " --genomeLoad LoadAndKeep"
+#     " --limitBAMsortRAM 5000000000"
+#     " --outSAMprimaryFlag AllBestScore"
+#     " --outSAMattributes All"
+#     " --outSAMunmapped Within"
+#     " --outStd BAM_Unsorted"
+#     " --outSAMtype BAM Unsorted"
+#     " --limitOutSJcollapsed 5000000"
+# )
 
 # TODO: port remaining python code to map_strategy.py
 # to expose it to enable coverage analysis and unit-testing
@@ -172,7 +174,7 @@ ruleorder:
 
 rule symlinks:
     input: lambda wc: BAM_SYMLINKS.get(wc_fill(linked_bam, wc),f"NO_BAM_SYMLINKS_for_{wc_fill(linked_bam, wc)}")
-    output: linked_bam
+    output: cfg.paths.bam.linked #linked_bam
     params:
         rel_input=lambda wildcards, input: os.path.basename(input[0])
     shell:
@@ -192,9 +194,9 @@ rule map_reads_bowtie2:
         # index=lambda wc: BAM_IDX_LKUP[wc_fill(bt2_mapped_bam, wc)],
         unpack(lambda wc: get_map_inputs(wc, mapper='bowtie2')),
     output:
-        bam=bt2_mapped_bam,
-        ubam=bt2_unmapped_bam
-    log: bt2_mapped_bam + ".log"
+        bam=cfg.paths.bam.bt2_mapped, #bt2_mapped_bam,
+        ubam=cfg.paths.bam.bt2_unmapped, #bt2_unmapped_bam
+    log: cfg.paths.bam.bt2_mapped_log
     params:
         auto = lambda wc, output: get_map_params(wc, output, mapper='bowtie2'),
     threads: 32 
@@ -273,7 +275,7 @@ rule map_reads_STAR:
         # this needs to be removed for memory sharing
         # " --sjdbGTFfile {params.auto[annotation]}"
         " --outFileNamePrefix {params.star_prefix}"
-        " --runThreadN {threads}"
+        # " --runThreadN {threads}"
         " "
         "| python {repo_dir}/scripts/splice_bam_header.py"
         " --in-ubam {input.bam}"
@@ -338,6 +340,7 @@ rule prepare_species_reference_annotation:
 		else:
 			shell('ln -sr {input} {output}')
 
+
 # TODO: transition to species_reference_file and map_index_param
 # and get rid of INDEX_FASTA_LKUP
 rule create_bowtie2_index:
@@ -345,15 +348,13 @@ rule create_bowtie2_index:
         species_reference_sequence
     output:
         bt2_index_file
+    threads: max(workflow.cores * 0.25, 8)
     params:
-        auto = lambda wc: INDEX_FASTA_LKUP[wc_fill(bt2_index_file, wc)]
+        settings = lambda wc: get_index_creation_settings(pdf=project_df, species=wc.species, reference=wc.ref_name)
     shell:
         """
-        mkdir -p {params.auto[map_index]}
-        bowtie2-build --ftabchars 12 \
-                      --offrate 1 \
-                      {params.auto[ref_path]} \
-                      {params.auto[map_index_param]}
+        mkdir -p {params.settings[bt2_index]}
+        bowtie2-build --threads {threads} {params.settings[bowtie2_flags]} {input} {params.settings[bt2_index_param]}
         """
 
 rule create_star_index:
@@ -364,11 +365,14 @@ rule create_star_index:
         index_dir=directory(star_index),
         index_file=star_index_file
     threads: max(workflow.cores * 0.25, 8)
+    params:
+        settings = lambda wc: get_index_creation_settings(pdf=project_df, species=wc.species, reference=wc.ref_name)
     shell:
         """
         mkdir -p {output.index_dir} 
         STAR --runMode genomeGenerate \
              --runThreadN {threads} \
+             {params.settings[STAR_flags]} \
              --genomeDir {output.index_dir} \
              --genomeFastaFiles {input.sequence} \
              --sjdbGTFfile {input.annotation}

@@ -212,14 +212,28 @@ def get_species_parser(required=True):
     )
     parser.add_argument(
         "--BT2_flags",
-        help="bt2 mapping arguments for this reference (default=mapping.smk:default_BT2_MAP_FLAGS) ",
+        help="bt2 mapping arguments for this reference (default=map_strategy.py:default_BT2_MAP_FLAGS) ",
         type=str,
         default="",
         required=False,
     )
     parser.add_argument(
         "--STAR_flags",
-        help="STAR mapping arguments for this reference (default=mapping.smk:default_STAR_MAP_FLAGS)",
+        help="STAR mapping arguments for this reference (default=map_strategy.py:default_STAR_MAP_FLAGS)",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--BT2_index_flags",
+        help="bt2 index creation arguments for this reference (default=map_strategy.py:default_BT2_INDEX_FLAGS) ",
+        type=str,
+        default="",
+        required=False,
+    )
+    parser.add_argument(
+        "--STAR_index_flags",
+        help="STAR index creation arguments for this reference (default=map_strategy.py:default_STAR_INDEX_FLAGS)",
         type=str,
         default="",
         required=False,
@@ -569,6 +583,15 @@ class ConfigFile:
                     cf.variables[var_with_default]["default"] = default_val
 
         cf.expand_strings()
+        from spacemake.util import dotdict
+
+        # make config.paths.complete_data.root a viable option
+        cf.paths = dotdict(cf.variables["paths"])
+        for k, v in cf.paths.items():
+            if type(v) is dict:
+                # replace dict with dotdict for easier access
+                cf.paths[k] = dotdict(v)
+
         return cf
 
     def expand_strings(self, **kw):
@@ -851,6 +874,8 @@ class ConfigFile:
         BT2_index=None,
         BT2_flags=None,
         STAR_flags=None,
+        BT2_index_flags=None,
+        STAR_index_flags=None,
     ):
         assert_file(sequence, default_value=None, extension=[".fa", ".fa.gz"])
         if annotation:
@@ -873,6 +898,12 @@ class ConfigFile:
 
         if STAR_flags:
             d["STAR_flags"] = STAR_flags
+
+        if BT2_index_flags:
+            d["BT2_index_flags"] = BT2_index_flags
+
+        if STAR_index_flags:
+            d["STAR_index_flags"] = STAR_index_flags
 
         species_refs = self.variables["species"].get(name, {})
         species_refs[reference] = d
