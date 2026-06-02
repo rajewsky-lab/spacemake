@@ -76,7 +76,7 @@ First we load the spacemake processed Seq-scope tile nr 2105 data:
 
 .. code-block:: ipython3
 
-    from spacemake import Spacemake
+    from spacemake.smk import Spacemake
 
     spmk = Spacemake('/path/to/your/spacemake/project')
 

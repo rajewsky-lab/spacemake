@@ -234,6 +234,10 @@ def parse_barcode_file(barcode_file):
 
 def attach_barcode_file(adata, barcode_file):
     bc = parse_barcode_file(barcode_file)
+    # print("attach_barcode_file()")
+    # print("barcode_file", barcode_file)
+    # print("bc:", bc.index.is_unique)
+    # print("ad:", adata.obs.index.is_unique)
 
     # new obs has only the indices of the exact barcode matches
     new_obs = adata.obs.merge(bc, left_index=True, right_index=True, how="inner")

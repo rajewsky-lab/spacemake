@@ -20,6 +20,7 @@ pucks:
     openst:
         width_um: 1200
         spot_diameter_um: 0.6
+        px_by_um: 26.616666666666667 # based on Illumina NovaSeq S1 flowcell
         coordinate_system: 'puck_data/openst_coordinate_system.csv'
 
 run_modes:
@@ -83,6 +84,19 @@ run_modes:
         - 100
         - 250
         - 500
+    openst_nomesh:
+        clean_dge: false
+        count_intronic_reads: true
+        count_mm_reads: true
+        detect_tissue: false
+        mesh_data: false
+        n_beads: 100000
+        polyA_adapter_trimming: true
+        spatial_barcode_min_matches: 0.1
+        umi_cutoff:
+        - 100
+        - 250
+        - 500
     
 
 barcode_flavors:
@@ -122,7 +136,7 @@ barcode_flavors:
 adapter_flavors:
     default:
         - nextseq_quality:
-            cutoff: 32
+            cutoff: 25
         - polyA:
         - adapter:
             name: SMART

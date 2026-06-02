@@ -39,7 +39,7 @@ register_module_output_hook(get_mapped_BAM_output, "mapping.smk")
 #####################################
 
 # The entry point: pre-processed, unmapped reads in a uBAM
-ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed"
+ubam_input = "unaligned_bc_tagged.polyA_adapter_trimmed.corrected"
 # this must be local and not have .bam appended!
 # basically, if ubam_input were used as {target} in linked_bam it should eval to 
 # "unaligned_bc_tagged.polyA_adapter_trimmed.bam"
@@ -162,7 +162,10 @@ def get_map_params(wc, output, mapper="STAR"):
 ##############################################################################
 
 ruleorder:
-    map_reads_bowtie2 > map_reads_STAR > symlinks
+    map_reads_bowtie2 > map_reads_STAR > cb_correct > symlinks
+
+# wildcard_constraints:
+#     link_name=".*!corrected$"
 
 ruleorder:    
     symlink_final_log > map_reads_STAR

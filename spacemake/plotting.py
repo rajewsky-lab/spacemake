@@ -60,25 +60,30 @@ PCT_DOWNSAMPLE_TO_PLOT = [20, 40, 60, 80, 100]
 logger_name = "spacemake.pl"
 logger = logging.getLogger(logger_name)
 
+
 def ensure_anndata(func):
     """
     Decorator to ensure the first argument is an AnnData object.
     If a string is provided, it will load the file as AnnData.
     """
+
     @functools.wraps(func)
     def wrapper(adata, *args, **kwargs):
         if isinstance(adata, str):
             adata = ad.read_h5ad(adata)
         return func(adata, *args, **kwargs)
+
     return wrapper
+
 
 @dataclass
 class Plot:
     """Represents a single plot with its metadata."""
+
     title: str
     description: str
     plot_func: Callable
-    
+
     def generate(self) -> str:
         """Generate the HTML for this plot."""
         return f"""
@@ -88,46 +93,52 @@ class Plot:
             {self._get_plot_html()}
         </div>
         """
-    
+
     def _get_plot_html(self) -> str:
         """Convert matplotlib figure to HTML."""
         try:
             with plt.ioff():
                 result = self.plot_func()
                 if result is None:
-                    return '<div class="alert alert-warning">No plot data available</div>'
-                
+                    return (
+                        '<div class="alert alert-warning">No plot data available</div>'
+                    )
+
                 if isinstance(result, tuple) and len(result) == 2:
                     fig, ax = result
                 else:
                     fig = result
-                
+
                 buf = BytesIO()
-                fig.savefig(buf, format='png', bbox_inches='tight', dpi=150, facecolor='white')
+                fig.savefig(
+                    buf, format="png", bbox_inches="tight", dpi=150, facecolor="white"
+                )
                 plt.close(fig)
-                
-                data = base64.b64encode(buf.getvalue()).decode('utf-8')
+
+                data = base64.b64encode(buf.getvalue()).decode("utf-8")
                 return f'<div class="text-center"><img src="data:image/png;base64,{data}" class="img-fluid" style="max-width: 100%; height: auto;"/></div>'
         except Exception as e:
             # just empty if plot cannot be shown
             return f'<div class="alert alert-primary">Plot not available for this configuration</div>'
-    
+
+
 @dataclass
 class PlotGroup:
     """Represents a group of related plots."""
+
     name: str
     description: str
     plots: List[Plot]
-    
+
     def get_clean_id(self) -> str:
         """Get a clean ID for HTML use."""
         return "".join(c.lower() if c.isalnum() else "-" for c in self.name).strip("-")
-    
+
     def generate(self, active: bool = False) -> str:
         """Generate HTML for all plots in the group."""
         plots_html = "\n".join(plot.generate() for plot in self.plots)
         clean_id = self.get_clean_id()
-        
+
         return f"""
         <div class="tab-pane fade {'show active' if active else ''}" 
              id="{clean_id}" 
@@ -139,59 +150,62 @@ class PlotGroup:
         </div>
         """
 
+
 @dataclass
 class Column:
     """Represents a single column in a table."""
+
     name: str
     description: str
     formatter: Optional[Callable[[Any], str]] = None
-    
+
     def format_value(self, value: Any) -> str:
         """Format a value according to the column's rules."""
         if self.formatter is not None:
             return self.formatter(value)
         return str(value)
 
+
 @dataclass
 class TableStyle:
     """Defines the styling for a table."""
+
     table_classes: List[str] = field(default_factory=lambda: ["table", "table-striped"])
     container_classes: List[str] = field(default_factory=lambda: ["table-container"])
     header_classes: List[str] = field(default_factory=lambda: ["thead-light"])
     row_classes: List[str] = field(default_factory=lambda: [])
-    
+
     def get_table_class(self) -> str:
         return " ".join(self.table_classes)
-    
+
     def get_container_class(self) -> str:
         return " ".join(self.container_classes)
-    
+
     def get_header_class(self) -> str:
         return " ".join(self.header_classes)
-    
+
     def get_row_class(self) -> str:
         return " ".join(self.row_classes)
+
 
 @dataclass
 class DataFrameTable:
     """A table based on a pandas DataFrame with custom column formatting."""
+
     data: pd.DataFrame
     title: str
     description: str
     style: TableStyle = field(default_factory=TableStyle)
     columns: Optional[Dict[str, Column]] = None
-    
+
     def __post_init__(self):
         """Initialize columns if not provided."""
         if self.columns is None:
             self.columns = {
-                col: Column(
-                    name=str(col),
-                    description=str(col),
-                    formatter=None
-                ) for col in self.data.columns
+                col: Column(name=str(col), description=str(col), formatter=None)
+                for col in self.data.columns
             }
-    
+
     def generate(self):
         from IPython.display import HTML
 
@@ -204,11 +218,11 @@ class DataFrameTable:
                     <thead class="{self.style.get_header_class()}">
                         <tr>
         """
-        
+
         # Add headers
         for col_name, col in self.columns.items():
             table_html += f'<th scope="col" title="{col.description}">{col.name}</th>'
-        
+
         table_html += """
                         </tr>
                     </thead>
@@ -216,7 +230,7 @@ class DataFrameTable:
         """
 
         display_data = self.data.reset_index()
-        
+
         # Add data rows
         for _, row in display_data.iterrows():
             table_html += f'<tr class="{self.style.get_row_class()}">'
@@ -224,33 +238,34 @@ class DataFrameTable:
                 formatted_value = col.format_value(row[col_name])
                 table_html += f"<td>{formatted_value}</td>"
             table_html += "</tr>"
-        
+
         table_html += """
                     </tbody>
                 </table>
             </div>
         </div>
         """
-        
+
         return table_html
-    
+
+
 class PaginatedDataFrameTable(DataFrameTable):
     """A paginated version of DataFrameTable for handling large datasets."""
-    
+
     def __init__(self, data, title, description, rows_per_page=20, **kwargs):
         super().__init__(data=data, title=title, description=description, **kwargs)
         self.rows_per_page = rows_per_page
         self.total_rows = len(data)
         self.total_pages = math.ceil(self.total_rows / self.rows_per_page)
         self.table_id = f"table-{hash(title)}-{id(self)}"
-    
+
     def generate(self):
         from IPython.display import HTML
-        
+
         if self.total_rows <= self.rows_per_page:
             # If data fits in one page, use the regular table
             return super().generate()
-        
+
         # Generate paginated table
         table_html = f"""
         <div class="table-section">
@@ -276,19 +291,21 @@ class PaginatedDataFrameTable(DataFrameTable):
                     <thead class="{self.style.get_header_class()}">
                         <tr>
         """
-        
+
         # Add sortable headers
         for col_name, col in self.columns.items():
-            table_html += f'''<th scope="col" title="{col.description}" class="sortable-header" data-column="{col_name}" style="cursor: pointer; user-select: none;">
+            table_html += f"""<th scope="col" title="{col.description}" class="sortable-header" data-column="{col_name}" style="cursor: pointer; user-select: none;">
                 {col.name} <span class="sort-indicator"></span>
-            </th>'''
-        
+            </th>"""
+
         table_html += """
                         </tr>
                     </thead>
                     <tbody id="{}-body">
-        """.format(self.table_id)
-        
+        """.format(
+            self.table_id
+        )
+
         # Add all data rows (we'll show/hide via JavaScript)
         display_data = self.data.reset_index(drop=True)
         for idx, (_, row) in enumerate(display_data.iterrows()):
@@ -299,7 +316,7 @@ class PaginatedDataFrameTable(DataFrameTable):
                 formatted_value = col.format_value(row[col_name])
                 table_html += f"<td>{formatted_value}</td>"
             table_html += "</tr>"
-        
+
         table_html += f"""
                     </tbody>
                 </table>
@@ -489,33 +506,37 @@ class PaginatedDataFrameTable(DataFrameTable):
         }})();
         </script>
         """
-        
+
         return table_html
+
 
 class TabVisualizer:
     """Manages tabbed visualization of plot groups with simple, clean styling."""
+
     def __init__(self, title: str = "Spacemake QC Report"):
         self.title = title
         self.plot_groups: List[PlotGroup] = []
         self.unique_id = str(uuid.uuid4())[:8]
-    
+
     def add_plot_group(self, group: PlotGroup) -> None:
         """Add a plot group to the visualizer."""
         self.plot_groups.append(group)
-    
+
     def generate_html(self):
         """Generate complete HTML with simple, clean styling."""
         from IPython.display import HTML
 
-        tabs_html = f'<ul class="nav nav-tabs nav-tabs-{self.unique_id}" role="tablist">'
-        
+        tabs_html = (
+            f'<ul class="nav nav-tabs nav-tabs-{self.unique_id}" role="tablist">'
+        )
+
         content_html = f'<div class="tab-content tab-content-{self.unique_id} mt-3">'
-        
+
         for i, group in enumerate(self.plot_groups):
             active = i == 0
             clean_id = group.get_clean_id()
             unique_clean_id = f"{clean_id}-{self.unique_id}"
-            
+
             # Add tab navigation item
             tabs_html += f"""
             <li class="nav-item" role="presentation">
@@ -532,7 +553,7 @@ class TabVisualizer:
                 </button>
             </li>
             """
-            
+
             content_html += f"""
             <div class="tab-pane fade {'show active' if active else ''}" 
                  id="{unique_clean_id}" 
@@ -543,9 +564,9 @@ class TabVisualizer:
                 {chr(10).join(plot.generate() for plot in group.plots)}
             </div>
             """
-        
-        tabs_html += '</ul>'
-        content_html += '</div>'
+
+        tabs_html += "</ul>"
+        content_html += "</div>"
 
         html_template = f"""
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -660,20 +681,37 @@ class TabVisualizer:
 
         return HTML(html_template)
 
-def histogram(values, axis, nbins=100, color="#000000", log=False, auto_log=True):
-    # decide linear or logarithmic scale
-    min_difference = values.max() - values.min()
 
-    if log == False or (auto_log == True and np.abs(min_difference) < 100):
-        hist, bins = np.histogram(values, bins=nbins)
-        width = bins[1] - bins[0]
-        axis.bar(bins[:-1], hist, width=width, color=color, align='edge')
-    else:
+def histogram(
+    values,
+    axis,
+    nbins=100,
+    color="#000000",
+    log=False,
+    auto_log=True,
+    exclude_outliers=False,
+):
+    # decide linear or logarithmic scale
+    max_difference = values.max() - values.min()
+    if exclude_outliers:
+        upper_bound = np.percentile(
+            values, 99.5
+        )  # 99.5% of data are <= this value. Exclude outliers that are above
+        lower_bound = 0
+        values = values[(lower_bound <= values) & (values <= upper_bound)]
+        # print(values)
+
+    hist, bins = np.histogram(values, bins=nbins)
+    if log == True or (auto_log == True and np.abs(max_difference) >= 100):
         logbins = np.logspace(np.log10(bins[0] + 1), np.log10(bins[-1]), nbins)
         axis.hist(values, bins=logbins, color=color)
         axis.set_xscale("log")
+    else:
+        width = bins[1] - bins[0]
+        axis.bar(bins[:-1], hist, width=width, color=color, align="edge")
 
     axis.spines[["right", "top"]].set_visible(False)
+
 
 @ensure_anndata
 def _scales_for_spatial_plot(adata):
@@ -683,10 +721,12 @@ def _scales_for_spatial_plot(adata):
         px_by_um = adata.uns["puck_variables"]["coord_by_um"]
         spot_diameter_um = adata.uns["puck_variables"]["spot_diameter_um"]
     except:
-        logging.warning("Could not find 'coord_by_um' in the 'puck_variables' from the AnnData file. Setting to 1 as default")
+        logging.warning(
+            "Could not find 'coord_by_um' in the 'puck_variables' from the AnnData file. Setting to 1 as default"
+        )
         px_by_um = 1
         spot_diameter_um = 1
-    
+
     meshed = False
     if "mesh_variables" in adata.uns.keys():
         meshed = True
@@ -718,27 +758,67 @@ def _scales_for_spatial_plot(adata):
     x_breaks = np.arange(x_limits[0], x_limits[1], px_by_um * mm_dist)
     y_breaks = np.arange(y_limits[0], y_limits[1], px_by_um * mm_dist)
 
-    return {"x_mm_breaks": x_mm_breaks,
-            "y_mm_breaks": y_mm_breaks,
-            "x_breaks": x_breaks,
-            "y_breaks": y_breaks,
-            "puck_bead_size": puck_bead_size,
-            "px_by_um": px_by_um}
+    return {
+        "x_mm_breaks": x_mm_breaks,
+        "y_mm_breaks": y_mm_breaks,
+        "x_breaks": x_breaks,
+        "y_breaks": y_breaks,
+        "puck_bead_size": puck_bead_size,
+        "px_by_um": px_by_um,
+    }
+
+
+def auto_threshold(x, log=True):
+    from skimage.filters import threshold_otsu
+
+    if log:
+        x = np.log10(x + 1)
+        return 10 ** threshold_otsu(x) - 1
+    else:
+        return threshold_otsu(x)
+
 
 @ensure_anndata
-def spatial(adata, spot_size=1.5, color="total_counts", cmap="magma", figsize=(5, 5), return_fig=True, **kwargs):
+def spatial(
+    adata,
+    spot_size=1.5,
+    color="total_counts",
+    cmap="magma",
+    figsize=(5, 5),
+    return_fig=True,
+    clip_outliers=True,
+    remove_background=False,
+    # auto_log=True,
+    **kwargs,
+):
     if spot_size <= 0:
         raise ValueError("spot_size must be > 0")
-    
-    if (color not in adata.obs) and (color not in adata.var) and (color not in adata.var_names):
+
+    if color in adata.obs:
+        data = adata.obs[color].values
+    elif color in adata.var:
+        data = adata.var[color].values
+    elif color in adata.var_names:
+        data = np.array(adata[:, color].X).ravel()
+    else:
         logger.warning(f"No '{color}' found in adata")
         return None
-    
+
     fig, axes = plt.subplots(1, 1, figsize=figsize)
     if len(adata) < 2:
         return fig, axes
 
     scales = _scales_for_spatial_plot(adata)
+
+    if remove_background:
+        if color in adata.obs:
+            thresh = auto_threshold(data)
+            adata = adata[adata.obs[color] > thresh]
+        else:
+            logger.warning("automatic background removal only supported on .obs keyes")
+
+    if clip_outliers and "vmax" not in kwargs:
+        kwargs["vmax"] = np.percentile(data, 95)
 
     sc.pl.spatial(
         adata,
@@ -749,7 +829,7 @@ def spatial(adata, spot_size=1.5, color="total_counts", cmap="magma", figsize=(5
         ax=axes,
         show=False,
         cmap=cmap,
-        **kwargs
+        **kwargs,
     )
     axes.spines[["right", "top"]].set_visible(False)
     axes.set_xticks(scales["x_breaks"])
@@ -762,16 +842,25 @@ def spatial(adata, spot_size=1.5, color="total_counts", cmap="magma", figsize=(5
     if return_fig:
         return fig, axes
 
+
 @ensure_anndata
-def neighborhood_enrichment(adata, key=None, spot_size=1.5, color="total_counts", cmap="magma", figsize=(4, 4), return_fig=True, **kwargs):
+def neighborhood_enrichment(
+    adata,
+    key=None,
+    spot_size=1.5,
+    color="total_counts",
+    cmap="magma",
+    figsize=(4, 4),
+    return_fig=True,
+    **kwargs,
+):
     if key is None or key == "":
         raise ValueError("`key` must be a valid .uns key")
-    
-    nhood_enrich_current_res = pd.DataFrame(adata.uns[f'{key}']['zscore'])
-    nhood_enrich_current_res = pd.melt(nhood_enrich_current_res.reset_index(), id_vars='index')\
-        .rename(columns={'index': 'cluster_a',
-                         'variable': 'cluster_b',
-                         'value': 'zscore'})
+
+    nhood_enrich_current_res = pd.DataFrame(adata.uns[f"{key}"]["zscore"])
+    nhood_enrich_current_res = pd.melt(
+        nhood_enrich_current_res.reset_index(), id_vars="index"
+    ).rename(columns={"index": "cluster_a", "variable": "cluster_b", "value": "zscore"})
 
     ne_data = np.zeros(
         (
@@ -783,11 +872,9 @@ def neighborhood_enrichment(adata, key=None, spot_size=1.5, color="total_counts"
         nhood_enrich_current_res["cluster_a"],
         nhood_enrich_current_res["cluster_b"],
     ] = nhood_enrich_current_res["zscore"]
-    
+
     fig, axes = plt.subplots(1, 1, figsize=figsize)
-    plmat = axes.matshow(
-        ne_data, cmap="magma", vmin=-50, vmax=100, origin="lower"
-    )
+    plmat = axes.matshow(ne_data, cmap="magma", vmin=-50, vmax=100, origin="lower")
     cbar = plt.colorbar(plmat, fraction=0.046)
     cbar.set_label("Neighbor enrichment score")
     axes.set_xlabel("cluster identity")
@@ -798,6 +885,7 @@ def neighborhood_enrichment(adata, key=None, spot_size=1.5, color="total_counts"
 
     if return_fig:
         return fig, axes
+
 
 @ensure_anndata
 def umap(adata, color=None, return_fig=True, **kwargs):
@@ -814,34 +902,39 @@ def umap(adata, color=None, return_fig=True, **kwargs):
     if return_fig:
         return fig, axes
 
+
 @ensure_anndata
 def marker_gene_table(adata, rank_key=None):
     if rank_key is None or rank_key == "":
         raise ValueError("`rank_key` must be a valid adata.uns key")
 
-    if not 'names' in adata.uns[rank_key]:
+    if not "names" in adata.uns[rank_key]:
         return None
 
-    df = pd.DataFrame(adata.uns[rank_key]['names'])\
-            .melt(var_name = 'cluster', value_name = 'gene')
+    df = pd.DataFrame(adata.uns[rank_key]["names"]).melt(
+        var_name="cluster", value_name="gene"
+    )
 
-    for key in ['logfoldchanges', 'pvals', 'pvals_adj']:
-        df_key = pd.DataFrame(adata.uns[rank_key][key])\
-            .melt(var_name = 'cluster', value_name = key)
+    for key in ["logfoldchanges", "pvals", "pvals_adj"]:
+        df_key = pd.DataFrame(adata.uns[rank_key][key]).melt(
+            var_name="cluster", value_name=key
+        )
         df[key] = df_key[key]
-        
-    df.set_index(['gene', 'cluster'], inplace=True)
-        
-    for key in ['pts', 'pts_rest']:
+
+    df.set_index(["gene", "cluster"], inplace=True)
+
+    for key in ["pts", "pts_rest"]:
         df2 = adata.uns[rank_key][key]
-        df2['gene'] = df2.index
-        df2 = df2.melt(var_name='cluster', id_vars='gene')\
-            .set_index(['gene', 'cluster'])
-        
+        df2["gene"] = df2.index
+        df2 = df2.melt(var_name="cluster", id_vars="gene").set_index(
+            ["gene", "cluster"]
+        )
+
         df[key] = df2.loc[df.index].value
-            
+
     df.reset_index(inplace=True)
     return df
+
 
 @ensure_anndata
 def knee_plot(adata, figsize=(5, 3), return_fig=True):
@@ -859,6 +952,7 @@ def knee_plot(adata, figsize=(5, 3), return_fig=True):
 
     if return_fig:
         return fig, axis
+
 
 @ensure_anndata
 def umi_cutoff(adata, figsize=(8, 4), return_fig=True):
@@ -880,7 +974,12 @@ def umi_cutoff(adata, figsize=(8, 4), return_fig=True):
         return df_summary
 
     umi_cutoff_data = pd.DataFrame(
-        np.vstack([summarise_dge_summary(adata.obs, umi_cutoff).values for umi_cutoff in umi_cutoffs]),
+        np.vstack(
+            [
+                summarise_dge_summary(adata.obs, umi_cutoff).values
+                for umi_cutoff in umi_cutoffs
+            ]
+        ),
         columns=[
             "n_reads",
             "total_counts",
@@ -954,6 +1053,7 @@ def umi_cutoff(adata, figsize=(8, 4), return_fig=True):
     if return_fig:
         return fig, axes
 
+
 @ensure_anndata
 def plot_histogram_beads(adata, figsize=(7, 3.5), return_fig=True):
     fig, axes = plt.subplots(2, 2, figsize=figsize)
@@ -980,6 +1080,7 @@ def plot_histogram_beads(adata, figsize=(7, 3.5), return_fig=True):
     if return_fig:
         return fig, axes
 
+
 @ensure_anndata
 def nucleotide_distribution_per_bead(adata, figsize=(8, 4), return_fig=True):
     adata.obs["reads_cumsum"] = adata.obs["n_reads"].cumsum()
@@ -995,13 +1096,19 @@ def nucleotide_distribution_per_bead(adata, figsize=(8, 4), return_fig=True):
     cell_bc_len = len(adata.obs["cell_bc"].iloc[0])
     nucls = adata.obs["cell_bc"].str.strip().apply(list).apply(pd.Series)
     nucls = pd.concat([adata.obs[["cell_bc", "quartile"]], nucls], axis=1)
-    nucls = nucls.melt(id_vars=["cell_bc", "quartile"], var_name="pos", value_name="nucl")
-    nucls = nucls.groupby(["pos", "nucl", "quartile"]).size().reset_index(name="nucl_count")
+    nucls = nucls.melt(
+        id_vars=["cell_bc", "quartile"], var_name="pos", value_name="nucl"
+    )
+    nucls = (
+        nucls.groupby(["pos", "nucl", "quartile"]).size().reset_index(name="nucl_count")
+    )
     nucls = nucls.pivot_table(
         index=["pos", "nucl"], columns="quartile", values="nucl_count", fill_value=0
     ).reset_index()
     lbl_df = adata.obs.groupby("quartile").size().reset_index(name="lbl")
-    lbl_df["lbl"] = lbl_df.apply(lambda row: f"{row['quartile']} (n={row['lbl']})", axis=1)
+    lbl_df["lbl"] = lbl_df.apply(
+        lambda row: f"{row['quartile']} (n={row['lbl']})", axis=1
+    )
     lbls = dict(zip(lbl_df["quartile"], lbl_df["lbl"]))
 
     # Create the plot
@@ -1025,13 +1132,17 @@ def nucleotide_distribution_per_bead(adata, figsize=(8, 4), return_fig=True):
         axes[1, 0].set_xlim(0.1, cell_bc_len + 1.5)
         axes[1, 0].set_title(lbls["Q3"])
         axes[1, 0].spines[["right", "top"]].set_visible(False)
-        axes[1, 0].set_xticks(list(set(list(range(1, cell_bc_len + 1, 2)) + [cell_bc_len])))
+        axes[1, 0].set_xticks(
+            list(set(list(range(1, cell_bc_len + 1, 2)) + [cell_bc_len]))
+        )
 
         axes[1, 1].plot(x, group["Q4"], color=nucl_clrs[name], linewidth=2)
         axes[1, 1].set_xlim(0.1, cell_bc_len + 1.5)
         axes[1, 1].set_title(lbls["Q4"])
         axes[1, 1].spines[["right", "top"]].set_visible(False)
-        axes[1, 1].set_xticks(list(set(list(range(1, cell_bc_len + 1, 2)) + [cell_bc_len])))
+        axes[1, 1].set_xticks(
+            list(set(list(range(1, cell_bc_len + 1, 2)) + [cell_bc_len]))
+        )
 
     handles, labels = axes[0, 0].get_legend_handles_labels()
     legend = fig.legend(
@@ -1048,6 +1159,7 @@ def nucleotide_distribution_per_bead(adata, figsize=(8, 4), return_fig=True):
 
     if return_fig:
         return fig, axes
+
 
 @ensure_anndata
 def entropy_compression(adata, nbins=30, figsize=(7, 4), return_fig=True):
@@ -1097,16 +1209,26 @@ def entropy_compression(adata, nbins=30, figsize=(7, 4), return_fig=True):
         return fig, axes
 
 
-def density_per_downsampling(values, metric, log_scale=True, color="#000000", title="", figsize=None, return_fig=True):
+def density_per_downsampling(
+    values,
+    metric,
+    log_scale=True,
+    color="#000000",
+    title="",
+    figsize=None,
+    return_fig=True,
+):
     if figsize is None:
         figsize = (5, 0.5 * len(PCT_DOWNSAMPLE_TO_PLOT))
-        
+
     fig, axes = plt.subplots(len(PCT_DOWNSAMPLE_TO_PLOT), 1, figsize=figsize)
 
     i = 0
     for downsample_pct, value_density in values.groupby("_downsample_pct_report"):
         if int(downsample_pct) in PCT_DOWNSAMPLE_TO_PLOT:
-            density_function = gaussian_kde(np.nan_to_num(value_density[metric]), bw_method=0.1)
+            density_function = gaussian_kde(
+                np.nan_to_num(value_density[metric]), bw_method=0.1
+            )
             x = np.linspace(1, max(np.nan_to_num(values[metric])), 100)
 
             axes[i].plot(x, density_function(x), color="black", linewidth=1)
@@ -1117,7 +1239,13 @@ def density_per_downsampling(values, metric, log_scale=True, color="#000000", ti
                 axes[i].set_xscale("log")
 
             axes[i].spines[["right", "top", "bottom"]].set_visible(False)
-            axes[i].text(1.05, 0.5, f"{downsample_pct}%", transform=axes[i].transAxes, va="center")
+            axes[i].text(
+                1.05,
+                0.5,
+                f"{downsample_pct}%",
+                transform=axes[i].transAxes,
+                va="center",
+            )
             i += 1
 
         axes[-1].spines[["right", "top"]].set_visible(False)
@@ -1134,7 +1262,15 @@ def density_per_downsampling(values, metric, log_scale=True, color="#000000", ti
         return fig, axes
 
 
-def median_per_downsampling(values, metric, umi_cutoffs, color="#000000", title="", figsize=(5, 3), return_fig=True):
+def median_per_downsampling(
+    values,
+    metric,
+    umi_cutoffs,
+    color="#000000",
+    title="",
+    figsize=(5, 3),
+    return_fig=True,
+):
     fig, axes = plt.subplots(1, 1, figsize=figsize)
 
     lines = ["-", "--", "-.", ":"]
@@ -1144,16 +1280,27 @@ def median_per_downsampling(values, metric, umi_cutoffs, color="#000000", title=
     for umi_cutoff in umi_cutoffs:
         _values = values[values["total_counts"] > umi_cutoff]
         median_values = (
-            _values[[metric, "_downsample_pct_report"]].groupby("_downsample_pct_report").median().reset_index()
+            _values[[metric, "_downsample_pct_report"]]
+            .groupby("_downsample_pct_report")
+            .median()
+            .reset_index()
         )
 
         linestyle = next(linecycler)
 
         (line,) = axes.plot(
-            median_values["_downsample_pct_report"], median_values[metric], linestyle, color=color, label=umi_cutoff
+            median_values["_downsample_pct_report"],
+            median_values[metric],
+            linestyle,
+            color=color,
+            label=umi_cutoff,
         )
         axes.scatter(
-            median_values["_downsample_pct_report"], median_values[metric], s=20, color=color, edgecolors="black"
+            median_values["_downsample_pct_report"],
+            median_values[metric],
+            s=20,
+            color=color,
+            edgecolors="black",
         )
 
         handles.append(line)
@@ -1180,10 +1327,18 @@ def deciled_median(decile_dat, figsize=(6, 4), return_fig=True):
     for i, (obs, data) in enumerate(decile_dat.groupby("observation")):
         for _obs, _data in data.groupby("decile"):
             axes.flatten()[i].plot(
-                _data["_downsample_pct_report"], _data["value"], label=_obs, linewidth=0.6, color=parula_dict[_obs]
+                _data["_downsample_pct_report"],
+                _data["value"],
+                label=_obs,
+                linewidth=0.6,
+                color=parula_dict[_obs],
             )
             axes.flatten()[i].scatter(
-                _data["_downsample_pct_report"], _data["value"], s=20, edgecolors="black", color=parula_dict[_obs]
+                _data["_downsample_pct_report"],
+                _data["value"],
+                s=20,
+                edgecolors="black",
+                color=parula_dict[_obs],
             )
 
         axes.flatten()[i].set_xticks([0, 20, 40, 60, 80, 100])
@@ -1198,10 +1353,26 @@ def deciled_median(decile_dat, figsize=(6, 4), return_fig=True):
     # Create a single legend at the bottom
     handles, labels = [], []
     for obs in parula_dict:
-        handles.append(plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=parula_dict[obs], markersize=8))
+        handles.append(
+            plt.Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="w",
+                markerfacecolor=parula_dict[obs],
+                markersize=8,
+            )
+        )
         labels.append(str(obs))
 
-    fig.legend(handles, labels, title="Decile", loc="lower right", ncol=3, bbox_to_anchor=(0.95, 0.02))
+    fig.legend(
+        handles,
+        labels,
+        title="Decile",
+        loc="lower right",
+        ncol=3,
+        bbox_to_anchor=(0.95, 0.02),
+    )
 
     plt.tight_layout()
 

@@ -1,4 +1,4 @@
-spacemake_version: 0.9.1
+spacemake_version: 0.9.1b
 root_dir: '.'
 temp_dir: '/tmp'
 external_bin: 
@@ -105,7 +105,19 @@ run_modes:
         - 100
         - 250
         - 500
-  
+    openst_nomesh:
+        clean_dge: false
+        count_intronic_reads: true
+        count_mm_reads: true
+        detect_tissue: false
+        mesh_data: false
+        n_beads: 100000
+        polyA_adapter_trimming: true
+        spatial_barcode_min_matches: 0.1
+        umi_cutoff:
+        - 100
+        - 250
+        - 500
 
 adapter_flavors:
     default:

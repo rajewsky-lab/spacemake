@@ -52,11 +52,14 @@ star_index_file = star_index + "/SAindex"
 star_index_locked = star_index + "/smk.indexlocked.{species}.{ref_name}"
 import uuid
 
-#star_index_locked_current = star_index_locked + f".{uuid.uuid4()}"
-#star_index_loaded = "{species}.{ref_name}.genomeLoad.done"
-star_index_unloaded = ".{species}.{ref_name}.genomeUnload.done.{groupid}"
-star_index_log_location = "species_data/{species}/{ref_name}/.star_index_logs"
-star_idx_service = "{species}.{ref_name}.STAR_index_loaded"
+# star_index_locked_current = star_index_locked + f".{uuid.uuid4()}"
+# star_index_loaded = "{species}.{ref_name}.genomeLoad.done"
+import tempfile
+
+tmp = tempfile.gettempdir()
+star_index_unloaded = tmp + "/.{species}.{ref_name}.genomeUnload.done.{groupid}"
+star_index_log_location = tmp + "/species_data/{species}/{ref_name}/.star_index_logs"
+star_idx_service = tmp + "/{species}.{ref_name}.STAR_index_loaded"
 
 bt2_index = "species_data/{species}/{ref_name}/bt2_index"
 bt2_index_param = bt2_index + "/{ref_name}"
@@ -128,8 +131,12 @@ split_reads_read_type = split_reads_root + "read_type_num.txt"
 #######################
 
 qc_sheet = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.html"
-qc_sheet_notebook = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.ipynb"
-qc_sheet_notebook_text = data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.ipynb.txt"
+qc_sheet_notebook = (
+    data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.ipynb"
+)
+qc_sheet_notebook_text = (
+    data_root + "/qc_sheets/qc_sheet_{sample_id}_{puck_barcode_file_id_qc}.ipynb.txt"
+)
 reads_type_out = split_reads_read_type
 barcode_readcounts_suffix = "{polyA_adapter_trimmed}.txt.gz"
 barcode_readcounts = complete_data_root + "/out_readcounts" + barcode_readcounts_suffix
@@ -147,6 +154,16 @@ spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/spatialBarcodes_{puck_barcode_file_id}.txt"
 )
+# added in bc-correct. Created after correction, needed only for DigitalExpression
+# can go in drop-dropseq
+spatial_barcodes_corrected = (
+    complete_data_root
+    + "/puck_barcode_files/spatialBarcodes_corrected{polyA_adapter_trimmed}.{puck_barcode_file_id}.txt"
+)
+corrected_sample_bci = (
+    complete_data_root + "/puck_barcode_files/corrected{polyA_adapter_trimmed}.bci"
+)
+
 parsed_spatial_barcodes = (
     complete_data_root
     + "/puck_barcode_files/spatial_barcodes_{puck_barcode_file_id}.csv"
@@ -343,8 +360,18 @@ star_tmp_dir = star_prefix + "tmp"
 # final bam (cram) file
 final_bam_suffix = "/final{polyA_adapter_trimmed}"
 final_bam = complete_data_root + final_bam_suffix + ".cram"
-bam_mm_included_pipe_suffix = "{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included_{puck_barcode_file_id}.cram"
+bam_mm_included_pipe_suffix = ".{n_beads}{dge_type}{dge_cleaned}{polyA_adapter_trimmed}.mm_included_{puck_barcode_file_id}.cram"
 final_bam_mm_included_pipe = complete_data_root + "/final" + bam_mm_included_pipe_suffix
+
+# final_bam_corrected = complete_data_root + "/corrected{polyA_adapter_trimmed}.cram"
+# final_bam_cb_nomatch = complete_data_root + "/nomatch{polyA_adapter_trimmed}.cram"
+
+ubam = tagged_polyA_adapter_trimmed_bam  # complete_data_root + "/unaligned_bc_tagged.{polyA_adapter_trimmed}.cram"
+ubam_corrected = ubam.replace(".cram", ".corrected.cram")
+
+ubam_nomatch = ubam.replace(".cram", ".nomatch.cram")
+ubam_correction_stats = complete_data_root + "/stats/cb_correct.tsv"
+ubam_correction_sample_stats = complete_data_root + "/stats/cb_correct_sample.tsv"
 
 # downsampled bam
 downsampled_bam_mm_included_pipe_suffix = (
@@ -362,7 +389,12 @@ downsample_saturation_analysis = (
     downsampled_data_prefix
     + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.html"
 )
-saturation_analysis_notebook = downsampled_data_prefix + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.ipynb"
+saturation_analysis_notebook = (
+    downsampled_data_prefix
+    + "/{project_id}_{sample_id}_{puck_barcode_file_id}_saturation_analysis.ipynb"
+)
+
+capture_area_bci = complete_data_root + "/puck_barcode_files/capture_area.bci"
 
 
 # bt2_rRNA_index_basename = bt2_rRNA_index_dir + '/{species}_rRNA'

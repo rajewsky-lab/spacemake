@@ -3,6 +3,20 @@ Release notes
 
 Version 0.9
 -----------
+
+0.9.3
+~~~~~
+* Adds spatial barcode correction with edit distance 1, boosting counts by ~5-15% for many samples. **see the documentation for details and caveats**.
+
+
+0.9.2
+~~~~~
+* Fixes ``OverflowError`` in QC reports
+
+0.9.1b
+~~~~~
+* Fixes permissions of `html` files (QC report and automated analysis)
+
 0.9.1
 ~~~~~
 * Uses ``cram`` instead of ``bam`` to significantly reduce disk space.

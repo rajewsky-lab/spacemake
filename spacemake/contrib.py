@@ -1,6 +1,6 @@
 import importlib.metadata
 
-__version__ = "0.9.2"
+__version__ = "0.9.7"
 __author__ = [
     "Nikos Karaiskos",
     "Tamas Ryszard Sztanka-Toth",
@@ -64,13 +64,21 @@ roadmap = [
     (
         "0.9.1",
         "QC reports are now produced with python/notebooks. "
-        "Completely dropped dependencies on all R packages."
+        "Completely dropped dependencies on all R packages.",
     ),
     (
         "0.9.2",
         "also count alignments against non-genome indices, "
         "using scbamtools.count. Spatial output is merged "
         "from genome and non-genome alignments.",
+    ),
+    (
+        "0.9.3",
+        "barcode error correction. ~5%-15% more reads assigned to spatial barcodes.",
+    ),
+    (
+        "0.9.7",
+        "Own annotator and counting",
     ),
     (
         "1.x",

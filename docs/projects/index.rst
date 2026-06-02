@@ -40,13 +40,13 @@ In spacemake each sample can have the folloing variables:
     Since the ``0.1`` version of spacemake, it is possible to only provide the count matrix as input data for spacemake.
     Note: a raw count matrix is expected, if a non count matrix is provided, spacemake will raise an error. 
 
-``barcode_flavor`` (optional)
+``barcode-flavor`` (optional)
    ``barcode_flavor`` of the sample. If not provided, ``default`` will be used (Drop-seq).
 
 ``species``
    ``species`` of the sample
 
-``map_strategy``
+``map-strategy``
     As of version ``0.7`` you can provide a mapping strategy as a string which gets converted into a 
     series of map rules. These rules translate into BAM names and their dependencies. 
 
@@ -115,15 +115,17 @@ In spacemake each sample can have the folloing variables:
    name of the ``puck`` for this sample. if puck contains a ``barcodes`` variable, with a path
    to a coordinate file, those coordinates will be used when processing this sample.
    If not provided, a ``default`` puck will be used with ``width_um=3000``,
-   ``spot_diameter_um=10``.
+   ``spot_diameter_um=10``. For openst, you want to set this to ``openst``.
 
 ``puck-id`` (optional)
    ``puck-id`` of a sample
 
-``puck_barcode_file`` (optional)
+``puck-barcode-file`` (optional)
     the path to the file contining (x,y) positions of the barcodes. If the ``puck`` for this
     sample has a ``barcodes`` variable, it will be ignored, and ``puck_barcode_file`` will
     be used.
+    For openst, you may initially add all the barcode files for the flowcell from which your capture area was made.
+    Example: ``--puck-barcode-file /path/to/flowcell_barcode_files/fc*.txt.gz``
 
 ``investigator`` (optional)
    name investigator(s) responsible for this sample
@@ -141,33 +143,43 @@ In spacemake each sample can have the folloing variables:
 
 To add a single sample, we can use the following command::
 
-   spacemake projects add_sample \
+   spacemake projects add-sample \
       --project-id PROJECT-ID \                 # required
       --sample-id SAMPLE-ID \                   # required
       --R1 R1 [R1 R1 ...] \                     # required, if no longreads
       --R2 R2 [R2 R2 ...] \                     # required, if no longreads
       --longreads LONGREADS \                   # required, if no R1 & R2
       --longread-signature LONGREAD_SIGNATURE \ # optional
-      --barcode_flavor BARCODE_FLAVOR \         # optional
+      --barcode-flavor BARCODE_FLAVOR \         # optional
       --species SPECIES \                       # required
       --puck PUCK \                             # optional
       --puck-id PUCK-ID \                       # optional
-      --puck_barcode_file PUCK_BARCODE_FILE \   # optional
+      --puck-barcode-file PUCK_BARCODE_FILE \   # optional
       --investigator INVESTIGATOR \             # optional
       --experiment EXPERIMENT \                 # optional
-      --sequencing_date SEQUENCING_DATE \       # optional
-      --run_mode RUN_MODE [RUN_MODE ...] \      # optional
+      --sequencing-date SEQUENCING_DATE \       # optional
+      --run-mode RUN_MODE [RUN_MODE ...] \      # optional
 
 
 .. warning::
 
-   A sample is spatial only if: either a ``puck_barcode_file`` is provided, or the sample's
+   A sample is spatial only if: either a ``puck-barcode-file`` is provided, or the sample's
    ``puck`` has a ``barcodes`` variable pointing to a barcode position file.
    If this is not the case, spacemake won't be able to find the spatial barcodes for
    this sample, and the sampe will be processed as a single-cell sample.
 
-   In case both the ``puck_barcode_file`` is provided and the sample's ``puck`` has the
-   ``barcodes`` variable set, ``puck_barcode_file`` will be used for the spatial coordinates.
+   In case both the ``puck-barcode-file`` is provided and the sample's ``puck`` has the
+   ``barcodes`` variable set, ``puck-barcode-file`` will be used for the spatial coordinates.
+
+.. note::
+
+   As of version ``0.9.3``, spacemake can perform barcode correction if reference barcodes
+   are associated with a sample via ``--puck-barcode-file`` (see above). If no barcode files are
+   associated with your sample, no barcode correction will be performed and all reads will be mapped.
+   If barcode correction is possible, however, reads with non-matching barcodes will be dumped to 
+   ``unaligned_bc_tagged.polyA_adapter_trimmed.nomatch.cram`` in the sample's folder. Since these reads can not be spatially registered,
+   they can not be used in downstream analyses and do not need to be mapped.
+   Statistics and a graphical report on barcode matching can be found in the sample's QC report.
 
 Add a Visium/Seq-scope/Slide-seq sample
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -193,7 +205,7 @@ Visium for instance works with 6.5mm by 6.5mm sized capture areas, where each sp
 
     If a puck is not specified, spacemake will still run but will use the ``default`` puck as specified :ref:`here <provided pucks>`.
 
-Step 2: formatting a custom puck_barcode_file
+Step 2: formatting a custom puck-barcode-file
 """""""""""""""""""""""""""""""""""""""""""""
 
 For all spatial samples we need to provide a ``puck_barcode_file``. This file needs to be a comma or tab separated, and it needs to have the following three (named) columns:
@@ -211,16 +223,16 @@ The configured run\_mode(s) will specify how a sample is processed downstream, a
 
 .. warning::
 
-    If no run\_mode(s) are provided spacemake will use the ``default`` run\_mode as specified :ref:`here <provided run\\_mode(s)>`.
+    If no run-mode(s) are provided spacemake will use the ``default`` run-mode as specified :ref:`here <provided run\\_mode(s)>`.
 
-    Similarily if there is no barcode\_flavor specified spacemake will use the ``default`` barcode\_flavor as specified :ref:`here <provided barcode\\_flavors>`.
+    Similarily if there is no barcode-flavor specified spacemake will use the ``default`` barcode-flavor as specified :ref:`here <provided barcode\\_flavors>`.
 
 Step 4: add your sample
 """""""""""""""""""""""
 
 Once everything is configured you can add your custom spatial sample with the following command::
 
-    spacemake projects add_sample \
+    spacemake projects add-sample \
         # your sample's project-id \
         --project-id PROJECT-ID \
         # your sample's sample-id \
@@ -229,16 +241,16 @@ Once everything is configured you can add your custom spatial sample with the fo
         --R1 R1 [R1 R1 ...] \
         # one or more R2.fastq.gz files
         --R2 R2 [R2 R2 ...] \
-        # name of the barcode\_flavor, configured in Step 3 \
-        --barcode_flavor BARCODE_FLAVOR \
+        # name of the barcode-flavor, configured in Step 3 \
+        --barcode-flavor BARCODE_FLAVOR \
         # name of the species, configured in Step 3 \
         --species SPECIES \
         # name of the puck, configured in Step 1 \
         --puck PUCK \
         # path to your custom barcode file, configured in Step 2 \
-        --puck_barcode_file PUCK_BARCODE_FILE \
-        # name of the run\_mode(s), configured in Step 3 \
-        --run_mode RUN_MODE [RUN_MODE ...]
+        --puck-barcode-file PUCK_BARCODE_FILE \
+        # name of the run-mode(s), configured in Step 3 \
+        --run-mode RUN_MODE [RUN_MODE ...]
 
 Add a single-cell sample
 ^^^^^^^^^^^^^^^^^^^^^^^^
