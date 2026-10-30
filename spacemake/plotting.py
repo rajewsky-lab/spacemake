@@ -818,7 +818,9 @@ def spatial(
             logger.warning("automatic background removal only supported on .obs keyes")
 
     if clip_outliers and "vmax" not in kwargs:
-        kwargs["vmax"] = np.percentile(data, 95)
+        finite_data = np.asarray(data, dtype=np.float64) # handle the exact_entropy which is float16
+        finite_data = finite_data[np.isfinite(finite_data)]
+        kwargs["vmax"] = np.nanpercentile(finite_data, 95)
 
     sc.pl.spatial(
         adata,
